@@ -1,0 +1,5429 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../helpers/artist_ascension.dart';
+import '../theme/app_colors.dart';
+import '../services/auth_email_alias_service.dart';
+import '../services/supabase_auth_service.dart';
+import '../services/supabase_bootstrap.dart';
+import 'jnt_ascension_page.dart';
+import 'notifications_page.dart';
+import 'artist_reviews_page.dart';
+import '../widgets/notification_bell_button.dart';
+import '../widgets/searchable_dropdown_field.dart';
+import '../widgets/artist_ascension_card.dart';
+
+class ArtistProfilePage extends StatefulWidget {
+  const ArtistProfilePage({
+    super.key,
+    this.showBottomNav = false,
+    this.bottomNavIndex = 0,
+    this.onNavTap,
+  });
+
+  final bool showBottomNav;
+  final int bottomNavIndex;
+  final ValueChanged<int>? onNavTap;
+
+  @override
+  State<ArtistProfilePage> createState() => _ArtistProfilePageState();
+}
+
+class _ArtistIdentity {
+  const _ArtistIdentity({required this.uid, required this.email});
+
+  final String uid;
+  final String email;
+}
+
+class _ArtistProfilePageState extends State<ArtistProfilePage> {
+  static const int _maxPortfolioUploadBytes = 2 * 1024 * 1024; // 2MB
+  static const int _preferredPortfolioUploadBytes = 650 * 1024; // ~650KB
+  static const int _portfolioMaxEdge = 1600;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  bool _loggingOutFromProfile = false;
+  bool _directRequestsEnabled = true;
+  bool _savingDirectRequestPref = false;
+  bool _nfcRequestsEnabled = false;
+  bool _savingNfcRequestPref = false;
+  bool _allClientRequestNotificationsEnabled = true;
+  bool _savingAllClientRequestNotifications = false;
+  DocumentReference<Map<String, dynamic>>? _artistDocRef;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _artistSub;
+  Map<String, dynamic> _artistData = const <String, dynamic>{};
+  String _artistSupabaseTable = '';
+  String _artistSupabaseId = '';
+
+
+  Future<_ArtistIdentity> _resolveArtistIdentity() async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    final firebaseUid = (firebaseUser?.uid ?? '').trim();
+    final firebaseEmail = (firebaseUser?.email ?? '').trim().toLowerCase();
+    final supabaseEmail = (SupabaseAuthService.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    final loginEmail = firebaseEmail.isNotEmpty ? firebaseEmail : supabaseEmail;
+    final aliasUid = loginEmail.isNotEmpty
+        ? await AuthEmailAliasService.resolveUidForLogin(loginEmail)
+        : null;
+    return _ArtistIdentity(
+      uid: firebaseUid.isNotEmpty ? firebaseUid : (aliasUid ?? ''),
+      email: loginEmail,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _bindArtistProfile();
+  }
+
+  @override
+  void dispose() {
+    _artistSub?.cancel();
+    super.dispose();
+  }
+
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    return const <String, dynamic>{};
+  }
+
+  Map<String, dynamic> _withSupabaseMeta(Map<String, dynamic> data) {
+    return <String, dynamic>{
+      ...data,
+      '__supabaseTable': _artistSupabaseTable,
+      '__supabaseId': _artistSupabaseId,
+    };
+  }
+
+  Future<Map<String, dynamic>?> _readSupabaseArtistRow({
+    required String table,
+    required String uid,
+    required String email,
+  }) async {
+    final client = SupabaseBootstrap.client;
+
+    Future<Map<String, dynamic>?> firstRow(PostgrestFilterBuilder<dynamic> query) async {
+      try {
+        final rows = await query.limit(1);
+        if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      } catch (e) {
+        debugPrint('Supabase artist lookup failed for $table: $e');
+      }
+      return null;
+    }
+
+    if (uid.isNotEmpty) {
+      final byId = await firstRow(client.from(table).select().eq('id', uid));
+      if (byId != null) return byId;
+
+      final byUid = await firstRow(client.from(table).select().eq('uid', uid));
+      if (byUid != null) return byUid;
+    }
+
+    if (email.isNotEmpty) {
+      final byEmail = await firstRow(client.from(table).select().eq('email', email));
+      if (byEmail != null) return byEmail;
+    }
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _loadSupabaseArtistProfile(_ArtistIdentity identity) async {
+    final uid = identity.uid.trim();
+    final email = identity.email.trim().toLowerCase();
+
+    for (final table in const <String>['artist', 'client_artist']) {
+      final row = await _readSupabaseArtistRow(table: table, uid: uid, email: email);
+      if (row == null) continue;
+
+      _artistSupabaseTable = table;
+      _artistSupabaseId = _firstNonEmpty([
+        row['id'],
+        row['uid'],
+        uid,
+      ]);
+
+      return row;
+    }
+
+    return null;
+  }
+
+  Future<void> _syncSupabaseArtistFields(Map<String, dynamic> fields) async {
+    final table = _artistSupabaseTable.trim();
+    final id = _artistSupabaseId.trim();
+    if (table.isEmpty || id.isEmpty || fields.isEmpty) return;
+
+    try {
+      await SupabaseBootstrap.client.from(table).update(fields).eq('id', id);
+    } catch (e) {
+      debugPrint('Supabase artist update failed: $e');
+    }
+  }
+
+  Map<String, dynamic> _firestoreCompatArtistData(Map<String, dynamic> row) {
+    final profile = _asMap(row['profile']);
+    final basic = _asMap(row['basic']);
+    final name = _firstNonEmpty([
+      profile['displayName'],
+      profile['studioName'],
+      profile['name'],
+      row['displayName'],
+      row['display_name'],
+      row['studioName'],
+      row['studio_name'],
+      row['name'],
+      basic['name'],
+    ]);
+    final avatar = _cleanAvatarValue(_firstNonEmpty([
+      profile['profileImageUrl'],
+      profile['profilePhotoUrl'],
+      profile['photoUrl'],
+      profile['avatarUrl'],
+      row['profileImageUrl'],
+      row['profile_image_url'],
+      row['profilePhotoUrl'],
+      row['photoUrl'],
+      row['avatarUrl'],
+      basic['profileImageUrl'],
+      basic['photoUrl'],
+      basic['avatarUrl'],
+    ]));
+
+    return <String, dynamic>{
+      ...row,
+      'displayName': name,
+      'name': name,
+      'studioName': _firstNonEmpty([profile['studioName'], row['studioName'], row['studio_name']]),
+      'profileImageUrl': avatar,
+      'photoUrl': avatar,
+      'avatarUrl': avatar,
+      'panel_displayName': name,
+      'panel_studioName': _firstNonEmpty([profile['studioName'], row['studioName'], row['studio_name']]),
+      'panel_profileImageUrl': avatar,
+      'profile': <String, dynamic>{
+        ...profile,
+        if (name.isNotEmpty) 'displayName': name,
+        if (avatar.isNotEmpty) 'profileImageUrl': avatar,
+        if (avatar.isNotEmpty) 'photoUrl': avatar,
+        if (avatar.isNotEmpty) 'avatarUrl': avatar,
+      },
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+
+  Future<void> _bindArtistProfile() async {
+    final identity = await _resolveArtistIdentity();
+    if (identity.uid.trim().isEmpty && identity.email.trim().isEmpty) {
+      return;
+    }
+
+    final supabaseRow = await _loadSupabaseArtistProfile(identity);
+    if (supabaseRow != null) {
+      final compatData = _firestoreCompatArtistData(supabaseRow);
+      final nextDirect = _readBool(
+        compatData['panel_directRequestsEnabled'],
+        (compatData['availability'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+        (compatData['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+      );
+      final nextNfc =
+          _readMaybeBool(
+            compatData['panel_nfcRequestEnabled'],
+            (compatData['availability'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+            (compatData['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+          ) ??
+          false;
+      final nextAllClientNotifications = _readBool(
+        compatData['panel_allClientRequestNotificationsEnabled'],
+        (compatData['notifications'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+        (compatData['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+      );
+
+      final docId = _firstNonEmpty([
+        _artistSupabaseId,
+        identity.uid,
+        identity.email,
+      ]).replaceAll('/', '_');
+
+      final streamRef = _db.collection(_artistSupabaseTable == 'client_artist' ? 'client_artist' : 'artist').doc(docId);
+      _artistDocRef = streamRef;
+
+      if (mounted) {
+        setState(() {
+          _artistData = compatData;
+          _directRequestsEnabled = nextDirect;
+          _nfcRequestsEnabled = nextNfc;
+          _allClientRequestNotificationsEnabled = nextAllClientNotifications;
+        });
+      }
+
+      try {
+        await streamRef.set(compatData, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore compatibility mirror failed: $e');
+      }
+
+      _artistSub?.cancel();
+      _artistSub = streamRef.snapshots().listen((snap) {
+        if (!mounted) return;
+        final data = snap.data() ?? compatData;
+        setState(() {
+          _artistData = data;
+          _directRequestsEnabled = _readBool(
+            data['panel_directRequestsEnabled'],
+            (data['availability'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+            (data['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+          );
+          _nfcRequestsEnabled =
+              _readMaybeBool(
+                data['panel_nfcRequestEnabled'],
+                (data['availability'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+                (data['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+              ) ??
+              false;
+          _allClientRequestNotificationsEnabled = _readBool(
+            data['panel_allClientRequestNotificationsEnabled'],
+            (data['notifications'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+            (data['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+          );
+        });
+      });
+
+      return;
+    }
+
+    DocumentReference<Map<String, dynamic>>? resolvedRef;
+    DocumentSnapshot<Map<String, dynamic>>? resolvedSnap;
+    int resolvedScore = -1;
+
+    int scoreDoc(Map<String, dynamic> data) {
+      int listLen(dynamic raw) {
+        if (raw is List) return raw.length;
+        return 0;
+      }
+
+      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
+      final artist = (data['artist'] as Map<String, dynamic>?) ?? const {};
+      final portfolio =
+          (data['portfolio'] as Map<String, dynamic>?) ?? const {};
+      final artistPortfolio =
+          (artist['portfolio'] as Map<String, dynamic>?) ?? const {};
+
+      var score = 0;
+      score += listLen(data['portfolioImages']) * 5;
+      score += listLen(data['panel_portfolioImages']) * 5;
+      score += listLen(data['panel_artist_portfolioImages']) * 5;
+      score += listLen(data['portfolioItems']) * 3;
+      score += listLen(portfolio['images']) * 3;
+      score += listLen(portfolio['items']) * 2;
+      score += listLen(artist['portfolioImages']) * 3;
+      score += listLen(artist['portfolioItems']) * 2;
+      score += listLen(artistPortfolio['images']) * 2;
+      score += listLen(artistPortfolio['items']) * 2;
+      if (_firstNonEmpty([
+        profile['photoUrl'],
+        profile['avatarUrl'],
+        profile['profileImageUrl'],
+        data['photoUrl'],
+        data['avatarUrl'],
+        data['panel_profileImageUrl'],
+        data['profileImageUrl'],
+      ]).isNotEmpty) {
+        score += 4;
+      }
+      if (_firstNonEmpty([
+        profile['displayName'],
+        profile['studioName'],
+        data['panel_displayName'],
+        data['panel_studioName'],
+        data['displayName'],
+        data['name'],
+      ]).isNotEmpty) {
+        score += 2;
+      }
+      return score;
+    }
+
+    Future<void> considerRef(
+      DocumentReference<Map<String, dynamic>> ref,
+    ) async {
+      try {
+        final snap = await ref.get();
+        if (!snap.exists) return;
+        final data = snap.data() ?? const <String, dynamic>{};
+        var score = scoreDoc(data);
+        try {
+          final sub = await ref
+              .collection('portfolio_items')
+              .limit(1)
+              .get(const GetOptions(source: Source.server));
+          if (sub.docs.isNotEmpty) score += 10;
+        } catch (_) {}
+        if (score > resolvedScore) {
+          resolvedScore = score;
+          resolvedRef = ref;
+          resolvedSnap = snap;
+        }
+      } catch (_) {}
+    }
+
+    for (final collection in const <String>['artist', 'client_artist']) {
+      if (identity.uid.isNotEmpty) {
+        await considerRef(_db.collection(collection).doc(identity.uid));
+      }
+    }
+
+    final email = identity.email.trim().toLowerCase();
+    if (email.isNotEmpty) {
+      for (final collection in const <String>['artist', 'client_artist']) {
+        try {
+          final query = await _db
+              .collection(collection)
+              .where('email', isEqualTo: email)
+              .limit(2)
+              .get();
+          for (final doc in query.docs) {
+            await considerRef(doc.reference);
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (resolvedRef == null) {
+      return;
+    }
+
+    final streamRef = resolvedRef!;
+    _artistDocRef = streamRef;
+    if (resolvedSnap != null && mounted) {
+      final data = resolvedSnap!.data() ?? const <String, dynamic>{};
+      final nextDirect = _readBool(
+        data['panel_directRequestsEnabled'],
+        (data['availability']
+            as Map<String, dynamic>?)?['directRequestsEnabled'],
+        (data['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+      );
+      final nextNfc =
+          _readMaybeBool(
+            data['panel_nfcRequestEnabled'],
+            (data['availability']
+                as Map<String, dynamic>?)?['nfcRequestEnabled'],
+            (data['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+          ) ??
+          false;
+      final nextAllClientNotifications = _readBool(
+        data['panel_allClientRequestNotificationsEnabled'],
+        (data['notifications']
+            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+        (data['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+      );
+      setState(() {
+        _artistData = data;
+        _directRequestsEnabled = nextDirect;
+        _nfcRequestsEnabled = nextNfc;
+        _allClientRequestNotificationsEnabled = nextAllClientNotifications;
+      });
+      unawaited(_ensurePortfolioSubcollectionSeed(streamRef, data));
+    }
+    _artistSub?.cancel();
+    _artistSub = streamRef.snapshots().listen((snap) {
+      if (!mounted) return;
+      final data = snap.data() ?? const <String, dynamic>{};
+      final nextDirect = _readBool(
+        data['panel_directRequestsEnabled'],
+        (data['availability']
+            as Map<String, dynamic>?)?['directRequestsEnabled'],
+        (data['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+      );
+      final nextNfc =
+          _readMaybeBool(
+            data['panel_nfcRequestEnabled'],
+            (data['availability']
+                as Map<String, dynamic>?)?['nfcRequestEnabled'],
+            (data['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+          ) ??
+          false;
+      final nextAllClientNotifications = _readBool(
+        data['panel_allClientRequestNotificationsEnabled'],
+        (data['notifications']
+            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+        (data['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+      );
+      setState(() {
+        _artistData = data;
+        _directRequestsEnabled = nextDirect;
+        _nfcRequestsEnabled = nextNfc;
+        _allClientRequestNotificationsEnabled = nextAllClientNotifications;
+      });
+      unawaited(_ensurePortfolioSubcollectionSeed(streamRef, data));
+    });
+  }
+
+  Future<void> _ensurePortfolioSubcollectionSeed(
+    DocumentReference<Map<String, dynamic>> ref,
+    Map<String, dynamic> data,
+  ) async {
+    final legacyItems = _portfolioItemsFromData(data);
+    if (legacyItems.isEmpty) return;
+    try {
+      final existing = await ref
+          .collection('portfolio_items')
+          .limit(1)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 6));
+      if (existing.docs.isNotEmpty) return;
+    } catch (_) {
+      return;
+    }
+
+    final seen = <String>{};
+    for (final item in legacyItems.take(24)) {
+      final image = item.image.trim();
+      if (image.isEmpty || !seen.add(image)) continue;
+      try {
+        await ref
+            .collection('portfolio_items')
+            .add({
+              'imageUrl': image,
+              'storagePath': '',
+              'style': item.style.trim().isEmpty ? 'All' : item.style.trim(),
+              'createdAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            })
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {}
+    }
+  }
+
+  bool _readBool(Object? a, [Object? b, Object? c]) {
+    for (final v in <Object?>[a, b, c]) {
+      if (v is bool) return v;
+      if (v is String) {
+        final text = v.trim().toLowerCase();
+        if (text == 'true') return true;
+        if (text == 'false') return false;
+      }
+      if (v is num) return v != 0;
+    }
+    return true;
+  }
+
+  bool? _readMaybeBool(Object? a, [Object? b, Object? c]) {
+    for (final v in <Object?>[a, b, c]) {
+      if (v is bool) return v;
+      if (v is String) {
+        final text = v.trim().toLowerCase();
+        if (text == 'true') return true;
+        if (text == 'false') return false;
+      }
+      if (v is num) return v != 0;
+    }
+    return null;
+  }
+
+  String _firstNonEmpty(List<Object?> values) {
+    for (final raw in values) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String _cleanAvatarValue(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return '';
+    final lower = text.toLowerCase();
+    if (lower.startsWith('assets/')) return '';
+    if (lower.contains('profile_placeholder')) return '';
+    if (lower.contains('avatar_placeholder')) return '';
+    return text;
+  }
+
+  String get _artistName {
+    final profile =
+        (_artistData['profile'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    return _firstNonEmpty([
+      profile['displayName'],
+      profile['studioName'],
+      _artistData['panel_displayName'],
+      _artistData['panel_studioName'],
+      _artistData['displayName'],
+      _artistData['name'],
+      'Artist',
+    ]);
+  }
+
+  String get _avatarPath {
+    final profile =
+        (_artistData['profile'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    return _cleanAvatarValue(
+      _firstNonEmpty([
+        profile['photoUrl'],
+        profile['avatarUrl'],
+        profile['profileImageUrl'],
+        profile['profilePhotoUrl'],
+        profile['photoURL'],
+        profile['avatarURL'],
+        profile['profilePhoto'],
+        _artistData['photoUrl'],
+        _artistData['avatarUrl'],
+        _artistData['panel_profileImageUrl'],
+        _artistData['profileImageUrl'],
+        _artistData['profilePhotoUrl'],
+        _artistData['profilePhoto'],
+        (_artistData['basic'] as Map<String, dynamic>?)?['profileImageUrl'],
+        (_artistData['basic'] as Map<String, dynamic>?)?['avatarUrl'],
+        (_artistData['basic'] as Map<String, dynamic>?)?['photoUrl'],
+        (_artistData['basic'] as Map<String, dynamic>?)?['profilePhotoUrl'],
+        (_artistData['basic'] as Map<String, dynamic>?)?['profilePhoto'],
+      ]),
+    );
+  }
+
+  ArtistAscensionState get _ascensionState =>
+      artistAscensionFromDoc(_artistData);
+
+  double? get _rating {
+    final stats =
+        (_artistData['stats'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    for (final raw in <Object?>[
+      stats['rating'],
+      stats['averageRating'],
+      _artistData['rating'],
+      _artistData['averageRating'],
+      _artistData['panel_rating'],
+    ]) {
+      if (raw is num && raw > 0) return raw.toDouble();
+      if (raw is String) {
+        final parsed = double.tryParse(raw.trim());
+        if (parsed != null && parsed > 0) return parsed;
+      }
+    }
+    return null;
+  }
+
+  int get _reviews {
+    final stats =
+        (_artistData['stats'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    for (final raw in <Object?>[
+      stats['reviews'],
+      stats['reviewCount'],
+      _artistData['reviews'],
+      _artistData['reviewCount'],
+      _artistData['panel_reviews'],
+    ]) {
+      if (raw is num && raw >= 0) return raw.round();
+      if (raw is String) {
+        final parsed = int.tryParse(raw.trim());
+        if (parsed != null && parsed >= 0) return parsed;
+      }
+    }
+    return 0;
+  }
+
+  Future<void> _setDirectRequestsEnabled(bool value) async {
+    setState(() {
+      _directRequestsEnabled = value;
+      _savingDirectRequestPref = true;
+    });
+    final ref = _artistDocRef;
+    if (ref == null) {
+      if (!mounted) return;
+      setState(() => _savingDirectRequestPref = false);
+      return;
+    }
+    try {
+      await ref.set({
+        'panel_directRequestsEnabled': value,
+        'availability': {'directRequestsEnabled': value},
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await _syncSupabaseArtistFields({
+        'availability': {'directRequestsEnabled': value},
+        'profile': {
+          ..._asMap(_artistData['profile']),
+          'directRequestsEnabled': value,
+        },
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update direct request preference.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingDirectRequestPref = false);
+      }
+    }
+  }
+
+  Future<void> _setNfcRequestsEnabled(bool value) async {
+    setState(() {
+      _nfcRequestsEnabled = value;
+      _savingNfcRequestPref = true;
+    });
+    final ref = _artistDocRef;
+    if (ref == null) {
+      if (!mounted) return;
+      setState(() => _savingNfcRequestPref = false);
+      return;
+    }
+    try {
+      await ref.set({
+        'panel_nfcRequestEnabled': value,
+        'availability': {'nfcRequestEnabled': value},
+        'profile': {'nfcRequestEnabled': value},
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await _syncSupabaseArtistFields({
+        'availability': {
+          ..._asMap(_artistData['availability']),
+          'nfcRequestEnabled': value,
+        },
+        'profile': {
+          ..._asMap(_artistData['profile']),
+          'nfcRequestEnabled': value,
+        },
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update NFC request preference.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingNfcRequestPref = false);
+      }
+    }
+  }
+
+  Future<void> _setAllClientRequestNotificationsEnabled(bool value) async {
+    setState(() {
+      _allClientRequestNotificationsEnabled = value;
+      _savingAllClientRequestNotifications = true;
+    });
+    final ref = _artistDocRef;
+    if (ref == null) {
+      if (!mounted) return;
+      setState(() => _savingAllClientRequestNotifications = false);
+      return;
+    }
+    try {
+      await ref.set({
+        'panel_allClientRequestNotificationsEnabled': value,
+        'notifications': {
+          'allClientRequestsEnabled': value,
+          'directRequestNotificationsEnabled': true,
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await _syncSupabaseArtistFields({
+        'notifications': {
+          ..._asMap(_artistData['notifications']),
+          'allClientRequestsEnabled': value,
+          'directRequestNotificationsEnabled': true,
+        },
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update notification preference.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingAllClientRequestNotifications = false);
+      }
+    }
+  }
+
+  void _onNotifications() {
+    NotificationsPage.showAsModal(context);
+  }
+
+  Future<void> _logoutFromProfile() async {
+    if (_loggingOutFromProfile) return;
+    setState(() => _loggingOutFromProfile = true);
+    try {
+      await FirebaseAuth.instance.signOut();
+      await SupabaseBootstrap.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to logout. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _loggingOutFromProfile = false);
+    }
+  }
+
+  Future<void> _onEditProfile() async {
+    final ref = _artistDocRef;
+    if (ref == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistEditProfilePage(docRef: ref, initialData: _withSupabaseMeta(_artistData)),
+        ),
+      ),
+    );
+  }
+
+  List<ArtistPortfolioItem> _portfolioItemsFromData(Map<String, dynamic> data) {
+    final portfolio =
+        (data['portfolio'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final artist =
+        (data['artist'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final artistPortfolio =
+        (artist['portfolio'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final List<ArtistPortfolioItem> items = <ArtistPortfolioItem>[];
+
+    void addFromAny(Object? raw, {String fallbackStyle = 'All'}) {
+      if (raw == null) return;
+      if (raw is String) {
+        final s = raw.trim();
+        if (s.isEmpty || !_isPortfolioImageValue(s)) return;
+        items.add(ArtistPortfolioItem(image: s, style: fallbackStyle));
+        return;
+      }
+      if (raw is List) {
+        for (final item in raw) {
+          addFromAny(item, fallbackStyle: fallbackStyle);
+        }
+        return;
+      }
+      if (raw is Map) {
+        final map = Map<String, dynamic>.from(raw);
+        final image = _firstNonEmpty([
+          map['imageUrl'],
+          map['imageURL'],
+          map['downloadUrl'],
+          map['downloadURL'],
+          map['photoUrl'],
+          map['photoURL'],
+          map['url'],
+          map['image'],
+        ]);
+        if (image.isNotEmpty && _isPortfolioImageValue(image)) {
+          final style = _firstNonEmpty([
+            map['style'],
+            map['category'],
+            map['type'],
+            fallbackStyle,
+          ]);
+          items.add(ArtistPortfolioItem(image: image, style: style));
+        }
+        for (final value in map.values) {
+          if (value is List || value is Map) {
+            addFromAny(value, fallbackStyle: fallbackStyle);
+          }
+        }
+      }
+    }
+
+    addFromAny(portfolio['items']);
+    addFromAny(portfolio['images']);
+    addFromAny(data['portfolioItems']);
+    addFromAny(data['portfolioImages']);
+    addFromAny(data['panel_portfolioImages']);
+    addFromAny(data['panel_artist_portfolioImages']);
+    addFromAny(artistPortfolio['items']);
+    addFromAny(artistPortfolio['images']);
+    addFromAny(artist['portfolioItems']);
+    addFromAny(artist['portfolioImages']);
+
+    return items;
+  }
+
+  Future<List<ArtistPortfolioItem>> _loadPortfolioItemsFresh() async {
+    final merged = <ArtistPortfolioItem>[
+      ..._portfolioItemsFromData(_artistData),
+    ];
+    final seen = <String>{
+      for (final i in merged) _portfolioImageKey(i.image),
+    };
+    final knownDocIds = <String>{};
+    final knownDocKeys = <String>{};
+
+    void addUnique(List<ArtistPortfolioItem> items) {
+      for (final item in items) {
+        final key = _portfolioImageKey(item.image);
+        if (seen.add(key)) merged.add(item);
+      }
+    }
+
+    void addRawImage(String value, {String style = 'All'}) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty || !_isPortfolioImageValue(trimmed)) return;
+      final key = _portfolioImageKey(trimmed);
+      if (seen.add(key)) {
+        merged.add(ArtistPortfolioItem(image: trimmed, style: style));
+      }
+    }
+
+    void addDeepCandidates(Object? raw, {String parentKey = ''}) {
+      if (raw is String) {
+        final value = raw.trim();
+        if (value.isEmpty || !_isPortfolioImageValue(value)) return;
+        final key = parentKey.toLowerCase();
+        final looksRelevantKey =
+            key.contains('portfolio') ||
+            key.contains('image') ||
+            key.contains('photo') ||
+            key.contains('url') ||
+            key.contains('path');
+        final looksLikeUrl =
+            value.startsWith('http://') ||
+            value.startsWith('https://') ||
+            value.startsWith('gs://');
+        final looksLikeStoragePath =
+            value.contains('/') &&
+            (value.endsWith('.jpg') ||
+                value.endsWith('.jpeg') ||
+                value.endsWith('.png') ||
+                value.endsWith('.webp') ||
+                value.endsWith('.gif'));
+        if (looksRelevantKey && (looksLikeUrl || looksLikeStoragePath)) {
+          addRawImage(value);
+        }
+        return;
+      }
+      if (raw is List) {
+        for (final item in raw) {
+          addDeepCandidates(item, parentKey: parentKey);
+        }
+        return;
+      }
+      if (raw is Map) {
+        raw.forEach((k, v) {
+          addDeepCandidates(v, parentKey: k.toString());
+        });
+      }
+    }
+
+    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    final db = FirebaseFirestore.instance;
+    final boundDocId = _artistDocRef?.id ?? '';
+
+    if (boundDocId.isNotEmpty) knownDocIds.add(boundDocId);
+    if (uid.isNotEmpty) knownDocIds.add(uid);
+
+    Future<void> pullDoc(String collection, String id) async {
+      if (id.isEmpty) return;
+      final lookupKey = '$collection:$id';
+      if (!knownDocKeys.add(lookupKey)) return;
+      knownDocIds.add(id);
+      try {
+        final snap = await db
+            .collection(collection)
+            .doc(id)
+            .get(const GetOptions(source: Source.server));
+        if (!snap.exists) return;
+        final data = snap.data() ?? const <String, dynamic>{};
+        addUnique(_portfolioItemsFromData(data));
+        addDeepCandidates(data);
+      } catch (_) {}
+    }
+
+    Future<void> pullByEmail(String collection, String emailValue) async {
+      if (emailValue.isEmpty) return;
+      try {
+        final q = await db
+            .collection(collection)
+            .where('email', isEqualTo: emailValue)
+            .limit(1)
+            .get(const GetOptions(source: Source.server));
+        if (q.docs.isEmpty) return;
+        final doc = q.docs.first;
+        knownDocIds.add(doc.id);
+        addUnique(_portfolioItemsFromData(doc.data()));
+        addDeepCandidates(doc.data());
+      } catch (_) {}
+    }
+
+    Future<void> pullByUidField(String collection, String uidValue) async {
+      if (uidValue.isEmpty) return;
+      try {
+        final q = await db
+            .collection(collection)
+            .where('uid', isEqualTo: uidValue)
+            .limit(2)
+            .get(const GetOptions(source: Source.server));
+        for (final doc in q.docs) {
+          final key = '$collection:${doc.id}';
+          if (!knownDocKeys.add(key)) continue;
+          knownDocIds.add(doc.id);
+          addUnique(_portfolioItemsFromData(doc.data()));
+          addDeepCandidates(doc.data());
+        }
+      } catch (_) {}
+    }
+
+    for (final c in const <String>['artist', 'client_artist']) {
+      await pullDoc(c, boundDocId);
+      await pullDoc(c, uid);
+      await pullByUidField(c, uid);
+      await pullByEmail(c, email);
+    }
+
+    // Storage fallback for legacy/missing Firestore portfolio fields.
+    if (merged.isEmpty) {
+      final storage = FirebaseStorage.instance;
+
+      Future<void> listFolder(String base, String id) async {
+        if (id.trim().isEmpty) return;
+        try {
+          final folder = storage.ref('$base/$id/portfolio');
+          final listed = await folder.listAll().timeout(
+            const Duration(seconds: 6),
+          );
+          for (final item in listed.items) {
+            try {
+              final url = (await item.getDownloadURL().timeout(
+                const Duration(seconds: 6),
+              )).trim();
+              if (url.isEmpty) continue;
+              final key = '$url|All';
+              if (seen.add(key)) {
+                merged.add(ArtistPortfolioItem(image: url, style: 'All'));
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
+      final idsToTry = <String>{uid, ...knownDocIds};
+      for (final id in idsToTry) {
+        await listFolder('artists', id);
+        await listFolder('client_artists', id);
+      }
+    }
+
+    return merged;
+  }
+
+  Future<void> _openPortfolio() async {
+    var ref = _artistDocRef;
+    if (ref == null) {
+      await _bindArtistProfile();
+      ref = _artistDocRef;
+    }
+    if (ref == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Artist profile not found.')),
+        );
+      }
+      return;
+    }
+    final docRef = ref;
+    // Open modal immediately; seed legacy items in background.
+    _seedPortfolioItemsIfMissing(docRef);
+    await _cleanupMalformedPortfolioItems(docRef);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistPortfolioModal(
+            docRef: docRef,
+            initialItems: _portfolioItemsFromData(_artistData),
+            onUploadTap: _uploadPortfolioDesigns,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _seedPortfolioItemsIfMissing(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    try {
+      final existing = await ref
+          .collection('portfolio_items')
+          .limit(1)
+          .get(const GetOptions(source: Source.server));
+      if (existing.docs.isNotEmpty) return;
+    } catch (_) {
+      return;
+    }
+
+    final urls = <String>{};
+    void addUrl(dynamic raw) {
+      final v = (raw ?? '').toString().trim();
+      if (v.isEmpty) return;
+      if (v.startsWith('http://') ||
+          v.startsWith('https://') ||
+          v.startsWith('gs://') ||
+          v.contains('/')) {
+        urls.add(v);
+      }
+    }
+
+    final portfolio = (_artistData['portfolio'] as Map<String, dynamic>?) ?? {};
+    final artist = (_artistData['artist'] as Map<String, dynamic>?) ?? {};
+    final artistPortfolio =
+        (artist['portfolio'] as Map<String, dynamic>?) ?? {};
+
+    final candidates = <dynamic>[
+      _artistData['portfolioImages'],
+      _artistData['portfolioItems'],
+      _artistData['panel_portfolioImages'],
+      _artistData['panel_artist_portfolioImages'],
+      portfolio['images'],
+      portfolio['items'],
+      artist['portfolioImages'],
+      artist['portfolioItems'],
+      artistPortfolio['images'],
+      artistPortfolio['items'],
+    ];
+
+    void walk(dynamic raw) {
+      if (raw == null) return;
+      if (raw is String) {
+        addUrl(raw);
+        return;
+      }
+      if (raw is List) {
+        for (final item in raw) {
+          walk(item);
+        }
+        return;
+      }
+      if (raw is Map) {
+        for (final v in raw.values) {
+          walk(v);
+        }
+      }
+    }
+
+    for (final c in candidates) {
+      walk(c);
+    }
+
+    final storage = FirebaseStorage.instance;
+    final bases = <String>{
+      ref.path.startsWith('client_artist/') ? 'client_artists' : 'artists',
+      'artists',
+      'client_artists',
+    };
+    final ownerIds = <String>{
+      ref.id.trim(),
+      (FirebaseAuth.instance.currentUser?.uid ?? '').trim(),
+    }..removeWhere((e) => e.isEmpty);
+    for (final base in bases) {
+      for (final ownerId in ownerIds) {
+        try {
+          final listed = await storage
+              .ref('$base/$ownerId/portfolio')
+              .listAll()
+              .timeout(const Duration(seconds: 6));
+          for (final item in listed.items) {
+            try {
+              final url = (await item.getDownloadURL().timeout(
+                const Duration(seconds: 6),
+              )).trim();
+              if (url.isNotEmpty) urls.add(url);
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (urls.isEmpty) return;
+    for (final url in urls) {
+      try {
+        await ref.collection('portfolio_items').add({
+          'imageUrl': url,
+          'storagePath': '',
+          'style': 'All',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _cleanupMalformedPortfolioItems(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    try {
+      final snap = await ref
+          .collection('portfolio_items')
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 8));
+      if (snap.docs.isEmpty) return;
+
+      final seen = <String>{};
+      final deleteRefs = <DocumentReference<Map<String, dynamic>>>[];
+
+      for (final doc in snap.docs) {
+        final item = _portfolioItemFromDocData(doc.data(), doc.id);
+        if (item == null) {
+          deleteRefs.add(doc.reference);
+          continue;
+        }
+
+        final key = _portfolioImageKey(item.image);
+        if (!seen.add(key)) {
+          deleteRefs.add(doc.reference);
+        }
+      }
+
+      if (deleteRefs.isEmpty) return;
+
+      for (var i = 0; i < deleteRefs.length; i += 300) {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final refToDelete in deleteRefs.skip(i).take(300)) {
+          batch.delete(refToDelete);
+        }
+        await batch.commit().timeout(const Duration(seconds: 8));
+      }
+    } catch (_) {}
+  }
+
+  Future<List<ArtistPortfolioItem>> _uploadPortfolioDesigns({
+    List<XFile>? selectedFiles,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final ref = _artistDocRef;
+    if (ref == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Artist profile not found. Please try again.'),
+          ),
+        );
+      }
+      return const <ArtistPortfolioItem>[];
+    }
+
+    final picker = ImagePicker();
+    final picked =
+        selectedFiles ??
+        await picker.pickMultiImage(
+          imageQuality: 78,
+          maxWidth: 1600,
+          maxHeight: 1600,
+        );
+    if (picked.isEmpty) {
+      return const <ArtistPortfolioItem>[];
+    }
+
+    final List<String> uploaded = <String>[];
+    String? firstError;
+    try {
+      final storage = SupabaseBootstrap.client.storage.from('portfolio-images');
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final isClientArtistDoc = ref.path.startsWith('client_artist/');
+      final storageBases = isClientArtistDoc
+          ? const <String>['client_artists', 'artists']
+          : const <String>['artists', 'client_artists'];
+      final storageOwnerId = (FirebaseAuth.instance.currentUser?.uid ?? ref.id)
+          .trim();
+
+      Future<Map<String, String>?> uploadToBase({
+        required String base,
+        required Uint8List bytes,
+        required int index,
+        required int attempt,
+      }) async {
+        final storagePath =
+            '$base/$storageOwnerId/portfolio/${now}_${index + 1}_a$attempt.jpg';
+        try {
+          await storage.uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: true,
+            ),
+          ).timeout(
+            const Duration(seconds: 45),
+            onTimeout: () {
+              throw TimeoutException(
+                'Timed out uploading to Supabase $storagePath (doc: ${ref.path})',
+              );
+            },
+          );
+
+          final trimmed = storage.getPublicUrl(storagePath).trim();
+          if (trimmed.isEmpty) return null;
+          return <String, String>{'url': trimmed, 'path': storagePath};
+        } catch (e) {
+          firstError ??= e.toString();
+          return null;
+        }
+      }
+
+      var completed = 0;
+      onProgress?.call(completed, picked.length);
+      for (var i = 0; i < picked.length; i++) {
+        try {
+          final file = picked[i];
+          final rawBytes = await file.readAsBytes().timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw TimeoutException('Timed out reading selected image bytes.');
+            },
+          );
+          if (rawBytes.isEmpty) {
+            firstError ??= 'Selected image is empty.';
+            continue;
+          }
+          if (rawBytes.lengthInBytes > _maxPortfolioUploadBytes) {
+            firstError ??=
+                'Selected image exceeds 2MB. Please choose a file smaller than 2MB.';
+            continue;
+          }
+          Uint8List bytes = rawBytes;
+          if (bytes.lengthInBytes > _preferredPortfolioUploadBytes) {
+            final optimized = _optimizePortfolioUploadBytes(bytes);
+            if (optimized != null && optimized.isNotEmpty) {
+              bytes = optimized;
+            }
+          }
+
+          Map<String, String>? uploadedData;
+          for (final base in storageBases) {
+            uploadedData = await uploadToBase(
+              base: base,
+              bytes: bytes,
+              index: i,
+              attempt: 1,
+            );
+            if (uploadedData != null) break;
+          }
+
+          // Last fallback: retry with a much smaller payload on slow links.
+          if (uploadedData == null) {
+            final tiny = _optimizePortfolioUploadBytes(
+              bytes,
+              maxEdge: 900,
+              maxBytes: 300 * 1024,
+            );
+            if (tiny != null && tiny.isNotEmpty) {
+              for (final base in storageBases) {
+                uploadedData = await uploadToBase(
+                  base: base,
+                  bytes: tiny,
+                  index: i,
+                  attempt: 2,
+                );
+                if (uploadedData != null) break;
+              }
+            }
+          }
+
+          // Storage timeout fallback: persist inline image so UI updates immediately.
+          if (uploadedData == null) {
+            final tiny =
+                _optimizePortfolioUploadBytes(
+                  bytes,
+                  maxEdge: 800,
+                  maxBytes: 220 * 1024,
+                ) ??
+                bytes;
+            final inline = 'data:image/jpeg;base64,${base64Encode(tiny)}';
+            uploadedData = <String, String>{'url': inline, 'path': ''};
+          }
+
+          final trimmedUrl = (uploadedData['url'] ?? '').trim();
+          final storagePath = (uploadedData['path'] ?? '').trim();
+          if (trimmedUrl.isEmpty) continue;
+          uploaded.add(trimmedUrl);
+          try {
+            await ref
+                .collection('portfolio_items')
+                .add({
+                  'imageUrl': trimmedUrl,
+                  'storagePath': storagePath,
+                  'style': 'All',
+                  'createdAt': FieldValue.serverTimestamp(),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                })
+                .timeout(const Duration(seconds: 25));
+          } catch (e) {
+            firstError ??= e.toString();
+            // Don't block uploader on one failed metadata write.
+          }
+        } on FirebaseException catch (e) {
+          firstError ??=
+              '${e.code}${e.message == null ? '' : ' - ${e.message}'}';
+        } catch (e) {
+          firstError ??= e.toString();
+        } finally {
+          completed += 1;
+          onProgress?.call(completed, picked.length);
+        }
+      }
+
+      if (uploaded.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Could not upload photos.${firstError == null ? '' : ' $firstError'}',
+              ),
+            ),
+          );
+        }
+        return const <ArtistPortfolioItem>[];
+      }
+
+      final itemMaps = uploaded
+          .map((url) => <String, dynamic>{'imageUrl': url, 'style': 'All'})
+          .toList(growable: false);
+
+      try {
+        await ref
+            .set({
+              'portfolioImages': FieldValue.arrayUnion(uploaded),
+              'panel_portfolioImages': FieldValue.arrayUnion(uploaded),
+              'panel_artist_portfolioImages': FieldValue.arrayUnion(uploaded),
+              'portfolio': {
+                'images': FieldValue.arrayUnion(uploaded),
+                'items': FieldValue.arrayUnion(itemMaps),
+              },
+              'portfolioItems': FieldValue.arrayUnion(itemMaps),
+              'artist': {
+                'portfolioImages': FieldValue.arrayUnion(uploaded),
+                'portfolioItems': FieldValue.arrayUnion(itemMaps),
+                'portfolio': {
+                  'images': FieldValue.arrayUnion(uploaded),
+                  'items': FieldValue.arrayUnion(itemMaps),
+                },
+              },
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(const Duration(seconds: 20));
+      } catch (e) {
+        firstError ??= e.toString();
+      }
+
+
+      if (_artistSupabaseTable.trim().isNotEmpty && _artistSupabaseId.trim().isNotEmpty) {
+        try {
+          final currentPortfolio = _asMap(_artistData['portfolio']);
+          final existingImages = <String>[
+            ...((currentPortfolio['images'] as List?) ?? const <dynamic>[]).map((e) => e.toString()),
+          ];
+          final mergedImages = <String>{...existingImages, ...uploaded}.toList(growable: false);
+          final existingItems = <dynamic>[
+            ...((currentPortfolio['items'] as List?) ?? const <dynamic>[]),
+          ];
+          final mergedItems = <dynamic>[...itemMaps, ...existingItems];
+
+          await SupabaseBootstrap.client.from(_artistSupabaseTable).update({
+            'portfolio': {
+              ...currentPortfolio,
+              'images': mergedImages,
+              'items': mergedItems,
+            },
+          }).eq('id', _artistSupabaseId);
+        } catch (e) {
+          debugPrint('Supabase portfolio save failed: $e');
+        }
+      }
+
+      // Success is reflected immediately in portfolio tiles; no success snackbar.
+
+      return uploaded
+          .map((url) => ArtistPortfolioItem(image: url, style: 'All'))
+          .toList(growable: false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Upload failed.${firstError == null ? '' : ' $firstError'} ${e.toString()}',
+            ),
+          ),
+        );
+      }
+      return const <ArtistPortfolioItem>[];
+    }
+  }
+
+  Uint8List? _optimizePortfolioUploadBytes(
+    Uint8List source, {
+    int maxEdge = _portfolioMaxEdge,
+    int maxBytes = _maxPortfolioUploadBytes,
+  }) {
+    final decoded = img.decodeImage(source);
+    if (decoded == null) return null;
+
+    img.Image processed = decoded;
+    final maxSide = processed.width > processed.height
+        ? processed.width
+        : processed.height;
+    if (maxSide > maxEdge) {
+      final scale = maxEdge / maxSide;
+      processed = img.copyResize(
+        processed,
+        width: (processed.width * scale).round(),
+        height: (processed.height * scale).round(),
+        interpolation: img.Interpolation.average,
+      );
+    }
+
+    for (var quality = 88; quality >= 56; quality -= 8) {
+      final encoded = img.encodeJpg(processed, quality: quality);
+      final bytes = Uint8List.fromList(encoded);
+      if (bytes.lengthInBytes <= maxBytes) return bytes;
+    }
+    final fallback = img.encodeJpg(processed, quality: 50);
+    return Uint8List.fromList(fallback);
+  }
+
+  String _fileExt(String name) {
+    final value = name.trim().toLowerCase();
+    final dot = value.lastIndexOf('.');
+    if (dot == -1 || dot == value.length - 1) return 'jpg';
+    final ext = value.substring(dot + 1);
+    if (ext == 'jpg' ||
+        ext == 'jpeg' ||
+        ext == 'png' ||
+        ext == 'webp' ||
+        ext == 'gif') {
+      return ext == 'jpg' ? 'jpeg' : ext;
+    }
+    return 'jpeg';
+  }
+
+  Future<void> _openPayoutSettings() async {
+    var ref = _artistDocRef;
+    if (ref == null) {
+      await _bindArtistProfile();
+      ref = _artistDocRef;
+    }
+    if (ref == null) return;
+    final docRef = ref;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.82,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistPayoutSettingsPage(
+            docRef: docRef,
+            initialData: _withSupabaseMeta(_artistData),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<Map<String, String>> _availabilityDayStates() async {
+    final panel =
+        (_artistData['panel_availability'] as Map<String, dynamic>?) ??
+        (_artistData['availability'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final raw = panel['dayStates'];
+    if (raw is! Map) return const <String, String>{};
+    final out = <String, String>{};
+    raw.forEach((key, value) {
+      final k = key.toString().trim();
+      final v = value.toString().trim().toLowerCase();
+      if (k.isEmpty || v.isEmpty) return;
+      if (v == 'direct' || v == 'blocked' || v == 'unavailable') {
+        out[k] = v;
+      }
+    });
+    return out;
+  }
+
+  Future<void> _openAvailability() async {
+    var ref = _artistDocRef;
+    if (ref == null) {
+      await _bindArtistProfile();
+      ref = _artistDocRef;
+    }
+    if (ref == null) return;
+    final docRef = ref;
+    final states = await _availabilityDayStates();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistAvailabilityModal(
+            docRef: docRef,
+            initialDirectRequestsEnabled: _directRequestsEnabled,
+            initialDayStates: states,
+            onDirectRequestChanged: _setDirectRequestsEnabled,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.snow,
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.only(
+            bottom: widget.showBottomNav ? kBottomNavigationBarHeight + 16 : 16,
+          ),
+          children: [
+            // ✅ Separate top header strip
+            _topHeaderStrip(),
+
+            // ✅ Separate hero section (as its own section)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: _profileHeroCard(),
+            ),
+
+            const SizedBox(height: 14),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+              child: Column(
+                children: [
+                  _menuTile(
+                    icon: Icons.photo_library_outlined,
+                    title: 'Portfolio',
+                    subtitle: 'Upload designs & showcase your work.',
+                    onTap: _openPortfolio,
+                  ),
+                  _menuTile(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'Payout Settings',
+                    subtitle: 'Manage payout & banking details.',
+                    onTap: _openPayoutSettings,
+                  ),
+                  _menuTile(
+                    icon: Icons.access_time_rounded,
+                    title: 'Availability',
+                    subtitle: 'Update your schedule & turnaround.',
+                    onTap: _openAvailability,
+                  ),
+
+                  // ✅ Direct Requests section (after Availability)
+                  _directRequestsCard(),
+
+                  _nfcRequestsCard(),
+
+                  _requestNotificationsCard(),
+
+                  _jntAscensionTile(context),
+
+                  _artistAscensionSection(),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: 180,
+                    height: 42,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.blackCat,
+                        foregroundColor: AppColors.snow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                      onPressed: _loggingOutFromProfile
+                          ? null
+                          : _logoutFromProfile,
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      label: Text(
+                        _loggingOutFromProfile ? 'Logging out...' : 'Logout',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: AppColors.snow,
+                          fontFamily: 'Arial',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: widget.showBottomNav
+          ? BottomNavigationBar(
+              currentIndex: widget.bottomNavIndex,
+              backgroundColor: AppColors.balletSlippers,
+              selectedItemColor: AppColors.blackCat,
+              unselectedItemColor: Colors.black.withOpacity(0.55),
+              type: BottomNavigationBarType.fixed,
+              onTap: (i) {
+                if (widget.onNavTap != null) {
+                  widget.onNavTap!(i);
+                  return;
+                }
+                if (i != widget.bottomNavIndex) {
+                  Navigator.pop(context);
+                }
+              },
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.inbox_outlined),
+                  activeIcon: Icon(Icons.inbox),
+                  label: 'Requests',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  activeIcon: Icon(Icons.calendar_month),
+                  label: 'Calendar',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.history_outlined),
+                  activeIcon: Icon(Icons.history),
+                  label: 'History',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.attach_money_outlined),
+                  activeIcon: Icon(Icons.attach_money),
+                  label: 'Earnings',
+                ),
+              ],
+            )
+          : null,
+    );
+  }
+
+  // =========================
+  // TOP STRIP (separate look)
+  // =========================
+  Widget _topHeaderStrip() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: AppColors.alabaster,
+        border: Border(bottom: const BorderSide(color: AppColors.alabaster)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Row(
+            children: [
+              NotificationBellButton(onTap: _onNotifications, iconSize: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Center(
+                  child: Image.asset(
+                    'assets/images/jnt_logo_black.png',
+                    height: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 74,
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+                decoration: BoxDecoration(
+                  color: AppColors.alabaster,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(color: AppColors.blackCatLight),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      height: 44,
+                      width: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.06),
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.qr_code_rounded, size: 26),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Member ID',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black.withOpacity(0.70),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================
+  // PROFILE HERO (separate)
+  // =========================
+  Widget _profileHeroCard() {
+    final w = MediaQuery.of(context).size.width;
+    final avatarSize = w < 380 ? 110.0 : 126.0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                height: avatarSize,
+                width: avatarSize,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.zero,
+                  child: _avatarImage(),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          Text(
+            _artistName,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.black.withOpacity(0.90),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+          TierBadge(tier: _ascensionState.tier),
+
+          const SizedBox(height: 10),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_rating != null) ...[
+                _stars(_rating!),
+                const SizedBox(width: 10),
+              ] else ...[
+                Icon(
+                  Icons.star_border_rounded,
+                  size: 18,
+                  color: Colors.black.withOpacity(0.45),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                _rating != null
+                    ? '${_rating!.toStringAsFixed(1)} | $_reviews Reviews'
+                    : 'N/A',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black.withOpacity(0.70),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
+              );
+            },
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text(
+                'View all reviews',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.deepPlum,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          SizedBox(
+            height: 46,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+              ),
+              onPressed: _onEditProfile,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Edit Profile',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Icon(Icons.chevron_right_rounded, color: Colors.black.withOpacity(0.55)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================
+  // MENU TILE
+  // =========================
+  Widget _menuTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.zero,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: Colors.black.withOpacity(0.75)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withOpacity(0.60),
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppColors.blackCat),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // DIRECT REQUESTS CARD
+  // =========================
+  Widget _directRequestsCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.blackCatBorderLight),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.mark_email_unread_outlined,
+            size: 22,
+            color: Colors.black.withOpacity(0.75),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Direct Requests',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _directRequestsEnabled
+                      ? 'Accepting requests now 😊'
+                      : 'Not accepting requests',
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.60),
+                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _directRequestsEnabled,
+            activeThumbColor: AppColors.blackCat,
+            inactiveThumbColor: AppColors.blackCatLight,
+            inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+            onChanged: _savingDirectRequestPref
+                ? null
+                : (v) => _setDirectRequestsEnabled(v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _nfcRequestsCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.blackCatBorderLight),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.nfc_rounded,
+            size: 22,
+            color: Colors.black.withOpacity(0.75),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'NFC Request',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _nfcRequestsEnabled
+                      ? 'Accepting NFC upgrade requests'
+                      : 'Not accepting NFC upgrade requests',
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.60),
+                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _nfcRequestsEnabled,
+            activeThumbColor: AppColors.blackCat,
+            inactiveThumbColor: AppColors.blackCatLight,
+            inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+            onChanged: _savingNfcRequestPref
+                ? null
+                : (v) => _setNfcRequestsEnabled(v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _requestNotificationsCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.blackCatBorderLight),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.message_outlined,
+                size: 22,
+                color: Colors.black.withOpacity(0.75),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Client Notifications',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+              Switch(
+                value: _allClientRequestNotificationsEnabled,
+                activeThumbColor: AppColors.blackCat,
+                inactiveThumbColor: AppColors.blackCatLight,
+                inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                onChanged: _savingAllClientRequestNotifications
+                    ? null
+                    : (v) => _setAllClientRequestNotificationsEnabled(v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(color: Colors.black.withOpacity(0.08), height: 1),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.alternate_email_rounded,
+                size: 22,
+                color: Colors.black.withOpacity(0.75),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Direct Request Notifications',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+              IgnorePointer(
+                child: Switch(
+                  value: true,
+                  activeThumbColor: AppColors.blackCat,
+                  inactiveThumbColor: AppColors.blackCatLight,
+                  inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                  onChanged: (_) {},
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _artistAscensionSection() {
+    // Backend hook: points/tier flags should be updated by controlled
+    // admin or server-side order completion logic, not from this UI.
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: ArtistAscensionCard(ascension: _ascensionState),
+    );
+  }
+
+  void _openAscension() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: const JntAscensionPage(),
+        ),
+      ),
+    );
+  }
+
+  Widget _jntAscensionTile(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.zero,
+      onTap: _openAscension,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.star_rounded, color: AppColors.blackCat, size: 22),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'JNT Ascension',
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.black.withOpacity(0.35),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // STARS
+  // =========================
+  Widget _stars(double rating) {
+    final r = rating.clamp(0, 5);
+    final full = r.floor();
+    final hasHalf = (r - full) >= 0.5;
+
+    List<Widget> icons = [];
+    for (int i = 0; i < 5; i++) {
+      if (i < full) {
+        icons.add(
+          const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFC107)),
+        );
+      } else if (i == full && hasHalf) {
+        icons.add(
+          const Icon(
+            Icons.star_half_rounded,
+            size: 18,
+            color: Color(0xFFFFC107),
+          ),
+        );
+      } else {
+        icons.add(
+          Icon(
+            Icons.star_rounded,
+            size: 18,
+            color: Colors.black.withOpacity(0.18),
+          ),
+        );
+      }
+    }
+    return Row(children: icons);
+  }
+
+  Widget _avatarImage() {
+    Widget fallback() {
+      final name = _artistName.trim();
+      final letter = name.isEmpty ? '' : name.substring(0, 1).toUpperCase();
+      return Container(
+        decoration: BoxDecoration(
+          color: AppColors.balletSlippers,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: AppColors.alabaster),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          letter,
+          style: TextStyle(
+            fontSize: 34,
+            fontWeight: FontWeight.w700,
+            color: AppColors.blackCat,
+          ),
+        ),
+      );
+    }
+
+    final src = _avatarPath.trim();
+    if (src.isEmpty) {
+      return FutureBuilder<String>(
+        future: _resolveStorageAvatarFallback(),
+        builder: (context, snapshot) {
+          final resolved = (snapshot.data ?? '').trim();
+          if (resolved.isEmpty) return fallback();
+          return Image.network(
+            resolved,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => fallback(),
+          );
+        },
+      );
+    }
+
+    if (src.startsWith('data:image/')) {
+      final comma = src.indexOf(',');
+      if (comma > 0 && comma < src.length - 1) {
+        try {
+          final bytes = base64Decode(src.substring(comma + 1));
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => fallback(),
+          );
+        } catch (_) {
+          return fallback();
+        }
+      }
+      return fallback();
+    }
+
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return Image.network(
+        src,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => FutureBuilder<String>(
+          future: _resolveStorageAvatarFallback(),
+          builder: (context, snapshot) {
+            final resolved = (snapshot.data ?? '').trim();
+            if (resolved.isEmpty) return fallback();
+            return Image.network(
+              resolved,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => fallback(),
+            );
+          },
+        ),
+      );
+    }
+    if (src.startsWith('gs://') ||
+        src.startsWith('artists/') ||
+        src.startsWith('client_artists/')) {
+      return FutureBuilder<String>(
+        future: _resolveStorageAvatarUrl(src),
+        builder: (context, snapshot) {
+          final resolved = (snapshot.data ?? '').trim();
+          if (resolved.isEmpty) return fallback();
+          return Image.network(
+            resolved,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => FutureBuilder<String>(
+              future: _resolveStorageAvatarFallback(),
+              builder: (context, snapshot) {
+                final fallbackSrc = (snapshot.data ?? '').trim();
+                if (fallbackSrc.isEmpty) return fallback();
+                return Image.network(
+                  fallbackSrc,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback(),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+    if (src.startsWith('assets/')) {
+      return Image.asset(
+        src,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback(),
+      );
+    }
+    return fallback();
+  }
+
+  Future<String> _resolveStorageAvatarUrl(String raw) async {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    try {
+      if (value.startsWith('gs://')) {
+        return await FirebaseStorage.instance
+            .refFromURL(value)
+            .getDownloadURL();
+      }
+      if (value.startsWith('artists/') || value.startsWith('client_artists/')) {
+        return await FirebaseStorage.instance.ref(value).getDownloadURL();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<String> _resolveStorageAvatarFallback() async {
+    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    if (uid.isEmpty) return '';
+    final candidates = <String>[
+      'artists/$uid/profile/avatar.jpg',
+      'artists/$uid/profile/avatar.jpeg',
+      'artists/$uid/profile/avatar.png',
+      'artists/$uid/profile/avatar.webp',
+      'client_artists/$uid/profile/avatar.jpg',
+      'client_artists/$uid/profile/avatar.jpeg',
+      'client_artists/$uid/profile/avatar.png',
+      'client_artists/$uid/profile/avatar.webp',
+    ];
+    for (final path in candidates) {
+      try {
+        final url = await FirebaseStorage.instance
+            .ref(path)
+            .getDownloadURL()
+            .timeout(const Duration(seconds: 4));
+        if (url.trim().isNotEmpty) return url.trim();
+      } catch (_) {}
+    }
+    final folders = <String>[
+      'artists/$uid/profile',
+      'client_artists/$uid/profile',
+    ];
+    for (final folder in folders) {
+      try {
+        final listed = await FirebaseStorage.instance
+            .ref(folder)
+            .listAll()
+            .timeout(const Duration(seconds: 4));
+        for (final item in listed.items) {
+          final name = item.name.toLowerCase();
+          if (!(name.endsWith('.jpg') ||
+              name.endsWith('.jpeg') ||
+              name.endsWith('.png') ||
+              name.endsWith('.webp'))) {
+            continue;
+          }
+          final url = await item.getDownloadURL().timeout(
+            const Duration(seconds: 4),
+          );
+          if (url.trim().isNotEmpty) return url.trim();
+        }
+      } catch (_) {}
+    }
+    return '';
+  }
+}
+
+class ArtistPayoutSettingsPage extends StatefulWidget {
+  const ArtistPayoutSettingsPage({
+    super.key,
+    required this.docRef,
+    required this.initialData,
+  });
+
+  final DocumentReference<Map<String, dynamic>> docRef;
+  final Map<String, dynamic> initialData;
+
+  @override
+  State<ArtistPayoutSettingsPage> createState() =>
+      _ArtistPayoutSettingsPageState();
+}
+
+class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
+  bool _saving = false;
+
+  bool _openApple = false;
+  bool _openPaypal = false;
+  bool _openAch = false;
+  bool _openVenmo = false;
+
+  final _appleNameCtrl = TextEditingController();
+  final _appleEmailCtrl = TextEditingController();
+  final _applePhoneCtrl = TextEditingController();
+
+  final _paypalEmailCtrl = TextEditingController();
+  final _paypalMerchantCtrl = TextEditingController();
+
+  final _achHolderCtrl = TextEditingController();
+  final _achBankCtrl = TextEditingController();
+  final _achRoutingCtrl = TextEditingController();
+  final _achAccountCtrl = TextEditingController();
+  String _achType = 'Checking';
+
+  final _venmoUserCtrl = TextEditingController();
+  final _venmoPhoneCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final panel = _asMap(widget.initialData['panel_payout']);
+    final payout = _asMap(widget.initialData['payout']);
+    final paymentDetails = _asMap(widget.initialData['paymentDetails']);
+
+    final apple = _methodData(panel, payout, 'applePay');
+    final paypal = _methodData(panel, payout, 'paypal');
+    final ach = _methodData(panel, payout, 'ach');
+    final venmo = _methodData(panel, payout, 'venmo');
+
+    final method = _normalizedMethodKey(
+      _firstNonEmpty([
+        panel['method'],
+        payout['method'],
+        widget.initialData['panel_payoutMethod'],
+        widget.initialData['panel_artist_payoutMethod'],
+      ]),
+    );
+
+    _appleNameCtrl.text = _firstNonEmpty([
+      apple['fullName'],
+      payout['applePayName'],
+      panel['applePayName'],
+      paymentDetails['applePayName'],
+    ]);
+    _appleEmailCtrl.text = _firstNonEmpty([
+      apple['email'],
+      payout['applePayEmail'],
+      panel['applePayEmail'],
+      paymentDetails['applePayEmail'],
+    ]);
+    _applePhoneCtrl.text = _firstNonEmpty([
+      apple['phone'],
+      payout['applePayPhone'],
+      panel['applePayPhone'],
+      paymentDetails['applePayPhone'],
+    ]);
+
+    _paypalEmailCtrl.text = _firstNonEmpty([
+      paypal['email'],
+      payout['email'],
+      panel['email'],
+      widget.initialData['panel_payoutEmail'],
+      widget.initialData['panel_artist_payoutEmail'],
+      widget.initialData['panel_bundlePaypalEmail'],
+      paymentDetails['paypalEmail'],
+      widget.initialData['paypalEmail'],
+    ]);
+    _paypalMerchantCtrl.text = _firstNonEmpty([
+      paypal['merchantId'],
+      payout['merchantId'],
+      panel['merchantId'],
+    ]);
+
+    _achHolderCtrl.text = _firstNonEmpty([
+      ach['accountHolder'],
+      ach['accountHolderName'],
+      payout['accountHolder'],
+      payout['accountHolderName'],
+      panel['accountHolder'],
+      panel['accountHolderName'],
+      widget.initialData['panel_payoutLegalName'],
+      widget.initialData['panel_artist_payoutLegalName'],
+    ]);
+    _achBankCtrl.text = _firstNonEmpty([
+      ach['bankName'],
+      payout['bankName'],
+      panel['bankName'],
+    ]);
+    _achRoutingCtrl.text = _firstNonEmpty([
+      ach['routingNumber'],
+      payout['routingNumber'],
+      payout['routing'],
+      panel['routingNumber'],
+      panel['routing'],
+    ]);
+    _achAccountCtrl.text = _firstNonEmpty([
+      ach['accountNumber'],
+      payout['accountNumber'],
+      panel['accountNumber'],
+    ]);
+    final type = _firstNonEmpty([ach['accountType']]);
+    if (type.toLowerCase() == 'savings') _achType = 'Savings';
+
+    _venmoUserCtrl.text = _firstNonEmpty([
+      venmo['username'],
+      payout['email'],
+      panel['email'],
+      widget.initialData['panel_payoutEmail'],
+      widget.initialData['panel_artist_payoutEmail'],
+      widget.initialData['panel_bundleVenmoHandle'],
+      paymentDetails['venmoHandle'],
+      widget.initialData['venmoHandle'],
+    ]);
+    _venmoPhoneCtrl.text = _firstNonEmpty([venmo['phone']]);
+
+    _applyDefaultExpandedMethod(method);
+  }
+
+  @override
+  void dispose() {
+    _appleNameCtrl.dispose();
+    _appleEmailCtrl.dispose();
+    _applePhoneCtrl.dispose();
+    _paypalEmailCtrl.dispose();
+    _paypalMerchantCtrl.dispose();
+    _achHolderCtrl.dispose();
+    _achBankCtrl.dispose();
+    _achRoutingCtrl.dispose();
+    _achAccountCtrl.dispose();
+    _venmoUserCtrl.dispose();
+    _venmoPhoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return const <String, dynamic>{};
+  }
+
+  Map<String, dynamic> _methodData(
+    Map<String, dynamic> primary,
+    Map<String, dynamic> fallback,
+    String key,
+  ) {
+    final first = _asMap(primary[key]);
+    if (first.isNotEmpty) return first;
+    return _asMap(fallback[key]);
+  }
+
+  String _firstNonEmpty(List<Object?> values) {
+    for (final raw in values) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String _normalizedMethodKey(String raw) {
+    final key = raw.trim().toLowerCase();
+    if (key == 'paypal') return 'paypal';
+    if (key == 'venmo') return 'venmo';
+    if (key == 'applepay' || key == 'apple pay') return 'apple';
+    if (key == 'banktransfer' ||
+        key == 'bank transfer' ||
+        key == 'ach' ||
+        key == 'bank') {
+      return 'ach';
+    }
+    return '';
+  }
+
+  void _applyDefaultExpandedMethod(String method) {
+    _openApple = false;
+    _openPaypal = false;
+    _openAch = false;
+    _openVenmo = false;
+
+    if (method == 'paypal') {
+      _openPaypal = true;
+      return;
+    }
+    if (method == 'venmo') {
+      _openVenmo = true;
+      return;
+    }
+    if (method == 'apple') {
+      _openApple = true;
+      return;
+    }
+    if (method == 'ach') {
+      _openAch = true;
+      return;
+    }
+
+    // Fallback by first section with data; else keep PayPal open by default.
+    if (_paypalEmailCtrl.text.trim().isNotEmpty ||
+        _paypalMerchantCtrl.text.trim().isNotEmpty) {
+      _openPaypal = true;
+    } else if (_venmoUserCtrl.text.trim().isNotEmpty ||
+        _venmoPhoneCtrl.text.trim().isNotEmpty) {
+      _openVenmo = true;
+    } else if (_appleNameCtrl.text.trim().isNotEmpty ||
+        _appleEmailCtrl.text.trim().isNotEmpty ||
+        _applePhoneCtrl.text.trim().isNotEmpty) {
+      _openApple = true;
+    } else if (_achHolderCtrl.text.trim().isNotEmpty ||
+        _achBankCtrl.text.trim().isNotEmpty ||
+        _achRoutingCtrl.text.trim().isNotEmpty ||
+        _achAccountCtrl.text.trim().isNotEmpty) {
+      _openAch = true;
+    } else {
+      _openPaypal = true;
+    }
+  }
+
+  void _toggleMethod(String key) {
+    setState(() {
+      final nextOpen = switch (key) {
+        'apple' => !_openApple,
+        'paypal' => !_openPaypal,
+        'ach' => !_openAch,
+        'venmo' => !_openVenmo,
+        _ => false,
+      };
+      _openApple = key == 'apple' ? nextOpen : false;
+      _openPaypal = key == 'paypal' ? nextOpen : false;
+      _openAch = key == 'ach' ? nextOpen : false;
+      _openVenmo = key == 'venmo' ? nextOpen : false;
+    });
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final appleEnabled =
+          _appleNameCtrl.text.trim().isNotEmpty ||
+          _appleEmailCtrl.text.trim().isNotEmpty ||
+          _applePhoneCtrl.text.trim().isNotEmpty;
+      final paypalEnabled =
+          _paypalEmailCtrl.text.trim().isNotEmpty ||
+          _paypalMerchantCtrl.text.trim().isNotEmpty;
+      final achEnabled =
+          _achHolderCtrl.text.trim().isNotEmpty ||
+          _achBankCtrl.text.trim().isNotEmpty ||
+          _achRoutingCtrl.text.trim().isNotEmpty ||
+          _achAccountCtrl.text.trim().isNotEmpty;
+      final venmoEnabled =
+          _venmoUserCtrl.text.trim().isNotEmpty ||
+          _venmoPhoneCtrl.text.trim().isNotEmpty;
+
+      final payout = <String, dynamic>{
+        'applePay': {
+          'enabled': appleEnabled,
+          'fullName': _appleNameCtrl.text.trim(),
+          'email': _appleEmailCtrl.text.trim(),
+          'phone': _applePhoneCtrl.text.trim(),
+        },
+        'paypal': {
+          'enabled': paypalEnabled,
+          'email': _paypalEmailCtrl.text.trim(),
+          'merchantId': _paypalMerchantCtrl.text.trim(),
+        },
+        'ach': {
+          'enabled': achEnabled,
+          'accountHolder': _achHolderCtrl.text.trim(),
+          'bankName': _achBankCtrl.text.trim(),
+          'routingNumber': _achRoutingCtrl.text.trim(),
+          'accountNumber': _achAccountCtrl.text.trim(),
+          'accountType': _achType,
+        },
+        'venmo': {
+          'enabled': venmoEnabled,
+          'username': _venmoUserCtrl.text.trim(),
+          'phone': _venmoPhoneCtrl.text.trim(),
+        },
+      };
+
+      await widget.docRef.set({
+        'panel_payout': payout,
+        'payout': payout,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Payout settings updated.')));
+      Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to save payout settings.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.snow,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Payout Settings',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Manage your payout and banking details.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.black.withOpacity(0.55),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _methodCard(
+              title: 'Apple Pay',
+              open: _openApple,
+              onTap: () => _toggleMethod('apple'),
+              leading: const FaIcon(
+                FontAwesomeIcons.applePay,
+                size: 24,
+                color: AppColors.blackCat,
+              ),
+              children: [
+                _field('Full Name', _appleNameCtrl),
+                _field('Apple Pay Email', _appleEmailCtrl),
+                _field('Phone', _applePhoneCtrl),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _methodCard(
+              title: 'PayPal',
+              open: _openPaypal,
+              onTap: () => _toggleMethod('paypal'),
+              leading: const Icon(
+                Icons.paypal_rounded,
+                size: 26,
+                color: AppColors.blackCat,
+              ),
+              children: [
+                _field('PayPal Email', _paypalEmailCtrl),
+                _field('Merchant ID (Optional)', _paypalMerchantCtrl),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _methodCard(
+              title: 'ACH Direct Deposit',
+              open: _openAch,
+              onTap: () => _toggleMethod('ach'),
+              leading: const Icon(
+                Icons.account_balance_rounded,
+                size: 26,
+                color: AppColors.blackCat,
+              ),
+              children: [
+                _field('Account Holder Name', _achHolderCtrl),
+                _field('Bank Name', _achBankCtrl),
+                _field('Routing Number', _achRoutingCtrl),
+                _field('Account Number', _achAccountCtrl),
+                _accountType(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _methodCard(
+              title: 'Venmo',
+              open: _openVenmo,
+              onTap: () => _toggleMethod('venmo'),
+              leading: const Icon(
+                Icons.account_balance_wallet_rounded,
+                size: 24,
+                color: AppColors.blackCat,
+              ),
+              children: [
+                _field('Venmo Username', _venmoUserCtrl),
+                _field('Phone', _venmoPhoneCtrl),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Center(
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: _saving ? null : _save,
+                  child: Text(
+                    _saving ? 'Saving...' : 'Save',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _methodCard({
+    required String title,
+    required bool open,
+    required VoidCallback onTap,
+    required Widget leading,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.zero,
+            child: Row(
+              children: [
+                SizedBox(height: 34, width: 56, child: Center(child: leading)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+                Icon(
+                  open
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.chevron_right_rounded,
+                  color: Colors.black.withOpacity(0.45),
+                ),
+              ],
+            ),
+          ),
+          if (open) ...[const SizedBox(height: 6), ...children],
+        ],
+      ),
+    );
+  }
+
+  Widget _logoBox(String text) {
+    return Container(
+      width: 48,
+      height: 30,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: Colors.black.withOpacity(0.2)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController c) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.black.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 5),
+          TextField(
+            controller: c,
+            style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.snow,
+              hintStyle: TextStyle(color: AppColors.blackCat.withOpacity(0.45)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _accountType() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Account Type',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.black.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 5),
+          DropdownButtonFormField<String>(
+            initialValue: _achType,
+            dropdownColor: AppColors.snow,
+            iconEnabledColor: AppColors.blackCat,
+            style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.snow,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'Checking', child: Text('Checking')),
+              DropdownMenuItem(value: 'Savings', child: Text('Savings')),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _achType = value);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ArtistPortfolioItem {
+  const ArtistPortfolioItem({
+    required this.image,
+    required this.style,
+    this.docId,
+    this.storagePath,
+  });
+
+  final String image;
+  final String style;
+  final String? docId;
+  final String? storagePath;
+}
+
+bool _isPortfolioImageValue(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return false;
+  final lower = value.toLowerCase();
+  if (lower.startsWith('data:image/')) return true;
+  if (lower.startsWith('http://') || lower.startsWith('https://')) return true;
+  if (lower.startsWith('gs://')) return true;
+  if (lower.startsWith('assets/')) return true;
+  if (lower.startsWith('file://')) return true;
+  return RegExp(
+    r'\.(jpg|jpeg|png|webp|gif|bmp|avif|heic|heif)(?:$|[?#])',
+    caseSensitive: false,
+  ).hasMatch(value);
+}
+
+String _portfolioItemKey(String image, String style) =>
+    '${image.trim()}|${style.trim().toLowerCase()}';
+
+String _portfolioImageKey(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return '';
+  final lower = value.toLowerCase();
+  if (lower.startsWith('http://') || lower.startsWith('https://')) {
+    final uri = Uri.tryParse(value);
+    if (uri != null) {
+      return uri.replace(queryParameters: const {}, fragment: '').toString();
+    }
+  }
+  return value;
+}
+
+ArtistPortfolioItem? _portfolioItemFromDocData(
+  Map<String, dynamic> data, [
+  String? docId,
+]) {
+  final image = [
+    data['imageUrl'],
+    data['downloadUrl'],
+    data['url'],
+    data['image'],
+    data['storagePath'],
+    data['path'],
+  ]
+      .map((raw) => (raw ?? '').toString().trim())
+      .firstWhere(
+        (value) => value.isNotEmpty && _isPortfolioImageValue(value),
+        orElse: () => '',
+      );
+  if (image.isEmpty) return null;
+  final style = [
+    data['style'],
+    data['category'],
+    data['type'],
+    'All',
+  ]
+      .map((raw) => (raw ?? '').toString().trim())
+      .firstWhere((value) => value.isNotEmpty, orElse: () => 'All');
+  return ArtistPortfolioItem(
+    image: image,
+    style: style,
+    docId: docId,
+    storagePath: [
+      data['storagePath'],
+      data['path'],
+    ].map((raw) => (raw ?? '').toString().trim()).firstWhere(
+      (value) => value.isNotEmpty,
+      orElse: () => '',
+    ),
+  );
+}
+
+class ArtistPortfolioModal extends StatefulWidget {
+  const ArtistPortfolioModal({
+    super.key,
+    required this.docRef,
+    required this.initialItems,
+    required this.onUploadTap,
+  });
+
+  final DocumentReference<Map<String, dynamic>> docRef;
+  final List<ArtistPortfolioItem> initialItems;
+  final Future<List<ArtistPortfolioItem>> Function({
+    List<XFile>? selectedFiles,
+    void Function(int completed, int total)? onProgress,
+  })
+  onUploadTap;
+
+  @override
+  State<ArtistPortfolioModal> createState() => _ArtistPortfolioModalState();
+}
+
+class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
+  static const int _portfolioPageSize = 24;
+  bool _uploading = false;
+  bool _hydratingSeed = false;
+  bool _initialLoading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _uploadTotal = 0;
+  int _uploadCompleted = 0;
+  String? _loadError;
+  final Set<String> _deletingDocIds = <String>{};
+  final ScrollController _scrollController = ScrollController();
+  DocumentSnapshot<Map<String, dynamic>>? _lastDoc;
+  List<ArtistPortfolioItem> _seedItems = const <ArtistPortfolioItem>[];
+  List<ArtistPortfolioItem> _pagedItems = const <ArtistPortfolioItem>[];
+  Future<List<ArtistPortfolioItem>>? _siblingItemsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _seedItems = List<ArtistPortfolioItem>.from(widget.initialItems);
+    _siblingItemsFuture = _loadSiblingPortfolioItems();
+    _scrollController.addListener(_onScroll);
+    unawaited(_loadInitialPage());
+    unawaited(_hydrateSeedItems());
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 280) {
+      unawaited(_loadMorePage());
+    }
+  }
+
+  void _appendUnique(List<ArtistPortfolioItem> source) {
+    final seen = <String>{
+      for (final item in _pagedItems) _portfolioImageKey(item.image),
+    };
+    final next = List<ArtistPortfolioItem>.from(_pagedItems);
+    for (final item in source) {
+      final key = _portfolioImageKey(item.image);
+      if (seen.add(key)) next.add(item);
+    }
+    _pagedItems = next;
+  }
+
+  Future<void> _loadInitialPage() async {
+    if (!mounted) return;
+    setState(() {
+      _initialLoading = true;
+      _loadingMore = false;
+      _hasMore = true;
+      _loadError = null;
+      _lastDoc = null;
+      _pagedItems = const <ArtistPortfolioItem>[];
+    });
+    try {
+      final snap = await widget.docRef
+          .collection('portfolio_items')
+          .orderBy('createdAt', descending: true)
+          .limit(_portfolioPageSize)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 4));
+      final items = _itemsFromQueryDocs(snap.docs);
+      _appendUnique(items);
+      _lastDoc = snap.docs.isNotEmpty ? snap.docs.last : null;
+      _hasMore = snap.docs.length >= _portfolioPageSize;
+    } catch (e) {
+      _loadError = e.toString();
+    } finally {
+      if (mounted) setState(() => _initialLoading = false);
+    }
+  }
+
+  Future<void> _loadMorePage() async {
+    if (_loadingMore || !_hasMore || _lastDoc == null) return;
+    if (!mounted) return;
+    setState(() => _loadingMore = true);
+    try {
+      final snap = await widget.docRef
+          .collection('portfolio_items')
+          .orderBy('createdAt', descending: true)
+          .startAfterDocument(_lastDoc!)
+          .limit(_portfolioPageSize)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 4));
+      final items = _itemsFromQueryDocs(snap.docs);
+      _appendUnique(items);
+      _lastDoc = snap.docs.isNotEmpty ? snap.docs.last : _lastDoc;
+      if (snap.docs.length < _portfolioPageSize) _hasMore = false;
+    } catch (_) {
+      _hasMore = false;
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<List<DocumentReference<Map<String, dynamic>>>>
+  _candidateDocRefs() async {
+    final refs = <DocumentReference<Map<String, dynamic>>>[];
+    final seenPaths = <String>{};
+
+    void addRef(DocumentReference<Map<String, dynamic>> ref) {
+      if (seenPaths.add(ref.path)) {
+        refs.add(ref);
+      }
+    }
+
+    addRef(widget.docRef);
+
+    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    final explicitIds = <String>{widget.docRef.id.trim(), uid}
+      ..removeWhere((e) => e.isEmpty);
+
+    for (final col in const <String>['artist', 'client_artist']) {
+      for (final id in explicitIds) {
+        addRef(FirebaseFirestore.instance.collection(col).doc(id));
+      }
+    }
+
+    if (email.isNotEmpty) {
+      for (final col in const <String>['artist', 'client_artist']) {
+        try {
+          final q = await FirebaseFirestore.instance
+              .collection(col)
+              .where('email', isEqualTo: email)
+              .limit(5)
+              .get();
+          for (final doc in q.docs) {
+            addRef(doc.reference);
+          }
+        } catch (_) {}
+      }
+    }
+
+    return refs;
+  }
+
+  Future<void> _hydrateSeedItems() async {
+    if (_hydratingSeed) return;
+    setState(() => _hydratingSeed = true);
+    try {
+      final seen = <String>{
+        for (final item in _seedItems) _portfolioImageKey(item.image),
+      };
+      final merged = List<ArtistPortfolioItem>.from(_seedItems);
+
+      void add(String image, {String style = 'All', String? storagePath}) {
+        final url = image.trim();
+        if (url.isEmpty || !_isPortfolioImageValue(url)) return;
+        final key = _portfolioImageKey(url);
+        if (!seen.add(key)) return;
+        merged.add(
+          ArtistPortfolioItem(
+            image: url,
+            style: style.trim().isEmpty ? 'All' : style.trim(),
+            storagePath: storagePath,
+          ),
+        );
+      }
+
+      void walk(dynamic raw, {String fallbackStyle = 'All'}) {
+        if (raw == null) return;
+        if (raw is String) {
+          add(raw, style: fallbackStyle);
+          return;
+        }
+        if (raw is List) {
+          for (final item in raw) {
+            walk(item, fallbackStyle: fallbackStyle);
+          }
+          return;
+        }
+        if (raw is Map) {
+          final map = Map<String, dynamic>.from(raw);
+          final image = _firstNonEmpty([
+            map['imageUrl'],
+            map['downloadUrl'],
+            map['url'],
+            map['image'],
+            map['storagePath'],
+            map['path'],
+            map['fullPath'],
+          ]);
+          final style = _firstNonEmpty([
+            map['style'],
+            map['category'],
+            map['type'],
+            fallbackStyle,
+          ]);
+          if (image.isNotEmpty && _isPortfolioImageValue(image)) {
+            add(
+              image,
+              style: style,
+              storagePath: _firstNonEmpty([
+                map['storagePath'],
+                map['path'],
+                map['fullPath'],
+              ]),
+            );
+          }
+          for (final v in map.values) {
+            if (v is List || v is Map) {
+              walk(v, fallbackStyle: fallbackStyle);
+            }
+          }
+        }
+      }
+
+      try {
+        final refs = await _candidateDocRefs();
+        for (final ref in refs) {
+          try {
+            final doc = await ref
+                .get(const GetOptions(source: Source.server))
+                .timeout(const Duration(seconds: 8));
+            if (!doc.exists) continue;
+            final data = doc.data() ?? const <String, dynamic>{};
+            final portfolio =
+                (data['portfolio'] as Map<String, dynamic>?) ??
+                const <String, dynamic>{};
+            final artist =
+                (data['artist'] as Map<String, dynamic>?) ??
+                const <String, dynamic>{};
+            final artistPortfolio =
+                (artist['portfolio'] as Map<String, dynamic>?) ??
+                const <String, dynamic>{};
+
+            for (final candidate in <dynamic>[
+              data['portfolioImages'],
+              data['portfolioItems'],
+              data['panel_portfolioImages'],
+              data['panel_artist_portfolioImages'],
+              portfolio['images'],
+              portfolio['items'],
+              artist['portfolioImages'],
+              artist['portfolioItems'],
+              artistPortfolio['images'],
+              artistPortfolio['items'],
+            ]) {
+              walk(candidate);
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      if (merged.isEmpty) {
+        final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+        final refs = await _candidateDocRefs();
+        final ownerIds = <String>{
+          uid,
+          widget.docRef.id.trim(),
+          ...refs.map((r) => r.id.trim()),
+        }..removeWhere((e) => e.isEmpty);
+        for (final ownerId in ownerIds) {
+          for (final base in const <String>['artists', 'client_artists']) {
+            try {
+              final listed = await FirebaseStorage.instance
+                  .ref('$base/$ownerId/portfolio')
+                  .listAll()
+                  .timeout(const Duration(seconds: 8));
+              for (final item in listed.items) {
+                final name = item.name.toLowerCase();
+                if (!(name.endsWith('.jpg') ||
+                    name.endsWith('.jpeg') ||
+                    name.endsWith('.png') ||
+                    name.endsWith('.webp'))) {
+                  continue;
+                }
+                try {
+                  final url = await item.getDownloadURL().timeout(
+                    const Duration(seconds: 6),
+                  );
+                  add(url, storagePath: item.fullPath);
+                } catch (_) {
+                  add(item.fullPath, storagePath: item.fullPath);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() => _seedItems = merged);
+    } finally {
+      if (mounted) setState(() => _hydratingSeed = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.snow,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Portfolio',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Showcase your nail art designs.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black.withOpacity(0.6),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 38,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.blackCat,
+                        foregroundColor: AppColors.snow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                      onPressed: _uploading
+                          ? null
+                          : () async {
+                              final picker = ImagePicker();
+                              final picked = await picker.pickMultiImage(
+                                imageQuality: 78,
+                                maxWidth: 1600,
+                                maxHeight: 1600,
+                              );
+                              if (picked.isEmpty) return;
+                              setState(() => _uploading = true);
+                              try {
+                                setState(() {
+                                  _uploadCompleted = 0;
+                                  _uploadTotal = picked.length;
+                                });
+                                final uploaded = await widget.onUploadTap(
+                                  selectedFiles: picked,
+                                  onProgress: (completed, total) {
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _uploadCompleted = completed;
+                                      _uploadTotal = total;
+                                    });
+                                  },
+                                );
+                                if (!mounted) return;
+                                if (uploaded.isNotEmpty) {
+                                  setState(() {
+                                    _seedItems = <ArtistPortfolioItem>[
+                                      ...uploaded,
+                                      ..._seedItems,
+                                    ];
+                                  });
+                                  await _loadInitialPage();
+                                }
+                              } finally {
+                                if (mounted) {
+                                  setState(() {
+                                    _uploading = false;
+                                    _uploadCompleted = 0;
+                                    _uploadTotal = 0;
+                                  });
+                                }
+                              }
+                            },
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text(
+                        _uploading
+                            ? (_uploadTotal > 0
+                                  ? 'Uploading $_uploadCompleted/$_uploadTotal'
+                                  : 'Uploading...')
+                            : 'Upload Design',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          fontFamily: 'Arial',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            const SizedBox(height: 12),
+            Expanded(
+              child:
+                  _initialLoading && _pagedItems.isEmpty && _seedItems.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : Builder(
+                      builder: (context) {
+                        if (_loadError != null &&
+                            _pagedItems.isEmpty &&
+                            _seedItems.isEmpty) {
+                          return Center(
+                            child: Text(
+                              'Unable to load portfolio. $_loadError',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.black.withOpacity(0.6),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (_pagedItems.isNotEmpty) {
+                          return _buildPortfolioGrid(_pagedItems);
+                        }
+
+                        return FutureBuilder<List<ArtistPortfolioItem>>(
+                          future: _siblingItemsFuture,
+                          builder: (context, siblingSnap) {
+                            final siblingItems =
+                                siblingSnap.data ??
+                                const <ArtistPortfolioItem>[];
+                            final displayItems = siblingItems.isNotEmpty
+                                ? siblingItems
+                                : _seedItems;
+                            if (displayItems.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No portfolio designs available.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black.withOpacity(0.6),
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              );
+                            }
+                            return _buildPortfolioGrid(displayItems);
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _firstNonEmpty(List<dynamic> values) {
+    for (final raw in values) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  ArtistPortfolioItem? _portfolioItemFromDocData(
+    Map<String, dynamic> data, [
+    String? docId,
+  ]) {
+    final image = _firstNonEmpty([
+      data['imageUrl'],
+      data['downloadUrl'],
+      data['url'],
+      data['image'],
+      data['storagePath'],
+      data['path'],
+    ]);
+    if (image.isEmpty || !_isPortfolioImageValue(image)) return null;
+    final style = _firstNonEmpty([
+      data['style'],
+      data['category'],
+      data['type'],
+      'All',
+    ]);
+    return ArtistPortfolioItem(
+      image: image,
+      style: style,
+      docId: docId,
+      storagePath: _firstNonEmpty([data['storagePath'], data['path']]),
+    );
+  }
+
+  List<ArtistPortfolioItem> _itemsFromQueryDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final items = <ArtistPortfolioItem>[];
+    for (final d in docs) {
+      final item = _portfolioItemFromDocData(d.data(), d.id);
+      if (item != null) items.add(item);
+    }
+    return items;
+  }
+
+  List<ArtistPortfolioItem> _distinctPortfolioItems(
+    Iterable<ArtistPortfolioItem> items,
+  ) {
+    final seen = <String>{};
+    final distinct = <ArtistPortfolioItem>[];
+    for (final item in items) {
+      final key = _portfolioImageKey(item.image);
+      if (key.isEmpty || !seen.add(key)) continue;
+      distinct.add(item);
+    }
+    return distinct;
+  }
+
+  Future<List<ArtistPortfolioItem>> _loadSiblingPortfolioItems() async {
+    final refs = await _candidateDocRefs();
+    final items = <ArtistPortfolioItem>[];
+    final seen = <String>{};
+    try {
+      for (final ref in refs) {
+        if (ref.path == widget.docRef.path) continue;
+        try {
+          final snap = await ref
+              .collection('portfolio_items')
+              .orderBy('createdAt', descending: true)
+              .limit(200)
+              .get()
+              .timeout(const Duration(seconds: 4));
+          for (final item in _itemsFromQueryDocs(snap.docs)) {
+            final key = _portfolioImageKey(item.image);
+            if (seen.add(key)) items.add(item);
+          }
+        } catch (_) {}
+      }
+      return _distinctPortfolioItems(items);
+    } catch (_) {
+      return const <ArtistPortfolioItem>[];
+    }
+  }
+
+  Widget _buildPortfolioGrid(List<ArtistPortfolioItem> displayItems) {
+    final items = _distinctPortfolioItems(displayItems);
+    final showTailLoader = _loadingMore || (_hasMore && _lastDoc != null);
+    return GridView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      itemCount: showTailLoader ? items.length + 1 : items.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.92,
+      ),
+      itemBuilder: (_, i) {
+        if (showTailLoader && i == items.length) {
+          return Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.zero,
+              color: Colors.black.withOpacity(0.03),
+            ),
+            child: _loadingMore
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const SizedBox.shrink(),
+          );
+        }
+        final item = items[i];
+        final deleting =
+            (item.docId ?? '').trim().isNotEmpty &&
+            _deletingDocIds.contains(item.docId!.trim());
+        return ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _portfolioImage(item.image),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: InkWell(
+                  onTap: deleting ? null : () => _deletePortfolioItem(item),
+                  borderRadius: BorderRadius.zero,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.65),
+                      shape: BoxShape.circle,
+                    ),
+                    child: deleting
+                        ? const Padding(
+                            padding: EdgeInsets.all(5),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _deletePortfolioItem(ArtistPortfolioItem item) async {
+    final image = item.image.trim();
+    if (image.isEmpty) return;
+
+    final docId = (item.docId ?? '').trim();
+    if (docId.isNotEmpty) {
+      setState(() => _deletingDocIds.add(docId));
+    }
+
+    try {
+      if (docId.isNotEmpty) {
+        await widget.docRef.collection('portfolio_items').doc(docId).delete();
+      } else {
+        final q = await widget.docRef
+            .collection('portfolio_items')
+            .where('imageUrl', isEqualTo: image)
+            .limit(3)
+            .get();
+        for (final d in q.docs) {
+          await d.reference.delete();
+        }
+      }
+
+      try {
+        await widget.docRef.set({
+          'portfolioImages': FieldValue.arrayRemove([image]),
+          'panel_portfolioImages': FieldValue.arrayRemove([image]),
+          'panel_artist_portfolioImages': FieldValue.arrayRemove([image]),
+          'portfolio': {
+            'images': FieldValue.arrayRemove([image]),
+            'items': FieldValue.arrayRemove([
+              <String, dynamic>{'imageUrl': image, 'style': item.style},
+            ]),
+          },
+          'portfolioItems': FieldValue.arrayRemove([
+            <String, dynamic>{'imageUrl': image, 'style': item.style},
+          ]),
+          'artist': {
+            'portfolioImages': FieldValue.arrayRemove([image]),
+            'portfolioItems': FieldValue.arrayRemove([
+              <String, dynamic>{'imageUrl': image, 'style': item.style},
+            ]),
+            'portfolio': {
+              'images': FieldValue.arrayRemove([image]),
+              'items': FieldValue.arrayRemove([
+                <String, dynamic>{'imageUrl': image, 'style': item.style},
+              ]),
+            },
+          },
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+
+      final path = (item.storagePath ?? '').trim();
+      if (path.isNotEmpty) {
+        try {
+          await FirebaseStorage.instance.ref(path).delete();
+        } catch (_) {}
+      } else if (image.startsWith('http://') || image.startsWith('https://')) {
+        try {
+          await FirebaseStorage.instance.refFromURL(image).delete();
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _seedItems = _seedItems
+              .where((e) => e.image.trim() != image)
+              .toList();
+          _pagedItems = _pagedItems
+              .where((e) => e.image.trim() != image)
+              .toList();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete photo.')),
+        );
+      }
+    } finally {
+      if (mounted && docId.isNotEmpty) {
+        setState(() => _deletingDocIds.remove(docId));
+      }
+    }
+  }
+
+  Widget _portfolioImage(String src) {
+    final value = src.trim();
+    Widget fallback() => Container(
+      color: Colors.black.withOpacity(0.06),
+      alignment: Alignment.center,
+      child: Icon(Icons.image_outlined, color: Colors.black.withOpacity(0.4)),
+    );
+
+    if (value.startsWith('data:image/')) {
+      final comma = value.indexOf(',');
+      if (comma > 0 && comma < value.length - 1) {
+        try {
+          final b64 = value.substring(comma + 1);
+          final bytes = base64Decode(b64);
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => fallback(),
+          );
+        } catch (_) {
+          return fallback();
+        }
+      }
+      return fallback();
+    }
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return Image.network(
+        value,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback(),
+      );
+    }
+    if (value.startsWith('gs://') || value.contains('/')) {
+      return FutureBuilder<String>(
+        future: _resolveStorageUrl(value),
+        builder: (context, snapshot) {
+          final resolved = (snapshot.data ?? '').trim();
+          if (resolved.isEmpty) {
+            return FutureBuilder<Uint8List?>(
+              future: _resolveStorageBytes(value),
+              builder: (context, bytesSnap) {
+                final bytes = bytesSnap.data;
+                if (bytes == null || bytes.isEmpty) return fallback();
+                return Image.memory(
+                  bytes,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback(),
+                );
+              },
+            );
+          }
+          return Image.network(
+            resolved,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => fallback(),
+          );
+        },
+      );
+    }
+    if (value.startsWith('assets/')) {
+      return Image.asset(
+        value,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback(),
+      );
+    }
+    return fallback();
+  }
+
+  Future<String> _resolveStorageUrl(String raw) async {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    try {
+      if (value.startsWith('gs://')) {
+        return await FirebaseStorage.instance
+            .refFromURL(value)
+            .getDownloadURL();
+      }
+      if (value.contains('/')) {
+        return await FirebaseStorage.instance.ref(value).getDownloadURL();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<Uint8List?> _resolveStorageBytes(String raw) async {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+    try {
+      if (value.startsWith('gs://')) {
+        return await FirebaseStorage.instance
+            .refFromURL(value)
+            .getData(4 * 1024 * 1024)
+            .timeout(const Duration(seconds: 8));
+      }
+      if (value.contains('/')) {
+        return await FirebaseStorage.instance
+            .ref(value)
+            .getData(4 * 1024 * 1024)
+            .timeout(const Duration(seconds: 8));
+      }
+    } catch (_) {}
+    return null;
+  }
+}
+
+class ArtistAvailabilityModal extends StatefulWidget {
+  const ArtistAvailabilityModal({
+    super.key,
+    required this.docRef,
+    required this.initialDirectRequestsEnabled,
+    required this.initialDayStates,
+    required this.onDirectRequestChanged,
+  });
+
+  final DocumentReference<Map<String, dynamic>> docRef;
+  final bool initialDirectRequestsEnabled;
+  final Map<String, String> initialDayStates;
+  final Future<void> Function(bool value) onDirectRequestChanged;
+
+  @override
+  State<ArtistAvailabilityModal> createState() =>
+      _ArtistAvailabilityModalState();
+}
+
+class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
+  late DateTime _visibleMonth;
+  late Map<String, String> _dayStates;
+  late bool _directRequestsEnabled;
+  bool _savingDirect = false;
+  bool _savingDays = false;
+  String? _dragStateToApply;
+  final Set<String> _dragVisitedKeys = <String>{};
+  bool _dragChanged = false;
+
+  static const List<String> _weekdays = <String>[
+    'S',
+    'M',
+    'T',
+    'W',
+    'T',
+    'F',
+    'S',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _visibleMonth = DateTime(now.year, now.month);
+    _dayStates = Map<String, String>.from(widget.initialDayStates);
+    _directRequestsEnabled = widget.initialDirectRequestsEnabled;
+  }
+
+  String _dateKey(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
+  }
+
+  String _monthLabel(DateTime d) {
+    const months = <String>[
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[d.month - 1]} ${d.year}';
+  }
+
+  List<DateTime> _monthGrid(DateTime month) {
+    final first = DateTime(month.year, month.month, 1);
+    final leadDays = first.weekday % 7;
+    final start = first.subtract(Duration(days: leadDays));
+    return List<DateTime>.generate(42, (i) => start.add(Duration(days: i)));
+  }
+
+  Future<void> _onDirectToggle(bool value) async {
+    if (_savingDirect) return;
+    setState(() {
+      _directRequestsEnabled = value;
+      _savingDirect = true;
+    });
+    await widget.onDirectRequestChanged(value);
+    if (!mounted) return;
+    setState(() => _savingDirect = false);
+  }
+
+  Future<void> _saveDayStates() async {
+    setState(() => _savingDays = true);
+    try {
+      await widget.docRef.set({
+        'panel_availability': {'dayStates': _dayStates},
+        'availability': {'dayStates': _dayStates},
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to update availability.')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingDays = false);
+    }
+  }
+
+  String? _nextDayState(String? current) {
+    if (current == null) return 'direct';
+    if (current == 'direct') return 'blocked';
+    if (current == 'blocked') return 'unavailable';
+    return null;
+  }
+
+  void _setDayStateForKey(String key, String? state) {
+    if (state == null) {
+      _dayStates.remove(key);
+      return;
+    }
+    _dayStates[key] = state;
+  }
+
+  Future<void> _onDayTap(DateTime day) async {
+    if (day.month != _visibleMonth.month || day.year != _visibleMonth.year) {
+      return;
+    }
+    final key = _dateKey(day);
+    final next = _nextDayState(_dayStates[key]);
+    setState(() {
+      _setDayStateForKey(key, next);
+    });
+    await _saveDayStates();
+  }
+
+  int? _dayIndexFromLocalOffset(Offset localPosition, Size gridSize) {
+    if (localPosition.dx < 0 ||
+        localPosition.dy < 0 ||
+        localPosition.dx > gridSize.width ||
+        localPosition.dy > gridSize.height) {
+      return null;
+    }
+    final col = (localPosition.dx / (gridSize.width / 7)).floor();
+    final row = (localPosition.dy / (gridSize.height / 6)).floor();
+    if (col < 0 || col > 6 || row < 0 || row > 5) return null;
+    return (row * 7) + col;
+  }
+
+  void _startDrag(Offset localPosition, List<DateTime> days, Size gridSize) {
+    final index = _dayIndexFromLocalOffset(localPosition, gridSize);
+    if (index == null) return;
+    final day = days[index];
+    if (day.month != _visibleMonth.month || day.year != _visibleMonth.year) {
+      return;
+    }
+    final key = _dateKey(day);
+    final next = _nextDayState(_dayStates[key]);
+    setState(() {
+      _dragStateToApply = next;
+      _dragVisitedKeys
+        ..clear()
+        ..add(key);
+      _setDayStateForKey(key, next);
+      _dragChanged = true;
+    });
+  }
+
+  void _updateDrag(Offset localPosition, List<DateTime> days, Size gridSize) {
+    final index = _dayIndexFromLocalOffset(localPosition, gridSize);
+    if (index == null || _dragStateToApply == null) return;
+    final day = days[index];
+    if (day.month != _visibleMonth.month || day.year != _visibleMonth.year) {
+      return;
+    }
+    final key = _dateKey(day);
+    if (_dragVisitedKeys.contains(key)) return;
+    setState(() {
+      _dragVisitedKeys.add(key);
+      _setDayStateForKey(key, _dragStateToApply);
+      _dragChanged = true;
+    });
+  }
+
+  Future<void> _endDrag() async {
+    final changed = _dragChanged;
+    setState(() {
+      _dragStateToApply = null;
+      _dragVisitedKeys.clear();
+      _dragChanged = false;
+    });
+    if (changed) {
+      await _saveDayStates();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = _monthGrid(_visibleMonth);
+    return Scaffold(
+      backgroundColor: AppColors.snow,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Availability',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Manage your schedule and turnaround time.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.black.withOpacity(0.55),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text(
+                  'Direct Request',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Switch(
+                  value: _directRequestsEnabled,
+                  activeThumbColor: AppColors.blackCat,
+                  inactiveThumbColor: AppColors.blackCatLight,
+                  inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                  onChanged: _savingDirect ? null : _onDirectToggle,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(color: AppColors.blackCatLight),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => setState(() {
+                            _visibleMonth = DateTime(
+                              _visibleMonth.year,
+                              _visibleMonth.month - 1,
+                            );
+                          }),
+                          icon: const Icon(Icons.chevron_left_rounded),
+                        ),
+                        Expanded(
+                          child: Container(
+                            height: 46,
+                            decoration: BoxDecoration(
+                              color: AppColors.snow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: AppColors.blackCatLight,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.chevron_left_rounded,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _monthLabel(_visibleMonth),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => setState(() {
+                            _visibleMonth = DateTime(
+                              _visibleMonth.year,
+                              _visibleMonth.month + 1,
+                            );
+                          }),
+                          icon: const Icon(Icons.chevron_right_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(height: 1, color: Colors.black.withOpacity(0.05)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: _weekdays
+                          .map(
+                            (d) => Expanded(
+                              child: Center(
+                                child: Text(
+                                  d,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black.withOpacity(0.55),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 280,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final gridSize = Size(
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                        );
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onPanStart: (details) =>
+                              _startDrag(details.localPosition, days, gridSize),
+                          onPanUpdate: (details) => _updateDrag(
+                            details.localPosition,
+                            days,
+                            gridSize,
+                          ),
+                          onPanEnd: (_) {
+                            unawaited(_endDrag());
+                          },
+                          child: Column(
+                            children: List<Widget>.generate(6, (week) {
+                              return Expanded(
+                                child: Row(
+                                  children: List<Widget>.generate(7, (
+                                    dayIndex,
+                                  ) {
+                                    final day = days[(week * 7) + dayIndex];
+                                    return Expanded(child: _dayCell(day));
+                                  }),
+                                ),
+                              );
+                            }),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(color: AppColors.blackCatLight),
+              ),
+              child: Row(
+                children: const [
+                  _AvailabilityLegend(
+                    color: AppColors.balletSlippers,
+                    label: 'Direct Request',
+                  ),
+                  SizedBox(width: 14),
+                  _AvailabilityLegend(
+                    color: Color(0xFFD17A7A),
+                    label: 'Blocked',
+                  ),
+                  SizedBox(width: 14),
+                  _AvailabilityLegend(
+                    color: AppColors.alabaster,
+                    label: 'Not Available',
+                    slashed: true,
+                  ),
+                ],
+              ),
+            ),
+            if (_savingDays)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Saving availability...',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.black.withOpacity(0.5),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Text(
+              'Tap or drag across dates to apply a range: Direct Request -> Blocked -> Not Available -> Clear.',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: Colors.black.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dayCell(DateTime day) {
+    final isCurrentMonth =
+        day.month == _visibleMonth.month && day.year == _visibleMonth.year;
+    final state = _dayStates[_dateKey(day)];
+    Color bg = Colors.transparent;
+    Color text = Colors.black.withOpacity(0.78);
+    final isUnavailable = state == 'unavailable';
+    if (!isCurrentMonth) {
+      bg = const Color(0xFFF0F0F6);
+      text = Colors.black.withOpacity(0.35);
+    } else if (state == 'direct') {
+      bg = AppColors.balletSlippers;
+      text = AppColors.blackCat;
+    } else if (state == 'blocked') {
+      bg = const Color(0xFFD17A7A);
+      text = Colors.white;
+    } else if (isUnavailable) {
+      bg = AppColors.alabaster;
+      text = Colors.black.withOpacity(0.55);
+    }
+
+    return InkWell(
+      onTap: () => _onDayTap(day),
+      child: Container(
+        margin: const EdgeInsets.all(1),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.zero,
+          border: isUnavailable
+              ? Border.all(color: AppColors.blackCatLight)
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (isUnavailable && isCurrentMonth)
+              Transform.rotate(
+                angle: -0.75,
+                child: Container(
+                  width: 20,
+                  height: 1.6,
+                  color: AppColors.blackCatLight,
+                ),
+              ),
+            Text(
+              '${day.day}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: text,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvailabilityLegend extends StatelessWidget {
+  const _AvailabilityLegend({
+    required this.color,
+    required this.label,
+    this.slashed = false,
+  });
+
+  final Color color;
+  final String label;
+  final bool slashed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          child: slashed
+              ? Transform.rotate(
+                  angle: -0.75,
+                  child: Center(
+                    child: Container(
+                      width: 12,
+                      height: 1.4,
+                      color: AppColors.blackCatLight,
+                    ),
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.black.withOpacity(0.6)),
+        ),
+      ],
+    );
+  }
+}
+
+class ArtistEditProfilePage extends StatefulWidget {
+  const ArtistEditProfilePage({
+    super.key,
+    required this.docRef,
+    required this.initialData,
+  });
+
+  final DocumentReference<Map<String, dynamic>> docRef;
+  final Map<String, dynamic> initialData;
+
+  @override
+  State<ArtistEditProfilePage> createState() => _ArtistEditProfilePageState();
+}
+
+class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
+  final _displayNameCtrl = TextEditingController();
+  final _studioNameCtrl = TextEditingController();
+  final _bioCtrl = TextEditingController();
+  final _cityCtrl = TextEditingController();
+  final _stateCtrl = TextEditingController();
+  final _instagramCtrl = TextEditingController();
+  final _tiktokCtrl = TextEditingController();
+  bool _saving = false;
+  bool _pickingPhoto = false;
+  String _selectedCountry = 'United States';
+  String? _selectedUsState;
+  String _profilePhotoUrl = '';
+  Uint8List? _profilePhotoBytes;
+
+  static const String _usCountry = 'United States';
+  static const List<String> _usStates = <String>[
+    'Alabama',
+    'Alaska',
+    'Arizona',
+    'Arkansas',
+    'California',
+    'Colorado',
+    'Connecticut',
+    'Delaware',
+    'Florida',
+    'Georgia',
+    'Hawaii',
+    'Idaho',
+    'Illinois',
+    'Indiana',
+    'Iowa',
+    'Kansas',
+    'Kentucky',
+    'Louisiana',
+    'Maine',
+    'Maryland',
+    'Massachusetts',
+    'Michigan',
+    'Minnesota',
+    'Mississippi',
+    'Missouri',
+    'Montana',
+    'Nebraska',
+    'Nevada',
+    'New Hampshire',
+    'New Jersey',
+    'New Mexico',
+    'New York',
+    'North Carolina',
+    'North Dakota',
+    'Ohio',
+    'Oklahoma',
+    'Oregon',
+    'Pennsylvania',
+    'Rhode Island',
+    'South Carolina',
+    'South Dakota',
+    'Tennessee',
+    'Texas',
+    'Utah',
+    'Vermont',
+    'Virginia',
+    'Washington',
+    'West Virginia',
+    'Wisconsin',
+    'Wyoming',
+    'District of Columbia',
+  ];
+
+  static const List<String> _countries = <String>[
+    'Afghanistan',
+    'Albania',
+    'Algeria',
+    'Andorra',
+    'Angola',
+    'Antigua and Barbuda',
+    'Argentina',
+    'Armenia',
+    'Australia',
+    'Austria',
+    'Azerbaijan',
+    'Bahamas',
+    'Bahrain',
+    'Bangladesh',
+    'Barbados',
+    'Belarus',
+    'Belgium',
+    'Belize',
+    'Benin',
+    'Bhutan',
+    'Bolivia',
+    'Bosnia and Herzegovina',
+    'Botswana',
+    'Brazil',
+    'Brunei',
+    'Bulgaria',
+    'Burkina Faso',
+    'Burundi',
+    'Cabo Verde',
+    'Cambodia',
+    'Cameroon',
+    'Canada',
+    'Central African Republic',
+    'Chad',
+    'Chile',
+    'China',
+    'Colombia',
+    'Comoros',
+    'Congo',
+    'Costa Rica',
+    "Cote d'Ivoire",
+    'Croatia',
+    'Cuba',
+    'Cyprus',
+    'Czech Republic',
+    'Democratic Republic of the Congo',
+    'Denmark',
+    'Djibouti',
+    'Dominica',
+    'Dominican Republic',
+    'Ecuador',
+    'Egypt',
+    'El Salvador',
+    'Equatorial Guinea',
+    'Eritrea',
+    'Estonia',
+    'Eswatini',
+    'Ethiopia',
+    'Fiji',
+    'Finland',
+    'France',
+    'Gabon',
+    'Gambia',
+    'Georgia',
+    'Germany',
+    'Ghana',
+    'Greece',
+    'Grenada',
+    'Guatemala',
+    'Guinea',
+    'Guinea-Bissau',
+    'Guyana',
+    'Haiti',
+    'Honduras',
+    'Hungary',
+    'Iceland',
+    'India',
+    'Indonesia',
+    'Iran',
+    'Iraq',
+    'Ireland',
+    'Israel',
+    'Italy',
+    'Jamaica',
+    'Japan',
+    'Jordan',
+    'Kazakhstan',
+    'Kenya',
+    'Kiribati',
+    'Kuwait',
+    'Kyrgyzstan',
+    'Laos',
+    'Latvia',
+    'Lebanon',
+    'Lesotho',
+    'Liberia',
+    'Libya',
+    'Liechtenstein',
+    'Lithuania',
+    'Luxembourg',
+    'Madagascar',
+    'Malawi',
+    'Malaysia',
+    'Maldives',
+    'Mali',
+    'Malta',
+    'Marshall Islands',
+    'Mauritania',
+    'Mauritius',
+    'Mexico',
+    'Micronesia',
+    'Moldova',
+    'Monaco',
+    'Mongolia',
+    'Montenegro',
+    'Morocco',
+    'Mozambique',
+    'Myanmar',
+    'Namibia',
+    'Nauru',
+    'Nepal',
+    'Netherlands',
+    'New Zealand',
+    'Nicaragua',
+    'Niger',
+    'Nigeria',
+    'North Korea',
+    'North Macedonia',
+    'Norway',
+    'Oman',
+    'Pakistan',
+    'Palau',
+    'Palestine',
+    'Panama',
+    'Papua New Guinea',
+    'Paraguay',
+    'Peru',
+    'Philippines',
+    'Poland',
+    'Portugal',
+    'Qatar',
+    'Romania',
+    'Russia',
+    'Rwanda',
+    'Saint Kitts and Nevis',
+    'Saint Lucia',
+    'Saint Vincent and the Grenadines',
+    'Samoa',
+    'San Marino',
+    'Sao Tome and Principe',
+    'Saudi Arabia',
+    'Senegal',
+    'Serbia',
+    'Seychelles',
+    'Sierra Leone',
+    'Singapore',
+    'Slovakia',
+    'Slovenia',
+    'Solomon Islands',
+    'Somalia',
+    'South Africa',
+    'South Korea',
+    'South Sudan',
+    'Spain',
+    'Sri Lanka',
+    'Sudan',
+    'Suriname',
+    'Sweden',
+    'Switzerland',
+    'Syria',
+    'Taiwan',
+    'Tajikistan',
+    'Tanzania',
+    'Thailand',
+    'Timor-Leste',
+    'Togo',
+    'Tonga',
+    'Trinidad and Tobago',
+    'Tunisia',
+    'Turkey',
+    'Turkmenistan',
+    'Tuvalu',
+    'Uganda',
+    'Ukraine',
+    'United Arab Emirates',
+    'United Kingdom',
+    'United States',
+    'Uruguay',
+    'Uzbekistan',
+    'Vanuatu',
+    'Vatican City',
+    'Venezuela',
+    'Vietnam',
+    'Yemen',
+    'Zambia',
+    'Zimbabwe',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.initialData;
+    final profile =
+        (data['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+
+    String firstNonEmpty(List<Object?> values) {
+      for (final raw in values) {
+        final text = (raw ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return '';
+    }
+
+    _displayNameCtrl.text = firstNonEmpty([
+      profile['displayName'],
+      data['panel_displayName'],
+      data['displayName'],
+      data['name'],
+    ]);
+    _studioNameCtrl.text = firstNonEmpty([
+      profile['studioName'],
+      data['panel_studioName'],
+    ]);
+    _bioCtrl.text = firstNonEmpty([profile['bio'], data['panel_bio']]);
+    _cityCtrl.text = firstNonEmpty([profile['city'], data['panel_city']]);
+    _stateCtrl.text = firstNonEmpty([profile['state'], data['panel_state']]);
+    final savedCountry = firstNonEmpty([
+      profile['country'],
+      data['panel_country'],
+    ]);
+    _selectedCountry = _matchCountry(savedCountry) ?? _usCountry;
+    if (_selectedCountry == _usCountry) {
+      _selectedUsState = _matchUsState(_stateCtrl.text);
+      if (_selectedUsState != null) {
+        _stateCtrl.text = _selectedUsState!;
+      }
+    }
+    _instagramCtrl.text = firstNonEmpty([
+      profile['instagram'],
+      data['panel_instagram'],
+    ]);
+    _tiktokCtrl.text = firstNonEmpty([profile['tiktok'], data['panel_tiktok']]);
+    _profilePhotoUrl = firstNonEmpty([
+      profile['photoUrl'],
+      profile['avatarUrl'],
+      profile['profileImageUrl'],
+      data['panel_profileImageUrl'],
+      data['profileImageUrl'],
+      data['photoUrl'],
+      data['avatarUrl'],
+    ]);
+  }
+
+  @override
+  void dispose() {
+    _displayNameCtrl.dispose();
+    _studioNameCtrl.dispose();
+    _bioCtrl.dispose();
+    _cityCtrl.dispose();
+    _stateCtrl.dispose();
+    _instagramCtrl.dispose();
+    _tiktokCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final displayName = _displayNameCtrl.text.trim();
+      final studioName = _studioNameCtrl.text.trim();
+      final bio = _bioCtrl.text.trim();
+      final city = _cityCtrl.text.trim();
+      final instagram = _instagramCtrl.text.trim();
+      final tiktok = _tiktokCtrl.text.trim();
+      final stateToSave = _selectedCountry == _usCountry
+          ? (_selectedUsState ?? _stateCtrl.text.trim())
+          : _stateCtrl.text.trim();
+      final uid = (FirebaseAuth.instance.currentUser?.uid ?? widget.docRef.id)
+          .trim();
+      var profilePhotoUrlToSave = _profilePhotoUrl.trim();
+      if (_profilePhotoBytes != null && _profilePhotoBytes!.isNotEmpty) {
+        profilePhotoUrlToSave = await _uploadEditProfilePhoto(
+          uid,
+          _profilePhotoBytes!,
+        );
+      }
+      await widget.docRef.set({
+        'panel_displayName': displayName,
+        'panel_studioName': studioName,
+        'panel_bio': bio,
+        'panel_city': city,
+        'panel_state': stateToSave,
+        'panel_country': _selectedCountry,
+        'panel_instagram': instagram,
+        'panel_tiktok': tiktok,
+        'panel_profileImageUrl': profilePhotoUrlToSave,
+        'displayName': displayName,
+        'name': displayName,
+        'studioName': studioName,
+        'bio': bio,
+        'city': city,
+        'state': stateToSave,
+        'country': _selectedCountry,
+        'instagram': instagram,
+        'tiktok': tiktok,
+        'profileImageUrl': profilePhotoUrlToSave,
+        'photoUrl': profilePhotoUrlToSave,
+        'avatarUrl': profilePhotoUrlToSave,
+        'profile': {
+          'displayName': displayName,
+          'studioName': studioName,
+          'bio': bio,
+          'city': city,
+          'state': stateToSave,
+          'country': _selectedCountry,
+          'instagram': instagram,
+          'tiktok': tiktok,
+          'photoUrl': profilePhotoUrlToSave,
+          'avatarUrl': profilePhotoUrlToSave,
+          'profileImageUrl': profilePhotoUrlToSave,
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final supabaseTable = (widget.initialData['__supabaseTable'] ?? '').toString().trim();
+      final supabaseId = (widget.initialData['__supabaseId'] ?? '').toString().trim();
+      if (supabaseTable.isNotEmpty && supabaseId.isNotEmpty) {
+        try {
+          await SupabaseBootstrap.client.from(supabaseTable).update({
+            'displayName': displayName,
+            'name': displayName,
+            'studioName': studioName,
+            'bio': bio,
+            'city': city,
+            'state': stateToSave,
+            'country': _selectedCountry,
+            'instagram': instagram,
+            'tiktok': tiktok,
+            'profileImageUrl': profilePhotoUrlToSave,
+            'photoUrl': profilePhotoUrlToSave,
+            'avatarUrl': profilePhotoUrlToSave,
+            'profile': {
+              ...((widget.initialData['profile'] as Map?) ?? const <String, dynamic>{}),
+              'displayName': displayName,
+              'studioName': studioName,
+              'bio': bio,
+              'city': city,
+              'state': stateToSave,
+              'country': _selectedCountry,
+              'instagram': instagram,
+              'tiktok': tiktok,
+              'photoUrl': profilePhotoUrlToSave,
+              'avatarUrl': profilePhotoUrlToSave,
+              'profileImageUrl': profilePhotoUrlToSave,
+            },
+          }).eq('id', supabaseId);
+        } catch (e) {
+          debugPrint('Supabase edit profile save failed: $e');
+        }
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to save profile changes.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    if (_pickingPhoto) return;
+    setState(() => _pickingPhoto = true);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 82,
+        maxWidth: 1400,
+        maxHeight: 1400,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return;
+      final optimized = _optimizeEditProfilePhotoBytes(bytes) ?? bytes;
+      if (!mounted) return;
+      setState(() {
+        _profilePhotoBytes = optimized;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to pick profile photo.')),
+      );
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: AppColors.blackCatBorderLight),
+        ),
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            children: [
+              Container(
+                height: 5,
+                width: 44,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.blackCat,
+                  borderRadius: BorderRadius.zero,
+                ),
+              ),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'Edit Profile',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                          color: AppColors.blackCat,
+                          fontFamily: 'ArialBold',
+                        ),
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.zero,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 22,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _profileUploadPicker(),
+              const SizedBox(height: 6),
+              _field('Display Name', _displayNameCtrl),
+              _field('Studio Name', _studioNameCtrl),
+              _field('Bio', _bioCtrl, maxLines: 3),
+              _field('City', _cityCtrl),
+              _countryDropdown(),
+              _selectedCountry == _usCountry
+                  ? _usStateDropdown()
+                  : _field('State', _stateCtrl),
+              _field('Instagram', _instagramCtrl),
+              _field('TikTok', _tiktokCtrl),
+              const SizedBox(height: 14),
+              Center(
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    onPressed: _saving ? null : _save,
+                    child: Text(
+                      _saving ? 'Saving...' : 'Save',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Uint8List? _optimizeEditProfilePhotoBytes(Uint8List source) {
+    final decoded = img.decodeImage(source);
+    if (decoded == null) return null;
+    img.Image processed = decoded;
+    final maxSide = processed.width > processed.height
+        ? processed.width
+        : processed.height;
+    if (maxSide > 900) {
+      final scale = 900 / maxSide;
+      processed = img.copyResize(
+        processed,
+        width: (processed.width * scale).round(),
+        height: (processed.height * scale).round(),
+        interpolation: img.Interpolation.average,
+      );
+    }
+    final encoded = img.encodeJpg(processed, quality: 74);
+    return Uint8List.fromList(encoded);
+  }
+
+  Future<String> _uploadEditProfilePhoto(String uid, Uint8List bytes) async {
+    try {
+      final safeUid = uid.trim().isEmpty
+          ? (SupabaseAuthService.currentUser?.id ?? 'unknown')
+          : uid.trim();
+      final path = 'artists/$safeUid/profile/avatar.jpg';
+      final storage = SupabaseBootstrap.client.storage.from('profile-pictures');
+
+      await storage.uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(
+          contentType: 'image/jpeg',
+          upsert: true,
+        ),
+      );
+
+      final url = storage.getPublicUrl(path).trim();
+      if (url.isNotEmpty) return url;
+    } catch (e) {
+      debugPrint('Artist edit profile photo upload failed: $e');
+    }
+
+    return 'data:image/jpeg;base64,${base64Encode(bytes)}';
+  }
+
+  ImageProvider? _imageProviderFromUrl(String src) {
+    if (src.startsWith('data:image/')) {
+      final comma = src.indexOf(',');
+      if (comma > 0 && comma < src.length - 1) {
+        try {
+          return MemoryImage(base64Decode(src.substring(comma + 1)));
+        } catch (_) {}
+      }
+      return null;
+    }
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return NetworkImage(src);
+    }
+    return null;
+  }
+
+  Widget _profileUploadPicker() {
+    final imageProvider = _imageProviderFromUrl(_profilePhotoUrl.trim());
+    final hasImage = _profilePhotoBytes != null || imageProvider != null;
+    return Center(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          GestureDetector(
+            onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
+            child: Container(
+              height: 88,
+              width: 88,
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: AppColors.blackCat.withOpacity(0.35),
+                  width: 1.4,
+                ),
+              ),
+              child: _profilePhotoBytes != null
+                  ? Image.memory(
+                      _profilePhotoBytes!,
+                      fit: BoxFit.cover,
+                      width: 88,
+                      height: 88,
+                    )
+                  : imageProvider != null
+                  ? Image(
+                      image: imageProvider,
+                      fit: BoxFit.cover,
+                      width: 88,
+                      height: 88,
+                    )
+                  : Icon(
+                      Icons.camera_alt_outlined,
+                      size: 26,
+                      color: AppColors.blackCat,
+                    ),
+            ),
+          ),
+          Positioned(
+            right: -4,
+            bottom: -4,
+            child: GestureDetector(
+              onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
+              child: Container(
+                height: 24,
+                width: 24,
+                decoration: BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(color: AppColors.blackCatBorderLight),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.blackCat.withOpacity(0.10),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  hasImage
+                      ? Icons.file_upload_outlined
+                      : Icons.photo_camera_outlined,
+                  color: AppColors.blackCat,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+          if (_pickingPhoto)
+            const Positioned.fill(
+              child: Center(
+                child: SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController c, {int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: Colors.black.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: c,
+            maxLines: maxLines,
+            style: const TextStyle(fontSize: 12),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.snow,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _countryDropdown() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SearchableDropdownField(
+        label: 'Country',
+        value: _selectedCountry,
+        items: _countries,
+        fillColor: AppColors.snow,
+        borderColor: AppColors.blackCatBorderLight,
+        onChanged: (value) {
+          setState(() {
+            _selectedCountry = value;
+            if (_selectedCountry == _usCountry) {
+              _selectedUsState = _matchUsState(_stateCtrl.text);
+              if (_selectedUsState != null) {
+                _stateCtrl.text = _selectedUsState!;
+              }
+            } else {
+              if (_selectedUsState != null && _stateCtrl.text.trim().isEmpty) {
+                _stateCtrl.text = _selectedUsState!;
+              }
+              _selectedUsState = null;
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _usStateDropdown() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SearchableDropdownField(
+        label: 'State',
+        value: _selectedUsState,
+        items: _usStates,
+        hint: 'Select state',
+        fillColor: AppColors.snow,
+        borderColor: AppColors.blackCatBorderLight,
+        onChanged: (value) {
+          setState(() {
+            _selectedUsState = value;
+            _stateCtrl.text = value;
+          });
+        },
+      ),
+    );
+  }
+
+  String? _matchCountry(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return null;
+    final lower = v.toLowerCase();
+    if (lower == 'usa' ||
+        lower == 'us' ||
+        lower == 'u.s.' ||
+        lower == 'u.s.a.') {
+      return _usCountry;
+    }
+    for (final country in _countries) {
+      if (country.toLowerCase() == lower) {
+        return country;
+      }
+    }
+    return null;
+  }
+
+  String? _matchUsState(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return null;
+    final lower = v.toLowerCase();
+    for (final state in _usStates) {
+      if (state.toLowerCase() == lower) {
+        return state;
+      }
+    }
+    return null;
+  }
+}
