@@ -6,10 +6,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 
 // âœ… reuse your existing model WITHOUT changing that file
-import '../models/artist_request_legacy_models.dart' show ClientRequest, NailDimensions, RequestStatus;
+import '../models/artist_request_legacy_models.dart'
+    show ClientRequest, NailDimensions, RequestStatus;
 import '../utlis/responsive_text.dart';
 import 'artist_profile_page.dart';
-import 'artist_inbox_page.dart';
 import 'notifications_page.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/notification_bell_button.dart';
@@ -79,7 +79,6 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     super.dispose();
   }
 
-
   List<ClientRequest> get _calendarRequests {
     if (_supabaseRequests.isEmpty) return widget.requests;
     if (widget.requests.isEmpty) return _supabaseRequests;
@@ -126,9 +125,10 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           .listen((rows) {
             final mapped = rows
                 .whereType<Map>()
-                .map((row) => _requestFromSupabaseRow(
-                      Map<String, dynamic>.from(row),
-                    ))
+                .map(
+                  (row) =>
+                      _requestFromSupabaseRow(Map<String, dynamic>.from(row)),
+                )
                 .whereType<ClientRequest>()
                 .toList(growable: false);
 
@@ -140,13 +140,20 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchCalendarRequestRowsFromSupabase() async {
+  Future<List<Map<String, dynamic>>>
+  _fetchCalendarRequestRowsFromSupabase() async {
     final supabase = Supabase.instance.client;
     final now = DateTime.now();
-    final minDate = DateTime(now.year, now.month, now.day)
-        .subtract(const Duration(days: 30));
-    final maxDate = DateTime(now.year, now.month, now.day)
-        .add(const Duration(days: 120));
+    final minDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 30));
+    final maxDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 120));
 
     try {
       final rows = await supabase
@@ -155,20 +162,20 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           .order('created_at', ascending: false)
           .limit(250);
 
-      if (rows is! List) return const <Map<String, dynamic>>[];
-
       return rows
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .where((row) {
             final data = _flattenCalendarRow(row);
-            final neededBy = _dateFromAny(_firstNonEmptyCalendar([
-              data['needBy'],
-              data['neededBy'],
-              data['dueDate'],
-              data['createdAt'],
-              data['created_at'],
-            ]));
+            final neededBy = _dateFromAny(
+              _firstNonEmptyCalendar([
+                data['needBy'],
+                data['neededBy'],
+                data['dueDate'],
+                data['createdAt'],
+                data['created_at'],
+              ]),
+            );
             if (neededBy == null) return true;
             final d = _dateOnly(neededBy);
             return !d.isBefore(minDate) && !d.isAfter(maxDate);
@@ -184,15 +191,17 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     try {
       final data = _flattenCalendarRow(row);
       final neededBy =
-          _dateFromAny(_firstNonEmptyCalendar([
-            data['needBy'],
-            data['neededBy'],
-            data['dueDate'],
-            data['createdAt'],
-            data['created_at'],
-            data['updatedAt'],
-            data['updated_at'],
-          ])) ??
+          _dateFromAny(
+            _firstNonEmptyCalendar([
+              data['needBy'],
+              data['neededBy'],
+              data['dueDate'],
+              data['createdAt'],
+              data['created_at'],
+              data['updatedAt'],
+              data['updated_at'],
+            ]),
+          ) ??
           DateTime.now();
 
       final dims = _asMapCalendar(
@@ -268,12 +277,14 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         ]),
         leftHand: left,
         rightHand: right,
-        images: _stringListCalendar(_firstExistingCalendar([
-          data['inspiration_photos'],
-          data['inspirationPhotos'],
-          data['clientImages'],
-          data['photos'],
-        ])),
+        images: _stringListCalendar(
+          _firstExistingCalendar([
+            data['inspiration_photos'],
+            data['inspirationPhotos'],
+            data['clientImages'],
+            data['photos'],
+          ]),
+        ),
         status: _statusFromCalendar(
           data['artistStatus'] ?? data['artist_status'] ?? data['status'],
         ),
@@ -360,7 +371,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
 
   Map<String, dynamic> _asMapCalendar(Object? raw) {
     if (raw is Map<String, dynamic>) return Map<String, dynamic>.from(raw);
-    if (raw is Map) return raw.map((key, value) => MapEntry(key.toString(), value));
+    if (raw is Map)
+      return raw.map((key, value) => MapEntry(key.toString(), value));
     return const <String, dynamic>{};
   }
 
@@ -448,7 +460,6 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return text.toLowerCase().contains('mm') ? text : '$text mm';
   }
 
-
   @override
   Widget build(BuildContext context) {
     final monthLabel = _monthLabel(_focusedMonth);
@@ -521,7 +532,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                             color: AppColors.snow,
                             borderRadius: BorderRadius.zero,
                             border: Border.all(
-                              color: Colors.black.withOpacity(0.05),
+                              color: AppColors.blackCat.withValues(alpha: 0.05),
                             ),
                           ),
                           child: Row(
@@ -593,7 +604,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           ? BottomNavigationBar(
               currentIndex: widget.bottomNavIndex,
               selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: Colors.black.withOpacity(0.35),
+              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
               backgroundColor: AppColors.balletSlippers,
               type: BottomNavigationBarType.fixed,
               onTap: (i) {
@@ -656,17 +667,6 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
       return;
     }
     NotificationsPage.showAsModal(context);
-  }
-
-  void _openInbox() {
-    if (widget.onOpenInbox != null) {
-      widget.onOpenInbox!.call();
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ArtistInboxPage()),
-    );
   }
 
   Future<void> _signOut() async {
@@ -940,7 +940,10 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     final circleBg = isSelected ? AppColors.deepPlum : Colors.transparent;
 
     final todayRing = isToday && !isSelected
-        ? Border.all(color: AppColors.deepPlum.withOpacity(0.45), width: 2)
+        ? Border.all(
+            color: AppColors.blackCat.withValues(alpha: 0.45),
+            width: 2,
+          )
         : Border.all(color: Colors.transparent, width: 2);
 
     return GestureDetector(
@@ -972,7 +975,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: AppColors.deepPlum.withOpacity(0.18),
+                              color: AppColors.blackCat.withValues(alpha: 0.18),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
@@ -1000,9 +1003,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                         margin: const EdgeInsets.symmetric(horizontal: 1.2),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.white.withOpacity(0.95)
-                              : AppColors.deepPlum.withOpacity(
-                                  isInMonth ? 0.85 : 0.25,
+                              ? AppColors.snow.withValues(alpha: 0.95)
+                              : AppColors.blackCat.withValues(
+                                  alpha: isInMonth ? 0.85 : 0.25,
                                 ),
                           shape: BoxShape.circle,
                         ),
@@ -1155,7 +1158,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
               width: 42,
               decoration: BoxDecoration(
                 color: AppColors.balletSlippers,
-                border: Border.all(color: Colors.black.withOpacity(0.06)),
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(alpha: 0.06),
+                ),
               ),
               alignment: Alignment.center,
               child: Text(
@@ -1362,7 +1367,11 @@ class _HeaderMenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: color ?? Colors.black.withOpacity(0.70)),
+        Icon(
+          icon,
+          size: 18,
+          color: color ?? AppColors.blackCat.withValues(alpha: 0.70),
+        ),
         const SizedBox(width: 10),
         Text(
           label,
@@ -1376,8 +1385,3 @@ class _HeaderMenuRow extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

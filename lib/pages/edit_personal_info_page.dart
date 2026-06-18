@@ -123,7 +123,7 @@ class _EditPersonalInfoPageState extends State<EditPersonalInfoPage> {
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 10,
-            color: AppColors.blackCat.withOpacity(0.75),
+            color: AppColors.blackCat.withValues(alpha: 0.75),
           ),
         ),
         const SizedBox(height: 6),

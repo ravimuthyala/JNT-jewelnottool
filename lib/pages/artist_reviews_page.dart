@@ -214,7 +214,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.blackCat.withOpacity(0.7),
+              color: AppColors.blackCat.withValues(alpha: 0.7),
               fontFamily: 'Arial',
             ),
           ),
@@ -242,7 +242,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 'No reviews yet.',
                 style: TextStyle(
                   fontSize: 12.5,
-                  color: AppColors.blackCat.withOpacity(0.72),
+                  color: AppColors.blackCat.withValues(alpha: 0.72),
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Arial',
                 ),
@@ -325,7 +325,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           Text(
             '\$${tips.toStringAsFixed(0)} Tips Earned',
             style: const TextStyle(
-              color: AppColors.deepPlum,
+              color: AppColors.blackCat,
               fontWeight: FontWeight.w700,
               fontFamily: 'Arialbold',
             ),
@@ -551,7 +551,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                     when,
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.blackCat.withOpacity(0.7),
+                      color: AppColors.blackCat.withValues(alpha: 0.7),
                       fontFamily: 'Arial',
                     ),
                   ),
@@ -569,7 +569,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
             'Order/Request ID: #${r.requestId}',
             style: TextStyle(
               fontSize: 12,
-              color: AppColors.blackCat.withOpacity(0.7),
+              color: AppColors.blackCat.withValues(alpha: 0.7),
               fontFamily: 'Arial',
             ),
           ),
@@ -579,7 +579,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
               const Icon(
                 Icons.redeem_rounded,
                 size: 16,
-                color: AppColors.deepPlum,
+                color: AppColors.blackCat,
               ),
               const SizedBox(width: 6),
               const Text(
@@ -596,7 +596,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 '\$${r.tipAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.deepPlum,
+                  color: AppColors.blackCat,
                   fontFamily: 'Arialbold',
                 ),
               ),
@@ -612,7 +612,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
               const Icon(
                 Icons.favorite_border_rounded,
                 size: 16,
-                color: AppColors.deepPlum,
+                color: AppColors.blackCat,
               ),
             ],
           ),

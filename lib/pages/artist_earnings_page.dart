@@ -527,7 +527,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                           summary.rangeLabel,
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
-                            color: Colors.black.withOpacity(0.70),
+                            color: AppColors.blackCat.withValues(alpha: 0.70),
                           ),
                         ),
                       ),
@@ -701,7 +701,7 @@ class _PerformanceTrendCard extends StatelessWidget {
                               p.label,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(alpha: 0.65),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -742,7 +742,7 @@ class _AvatarMenu extends StatelessWidget {
       tooltip: '',
       position: PopupMenuPosition.under,
       elevation: 12,
-      color: Colors.white,
+      color: AppColors.snow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       onSelected: (v) {
         switch (v) {
@@ -838,7 +838,7 @@ class _MenuRow extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 12,
-            color: color ?? AppColors.blackCat,
+            color: color,
           ),
         ),
       ],
@@ -875,7 +875,7 @@ class _TotalEarningsCard extends StatelessWidget {
                   'Total Earnings',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Colors.white.withOpacity(0.92),
+                    color: AppColors.snow.withValues(alpha: 0.92),
                     fontSize: 12,
                   ),
                 ),
@@ -884,7 +884,7 @@ class _TotalEarningsCard extends StatelessWidget {
                   '\$${total.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.snow,
                     fontSize: 30,
                     height: 1.0,
                   ),
@@ -894,7 +894,7 @@ class _TotalEarningsCard extends StatelessWidget {
                   deltaLabel,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Colors.white.withOpacity(0.90),
+                    color: AppColors.snow.withValues(alpha: 0.90),
                     fontSize: 12,
                   ),
                 ),
@@ -973,7 +973,7 @@ class _AscensionSummaryCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
-                    color: Colors.black.withOpacity(0.6),
+                    color: AppColors.blackCat.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -1032,7 +1032,7 @@ class _RangeDropdown extends StatelessWidget {
             const SizedBox(width: 6),
             Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: Colors.black.withOpacity(0.55),
+              color: AppColors.blackCat.withValues(alpha: 0.55),
             ),
           ],
         ),
@@ -1071,7 +1071,7 @@ class _StatCard extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 12,
-              color: Colors.black.withOpacity(0.85),
+              color: AppColors.blackCat.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 10),
@@ -1082,14 +1082,14 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(icon, size: 16, color: Colors.black.withOpacity(0.55)),
+              Icon(icon, size: 16, color: AppColors.blackCat.withValues(alpha: 0.55)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   subtitle,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Colors.black.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontSize: 12,
                   ),
                 ),
@@ -1129,7 +1129,7 @@ class _BreakdownCard extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 12,
-              color: Colors.black.withOpacity(0.90),
+              color: AppColors.blackCat.withValues(alpha: 0.90),
             ),
           ),
           const SizedBox(height: 12),
@@ -1174,7 +1174,7 @@ class _BreakdownCard extends StatelessWidget {
         widthFactor: pct.clamp(0.0, 1.0),
         child: Container(
           decoration: BoxDecoration(
-            color: color ?? AppColors.blackCat,
+            color: color,
             borderRadius: BorderRadius.zero,
           ),
         ),
@@ -1205,7 +1205,7 @@ class _RecentPayoutsCard extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 12,
-              color: Colors.black.withOpacity(0.90),
+              color: AppColors.blackCat.withValues(alpha: 0.90),
             ),
           ),
           const SizedBox(height: 12),
@@ -1215,7 +1215,7 @@ class _RecentPayoutsCard extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
-                color: Colors.black.withOpacity(0.60),
+                color: AppColors.blackCat.withValues(alpha: 0.60),
               ),
             ),
           ...items.map((e) => _PayoutTile(item: e)),
@@ -1251,7 +1251,7 @@ class _PayoutTile extends StatelessWidget {
               ),
               child: Icon(
                 Icons.attach_money_rounded,
-                color: Colors.black.withOpacity(0.75),
+                color: AppColors.blackCat.withValues(alpha: 0.75),
               ),
             ),
             const SizedBox(width: 12),
@@ -1272,7 +1272,7 @@ class _PayoutTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                     ),
                   ),
                 ],
@@ -1283,7 +1283,7 @@ class _PayoutTile extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
-                color: Colors.black.withOpacity(0.65),
+                color: AppColors.blackCat.withValues(alpha: 0.65),
               ),
             ),
           ],

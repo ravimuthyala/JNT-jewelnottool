@@ -10,7 +10,7 @@ class SupabaseBootstrap {
     try {
       await Supabase.initialize(
         url: 'https://mjvypuwrwcjylhizuhfw.supabase.co',
-        anonKey: 'sb_publishable_VPMJRDPaTI7xdm5ti7HEjg_S_aJIPXD',
+        publishableKey : 'sb_publishable_VPMJRDPaTI7xdm5ti7HEjg_S_aJIPXD',
       );
 
       _lastError = null;
@@ -25,7 +25,7 @@ class SupabaseBootstrap {
 
   static String userMessage() {
     if (kIsWeb) {
-      return 'Supabase is not initialized for Web. Check your Supabase URL and anon key.';
+      return 'Supabase is not initialized for Web. Check your Supabase URL and publishable key.';
     }
     return 'Supabase is not initialized. Check Supabase setup and restart the app.';
   }

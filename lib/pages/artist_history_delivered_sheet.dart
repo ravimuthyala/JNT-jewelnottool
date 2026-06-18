@@ -48,10 +48,10 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
   Widget _imageForPath(String raw) {
     final path = _normalizeImagePath(raw);
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.blackCat.withValues(alpha: 0.06),
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
     if (path.isEmpty) return fallback();
@@ -127,7 +127,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
               height: 5,
               width: 54,
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.12),
+                color: AppColors.blackCat.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.zero,
               ),
             ),
@@ -261,7 +261,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
             width: 78 * s,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.zero,
-              color: Colors.black.withOpacity(0.06),
+              color: AppColors.blackCat.withValues(alpha: 0.06),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -290,7 +290,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14 * s,
-            color: Colors.black.withOpacity(0.55),
+            color: AppColors.blackCat.withValues(alpha: 0.55),
           ),
         ),
       ],
@@ -307,7 +307,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.black.withOpacity(0.70)),
+          Icon(icon, color: AppColors.blackCat.withValues(alpha: 0.70)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -357,9 +357,9 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
             height: 44,
             width: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFEAF7F2),
+              color: AppColors.snow,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
             ),
             alignment: Alignment.center,
             child: const Icon(Icons.check_rounded, color: Color(0xFF2E8B57)),
@@ -377,7 +377,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
                 Text(
                   'Delivered on: ${fmtDate(order.deliveredAt)}',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -385,14 +385,14 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
                 Text(
                   'Shipped on: ${fmtDate(order.shippedAt)}',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 /*const SizedBox(height: 4),
                 Text(
                   'Shipped with: ${order.carrier ?? '—'}',
-                  style: TextStyle(color: Colors.black.withOpacity(0.65), fontWeight: FontWeight.w700),
+                  style: TextStyle(color: AppColors.blackCat.withValues(alpha: 0.65), fontWeight: FontWeight.w700),
                 ),*/
               ],
             ),
@@ -417,12 +417,12 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.image_outlined, color: Colors.black.withOpacity(0.45)),
+          Icon(Icons.image_outlined, color: AppColors.blackCat.withValues(alpha: 0.45)),
           const SizedBox(width: 10),
           Text(
             'No photos',
             style: TextStyle(
-              color: Colors.black.withOpacity(0.65),
+              color: AppColors.blackCat.withValues(alpha: 0.65),
               fontWeight: FontWeight.w700,
             ),
           ),

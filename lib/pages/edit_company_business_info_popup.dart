@@ -206,7 +206,7 @@ class _EditCompanyBusinessInfoPopupState
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Container(
-        color: Colors.black.withOpacity(0.25),
+        color: Colors.black.withValues(alpha: 0.25),
         child: SafeArea(
           child: Align(
             alignment: Alignment.bottomCenter,
@@ -244,7 +244,7 @@ class _EditCompanyBusinessInfoPopupState
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w400,
-                        color: Colors.black.withOpacity(0.55),
+                        color: Colors.black.withValues(alpha: 0.55),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -404,7 +404,7 @@ class _SectionLabel extends StatelessWidget {
         letterSpacing: 1.4,
         fontWeight: FontWeight.w700,
         fontSize: 10,
-        color: Colors.black.withOpacity(0.35),
+        color: Colors.black.withValues(alpha: 0.35),
       ),
     );
   }
@@ -424,7 +424,7 @@ class _SoftCard extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 18,
             offset: const Offset(0, 12),
           ),
@@ -464,13 +464,13 @@ class _DropdownField extends StatelessWidget {
       icon: Icon(
         Icons.keyboard_arrow_down_rounded,
         size: 16,
-        color: Colors.black.withOpacity(0.45),
+        color: Colors.black.withValues(alpha: 0.45),
       ),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 10,
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
         ),
         isDense: true,
         filled: true,
@@ -533,7 +533,7 @@ class _InputField extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 10,
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
         ),
         isDense: true,
         filled: true,

@@ -1,22 +1,17 @@
 // lib/pages/client_artist_registration_page.dart
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
-import '../services/auth_email_alias_service.dart';
-import '../services/notifications_service.dart';
 import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
-import '../utils/auth_test_email_alias.dart';
 import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
 import '../widgets/registration_profile_upload.dart';
@@ -76,7 +71,6 @@ class _ClientArtistRegistrationPageState
   static const double _smallFs = 13.5; // tiny helper lines
   static const double _fieldHeight = 46;
   static const double _fieldVerticalPadding = 14;
-  static const Color _alabaster = AppColors.alabaster;
   static const Color _snow = AppColors.snow;
   static const Color _blackCat = AppColors.blackCat;
 
@@ -146,15 +140,12 @@ class _ClientArtistRegistrationPageState
   // -----------------------
   // âœ… Checkout/cart state (ONLY changes are here + gating)
   // -----------------------
-  bool _kitInCart = false;
   bool _bundleInCart = false;
   String? _bundleCartKey; // 'Starter'/'Pro'/'Studio'/'Elite'
 
   // paid states (used to gate Continue)
   final bool _kitPaid = false;
   bool _bundlePaid = false;
-
-  int get _cartCount => (_kitInCart ? 1 : 0) + (_bundleInCart ? 1 : 0);
 
   static const List<String> usStates = [
     'Alabama',
@@ -592,16 +583,6 @@ class _ClientArtistRegistrationPageState
           (_agreeTerms && _noCopyright && _agreeSafety));
 
   // âœ… checkout requirements for gating continue
-  bool get _requiresKit => false;
-  bool get _requiresBundle => true;
-
-  bool get _checkoutRequirementsMet {
-    if (kAllowRegistrationWithoutCheckout) return true;
-    final kitOk = true;
-    final bundleOk = !_requiresBundle || _bundlePaid;
-    return kitOk && bundleOk;
-  }
-
   Uint8List? _optimizePortfolioBytes(
     Uint8List source, {
     int maxEdge = 1600,
@@ -730,63 +711,6 @@ class _ClientArtistRegistrationPageState
       debugPrint('CLIENT ARTIST PROFILE UPLOAD FAILED: $e');
       return '';
     }
-  }
-
-  String _profileImageDataUriFallback() {
-    final bytes = _profileBytes;
-    if (bytes == null || bytes.isEmpty) return '';
-    try {
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) return '';
-      img.Image processed = decoded;
-      final maxSide = processed.width > processed.height
-          ? processed.width
-          : processed.height;
-      if (maxSide > 700) {
-        final scale = 700 / maxSide;
-        processed = img.copyResize(
-          processed,
-          width: (processed.width * scale).round(),
-          height: (processed.height * scale).round(),
-          interpolation: img.Interpolation.average,
-        );
-      }
-      final encoded = img.encodeJpg(processed, quality: 62);
-      return 'data:image/jpeg;base64,${base64Encode(encoded)}';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  PaymentInfo _paymentFromCheckoutResult(Map<String, dynamic> result) {
-    PaymentMethod parseMethod(String? value) {
-      switch ((value ?? '').trim()) {
-        case 'card':
-          return PaymentMethod.card;
-        case 'venmo':
-          return PaymentMethod.venmo;
-        case 'paypal':
-          return PaymentMethod.paypal;
-        case 'applePay':
-        default:
-          return PaymentMethod.applePay;
-      }
-    }
-
-    final details =
-        (result['paymentDetails'] as Map?)?.cast<String, dynamic>() ??
-        const <String, dynamic>{};
-    return PaymentInfo(
-      method: parseMethod(result['paymentMethod']?.toString()),
-      saveForFuture: true,
-      cardNumber: (details['cardNumber'] ?? '').toString(),
-      nameOnCard: (details['nameOnCard'] ?? '').toString(),
-      expiryMMYY: (details['expiryMMYY'] ?? '').toString(),
-      cvv: (details['cvv'] ?? '').toString(),
-      zip: (details['zip'] ?? '').toString(),
-      venmoHandle: (details['venmoHandle'] ?? '').toString(),
-      paypalEmail: (details['paypalEmail'] ?? '').toString(),
-    );
   }
 
   Map<String, dynamic> _normalizedArtistPayout() {
@@ -1085,12 +1009,12 @@ class _ClientArtistRegistrationPageState
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: _hintFs - 0.5,
-        color: _blackCat.withOpacity(0.45),
+        color: _blackCat.withValues(alpha: 0.45),
         fontFamily: 'Arial',
       ),
       labelStyle: TextStyle(
         fontSize: _labelFs,
-        color: _blackCat.withOpacity(0.75),
+        color: _blackCat.withValues(alpha: 0.75),
         fontFamily: 'Arial',
       ),
       errorStyle: const TextStyle(
@@ -1289,7 +1213,7 @@ class _ClientArtistRegistrationPageState
                           fontSize: _inputFs,
                           color: hasValue
                               ? _blackCat
-                              : _blackCat.withOpacity(0.45),
+                              : _blackCat.withValues(alpha: 0.45),
                           fontFamily: 'Arial',
                           fontWeight: FontWeight.w400,
                         ),
@@ -1319,7 +1243,7 @@ class _ClientArtistRegistrationPageState
                       border: Border.all(color: AppColors.blackCatBorderLight),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: AppColors.blackCat.withValues(alpha: 0.04),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),
@@ -1337,7 +1261,7 @@ class _ClientArtistRegistrationPageState
                       itemCount: itemCount,
                       separatorBuilder: (_, _) => Divider(
                         height: 1,
-                        color: _blackCat.withOpacity(0.08),
+                        color: _blackCat.withValues(alpha: 0.08),
                       ),
                       itemBuilder: (context, index) {
                         final item = items[index];
@@ -1350,7 +1274,7 @@ class _ClientArtistRegistrationPageState
                           },
                           child: Container(
                             color: selectedItem
-                                ? _blackCat.withOpacity(0.10)
+                                ? _blackCat.withValues(alpha: 0.10)
                                 : _snow,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -1535,15 +1459,6 @@ class _ClientArtistRegistrationPageState
     return null;
   }
 
-  String? _areaCodeValidator(String? v) {
-    final t = (v ?? '').trim();
-    if (t.isEmpty) return 'Area code is required';
-    if (!RegistrationInputUtils.isValidAreaCode(t)) {
-      return 'Use + and 1-4 digits';
-    }
-    return null;
-  }
-
   // -----------------------
   // UI helpers
   // -----------------------
@@ -1559,10 +1474,10 @@ class _ClientArtistRegistrationPageState
         gradient: gradient,
         color: gradient == null ? _snow : null,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: _blackCat.withOpacity(0.22)),
+        border: Border.all(color: _blackCat.withValues(alpha: 0.22)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -1585,7 +1500,7 @@ class _ClientArtistRegistrationPageState
             style: TextStyle(
               fontFamily: 'Arial',
               fontSize: _subFs,
-              color: _blackCat.withOpacity(0.68),
+              color: _blackCat.withValues(alpha: 0.68),
             ),
           ),
           const SizedBox(height: 6),
@@ -1617,13 +1532,13 @@ class _ClientArtistRegistrationPageState
           borderRadius: BorderRadius.zero,
           border: Border.all(
             color: selected
-                ? _blackCat.withOpacity(0.55)
-                : _blackCat.withOpacity(0.24),
+                ? _blackCat.withValues(alpha: 0.55)
+                : _blackCat.withValues(alpha: 0.24),
             width: selected ? 1.4 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: AppColors.blackCat.withValues(alpha: 0.04),
               blurRadius: 16,
               offset: const Offset(0, 10),
             ),
@@ -1650,7 +1565,7 @@ class _ClientArtistRegistrationPageState
                     errorBuilder: (_, _, _) => Text(
                       'Image',
                       style: TextStyle(
-                        color: _blackCat.withOpacity(0.45),
+                        color: _blackCat.withValues(alpha: 0.45),
                         fontWeight: FontWeight.w800,
                         fontFamily: 'Arial',
                       ),
@@ -1678,7 +1593,7 @@ class _ClientArtistRegistrationPageState
               style: TextStyle(
                 fontFamily: 'Arial',
                 fontSize: _subFs,
-                color: _blackCat.withOpacity(0.68),
+                color: _blackCat.withValues(alpha: 0.68),
                 height: 1.25,
                 fontWeight: FontWeight.w500,
               ),
@@ -1697,7 +1612,7 @@ class _ClientArtistRegistrationPageState
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: purchased
-                      ? _blackCat.withOpacity(0.85)
+                      ? _blackCat.withValues(alpha: 0.85)
                       : _blackCat,
                   foregroundColor: _snow,
                   shape: RoundedRectangleBorder(
@@ -1732,12 +1647,12 @@ class _ClientArtistRegistrationPageState
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? _blackCat.withOpacity(0.10) : _snow,
+          color: selected ? _blackCat.withValues(alpha: 0.10) : _snow,
           borderRadius: BorderRadius.zero,
           border: Border.all(
             color: selected
-                ? _blackCat.withOpacity(0.75)
-                : _blackCat.withOpacity(0.24),
+                ? _blackCat.withValues(alpha: 0.75)
+                : _blackCat.withValues(alpha: 0.24),
           ),
         ),
         child: Text(
@@ -1746,7 +1661,7 @@ class _ClientArtistRegistrationPageState
             fontFamily: 'Arial',
             fontSize: _chipFs,
             fontWeight: FontWeight.w600,
-            color: selected ? _blackCat : _blackCat.withOpacity(0.88),
+            color: selected ? _blackCat : _blackCat.withValues(alpha: 0.88),
           ),
         ),
       ),
@@ -1767,8 +1682,8 @@ class _ClientArtistRegistrationPageState
               borderRadius: BorderRadius.zero,
               border: Border.all(
                 color: selected
-                    ? _blackCat.withOpacity(0.55)
-                    : _blackCat.withOpacity(0.22),
+                    ? _blackCat.withValues(alpha: 0.55)
+                    : _blackCat.withValues(alpha: 0.22),
                 width: selected ? 1.6 : 1.0,
               ),
             ),
@@ -1788,7 +1703,7 @@ class _ClientArtistRegistrationPageState
                   Icon(
                     Icons.check_circle,
                     size: 16,
-                    color: _blackCat.withOpacity(0.9),
+                    color: _blackCat.withValues(alpha: 0.9),
                   ),
               ],
             ),
@@ -1964,19 +1879,6 @@ class _ClientArtistRegistrationPageState
   // -----------------------
   // âœ… Checkout process (UPDATED to support kit + bundle at same time)
   // -----------------------
-  void _addSizingKitToCart() {
-    if (_kitPaid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sizing kit already purchased âœ…')),
-      );
-      return;
-    }
-    setState(() => _kitInCart = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Nail sizing kit added to cart âœ…')),
-    );
-  }
-
   Future<void> _addBundleToCart(String bundleKey) async {
     if (_bundlePurchased) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2179,8 +2081,6 @@ class _ClientArtistRegistrationPageState
     if (_submitting) return;
     setState(() => _submitting = true);
 
-    bool profileSaved = false;
-
     Future<void> rollbackCreatedUserIfNeeded() async {
       // Supabase user deletion must be handled server-side/admin-side.
       // For Phase 3, we avoid deleting the auth user from the app if profile saving fails.
@@ -2197,12 +2097,9 @@ class _ClientArtistRegistrationPageState
         throw Exception('Unable to create user.');
       }
 
-      final displayName = _displayNameCtrl.text.trim().isNotEmpty
-          ? _displayNameCtrl.text.trim()
-          : _fullNameOrStudioCtrl.text.trim();
       final uid = supabaseUser.id;
       // Disabled during Supabase Phase 4 because this helper still writes to Firebase/Firestore.
-      // TODO: recreate this mapping in Supabase if the app still needs login email aliases.
+      // Recreate this mapping in Supabase if the app still needs login email aliases.
       // await AuthEmailAliasService.saveAliasMapping(
       //   loginEmail: _emailCtrl.text,
       //   authEmail: supabaseUser.email ?? _emailCtrl.text.trim().toLowerCase(),
@@ -2215,8 +2112,6 @@ class _ClientArtistRegistrationPageState
       final portfolioImageUrls = await _uploadPortfolioImages(uid);
       debugPrint('CLIENT ARTIST FINAL PORTFOLIO URLS = $portfolioImageUrls');
 
-      final portfolioUploadFailed =
-          _portfolioImages.isNotEmpty && portfolioImageUrls.isEmpty;
       final payload = _buildCombinedFirestorePayload(
         uid: uid,
         profilePhotoUrl: profilePhotoUrl.trim(),
@@ -2322,7 +2217,6 @@ class _ClientArtistRegistrationPageState
           'updated_at': DateTime.now().toIso8601String(),
         });
 
-        profileSaved = true;
       } catch (e, st) {
         debugPrint('CLIENT ARTIST SUPABASE SAVE ERROR');
         debugPrint(e.toString());
@@ -2404,28 +2298,6 @@ class _ClientArtistRegistrationPageState
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<void> _seedPortfolioItems(String uid, List<String> urls) async {
-    if (urls.isEmpty) return;
-    final ref = FirebaseFirestore.instance.collection('client_artist').doc(uid);
-    final seen = <String>{};
-    for (final raw in urls) {
-      final url = raw.trim();
-      if (url.isEmpty || !seen.add(url)) continue;
-      try {
-        await ref
-            .collection('portfolio_items')
-            .add({
-              'imageUrl': url,
-              'storagePath': '',
-              'style': 'All',
-              'createdAt': DateTime.now().toIso8601String(),
-              'updatedAt': DateTime.now().toIso8601String(),
-            })
-            .timeout(const Duration(seconds: 4));
-      } catch (_) {}
     }
   }
 
@@ -2651,7 +2523,7 @@ class _ClientArtistRegistrationPageState
                         'Password must be 8+ characters and include uppercase, lowercase, number, and symbol.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.black.withOpacity(0.55),
+                          color: AppColors.blackCat.withValues(alpha: 0.55),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -2735,7 +2607,7 @@ class _ClientArtistRegistrationPageState
                                           hintText: 'Enter 10-digit phone',
                                           hintStyle: TextStyle(
                                             fontSize: _hintFs - 0.5,
-                                            color: _blackCat.withOpacity(0.45),
+                                            color: _blackCat.withValues(alpha: 0.45),
                                             fontFamily: 'Arial',
                                           ),
                                           border: InputBorder.none,
@@ -2821,7 +2693,7 @@ class _ClientArtistRegistrationPageState
                                 color: _snow,
                                 borderRadius: BorderRadius.zero,
                                 border: Border.all(
-                                  color: _blackCat.withOpacity(0.20),
+                                  color: _blackCat.withValues(alpha: 0.20),
                                 ),
                               ),
                               constraints: BoxConstraints(
@@ -3023,7 +2895,7 @@ class _ClientArtistRegistrationPageState
                               style: TextStyle(
                                 fontSize: _inputFs,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.black.withOpacity(0.8),
+                                color: AppColors.blackCat.withValues(alpha: 0.8),
                               ),
                             ),
                           ),
@@ -3033,7 +2905,7 @@ class _ClientArtistRegistrationPageState
                         'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB. Maximum 10 photos.',
                         style: TextStyle(
                           fontSize: _smallFs,
-                          color: Colors.black.withOpacity(0.6),
+                          color: AppColors.blackCat.withValues(alpha: 0.6),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -3085,7 +2957,7 @@ class _ClientArtistRegistrationPageState
                                   color: _snow,
                                   borderRadius: BorderRadius.zero,
                                   border: Border.all(
-                                    color: Colors.black.withOpacity(0.10),
+                                    color: AppColors.blackCat.withValues(alpha: 0.10),
                                   ),
                                 ),
                                 child: Column(
@@ -3093,7 +2965,7 @@ class _ClientArtistRegistrationPageState
                                   children: [
                                     Icon(
                                       Icons.add_photo_alternate_outlined,
-                                      color: _blackCat.withOpacity(0.9),
+                                      color: AppColors.blackCat.withValues(alpha: 0.9),
                                     ),
                                     const SizedBox(height: 6),
                                     const Text(
@@ -3117,14 +2989,14 @@ class _ClientArtistRegistrationPageState
                             color: _snow,
                             borderRadius: BorderRadius.zero,
                             border: Border.all(
-                              color: Colors.black.withOpacity(0.06),
+                              color: AppColors.blackCat.withValues(alpha: 0.06),
                             ),
                           ),
                           child: Row(
                             children: [
                               Icon(
                                 Icons.image_outlined,
-                                color: Colors.black.withOpacity(0.55),
+                                color: AppColors.blackCat.withValues(alpha: 0.55),
                               ),
                               const SizedBox(width: 10),
                               const Expanded(
@@ -3176,9 +3048,9 @@ class _ClientArtistRegistrationPageState
                         contentPadding: EdgeInsets.zero,
                         value: _directRequestsEnabled,
                         activeThumbColor: _blackCat,
-                        activeTrackColor: _blackCat.withOpacity(0.45),
-                        inactiveThumbColor: _blackCat.withOpacity(0.55),
-                        inactiveTrackColor: _blackCat.withOpacity(0.25),
+                        activeTrackColor: _blackCat.withValues(alpha: 0.45),
+                        inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
+                        inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
                         onChanged: (v) =>
                             setState(() => _directRequestsEnabled = v),
                         title: const Text(
@@ -3192,7 +3064,7 @@ class _ClientArtistRegistrationPageState
                           'Allow clients to request specific dates.',
                           style: TextStyle(
                             fontSize: _smallFs,
-                            color: Colors.black.withOpacity(0.55),
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
                           ),
                         ),
                       ),
@@ -3212,7 +3084,7 @@ class _ClientArtistRegistrationPageState
                               _showYearCalendar
                                   ? Icons.expand_less
                                   : Icons.expand_more,
-                              color: Colors.black.withOpacity(0.6),
+                              color: AppColors.blackCat.withValues(alpha: 0.6),
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -3416,7 +3288,7 @@ class _ClientArtistRegistrationPageState
                                   'Enable if you can take expedited requests.',
                                   style: TextStyle(
                                     fontSize: _smallFs,
-                                    color: Colors.black.withOpacity(0.6),
+                                    color: AppColors.blackCat.withValues(alpha: 0.6),
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -3431,9 +3303,9 @@ class _ClientArtistRegistrationPageState
                               value: _rush,
                               onChanged: (v) => setState(() => _rush = v),
                               activeThumbColor: _blackCat,
-                              activeTrackColor: _blackCat.withOpacity(0.45),
-                              inactiveThumbColor: _blackCat.withOpacity(0.55),
-                              inactiveTrackColor: _blackCat.withOpacity(0.25),
+                              activeTrackColor: _blackCat.withValues(alpha: 0.45),
+                              inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
+                              inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
                             ),
                           ),
                         ],
@@ -3459,277 +3331,262 @@ class _ClientArtistRegistrationPageState
                             (_) => _blackCat,
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            RadioListTile<String>(
-                              value: 'PayPal',
-                              groupValue: _paymentMethod,
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'PayPal',
-                                style: TextStyle(
-                                  fontSize: _inputFs,
-                                  color: _blackCat,
-                                  fontFamily: 'Arial',
-                                  fontWeight: FontWeight.w600,
+                        child: RadioGroup<String>(
+                          groupValue: _paymentMethod,
+                          onChanged: (value) => setState(() {
+                            if (value == null) return;
+                            _paymentMethod = value;
+                            _paymentSaved = false;
+                          }),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              RadioListTile<String>(
+                                value: 'PayPal',
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text(
+                                  'PayPal',
+                                  style: TextStyle(
+                                    fontSize: _inputFs,
+                                    color: _blackCat,
+                                    fontFamily: 'Arial',
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                              onChanged: (v) => setState(() {
-                                _paymentMethod = v ?? 'PayPal';
-                                _paymentSaved = false;
-                              }),
-                            ),
-                            if (_paymentMethod == 'PayPal') ...[
-                              _FieldLabel.required('PayPal Email'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _paypalEmailCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec(
-                                  'PayPal Email',
-                                  'name@email.com',
+                              if (_paymentMethod == 'PayPal') ...[
+                                _FieldLabel.required('PayPal Email'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _paypalEmailCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'PayPal Email',
+                                    'name@email.com',
+                                  ),
+                                  validator: (v) =>
+                                      _bundlePurchased ? _emailValidator(v) : null,
                                 ),
-                                validator: (v) => _bundlePurchased
-                                    ? _emailValidator(v)
-                                    : null,
-                              ),
-                              const SizedBox(height: 6),
-                            ],
-                            RadioListTile<String>(
-                              value: 'Venmo',
-                              groupValue: _paymentMethod,
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Venmo',
-                                style: TextStyle(
-                                  fontSize: _inputFs,
-                                  color: _blackCat,
-                                  fontFamily: 'Arial',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              onChanged: (v) => setState(() {
-                                _paymentMethod = v ?? 'Venmo';
-                                _paymentSaved = false;
-                              }),
-                            ),
-                            if (_paymentMethod == 'Venmo') ...[
-                              _FieldLabel.required('Venmo Handle'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _venmoHandleCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec(
+                                const SizedBox(height: 6),
+                              ],
+                              RadioListTile<String>(
+                                value: 'Venmo',
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text(
                                   'Venmo',
-                                  '@handle or phone/email',
-                                ),
-                                validator: (v) {
-                                  if (!_bundlePurchased) return null;
-                                  if (v == null || v.trim().isEmpty) {
-                                    return 'Venmo handle is required';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 6),
-                            ],
-                            RadioListTile<String>(
-                              value: 'Apple Pay',
-                              groupValue: _paymentMethod,
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Apple Pay',
-                                style: TextStyle(
-                                  fontSize: _inputFs,
-                                  color: _blackCat,
-                                  fontFamily: 'Arial',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              onChanged: (v) => setState(() {
-                                _paymentMethod = v ?? 'Apple Pay';
-                                _paymentSaved = false;
-                              }),
-                            ),
-                            if (_paymentMethod == 'Apple Pay') ...[
-                              _FieldLabel.required('Apple Pay Name'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _applePayPaymentNameCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec('Name', 'Name on Apple Pay'),
-                                validator: (v) => !_bundlePurchased
-                                    ? null
-                                    : _requiredValidator(v, 'Apple Pay Name'),
-                              ),
-                              const SizedBox(height: 6),
-                              _FieldLabel.required('Apple Pay Phone'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _applePayPaymentPhoneCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                keyboardType: TextInputType.phone,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(10),
-                                  UsPhoneTextInputFormatter(),
-                                ],
-                                decoration: _dec('Phone', 'Phone'),
-                                validator: (v) => !_bundlePurchased
-                                    ? null
-                                    : _phoneValidator(v),
-                              ),
-                              const SizedBox(height: 6),
-                              _FieldLabel.required('Apple Pay Email'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _applePayPaymentEmailCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec('Email', 'Email'),
-                                validator: (v) => !_bundlePurchased
-                                    ? null
-                                    : _emailValidator(v),
-                              ),
-                              const SizedBox(height: 6),
-                            ],
-                            RadioListTile<String>(
-                              value: 'Credit Card',
-                              groupValue: _paymentMethod,
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Credit Card',
-                                style: TextStyle(
-                                  fontSize: _inputFs,
-                                  color: _blackCat,
-                                  fontFamily: 'Arial',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              onChanged: (v) => setState(() {
-                                _paymentMethod = v ?? 'Credit Card';
-                                _paymentSaved = false;
-                              }),
-                            ),
-                            if (_paymentMethod == 'Credit Card') ...[
-                              _FieldLabel.required('Card Name'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _cardNameCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec('Name', 'Name on card'),
-                                validator: (v) => !_bundlePurchased
-                                    ? null
-                                    : _requiredValidator(v, 'Card Name'),
-                              ),
-                              const SizedBox(height: 6),
-                              _FieldLabel.required('Card Number'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _cardNumberCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(19),
-                                  CardNumberTextInputFormatter(),
-                                ],
-                                decoration: _dec(
-                                  'Number',
-                                  '1234 5678 9012 3456',
-                                ),
-                                validator: (v) => !_bundlePurchased
-                                    ? null
-                                    : _requiredValidator(v, 'Card Number'),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _FieldLabel.required('Expiration Date'),
-                                        const SizedBox(height: 6),
-                                        TextFormField(
-                                          controller: _cardExpiryCtrl,
-                                          style: const TextStyle(
-                                            fontSize: _inputFs,
-                                          ),
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter
-                                                .digitsOnly,
-                                            LengthLimitingTextInputFormatter(4),
-                                            ExpiryDateTextInputFormatter(),
-                                          ],
-                                          decoration: _dec(
-                                            'Expiration Date',
-                                            'MM/YY',
-                                          ),
-                                          validator: (v) => !_bundlePurchased
-                                              ? null
-                                              : _requiredValidator(
-                                                  v,
-                                                  'Expiration Date',
-                                                ),
-                                        ),
-                                      ],
-                                    ),
+                                  style: TextStyle(
+                                    fontSize: _inputFs,
+                                    color: _blackCat,
+                                    fontFamily: 'Arial',
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _FieldLabel.required('CVV'),
-                                        const SizedBox(height: 6),
-                                        TextFormField(
-                                          controller: _cardCvvCtrl,
-                                          style: const TextStyle(
-                                            fontSize: _inputFs,
-                                          ),
-                                          keyboardType: TextInputType.number,
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter
-                                                .digitsOnly,
-                                            LengthLimitingTextInputFormatter(4),
-                                          ],
-                                          decoration: _dec('CVV', '123'),
-                                          validator: (v) => !_bundlePurchased
-                                              ? null
-                                              : _requiredValidator(v, 'CVV'),
-                                        ),
-                                      ],
-                                    ),
+                                ),
+                              ),
+                              if (_paymentMethod == 'Venmo') ...[
+                                _FieldLabel.required('Venmo Handle'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _venmoHandleCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'Venmo',
+                                    '@handle or phone/email',
                                   ),
-                                ],
+                                  validator: (v) {
+                                    if (!_bundlePurchased) return null;
+                                    if (v == null || v.trim().isEmpty) {
+                                      return 'Venmo handle is required';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 6),
+                              ],
+                              RadioListTile<String>(
+                                value: 'Apple Pay',
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text(
+                                  'Apple Pay',
+                                  style: TextStyle(
+                                    fontSize: _inputFs,
+                                    color: _blackCat,
+                                    fontFamily: 'Arial',
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 6),
-                              _FieldLabel.required('Billing Zip'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _cardZipCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                keyboardType: TextInputType.number,
-                                decoration: _dec('Zip', 'Zip'),
-                                validator: (v) => !_bundlePurchased
-                                    ? null
-                                    : _requiredValidator(v, 'Billing Zip'),
+                              if (_paymentMethod == 'Apple Pay') ...[
+                                _FieldLabel.required('Apple Pay Name'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _applePayPaymentNameCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec('Name', 'Name on Apple Pay'),
+                                  validator: (v) => !_bundlePurchased
+                                      ? null
+                                      : _requiredValidator(v, 'Apple Pay Name'),
+                                ),
+                                const SizedBox(height: 6),
+                                _FieldLabel.required('Apple Pay Phone'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _applePayPaymentPhoneCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(10),
+                                    UsPhoneTextInputFormatter(),
+                                  ],
+                                  decoration: _dec('Phone', 'Phone'),
+                                  validator: (v) =>
+                                      !_bundlePurchased ? null : _phoneValidator(v),
+                                ),
+                                const SizedBox(height: 6),
+                                _FieldLabel.required('Apple Pay Email'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _applePayPaymentEmailCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec('Email', 'Email'),
+                                  validator: (v) =>
+                                      !_bundlePurchased ? null : _emailValidator(v),
+                                ),
+                                const SizedBox(height: 6),
+                              ],
+                              RadioListTile<String>(
+                                value: 'Credit Card',
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text(
+                                  'Credit Card',
+                                  style: TextStyle(
+                                    fontSize: _inputFs,
+                                    color: _blackCat,
+                                    fontFamily: 'Arial',
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 6),
+                              if (_paymentMethod == 'Credit Card') ...[
+                                _FieldLabel.required('Card Name'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _cardNameCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec('Name', 'Name on card'),
+                                  validator: (v) => !_bundlePurchased
+                                      ? null
+                                      : _requiredValidator(v, 'Card Name'),
+                                ),
+                                const SizedBox(height: 6),
+                                _FieldLabel.required('Card Number'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _cardNumberCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(19),
+                                    CardNumberTextInputFormatter(),
+                                  ],
+                                  decoration: _dec(
+                                    'Number',
+                                    '1234 5678 9012 3456',
+                                  ),
+                                  validator: (v) => !_bundlePurchased
+                                      ? null
+                                      : _requiredValidator(v, 'Card Number'),
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _FieldLabel.required('Expiration Date'),
+                                          const SizedBox(height: 6),
+                                          TextFormField(
+                                            controller: _cardExpiryCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                              LengthLimitingTextInputFormatter(4),
+                                              ExpiryDateTextInputFormatter(),
+                                            ],
+                                            decoration: _dec(
+                                              'Expiration Date',
+                                              'MM/YY',
+                                            ),
+                                            validator: (v) => !_bundlePurchased
+                                                ? null
+                                                : _requiredValidator(
+                                                    v,
+                                                    'Expiration Date',
+                                                  ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _FieldLabel.required('CVV'),
+                                          const SizedBox(height: 6),
+                                          TextFormField(
+                                            controller: _cardCvvCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                              LengthLimitingTextInputFormatter(4),
+                                            ],
+                                            decoration: _dec('CVV', '123'),
+                                            validator: (v) => !_bundlePurchased
+                                                ? null
+                                                : _requiredValidator(v, 'CVV'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                _FieldLabel.required('Billing Zip'),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _cardZipCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  decoration: _dec('Zip', 'Zip'),
+                                  validator: (v) => !_bundlePurchased
+                                      ? null
+                                      : _requiredValidator(v, 'Billing Zip'),
+                                ),
+                                const SizedBox(height: 6),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
 
@@ -3776,7 +3633,7 @@ class _ClientArtistRegistrationPageState
                         children: [
                           Icon(
                             Icons.info_outline,
-                            color: Colors.black.withOpacity(0.55),
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
                             size: _inputFs * 1.2,
                           ),
                           const SizedBox(width: 8),
@@ -3785,7 +3642,7 @@ class _ClientArtistRegistrationPageState
                                 ? 'Saved: $_paymentMethod'
                                 : 'Not saved yet',
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.65),
+                              color: AppColors.blackCat.withValues(alpha: 0.65),
                               fontSize: _inputFs,
                               fontWeight: FontWeight.w400,
                             ),
@@ -3880,7 +3737,7 @@ class _ClientArtistRegistrationPageState
                           Icon(
                             Icons.lock_outline,
                             size: 16,
-                            color: Colors.black.withOpacity(0.65),
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -3889,7 +3746,7 @@ class _ClientArtistRegistrationPageState
                               style: TextStyle(
                                 fontSize: _smallFs,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(alpha: 0.65),
                               ),
                             ),
                           ),
@@ -3922,7 +3779,7 @@ class _ClientArtistRegistrationPageState
                           style: TextStyle(
                             fontSize: _inputFs,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black.withOpacity(0.45),
+                            color: AppColors.blackCat.withValues(alpha: 0.45),
                           ),
                         ),
                         decoration: _dec(
@@ -4115,9 +3972,9 @@ class _ClientArtistRegistrationPageState
                                 onChanged: (v) =>
                                     setState(() => _receiveUpdates = v),
                                 activeThumbColor: _blackCat,
-                                activeTrackColor: _blackCat.withOpacity(0.45),
-                                inactiveThumbColor: _blackCat.withOpacity(0.55),
-                                inactiveTrackColor: _blackCat.withOpacity(0.25),
+                                activeTrackColor: _blackCat.withValues(alpha: 0.45),
+                                inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
+                                inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
                               ),
                             ),
                           ],
@@ -4195,7 +4052,7 @@ Widget _smallCheckboxRow({
     onTap: () => onChanged(!value),
     borderRadius: BorderRadius.zero,
     overlayColor: WidgetStateColor.resolveWith(
-      (_) => AppColors.blackCat.withOpacity(0.12),
+      (_) => AppColors.blackCat.withValues(alpha: 0.12),
     ),
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

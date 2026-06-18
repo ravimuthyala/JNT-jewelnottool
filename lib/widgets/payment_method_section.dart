@@ -40,9 +40,7 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
   static const double _hintFs = 13;
   static const double _checkFs = 14;
   static const double _fieldHeight = 46;
-  static const Color _clientRegBrandBg = Color(0xFFF4EFE1);
-  static const Color _clientRegBrandAccent = Color(0xFFEDD9C9);
-  static const Color _clientRegBrandInk = Color(0xFF292222);
+
   @override
   void initState() {
     super.initState();
@@ -109,11 +107,11 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
       hintText: hint,
       labelStyle: TextStyle(
         fontSize: _labelFs,
-        color: AppColors.blackCat.withOpacity(0.70),
+        color: AppColors.blackCat.withValues(alpha: 0.70),
       ),
       hintStyle: TextStyle(
         fontSize: _hintFs,
-        color: AppColors.blackCat.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
       filled: true,
       fillColor: AppColors.snow,
@@ -139,10 +137,10 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -157,64 +155,53 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
           ),
           const SizedBox(height: 10),
 
-          RadioListTile<PaymentMethod>(
-            value: PaymentMethod.applePay,
+          RadioGroup<PaymentMethod>(
             groupValue: _method,
-            onChanged: (v) => setState(() {
-              _method = v!;
+            onChanged: (value) => setState(() {
+              if (value == null) return;
+              _method = value;
               _emit();
             }),
-            title: const Text(
-              'Apple Pay',
-              style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
+            child: Column(
+              children: [
+                RadioListTile<PaymentMethod>(
+                  value: PaymentMethod.applePay,
+                  title: const Text(
+                    'Apple Pay',
+                    style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
+                  ),
+                  activeColor: AppColors.blackCat,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                RadioListTile<PaymentMethod>(
+                  value: PaymentMethod.venmo,
+                  title: const Text(
+                    'Venmo',
+                    style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
+                  ),
+                  activeColor: AppColors.blackCat,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                RadioListTile<PaymentMethod>(
+                  value: PaymentMethod.paypal,
+                  title: const Text(
+                    'PayPal',
+                    style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
+                  ),
+                  activeColor: AppColors.blackCat,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                RadioListTile<PaymentMethod>(
+                  value: PaymentMethod.card,
+                  title: const Text(
+                    'Credit / Debit Card',
+                    style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
+                  ),
+                  activeColor: AppColors.blackCat,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
             ),
-            activeColor: AppColors.blackCat,
-            contentPadding: EdgeInsets.zero,
-          ),
-
-          RadioListTile<PaymentMethod>(
-            value: PaymentMethod.venmo,
-            groupValue: _method,
-            onChanged: (v) => setState(() {
-              _method = v!;
-              _emit();
-            }),
-            title: const Text(
-              'Venmo',
-              style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
-            ),
-            activeColor: AppColors.blackCat,
-            contentPadding: EdgeInsets.zero,
-          ),
-
-          RadioListTile<PaymentMethod>(
-            value: PaymentMethod.paypal,
-            groupValue: _method,
-            onChanged: (v) => setState(() {
-              _method = v!;
-              _emit();
-            }),
-            title: const Text(
-              'PayPal',
-              style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
-            ),
-            activeColor: AppColors.blackCat,
-            contentPadding: EdgeInsets.zero,
-          ),
-
-          RadioListTile<PaymentMethod>(
-            value: PaymentMethod.card,
-            groupValue: _method,
-            onChanged: (v) => setState(() {
-              _method = v!;
-              _emit();
-            }),
-            title: const Text(
-              'Credit / Debit Card',
-              style: TextStyle(fontSize: _radioFs, fontWeight: FontWeight.w600),
-            ),
-            activeColor: AppColors.blackCat,
-            contentPadding: EdgeInsets.zero,
           ),
 
           const SizedBox(height: 10),

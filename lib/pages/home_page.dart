@@ -143,14 +143,11 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final dpr = mediaQuery.devicePixelRatio;
-    final size = mediaQuery.size;
-    final safeBgWidth = ((size.width <= 0 ? 1080 : size.width) * dpr).round();
-    final safeBgHeight = ((size.height <= 0 ? 1920 : size.height) * dpr).round();
     final safeLogoWidth = (350 * (dpr <= 0 ? 1.0 : dpr)).round();
     /*final bgImageProvider = ResizeImage(
       const AssetImage('assets/images/jnt_nails.png'),
-      width: safeBgWidth,
-      height: safeBgHeight,
+      width: ((size.width <= 0 ? 1080 : size.width) * dpr).round(),
+      height: ((size.height <= 0 ? 1920 : size.height) * dpr).round(),
     );*/
     final logoImageProvider = ResizeImage(
       const AssetImage('assets/images/JNTWhitelogo.png'),

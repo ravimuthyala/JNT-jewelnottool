@@ -349,7 +349,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withOpacity(0.55),
+                  disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.55),
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
@@ -366,7 +366,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
               'Your information is private and secure. Only the activated item will be shared when someone taps your nail.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.65),
+                color: AppColors.blackCat.withValues(alpha: 0.65),
                 fontSize: 12.5,
                 height: 1.35,
                 fontWeight: FontWeight.w500,
@@ -727,7 +727,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
                           backgroundColor: AppColors.blackCat,
                           foregroundColor: AppColors.snow,
                           disabledBackgroundColor: AppColors.blackCat
-                              .withOpacity(0.55),
+                              .withValues(alpha: 0.55),
                           shape: const RoundedRectangleBorder(
                             borderRadius: BorderRadius.zero,
                           ),
@@ -1001,7 +1001,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
               decoration: BoxDecoration(
                 color: AppColors.snow,
                 borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.blackCat.withOpacity(0.18)),
+                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
               ),
               child: Column(
                 children: [
@@ -1010,7 +1010,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                     height: 72,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: AppColors.balletSlippers.withOpacity(0.45),
+                      color: AppColors.balletSlippers.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.zero,
                     ),
                     child: Icon(
@@ -1037,7 +1037,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                     statusText,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.70),
+                      color: AppColors.blackCat.withValues(alpha: 0.70),
                       fontSize: 13,
                       height: 1.35,
                       fontWeight: FontWeight.w500,
@@ -1071,7 +1071,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withOpacity(0.55),
+                  disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.55),
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
@@ -1124,7 +1124,7 @@ class _ActivationIntroCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.18)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -1133,7 +1133,7 @@ class _ActivationIntroCard extends StatelessWidget {
             height: 48,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppColors.balletSlippers.withOpacity(0.45),
+              color: AppColors.balletSlippers.withValues(alpha: 0.45),
               borderRadius: BorderRadius.zero,
             ),
             child: const Icon(
@@ -1162,7 +1162,7 @@ class _ActivationIntroCard extends StatelessWidget {
                       ? 'Only one option can be activated per NFC chip.'
                       : '${selectedItem!.title} is selected for activation.',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.72),
+                    color: AppColors.blackCat.withValues(alpha: 0.72),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1202,7 +1202,7 @@ class _SavedItemTile extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? AppColors.blackCat
-                  : AppColors.blackCat.withOpacity(0.18),
+                  : AppColors.blackCat.withValues(alpha: 0.18),
               width: selected ? 1.4 : 1,
             ),
           ),
@@ -1230,7 +1230,7 @@ class _SavedItemTile extends StatelessWidget {
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.70),
+                        color: AppColors.blackCat.withValues(alpha: 0.70),
                         fontSize: 12.5,
                         height: 1.25,
                         fontWeight: FontWeight.w500,
@@ -1239,11 +1239,13 @@ class _SavedItemTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Radio<String>(
-                value: item.key,
+              RadioGroup<String>(
                 groupValue: selected ? item.key : null,
-                activeColor: AppColors.blackCat,
                 onChanged: (_) => onTap(),
+                child: Radio<String>(
+                  value: item.key,
+                  activeColor: AppColors.blackCat,
+                ),
               ),
             ],
           ),
@@ -1265,7 +1267,7 @@ class _SelectedScanItemCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.18)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1279,7 +1281,7 @@ class _SelectedScanItemCard extends StatelessWidget {
                 Text(
                   'Selected ${item.section}',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.62),
+                    color: AppColors.blackCat.withValues(alpha: 0.62),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1298,7 +1300,7 @@ class _SelectedScanItemCard extends StatelessWidget {
                 Text(
                   item.value,
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.72),
+                    color: AppColors.blackCat.withValues(alpha: 0.72),
                     fontSize: 12.5,
                     height: 1.3,
                     fontWeight: FontWeight.w500,
@@ -1324,7 +1326,7 @@ class _StatusCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.18)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -1333,7 +1335,7 @@ class _StatusCard extends StatelessWidget {
             height: 48,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppColors.balletSlippers.withOpacity(0.45),
+              color: AppColors.balletSlippers.withValues(alpha: 0.45),
               borderRadius: BorderRadius.zero,
             ),
             child: const Icon(
@@ -1367,7 +1369,7 @@ class _StatusCard extends StatelessWidget {
                 Text(
                   'Configure your profile and save to continue.',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.72),
+                    color: AppColors.blackCat.withValues(alpha: 0.72),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1448,7 +1450,7 @@ class _IconTextField extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: hint,
                   hintStyle: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.40),
+                    color: AppColors.blackCat.withValues(alpha: 0.40),
                     fontSize: 12.5,
                   ),
                   filled: true,
@@ -1463,7 +1465,7 @@ class _IconTextField extends StatelessWidget {
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(
-                      color: AppColors.blackCat.withOpacity(0.18),
+                      color: AppColors.blackCat.withValues(alpha: 0.18),
                     ),
                   ),
                   focusedBorder: const OutlineInputBorder(

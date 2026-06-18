@@ -61,21 +61,21 @@ class ArtistAscensionCard extends StatelessWidget {
           Text(
             'Current tier: $tierText',
             style: TextStyle(
-              color: Colors.black.withOpacity(0.85),
+              color: Colors.black.withValues(alpha: 0.85),
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Current points: ${ascension.points}',
-            style: TextStyle(color: Colors.black.withOpacity(0.70)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
           ),
           const SizedBox(height: 10),
           if (progressMeta.isMaxTier)
             Text(
               'You have reached the highest JNT Ascension tier.',
               style: TextStyle(
-                color: Colors.black.withOpacity(0.72),
+                color: Colors.black.withValues(alpha: 0.72),
                 fontWeight: FontWeight.w500,
               ),
             )
@@ -83,7 +83,7 @@ class ArtistAscensionCard extends StatelessWidget {
             Text(
               'Progress to ${progressMeta.nextTierLabel}',
               style: TextStyle(
-                color: Colors.black.withOpacity(0.8),
+                color: Colors.black.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -102,7 +102,7 @@ class ArtistAscensionCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '${progressMeta.pointsNeeded} points needed for next tier',
-              style: TextStyle(color: Colors.black.withOpacity(0.70)),
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
             ),
           ],
           const SizedBox(height: 12),
@@ -129,7 +129,7 @@ class ArtistAscensionCard extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(color: Colors.black.withOpacity(0.70)),
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
             ),
           ),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -148,7 +148,7 @@ class ArtistAscensionCard extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Colors.black.withOpacity(0.82)),
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.82)),
             ),
           ),
         ],
@@ -227,9 +227,9 @@ class TierBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.45)),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
       child: Text(
         label,

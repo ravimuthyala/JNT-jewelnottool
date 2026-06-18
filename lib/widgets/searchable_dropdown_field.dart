@@ -39,12 +39,12 @@ class SearchableDropdownField extends StatelessWidget {
     final defaultLabelStyle = TextStyle(
       fontWeight: FontWeight.w600,
       fontSize: 12,
-      color: Colors.black.withOpacity(0.7),
+      color: Colors.black.withValues(alpha: 0.7),
     );
     final defaultTextStyle = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w400,
-      color: Colors.black.withOpacity(0.9),
+      color: Colors.black.withValues(alpha: 0.9),
     );
     final normalizedItems = items
         .map((item) => item.trim())
@@ -89,7 +89,7 @@ class SearchableDropdownField extends StatelessWidget {
                 hintStyle: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: Colors.black.withOpacity(0.45),
+                  color: Colors.black.withValues(alpha: 0.45),
                 ),
                 filled: true,
                 fillColor: fillColor,
@@ -102,7 +102,7 @@ class SearchableDropdownField extends StatelessWidget {
                 suffixIcon: Icon(
                   Icons.search_rounded,
                   size: 18,
-                  color: Colors.black.withOpacity(0.55),
+                  color: Colors.black.withValues(alpha: 0.55),
                 ),
                 suffixIconConstraints: const BoxConstraints(
                   minHeight: 32,
@@ -157,7 +157,7 @@ class SearchableDropdownField extends StatelessWidget {
                             itemCount: list.length,
                             separatorBuilder: (_, _) => Divider(
                               height: 1,
-                              color: Colors.black.withOpacity(0.08),
+                              color: Colors.black.withValues(alpha: 0.08),
                             ),
                             itemBuilder: (context, index) {
                               final item = list[index];

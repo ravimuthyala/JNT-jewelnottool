@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +13,6 @@ import 'dart:io';
 import '../theme/app_colors.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
-import '../services/nail_measurement_service.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/nail_preferences_inline_editor.dart';
@@ -35,7 +34,7 @@ import '../models/client_profile_models.dart'
 const Color _requestSnow = Color(0xFFFAF9F9);
 const Color _focusRing = Color(0xFFFFBF47);
 final BorderSide _requestBorder = BorderSide(
-  color: AppColors.blackCat.withOpacity(0.25),
+  color: AppColors.blackCat.withValues(alpha:0.25),
 );
 
 class ClientCustomRequestPage extends StatefulWidget {
@@ -197,7 +196,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   late String _shape;
   late NailLength _length;
   late NailPreferences _singleNailPrefs;
-  String _measurementCoinReference = 'US Penny (1¢)';
 
   // Shipping
   bool _shippingDifferent = false;
@@ -222,76 +220,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   bool get _isShipCountryUs =>
       _shipCountry.trim().toLowerCase() == 'united states';
 
-  static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
-    _NailCaptureStep(
-      key: 'lThumb',
-      hand: 'left',
-      finger: 'thumb',
-      title: 'Left Thumb',
-    ),
-    _NailCaptureStep(
-      key: 'lIndex',
-      hand: 'left',
-      finger: 'index',
-      title: 'Left Index',
-    ),
-    _NailCaptureStep(
-      key: 'lMiddle',
-      hand: 'left',
-      finger: 'middle',
-      title: 'Left Middle',
-    ),
-    _NailCaptureStep(
-      key: 'lRing',
-      hand: 'left',
-      finger: 'ring',
-      title: 'Left Ring',
-    ),
-    _NailCaptureStep(
-      key: 'lPinky',
-      hand: 'left',
-      finger: 'pinky',
-      title: 'Left Pinky',
-    ),
-    _NailCaptureStep(
-      key: 'rThumb',
-      hand: 'right',
-      finger: 'thumb',
-      title: 'Right Thumb',
-    ),
-    _NailCaptureStep(
-      key: 'rIndex',
-      hand: 'right',
-      finger: 'index',
-      title: 'Right Index',
-    ),
-    _NailCaptureStep(
-      key: 'rMiddle',
-      hand: 'right',
-      finger: 'middle',
-      title: 'Right Middle',
-    ),
-    _NailCaptureStep(
-      key: 'rRing',
-      hand: 'right',
-      finger: 'ring',
-      title: 'Right Ring',
-    ),
-    _NailCaptureStep(
-      key: 'rPinky',
-      hand: 'right',
-      finger: 'pinky',
-      title: 'Right Pinky',
-    ),
-  ];
-
-  static const List<String> _coinReferences = <String>[
-    'US Penny (1¢)',
-    'US Nickel (5¢)',
-    'US Dime (10¢)',
-    'US Quarter (25¢)',
-    'US Dollar Coin (\$1)',
-  ];
 
   @override
   void initState() {
@@ -695,9 +623,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         .maybeSingle();
 
     if (row is Map<String, dynamic>) return row;
-    if (row is Map) {
-      return _asStringMap(row);
-    }
     return const <String, dynamic>{};
   }
 
@@ -730,255 +655,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     return values.every((v) => v != null && v > 0);
   }
 
-  Map<String, double> _currentMeasuredMap() {
-    final d = _singleNailPrefs.dimensions;
-    final out = <String, double>{};
-    void put(String key, double? v) {
-      if (v != null && v > 0) out[key] = v;
-    }
-
-    put('lThumb', d.lThumb);
-    put('lIndex', d.lIndex);
-    put('lMiddle', d.lMiddle);
-    put('lRing', d.lRing);
-    put('lPinky', d.lPinky);
-    put('rThumb', d.rThumb);
-    put('rIndex', d.rIndex);
-    put('rMiddle', d.rMiddle);
-    put('rRing', d.rRing);
-    put('rPinky', d.rPinky);
-    return out;
-  }
-
-  NailDimensions _dimensionsWithOverrides(Map<String, double> measured) {
-    final d = _singleNailPrefs.dimensions;
-    bool keepNfc(String key, double? fallback, bool selected) {
-      final value = measured[key] ?? fallback;
-      return selected && value != null && value >= 8;
-    }
-
-    return NailDimensions(
-      lThumb: measured['lThumb'] ?? d.lThumb,
-      lIndex: measured['lIndex'] ?? d.lIndex,
-      lMiddle: measured['lMiddle'] ?? d.lMiddle,
-      lRing: measured['lRing'] ?? d.lRing,
-      lPinky: measured['lPinky'] ?? d.lPinky,
-      rThumb: measured['rThumb'] ?? d.rThumb,
-      rIndex: measured['rIndex'] ?? d.rIndex,
-      rMiddle: measured['rMiddle'] ?? d.rMiddle,
-      rRing: measured['rRing'] ?? d.rRing,
-      rPinky: measured['rPinky'] ?? d.rPinky,
-      lThumbNfc: keepNfc('lThumb', d.lThumb, d.lThumbNfc),
-      lIndexNfc: keepNfc('lIndex', d.lIndex, d.lIndexNfc),
-      lMiddleNfc: keepNfc('lMiddle', d.lMiddle, d.lMiddleNfc),
-      lRingNfc: keepNfc('lRing', d.lRing, d.lRingNfc),
-      lPinkyNfc: keepNfc('lPinky', d.lPinky, d.lPinkyNfc),
-      rThumbNfc: keepNfc('rThumb', d.rThumb, d.rThumbNfc),
-      rIndexNfc: keepNfc('rIndex', d.rIndex, d.rIndexNfc),
-      rMiddleNfc: keepNfc('rMiddle', d.rMiddle, d.rMiddleNfc),
-      rRingNfc: keepNfc('rRing', d.rRing, d.rRingNfc),
-      rPinkyNfc: keepNfc('rPinky', d.rPinky, d.rPinkyNfc),
-    );
-  }
-
-  Future<double?> _askManualMeasurement(String fingerTitle) async {
-    final ctrl = TextEditingController();
-    final value = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.snow,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text('Enter $fingerTitle (mm)'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(hintText: 'e.g. 14.5'),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCatLight,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              textStyle: Theme.of(
-                ctx,
-              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(ctx, double.tryParse(ctrl.text.trim())),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              textStyle: Theme.of(
-                ctx,
-              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    ctrl.dispose();
-    return value;
-  }
-
-  Future<bool> _showMeasurementGuide() async {
-    final allowed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Nail Measurement')),
-          body: const Padding(
-            padding: EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("We'll use a coin or currency as a reference guide."),
-                SizedBox(height: 8),
-                Text('1. Keep finger flat'),
-                Text('2. Place coin/currency near nail'),
-                Text('3. Capture photo'),
-                Text('4. Confirm measurement'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    return allowed == true;
-  }
-
-  Future<String?> _showCoinSelector() async {
-    return showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: _coinReferences
-              .map(
-                (coin) => ListTile(
-                  title: Text(coin),
-                  onTap: () => Navigator.pop(ctx, coin),
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _startGuidedNailMeasurement() async {
-    if (!mounted) return;
-    final proceed = await _showMeasurementGuide();
-    if (!proceed || !mounted) return;
-    final selectedCoin = await _showCoinSelector();
-    if (selectedCoin == null || selectedCoin.trim().isEmpty || !mounted) return;
-    _measurementCoinReference = selectedCoin;
-
-    final measured = _currentMeasuredMap();
-    var stepIndex = 0;
-    var measuring = false;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (modalContext, setModalState) {
-          final step = _nailCaptureSteps[stepIndex];
-
-          Future<void> saveCurrentAndMoveNext(double mm) async {
-            if (!mm.isFinite || mm <= 0) return;
-            measured[step.key] = (mm * 10).roundToDouble() / 10.0;
-            setState(() {
-              _singleNailPrefs = NailPreferences(
-                dimensions: _dimensionsWithOverrides(measured),
-                shape: _shape,
-                length: _length,
-              );
-            });
-            if (stepIndex < _nailCaptureSteps.length - 1) {
-              setModalState(() => stepIndex += 1);
-            } else {
-              Navigator.of(sheetContext).pop();
-            }
-          }
-
-          Future<void> captureCurrentStep() async {
-            if (measuring) return;
-            setModalState(() => measuring = true);
-            try {
-              final image = await _picker.pickImage(
-                source: ImageSource.camera,
-                imageQuality: 90,
-              );
-              if (image == null) return;
-              final bytes = await image.readAsBytes();
-              double? mm = await NailMeasurementService.measureNailWidthMm(
-                imageBytes: bytes,
-                hand: step.hand,
-                finger: step.finger,
-                coinReference: _measurementCoinReference,
-              );
-              mm ??= await _askManualMeasurement(step.title);
-              if (mm == null) return;
-              await saveCurrentAndMoveNext(mm);
-            } finally {
-              if (mounted) setModalState(() => measuring = false);
-            }
-          }
-
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Measure ${step.title} (${stepIndex + 1}/10)'),
-                  Text('Reference: $_measurementCoinReference'),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: measuring
-                              ? null
-                              : () async {
-                                  final manual = await _askManualMeasurement(
-                                    step.title,
-                                  );
-                                  if (manual == null) return;
-                                  await saveCurrentAndMoveNext(manual);
-                                },
-                          child: const Text('Enter Manually'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: measuring ? null : captureCurrentStep,
-                          child: Text(measuring ? 'Measuring...' : 'Capture'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   Future<void> _loadCompletedClientsFromDb() async {
     setState(() => _loadingCompletedClients = true);
@@ -1208,13 +884,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     );
   }
 
-  // ✅ Save budget to DB on slider release (implement your Firestore code here)
+  // ? Save budget to DB on slider release (implement your Firestore code here)
   Future<void> _saveBudgetToDb(RangeValues v) async {
-    // TODO:
-    // await FirebaseFirestore.instance.collection('requests').doc(requestId).set({
-    //   'budgetMin': v.start.round(),
-    //   'budgetMax': v.end.round(),
-    // }, SetOptions(merge: true));
+  
   }
 
   CompletedClient? _findClient(String? id) {
@@ -2239,7 +1911,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           ..['needBy'] = 'Need By Date is required';
       });
       _needByFocusNode.requestFocus();
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Need By Date is required',
         Directionality.of(context),
       );
@@ -2253,7 +1926,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           ..['description'] = 'Description is required';
       });
       _descriptionFocusNode.requestFocus();
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Description is required',
         Directionality.of(context),
       );
@@ -2705,7 +2379,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     icon: Icon(
                       Icons.arrow_back_rounded,
                       size: 22,
-                      color: AppColors.blackCat.withOpacity(0.75),
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
                     ),
                   ),
                 ),
@@ -2766,7 +2440,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                 "Tell artists exactly what you're looking for and get custom proposals.",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppColors.blackCat.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                   fontFamily: 'Arial',
@@ -2865,7 +2539,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             Text(
               'Upload photos that inspire your vision.',
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 fontFamily: 'Arial',
@@ -2901,7 +2575,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             Text(
               'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo.',
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 fontWeight: FontWeight.w600,
                 fontSize: 11.5,
                 fontFamily: 'Arial',
@@ -2928,7 +2602,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                 height: 110,
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: AppColors.blackCat.withOpacity(0.25),
+                                    color: AppColors.blackCat.withValues(alpha: 0.25),
                                   ),
                                 ),
                                 clipBehavior: Clip.hardEdge,
@@ -3096,7 +2770,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                       Text(
                         'Loading clients from database...',
                         style: TextStyle(
-                          color: AppColors.blackCat.withOpacity(0.65),
+                          color: AppColors.blackCat.withValues(alpha: 0.65),
                           fontWeight: FontWeight.w400,
                           fontSize: 12,
                           fontFamily: 'Arial',
@@ -3110,7 +2784,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                   child: Text(
                     'No completed client profiles found in database.',
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.65),
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
                       fontFamily: 'Arial',
@@ -3121,7 +2795,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                 Text(
                   'Add clients to the group order. Only clients with completed profiles appear here.',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                     fontFamily: 'Arial',
@@ -3203,7 +2877,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                               fontSize: 12.5,
                               fontWeight: FontWeight.w400,
                               fontFamily: 'Arial',
-                              color: AppColors.blackCat.withOpacity(0.35),
+                              color: AppColors.blackCat.withValues(alpha: 0.35),
                             ),
                             filled: true,
                             fillColor: _requestSnow,
@@ -3212,7 +2886,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             suffixIcon: Icon(
                               Icons.search_rounded,
                               size: 22,
-                              color: AppColors.blackCat.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -3221,19 +2895,19 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withOpacity(0.04),
+                                color: AppColors.blackCat.withValues(alpha: 0.04),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withOpacity(0.04),
+                                color: AppColors.blackCat.withValues(alpha: 0.04),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withOpacity(0.04),
+                                color: AppColors.blackCat.withValues(alpha: 0.04),
                               ),
                             ),
                           ),
@@ -3256,7 +2930,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                     child: Text(
                                       'No matching clients found.',
                                       style: TextStyle(
-                                        color: AppColors.blackCat.withOpacity(
+                                        color: AppColors.blackCat.withValues(alpha: 
                                           0.60,
                                         ),
                                         fontSize: 12,
@@ -3291,7 +2965,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                           Text(
                             'Select a client to view nail dimensions and edit preferences.',
                             style: TextStyle(
-                              color: AppColors.blackCat.withOpacity(0.60),
+                              color: AppColors.blackCat.withValues(alpha: 0.60),
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                               fontFamily: 'Arial',
@@ -3307,7 +2981,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             showDimensionImages: false,
                             showNfcOptions: true,
                             nailDimensionBorderColor: AppColors.blackCat
-                                .withOpacity(0.25),
+                                .withValues(alpha: 0.25),
                             onChanged: (updated) {
                               setState(() {
                                 final oldNfcCount = slot.draftNails == null
@@ -3335,7 +3009,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: saved
-                                    ? AppColors.blackCat.withOpacity(0.15)
+                                    ? AppColors.blackCat.withValues(alpha: 0.15)
                                     : AppColors.blackCat,
                                 foregroundColor: _requestSnow,
                                 shape: RoundedRectangleBorder(
@@ -3344,7 +3018,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                               ),
                               onPressed: () => _saveSlot(i),
                               child: Text(
-                                saved ? 'Saved ✅' : 'Save Client Preferences',
+                                saved ? 'Saved ?' : 'Save Client Preferences',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 12,
@@ -3403,7 +3077,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
                     style: TextStyle(
                       fontWeight: FontWeight.w400,
-                      color: AppColors.blackCat.withOpacity(0.75),
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
                       height: 1.2,
                       fontSize: 13,
                     ),
@@ -3427,7 +3101,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                               : AppColors.blackCat,
                         ),
                         side: BorderSide(
-                          color: AppColors.blackCat.withOpacity(0.08),
+                          color: AppColors.blackCat.withValues(alpha: 0.08),
                         ),
                         visualDensity: const VisualDensity(
                           horizontal: -2,
@@ -3451,7 +3125,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                               : AppColors.blackCat,
                         ),
                         side: BorderSide(
-                          color: AppColors.blackCat.withOpacity(0.08),
+                          color: AppColors.blackCat.withValues(alpha: 0.08),
                         ),
                         visualDensity: const VisualDensity(
                           horizontal: -2,
@@ -3471,7 +3145,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
               showMeasurementTips: false,
               showDimensionImages: false,
               showNfcOptions: true,
-              nailDimensionBorderColor: AppColors.blackCat.withOpacity(0.25),
+              nailDimensionBorderColor: AppColors.blackCat.withValues(alpha: 0.25),
               onChanged: (updated) {
                 setState(() {
                   final oldNfcCount = _nfcSelectedCount(
@@ -3505,7 +3179,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             Text(
               'Set your preferred budget range for nail designs.',
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 fontFamily: 'Arialbold',
@@ -3555,7 +3229,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             'Shipping address different from profile address?',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: AppColors.blackCat.withOpacity(0.75),
+                              color: AppColors.blackCat.withValues(alpha: 0.75),
                               height: 1.2,
                               fontSize: 14,
                             ),
@@ -3685,7 +3359,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             ? BottomNavigationBar(
                 currentIndex: widget.bottomNavIndex,
                 selectedItemColor: AppColors.blackCat,
-                unselectedItemColor: AppColors.blackCat.withOpacity(0.35),
+                unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
                 type: BottomNavigationBarType.fixed,
                 onTap: (i) {
                   if (widget.onNavTap != null) {
@@ -3727,20 +3401,13 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     );
   }
 
-  List<NailLength> get _lengthOptions => const <NailLength>[
-    NailLength.xlLong,
-    NailLength.short,
-    NailLength.medium,
-    NailLength.long,
-    NailLength.extraLong,
-  ];
   Widget _photoFallback(String p) {
     return Container(
       width: 110,
       height: 110,
       alignment: Alignment.center,
       padding: const EdgeInsets.all(8),
-      color: AppColors.blackCat.withOpacity(0.04),
+      color: AppColors.blackCat.withValues(alpha: 0.04),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -3753,7 +3420,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 10.5,
-              color: AppColors.blackCat.withOpacity(0.65),
+              color: AppColors.blackCat.withValues(alpha: 0.65),
             ),
           ),
         ],
@@ -3767,7 +3434,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         t,
         style: TextStyle(
           fontWeight: FontWeight.w600,
-          color: AppColors.blackCat.withOpacity(0.75),
+          color: AppColors.blackCat.withValues(alpha: 0.75),
           fontSize: 14,
           fontFamily: 'Arialbold',
         ),
@@ -3804,7 +3471,7 @@ class GroupClientSelection {
   }
 }
 
-/// ✅ Avatar dropdown (Logout)
+/// ? Avatar dropdown (Logout)
 class _AvatarMenu extends StatelessWidget {
   const _AvatarMenu({
     required this.onSelected,
@@ -3974,7 +3641,7 @@ class _DateField extends StatelessWidget {
         hintText: 'MM/DD/YYYY',
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
         ),
@@ -3988,7 +3655,7 @@ class _DateField extends StatelessWidget {
         suffixIcon: Icon(
           Icons.calendar_month_rounded,
           size: 16,
-          color: AppColors.blackCat.withOpacity(0.45),
+          color: AppColors.blackCat.withValues(alpha: 0.45),
         ),
         errorText: (errorText ?? '').trim().isEmpty ? null : errorText,
         border: OutlineInputBorder(
@@ -4039,7 +3706,7 @@ class _TextArea extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
           fontFamily: 'Arial',
         ),
         errorText: (errorText ?? '').trim().isEmpty ? null : errorText,
@@ -4092,7 +3759,7 @@ class _InputField extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
         ),
@@ -4244,7 +3911,7 @@ class _SearchableSelectField extends StatelessWidget {
             hintText: hint,
             hintStyle: TextStyle(
               fontSize: 12.5,
-              color: AppColors.blackCat.withOpacity(0.35),
+              color: AppColors.blackCat.withValues(alpha: 0.35),
               fontWeight: FontWeight.w400,
               fontFamily: 'Arial',
             ),
@@ -4261,7 +3928,7 @@ class _SearchableSelectField extends StatelessWidget {
             suffixIcon: Icon(
               Icons.search_rounded,
               size: 16,
-              color: AppColors.blackCat.withOpacity(0.45),
+              color: AppColors.blackCat.withValues(alpha: 0.45),
             ),
             suffixIconConstraints: const BoxConstraints(
               minHeight: 32,
@@ -4375,7 +4042,7 @@ class _SoftButton extends StatelessWidget {
             Icon(
               icon,
               size: 22,
-              color: iconColor ?? AppColors.blackCat.withOpacity(0.9),
+              color: iconColor ?? AppColors.blackCat.withValues(alpha: 0.9),
             ),
             const SizedBox(width: 8),
             Text(
@@ -4441,7 +4108,7 @@ class _BudgetCard extends StatelessWidget {
           ),*/
           const SizedBox(height: 8),
 
-          // ✅ Single range text (no duplicates)
+          // ? Single range text (no duplicates)
           Text(
             currentText,
             //textAlign: TextAlign.center,
@@ -4454,15 +4121,15 @@ class _BudgetCard extends StatelessWidget {
             data: Theme.of(context).copyWith(
               sliderTheme: SliderTheme.of(context).copyWith(
                 activeTrackColor: AppColors.blackCat,
-                inactiveTrackColor: AppColors.blackCat.withOpacity(0.10),
+                inactiveTrackColor: AppColors.blackCat.withValues(alpha: 0.10),
                 thumbColor: AppColors.blackCat,
-                overlayColor: AppColors.blackCat.withOpacity(0.10),
+                overlayColor: AppColors.blackCat.withValues(alpha: 0.10),
                 rangeThumbShape: const RoundRangeSliderThumbShape(
                   enabledThumbRadius: 9,
                 ),
                 trackHeight: 3.2,
 
-                // ✅ This removes the duplicate bubble/tooltip values
+                // ? This removes the duplicate bubble/tooltip values
                 showValueIndicator: ShowValueIndicator.never,
               ),
             ),
@@ -4496,7 +4163,7 @@ class _RadioPill extends StatelessWidget {
     final bg = _requestSnow;
     final border = selected
         ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.08);
+        : AppColors.blackCat.withValues(alpha: 0.08);
 
     return InkWell(
       onTap: onTap,
@@ -4513,10 +4180,10 @@ class _RadioPill extends StatelessWidget {
           children: [
             Icon(
               selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 22, // ✅ smaller icon
+              size: 22, // ? smaller icon
               color: selected
                   ? AppColors.blackCat
-                  : AppColors.blackCat.withOpacity(0.35),
+                  : AppColors.blackCat.withValues(alpha: 0.35),
             ),
             const SizedBox(width: 10),
             Text(
@@ -4535,421 +4202,6 @@ class _RadioPill extends StatelessWidget {
   }
 }
 
-class _NailDimensionsReadOnlyCard extends StatelessWidget {
-  const _NailDimensionsReadOnlyCard({required this.dimensions});
-  final NailDimensions dimensions;
-
-  String _mm(double? v) {
-    if (v == null || !v.isFinite) return '-';
-    return '${v.toStringAsFixed(0)} mm';
-  }
-
-  Widget _pill(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: _requestSnow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-      ),
-    );
-  }
-
-  Widget _nfcMark(bool selected) {
-    return SizedBox(
-      height: 24,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Transform.scale(
-            scale: 0.7,
-            child: IgnorePointer(
-              child: Checkbox(
-                value: selected,
-                onChanged: (_) {},
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-                activeColor: AppColors.blackCat,
-                checkColor: AppColors.snow,
-              ),
-            ),
-          ),
-          const Text(
-            'NFC',
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _handRow(
-    String title,
-    List<String> labels,
-    List<double?> values,
-    List<bool> nfcValues,
-  ) {
-    Widget dimensionRow(int i) {
-      final hasValue = values[i] != null;
-      final isNfcEligible = hasValue && values[i]! >= 8;
-
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 74,
-              child: Text(
-                labels[i],
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ),
-            Container(
-              height: 42,
-              width: 72,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _requestSnow,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
-              ),
-              child: Text(
-                _mm(values[i]),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 86,
-              child: isNfcEligible
-                  ? _nfcMark(nfcValues[i])
-                  : const SizedBox.shrink(),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'mm',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.blackCat,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Center(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              fontFamily: 'Arialbold',
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...List.generate(labels.length, dimensionRow),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Nail Dimension (in mm)',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'Arialbold',
-            ),
-          ),
-          const SizedBox(height: 6),
-          /*Text(
-            'Measurement tips: Use a soft measuring tape or ruler. Enter width in millimeters (mm).',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.55),
-              fontWeight: FontWeight.w400,
-              fontSize: 11.5,
-            ),
-          ),*/
-          //const SizedBox(height: 14),
-          _handRow(
-            'Left Hand',
-            const ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'],
-            [
-              dimensions.lThumb,
-              dimensions.lIndex,
-              dimensions.lMiddle,
-              dimensions.lRing,
-              dimensions.lPinky,
-            ],
-            [
-              dimensions.lThumbNfc,
-              dimensions.lIndexNfc,
-              dimensions.lMiddleNfc,
-              dimensions.lRingNfc,
-              dimensions.lPinkyNfc,
-            ],
-          ),
-          const SizedBox(height: 18),
-          _handRow(
-            'Right Hand',
-            const ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'],
-            [
-              dimensions.rThumb,
-              dimensions.rIndex,
-              dimensions.rMiddle,
-              dimensions.rRing,
-              dimensions.rPinky,
-            ],
-            [
-              dimensions.rThumbNfc,
-              dimensions.rIndexNfc,
-              dimensions.rMiddleNfc,
-              dimensions.rRingNfc,
-              dimensions.rPinkyNfc,
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NailCaptureStep {
-  const _NailCaptureStep({
-    required this.key,
-    required this.hand,
-    required this.finger,
-    required this.title,
-  });
-
-  final String key;
-  final String hand;
-  final String finger;
-  final String title;
-}
-
-class _ShapeCard extends StatelessWidget {
-  const _ShapeCard({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = _requestSnow;
-    final border = selected
-        ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.10);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        width: 110,
-        height: 120,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: border, width: selected ? 1.6 : 1),
-        ),
-        child: Column(
-          children: [
-            Container(
-              height: 44,
-              width: 44,
-              decoration: BoxDecoration(
-                color: AppColors.blackCat.withOpacity(0.04),
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: border),
-              ),
-              child: Icon(
-                Icons.front_hand_outlined,
-                size: 20, // ✅ smaller icon
-                color: selected
-                    ? AppColors.blackCat
-                    : AppColors.blackCat.withOpacity(0.5),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Center(
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _lengthTitle(NailLength l) {
-  switch (l) {
-    case NailLength.xlLong:
-      return 'Extra Short';
-    case NailLength.short:
-      return 'Short';
-    case NailLength.medium:
-      return 'Medium';
-    case NailLength.long:
-      return 'Long';
-    case NailLength.extraLong:
-      return 'Extra Long';
-    case NailLength.none:
-      return 'Select';
-  }
-}
-
-String _lengthImage(NailLength l) {
-  switch (l) {
-    case NailLength.short:
-      return 'assets/images/length_short.png';
-    case NailLength.medium:
-      return 'assets/images/length_medium.png';
-    case NailLength.long:
-      return 'assets/images/length_long.png';
-    case NailLength.extraLong:
-      return 'assets/images/length_extra_long.png';
-    case NailLength.xlLong:
-      return 'assets/images/length_xl_long.png';
-    case NailLength.none:
-      return 'assets/images/length_short.png';
-  }
-}
-
-class _LengthImageCard extends StatelessWidget {
-  const _LengthImageCard({
-    required this.title,
-    required this.subtitle,
-    required this.imageAsset,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final String imageAsset;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = _requestSnow;
-    final border = selected
-        ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.10);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        width: 132,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: border, width: selected ? 1.6 : 1),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.04),
-              blurRadius: 14,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.center, // ✅ center whole column
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.zero,
-              child: Image.asset(
-                imageAsset,
-                height: 58,
-                width: double.infinity,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => Container(
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: AppColors.blackCat.withOpacity(0.05),
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.image_not_supported_outlined,
-                    size: 16,
-                  ), // ✅ smaller icon
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              textAlign: TextAlign.center, // ✅ centered under image
-              style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
-            ),
-            if (subtitle.trim().isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.blackCat.withOpacity(0.60),
-                  height: 1.15,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 const List<String> usStates = [
   'Alabama',
@@ -5048,7 +4300,7 @@ const List<String> countries = [
   'Cuba',
   'Cyprus',
   'Czechia (Czech Republic)',
-  "Côte d'Ivoire",
+  "C\u00F4te d'Ivoire",
   'Democratic Republic of the Congo',
   'Denmark',
   'Djibouti',

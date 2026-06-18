@@ -243,15 +243,6 @@ class _ClientShellPageState extends State<ClientShellPage> {
     );
   }
 
-  bool _asBool(Object? raw, {bool fallback = false}) {
-    if (raw is bool) return raw;
-    if (raw is num) return raw != 0;
-    final value = (raw ?? '').toString().trim().toLowerCase();
-    if (value == 'true' || value == 'yes' || value == '1') return true;
-    if (value == 'false' || value == 'no' || value == '0') return false;
-    return fallback;
-  }
-
   Future<Map<String, dynamic>?> _readClientRowFromSupabase() async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
@@ -263,8 +254,12 @@ class _ClientShellPageState extends State<ClientShellPage> {
     for (final table in const <String>['client', 'client_artist']) {
       try {
         if (uid.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('id', uid).limit(1);
-          if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          final rows = await supabase
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .limit(1);
+          if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
@@ -275,7 +270,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
               .select()
               .eq('email', email)
               .limit(1);
-          if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
@@ -294,8 +289,6 @@ class _ClientShellPageState extends State<ClientShellPage> {
     final clientProfile = _asMap(client['profile']);
     final address = _asMap(data['address']);
     final clientAddress = _asMap(client['address']);
-    final payment = _asMap(data['payment']);
-    final clientPayment = _asMap(client['payment']);
     final nail = _asMap(data['nailPreferences']).isNotEmpty
         ? _asMap(data['nailPreferences'])
         : _asMap(data['nail_preferences']);
@@ -680,25 +673,6 @@ class _ClientBottomNav extends StatelessWidget {
   bool _enabled(int i) {
     if (forceEnableAllTabs) return true;
     return i == 0 ? true : profileComplete;
-  }
-
-  String _routeLabelForIndex(
-    int index, {
-    required bool showRequestsTab,
-    required bool showProfileBottomTab,
-  }) {
-    if (index == 0) return 'Client home';
-    if (index == 1) return 'Design request';
-    if (showRequestsTab) {
-      if (index == 2) return 'Client requests';
-      if (index == 3) return 'Artists';
-      if (index == 4) return 'Orders';
-    } else {
-      if (index == 2) return 'Artists';
-      if (index == 3) return 'Orders';
-      if (showProfileBottomTab && index == 4) return 'Client profile';
-    }
-    return 'Client home';
   }
 
   @override

@@ -213,7 +213,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 height: 5,
                 width: 54,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.12),
+                  color: AppColors.blackCat.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.zero,
                 ),
               ),
@@ -255,7 +255,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                           child: RichText(
                             text: TextSpan(
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.80),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.80,
+                                ),
                                 height: 1.25,
                               ),
                               children: [
@@ -357,7 +359,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                           Text(
                             'Use Download/Print to attach the label, or show the QR at the carrier counter for scan-and-print drop-off.',
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.62),
+                              color: AppColors.blackCat.withValues(alpha: 0.62),
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
                               height: 1.25,
@@ -367,7 +369,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                           Text(
                             'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.68),
+                              color: AppColors.blackCat.withValues(alpha: 0.68),
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
                             ),
@@ -425,13 +427,15 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                           children: [
                             Icon(
                               Icons.image_outlined,
-                              color: Colors.black.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                             const SizedBox(width: 10),
                             Text(
                               'No images uploaded',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.65,
+                                ),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -457,13 +461,15 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                           children: [
                             Icon(
                               Icons.image_outlined,
-                              color: Colors.black.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                             const SizedBox(width: 10),
                             Text(
                               'No artist photos uploaded',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.65,
+                                ),
                                 fontWeight: FontWeight.w400,
                                 fontSize: 12,
                               ),
@@ -491,7 +497,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                         Text(
                           'Shipped by',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.60),
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
                             fontWeight: FontWeight.w400,
                             fontSize: 14,
                           ),
@@ -521,13 +527,17 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: Colors.black.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: Colors.black.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             focusedBorder: const OutlineInputBorder(
@@ -545,7 +555,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                         Text(
                           'Tracking #',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.60),
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
                             fontWeight: FontWeight.w400,
                             fontSize: 14,
                           ),
@@ -569,13 +579,17 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: Colors.black.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: Colors.black.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             focusedBorder: const OutlineInputBorder(
@@ -594,7 +608,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                         Text(
                           'Shipped Date',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.60),
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
                             fontWeight: FontWeight.w400,
                             fontSize: 14,
                           ),
@@ -611,7 +625,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                               color: AppColors.snow,
                               borderRadius: BorderRadius.zero,
                               border: Border.all(
-                                color: Colors.black.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             child: Row(
@@ -625,15 +641,21 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                                       fontWeight: FontWeight.w400,
                                       fontSize: 13.5,
                                       color: _shippedDate == null
-                                          ? Colors.black.withOpacity(0.45)
-                                          : Colors.black.withOpacity(0.90),
+                                          ? AppColors.blackCat.withValues(
+                                              alpha: 0.45,
+                                            )
+                                          : AppColors.blackCat.withValues(
+                                              alpha: 0.90,
+                                            ),
                                     ),
                                   ),
                                 ),
                                 Icon(
                                   Icons.calendar_today_rounded,
                                   size: 18,
-                                  color: Colors.black.withOpacity(0.45),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.45,
+                                  ),
                                 ),
                               ],
                             ),
@@ -659,10 +681,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.blackCat,
-                        disabledBackgroundColor: Colors.black.withOpacity(0.18),
+                        disabledBackgroundColor: AppColors.blackCat.withValues(
+                          alpha: 0.18,
+                        ),
                         foregroundColor: AppColors.snow,
-                        disabledForegroundColor: AppColors.snow.withOpacity(
-                          0.78,
+                        disabledForegroundColor: AppColors.snow.withValues(
+                          alpha: 0.78,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.zero,
@@ -765,7 +789,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
-                    color: Colors.black.withOpacity(0.90),
+                    color: AppColors.blackCat.withValues(alpha: 0.90),
                   ),
                 ),
                 if (headerSubtitle.isNotEmpty) ...[
@@ -776,7 +800,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 14,
-                      color: Colors.black.withOpacity(0.72),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -790,7 +814,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 14.5,
-                    color: Colors.black.withOpacity(0.60),
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -832,7 +856,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               child: Icon(
                 Icons.close_rounded,
                 size: 24,
-                color: Colors.black.withOpacity(0.70),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
               ),
             ),
           ),
@@ -1003,50 +1027,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     );
   }
 
-  static Widget _pillRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.black.withOpacity(0.75)),
-          const SizedBox(width: 10),
-          Text(
-            '$label ',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              color: Colors.black.withOpacity(0.55),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   static Widget _handCardCentered(String title, NailDimensionsV2 d) {
     return _softBox(
       Column(
@@ -1078,7 +1058,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             child: Text(
               k,
               style: TextStyle(
-                color: Colors.black.withOpacity(0.65),
+                color: AppColors.blackCat.withValues(alpha: 0.65),
                 fontWeight: FontWeight.w400,
                 fontSize: 14,
               ),
@@ -1168,7 +1148,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                       child: Text(
                         'Nail Shape',
                         style: TextStyle(
-                          color: Colors.black.withOpacity(0.60),
+                          color: AppColors.blackCat.withValues(alpha: 0.60),
                           fontWeight: FontWeight.w400,
                           fontSize: 12,
                         ),
@@ -1194,7 +1174,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                       child: Text(
                         'Nail Length',
                         style: TextStyle(
-                          color: Colors.black.withOpacity(0.60),
+                          color: AppColors.blackCat.withValues(alpha: 0.60),
                           fontWeight: FontWeight.w400,
                           fontSize: 12,
                         ),
@@ -1266,10 +1246,10 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   Widget _imageForPath(String raw) {
     final path = _normalizeImagePath(raw);
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.blackCat.withValues(alpha: 0.06),
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
     if (path.isEmpty) return fallback();
@@ -1407,7 +1387,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               '$label:',
               style: TextStyle(
                 fontWeight: FontWeight.w400,
-                color: Colors.black.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 fontSize: 12,
               ),
             ),

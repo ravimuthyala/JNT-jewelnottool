@@ -177,7 +177,7 @@ class _TipArtistPageState extends State<TipArtistPage> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.alabaster,
-                border: Border.all(color: AppColors.blackCat.withOpacity(0.12)),
+                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
                 borderRadius: BorderRadius.zero,
               ),
               child: Column(

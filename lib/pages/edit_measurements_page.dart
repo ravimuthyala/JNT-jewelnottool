@@ -24,7 +24,8 @@ class _EditMeasurementsPopupState extends State<EditMeasurementsPopup> {
   }
 
   Future<void> _save() async {
-    SemanticsService.announce(
+    SemanticsService.sendAnnouncement(
+      View.of(context),
       'Measurements saved',
       Directionality.of(context),
     );

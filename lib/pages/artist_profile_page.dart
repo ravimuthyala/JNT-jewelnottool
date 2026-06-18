@@ -63,7 +63,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   String _artistSupabaseTable = '';
   String _artistSupabaseId = '';
 
-
   Future<_ArtistIdentity> _resolveArtistIdentity() async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     final firebaseUid = (firebaseUser?.uid ?? '').trim();
@@ -93,10 +92,10 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     super.dispose();
   }
 
-
   Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
-    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    if (value is Map)
+      return value.map((key, value) => MapEntry(key.toString(), value));
     return const <String, dynamic>{};
   }
 
@@ -115,7 +114,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }) async {
     final client = SupabaseBootstrap.client;
 
-    Future<Map<String, dynamic>?> firstRow(PostgrestFilterBuilder<dynamic> query) async {
+    Future<Map<String, dynamic>?> firstRow(
+      PostgrestFilterBuilder<dynamic> query,
+    ) async {
       try {
         final rows = await query.limit(1);
         if (rows is List && rows.isNotEmpty && rows.first is Map) {
@@ -136,27 +137,31 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     }
 
     if (email.isNotEmpty) {
-      final byEmail = await firstRow(client.from(table).select().eq('email', email));
+      final byEmail = await firstRow(
+        client.from(table).select().eq('email', email),
+      );
       if (byEmail != null) return byEmail;
     }
 
     return null;
   }
 
-  Future<Map<String, dynamic>?> _loadSupabaseArtistProfile(_ArtistIdentity identity) async {
+  Future<Map<String, dynamic>?> _loadSupabaseArtistProfile(
+    _ArtistIdentity identity,
+  ) async {
     final uid = identity.uid.trim();
     final email = identity.email.trim().toLowerCase();
 
     for (final table in const <String>['artist', 'client_artist']) {
-      final row = await _readSupabaseArtistRow(table: table, uid: uid, email: email);
+      final row = await _readSupabaseArtistRow(
+        table: table,
+        uid: uid,
+        email: email,
+      );
       if (row == null) continue;
 
       _artistSupabaseTable = table;
-      _artistSupabaseId = _firstNonEmpty([
-        row['id'],
-        row['uid'],
-        uid,
-      ]);
+      _artistSupabaseId = _firstNonEmpty([row['id'], row['uid'], uid]);
 
       return row;
     }
@@ -190,31 +195,41 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       row['name'],
       basic['name'],
     ]);
-    final avatar = _cleanAvatarValue(_firstNonEmpty([
-      profile['profileImageUrl'],
-      profile['profilePhotoUrl'],
-      profile['photoUrl'],
-      profile['avatarUrl'],
-      row['profileImageUrl'],
-      row['profile_image_url'],
-      row['profilePhotoUrl'],
-      row['photoUrl'],
-      row['avatarUrl'],
-      basic['profileImageUrl'],
-      basic['photoUrl'],
-      basic['avatarUrl'],
-    ]));
+    final avatar = _cleanAvatarValue(
+      _firstNonEmpty([
+        profile['profileImageUrl'],
+        profile['profilePhotoUrl'],
+        profile['photoUrl'],
+        profile['avatarUrl'],
+        row['profileImageUrl'],
+        row['profile_image_url'],
+        row['profilePhotoUrl'],
+        row['photoUrl'],
+        row['avatarUrl'],
+        basic['profileImageUrl'],
+        basic['photoUrl'],
+        basic['avatarUrl'],
+      ]),
+    );
 
     return <String, dynamic>{
       ...row,
       'displayName': name,
       'name': name,
-      'studioName': _firstNonEmpty([profile['studioName'], row['studioName'], row['studio_name']]),
+      'studioName': _firstNonEmpty([
+        profile['studioName'],
+        row['studioName'],
+        row['studio_name'],
+      ]),
       'profileImageUrl': avatar,
       'photoUrl': avatar,
       'avatarUrl': avatar,
       'panel_displayName': name,
-      'panel_studioName': _firstNonEmpty([profile['studioName'], row['studioName'], row['studio_name']]),
+      'panel_studioName': _firstNonEmpty([
+        profile['studioName'],
+        row['studioName'],
+        row['studio_name'],
+      ]),
       'panel_profileImageUrl': avatar,
       'profile': <String, dynamic>{
         ...profile,
@@ -238,20 +253,26 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       final compatData = _firestoreCompatArtistData(supabaseRow);
       final nextDirect = _readBool(
         compatData['panel_directRequestsEnabled'],
-        (compatData['availability'] as Map<String, dynamic>?)?['directRequestsEnabled'],
-        (compatData['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+        (compatData['availability']
+            as Map<String, dynamic>?)?['directRequestsEnabled'],
+        (compatData['profile']
+            as Map<String, dynamic>?)?['directRequestsEnabled'],
       );
       final nextNfc =
           _readMaybeBool(
             compatData['panel_nfcRequestEnabled'],
-            (compatData['availability'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
-            (compatData['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+            (compatData['availability']
+                as Map<String, dynamic>?)?['nfcRequestEnabled'],
+            (compatData['profile']
+                as Map<String, dynamic>?)?['nfcRequestEnabled'],
           ) ??
           false;
       final nextAllClientNotifications = _readBool(
         compatData['panel_allClientRequestNotificationsEnabled'],
-        (compatData['notifications'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-        (compatData['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+        (compatData['notifications']
+            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+        (compatData['profile']
+            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
       );
 
       final docId = _firstNonEmpty([
@@ -260,7 +281,13 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         identity.email,
       ]).replaceAll('/', '_');
 
-      final streamRef = _db.collection(_artistSupabaseTable == 'client_artist' ? 'client_artist' : 'artist').doc(docId);
+      final streamRef = _db
+          .collection(
+            _artistSupabaseTable == 'client_artist'
+                ? 'client_artist'
+                : 'artist',
+          )
+          .doc(docId);
       _artistDocRef = streamRef;
 
       if (mounted) {
@@ -286,20 +313,26 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           _artistData = data;
           _directRequestsEnabled = _readBool(
             data['panel_directRequestsEnabled'],
-            (data['availability'] as Map<String, dynamic>?)?['directRequestsEnabled'],
-            (data['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
+            (data['availability']
+                as Map<String, dynamic>?)?['directRequestsEnabled'],
+            (data['profile']
+                as Map<String, dynamic>?)?['directRequestsEnabled'],
           );
           _nfcRequestsEnabled =
               _readMaybeBool(
                 data['panel_nfcRequestEnabled'],
-                (data['availability'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
-                (data['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
+                (data['availability']
+                    as Map<String, dynamic>?)?['nfcRequestEnabled'],
+                (data['profile']
+                    as Map<String, dynamic>?)?['nfcRequestEnabled'],
               ) ??
               false;
           _allClientRequestNotificationsEnabled = _readBool(
             data['panel_allClientRequestNotificationsEnabled'],
-            (data['notifications'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-            (data['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+            (data['notifications']
+                as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+            (data['profile']
+                as Map<String, dynamic>?)?['allClientRequestsEnabled'],
           );
         });
       });
@@ -794,7 +827,10 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         heightFactor: 0.94,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: ArtistEditProfilePage(docRef: ref, initialData: _withSupabaseMeta(_artistData)),
+          child: ArtistEditProfilePage(
+            docRef: ref,
+            initialData: _withSupabaseMeta(_artistData),
+          ),
         ),
       ),
     );
@@ -868,176 +904,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     return items;
   }
 
-  Future<List<ArtistPortfolioItem>> _loadPortfolioItemsFresh() async {
-    final merged = <ArtistPortfolioItem>[
-      ..._portfolioItemsFromData(_artistData),
-    ];
-    final seen = <String>{
-      for (final i in merged) _portfolioImageKey(i.image),
-    };
-    final knownDocIds = <String>{};
-    final knownDocKeys = <String>{};
-
-    void addUnique(List<ArtistPortfolioItem> items) {
-      for (final item in items) {
-        final key = _portfolioImageKey(item.image);
-        if (seen.add(key)) merged.add(item);
-      }
-    }
-
-    void addRawImage(String value, {String style = 'All'}) {
-      final trimmed = value.trim();
-      if (trimmed.isEmpty || !_isPortfolioImageValue(trimmed)) return;
-      final key = _portfolioImageKey(trimmed);
-      if (seen.add(key)) {
-        merged.add(ArtistPortfolioItem(image: trimmed, style: style));
-      }
-    }
-
-    void addDeepCandidates(Object? raw, {String parentKey = ''}) {
-      if (raw is String) {
-        final value = raw.trim();
-        if (value.isEmpty || !_isPortfolioImageValue(value)) return;
-        final key = parentKey.toLowerCase();
-        final looksRelevantKey =
-            key.contains('portfolio') ||
-            key.contains('image') ||
-            key.contains('photo') ||
-            key.contains('url') ||
-            key.contains('path');
-        final looksLikeUrl =
-            value.startsWith('http://') ||
-            value.startsWith('https://') ||
-            value.startsWith('gs://');
-        final looksLikeStoragePath =
-            value.contains('/') &&
-            (value.endsWith('.jpg') ||
-                value.endsWith('.jpeg') ||
-                value.endsWith('.png') ||
-                value.endsWith('.webp') ||
-                value.endsWith('.gif'));
-        if (looksRelevantKey && (looksLikeUrl || looksLikeStoragePath)) {
-          addRawImage(value);
-        }
-        return;
-      }
-      if (raw is List) {
-        for (final item in raw) {
-          addDeepCandidates(item, parentKey: parentKey);
-        }
-        return;
-      }
-      if (raw is Map) {
-        raw.forEach((k, v) {
-          addDeepCandidates(v, parentKey: k.toString());
-        });
-      }
-    }
-
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-    final db = FirebaseFirestore.instance;
-    final boundDocId = _artistDocRef?.id ?? '';
-
-    if (boundDocId.isNotEmpty) knownDocIds.add(boundDocId);
-    if (uid.isNotEmpty) knownDocIds.add(uid);
-
-    Future<void> pullDoc(String collection, String id) async {
-      if (id.isEmpty) return;
-      final lookupKey = '$collection:$id';
-      if (!knownDocKeys.add(lookupKey)) return;
-      knownDocIds.add(id);
-      try {
-        final snap = await db
-            .collection(collection)
-            .doc(id)
-            .get(const GetOptions(source: Source.server));
-        if (!snap.exists) return;
-        final data = snap.data() ?? const <String, dynamic>{};
-        addUnique(_portfolioItemsFromData(data));
-        addDeepCandidates(data);
-      } catch (_) {}
-    }
-
-    Future<void> pullByEmail(String collection, String emailValue) async {
-      if (emailValue.isEmpty) return;
-      try {
-        final q = await db
-            .collection(collection)
-            .where('email', isEqualTo: emailValue)
-            .limit(1)
-            .get(const GetOptions(source: Source.server));
-        if (q.docs.isEmpty) return;
-        final doc = q.docs.first;
-        knownDocIds.add(doc.id);
-        addUnique(_portfolioItemsFromData(doc.data()));
-        addDeepCandidates(doc.data());
-      } catch (_) {}
-    }
-
-    Future<void> pullByUidField(String collection, String uidValue) async {
-      if (uidValue.isEmpty) return;
-      try {
-        final q = await db
-            .collection(collection)
-            .where('uid', isEqualTo: uidValue)
-            .limit(2)
-            .get(const GetOptions(source: Source.server));
-        for (final doc in q.docs) {
-          final key = '$collection:${doc.id}';
-          if (!knownDocKeys.add(key)) continue;
-          knownDocIds.add(doc.id);
-          addUnique(_portfolioItemsFromData(doc.data()));
-          addDeepCandidates(doc.data());
-        }
-      } catch (_) {}
-    }
-
-    for (final c in const <String>['artist', 'client_artist']) {
-      await pullDoc(c, boundDocId);
-      await pullDoc(c, uid);
-      await pullByUidField(c, uid);
-      await pullByEmail(c, email);
-    }
-
-    // Storage fallback for legacy/missing Firestore portfolio fields.
-    if (merged.isEmpty) {
-      final storage = FirebaseStorage.instance;
-
-      Future<void> listFolder(String base, String id) async {
-        if (id.trim().isEmpty) return;
-        try {
-          final folder = storage.ref('$base/$id/portfolio');
-          final listed = await folder.listAll().timeout(
-            const Duration(seconds: 6),
-          );
-          for (final item in listed.items) {
-            try {
-              final url = (await item.getDownloadURL().timeout(
-                const Duration(seconds: 6),
-              )).trim();
-              if (url.isEmpty) continue;
-              final key = '$url|All';
-              if (seen.add(key)) {
-                merged.add(ArtistPortfolioItem(image: url, style: 'All'));
-              }
-            } catch (_) {}
-          }
-        } catch (_) {}
-      }
-
-      final idsToTry = <String>{uid, ...knownDocIds};
-      for (final id in idsToTry) {
-        await listFolder('artists', id);
-        await listFolder('client_artists', id);
-      }
-    }
-
-    return merged;
-  }
-
   Future<void> _openPortfolio() async {
     var ref = _artistDocRef;
     if (ref == null) {
@@ -1053,9 +919,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       return;
     }
     final docRef = ref;
-    // Open modal immediately; seed legacy items in background.
-    _seedPortfolioItemsIfMissing(docRef);
-    await _cleanupMalformedPortfolioItems(docRef);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1067,467 +930,93 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           child: ArtistPortfolioModal(
             docRef: docRef,
             initialItems: _portfolioItemsFromData(_artistData),
-            onUploadTap: _uploadPortfolioDesigns,
+            onUploadTap:
+                ({
+                  List<XFile>? selectedFiles,
+                  void Function(int completed, int total)? onProgress,
+                }) async {
+                  final picker = ImagePicker();
+                  final picked =
+                      selectedFiles ??
+                      await picker.pickMultiImage(
+                        imageQuality: 78,
+                        maxWidth: _portfolioMaxEdge.toDouble(),
+                        maxHeight: _portfolioMaxEdge.toDouble(),
+                      );
+                  if (picked.isEmpty) return const <ArtistPortfolioItem>[];
+
+                  final storage = SupabaseBootstrap.client.storage.from(
+                    'portfolio-images',
+                  );
+                  final uploaded = <ArtistPortfolioItem>[];
+                  final now = DateTime.now().millisecondsSinceEpoch;
+
+                  Future<Uint8List> prepareBytes(Uint8List rawBytes) async {
+                    if (rawBytes.lengthInBytes <=
+                        _preferredPortfolioUploadBytes) {
+                      return rawBytes;
+                    }
+                    final decoded = img.decodeImage(rawBytes);
+                    if (decoded == null) return rawBytes;
+                    final resized =
+                        decoded.width > _portfolioMaxEdge ||
+                            decoded.height > _portfolioMaxEdge
+                        ? img.copyResize(
+                            decoded,
+                            width: decoded.width > decoded.height
+                                ? _portfolioMaxEdge
+                                : null,
+                            height: decoded.height >= decoded.width
+                                ? _portfolioMaxEdge
+                                : null,
+                          )
+                        : decoded;
+                    var quality = 82;
+                    while (quality >= 55) {
+                      final encoded = Uint8List.fromList(
+                        img.encodeJpg(resized, quality: quality),
+                      );
+                      if (encoded.lengthInBytes <= _maxPortfolioUploadBytes) {
+                        return encoded;
+                      }
+                      quality -= 8;
+                    }
+                    return Uint8List.fromList(
+                      img.encodeJpg(resized, quality: 55),
+                    );
+                  }
+
+                  for (var index = 0; index < picked.length; index++) {
+                    final file = picked[index];
+                    final rawBytes = await file.readAsBytes();
+                    final bytes = await prepareBytes(rawBytes);
+                    final path =
+                        'artists/${docRef.id}/portfolio/${now}_${index + 1}.jpg';
+                    await storage.uploadBinary(
+                      path,
+                      bytes,
+                      fileOptions: const FileOptions(
+                        contentType: 'image/jpeg',
+                        upsert: true,
+                      ),
+                    );
+                    uploaded.add(
+                      ArtistPortfolioItem(
+                        image: storage.getPublicUrl(path),
+                        style: 'All',
+                        docId: docRef.id,
+                        storagePath: path,
+                      ),
+                    );
+                    onProgress?.call(index + 1, picked.length);
+                  }
+
+                  return uploaded;
+                },
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _seedPortfolioItemsIfMissing(
-    DocumentReference<Map<String, dynamic>> ref,
-  ) async {
-    try {
-      final existing = await ref
-          .collection('portfolio_items')
-          .limit(1)
-          .get(const GetOptions(source: Source.server));
-      if (existing.docs.isNotEmpty) return;
-    } catch (_) {
-      return;
-    }
-
-    final urls = <String>{};
-    void addUrl(dynamic raw) {
-      final v = (raw ?? '').toString().trim();
-      if (v.isEmpty) return;
-      if (v.startsWith('http://') ||
-          v.startsWith('https://') ||
-          v.startsWith('gs://') ||
-          v.contains('/')) {
-        urls.add(v);
-      }
-    }
-
-    final portfolio = (_artistData['portfolio'] as Map<String, dynamic>?) ?? {};
-    final artist = (_artistData['artist'] as Map<String, dynamic>?) ?? {};
-    final artistPortfolio =
-        (artist['portfolio'] as Map<String, dynamic>?) ?? {};
-
-    final candidates = <dynamic>[
-      _artistData['portfolioImages'],
-      _artistData['portfolioItems'],
-      _artistData['panel_portfolioImages'],
-      _artistData['panel_artist_portfolioImages'],
-      portfolio['images'],
-      portfolio['items'],
-      artist['portfolioImages'],
-      artist['portfolioItems'],
-      artistPortfolio['images'],
-      artistPortfolio['items'],
-    ];
-
-    void walk(dynamic raw) {
-      if (raw == null) return;
-      if (raw is String) {
-        addUrl(raw);
-        return;
-      }
-      if (raw is List) {
-        for (final item in raw) {
-          walk(item);
-        }
-        return;
-      }
-      if (raw is Map) {
-        for (final v in raw.values) {
-          walk(v);
-        }
-      }
-    }
-
-    for (final c in candidates) {
-      walk(c);
-    }
-
-    final storage = FirebaseStorage.instance;
-    final bases = <String>{
-      ref.path.startsWith('client_artist/') ? 'client_artists' : 'artists',
-      'artists',
-      'client_artists',
-    };
-    final ownerIds = <String>{
-      ref.id.trim(),
-      (FirebaseAuth.instance.currentUser?.uid ?? '').trim(),
-    }..removeWhere((e) => e.isEmpty);
-    for (final base in bases) {
-      for (final ownerId in ownerIds) {
-        try {
-          final listed = await storage
-              .ref('$base/$ownerId/portfolio')
-              .listAll()
-              .timeout(const Duration(seconds: 6));
-          for (final item in listed.items) {
-            try {
-              final url = (await item.getDownloadURL().timeout(
-                const Duration(seconds: 6),
-              )).trim();
-              if (url.isNotEmpty) urls.add(url);
-            } catch (_) {}
-          }
-        } catch (_) {}
-      }
-    }
-
-    if (urls.isEmpty) return;
-    for (final url in urls) {
-      try {
-        await ref.collection('portfolio_items').add({
-          'imageUrl': url,
-          'storagePath': '',
-          'style': 'All',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _cleanupMalformedPortfolioItems(
-    DocumentReference<Map<String, dynamic>> ref,
-  ) async {
-    try {
-      final snap = await ref
-          .collection('portfolio_items')
-          .get(const GetOptions(source: Source.server))
-          .timeout(const Duration(seconds: 8));
-      if (snap.docs.isEmpty) return;
-
-      final seen = <String>{};
-      final deleteRefs = <DocumentReference<Map<String, dynamic>>>[];
-
-      for (final doc in snap.docs) {
-        final item = _portfolioItemFromDocData(doc.data(), doc.id);
-        if (item == null) {
-          deleteRefs.add(doc.reference);
-          continue;
-        }
-
-        final key = _portfolioImageKey(item.image);
-        if (!seen.add(key)) {
-          deleteRefs.add(doc.reference);
-        }
-      }
-
-      if (deleteRefs.isEmpty) return;
-
-      for (var i = 0; i < deleteRefs.length; i += 300) {
-        final batch = FirebaseFirestore.instance.batch();
-        for (final refToDelete in deleteRefs.skip(i).take(300)) {
-          batch.delete(refToDelete);
-        }
-        await batch.commit().timeout(const Duration(seconds: 8));
-      }
-    } catch (_) {}
-  }
-
-  Future<List<ArtistPortfolioItem>> _uploadPortfolioDesigns({
-    List<XFile>? selectedFiles,
-    void Function(int completed, int total)? onProgress,
-  }) async {
-    final ref = _artistDocRef;
-    if (ref == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Artist profile not found. Please try again.'),
-          ),
-        );
-      }
-      return const <ArtistPortfolioItem>[];
-    }
-
-    final picker = ImagePicker();
-    final picked =
-        selectedFiles ??
-        await picker.pickMultiImage(
-          imageQuality: 78,
-          maxWidth: 1600,
-          maxHeight: 1600,
-        );
-    if (picked.isEmpty) {
-      return const <ArtistPortfolioItem>[];
-    }
-
-    final List<String> uploaded = <String>[];
-    String? firstError;
-    try {
-      final storage = SupabaseBootstrap.client.storage.from('portfolio-images');
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final isClientArtistDoc = ref.path.startsWith('client_artist/');
-      final storageBases = isClientArtistDoc
-          ? const <String>['client_artists', 'artists']
-          : const <String>['artists', 'client_artists'];
-      final storageOwnerId = (FirebaseAuth.instance.currentUser?.uid ?? ref.id)
-          .trim();
-
-      Future<Map<String, String>?> uploadToBase({
-        required String base,
-        required Uint8List bytes,
-        required int index,
-        required int attempt,
-      }) async {
-        final storagePath =
-            '$base/$storageOwnerId/portfolio/${now}_${index + 1}_a$attempt.jpg';
-        try {
-          await storage.uploadBinary(
-            storagePath,
-            bytes,
-            fileOptions: const FileOptions(
-              contentType: 'image/jpeg',
-              upsert: true,
-            ),
-          ).timeout(
-            const Duration(seconds: 45),
-            onTimeout: () {
-              throw TimeoutException(
-                'Timed out uploading to Supabase $storagePath (doc: ${ref.path})',
-              );
-            },
-          );
-
-          final trimmed = storage.getPublicUrl(storagePath).trim();
-          if (trimmed.isEmpty) return null;
-          return <String, String>{'url': trimmed, 'path': storagePath};
-        } catch (e) {
-          firstError ??= e.toString();
-          return null;
-        }
-      }
-
-      var completed = 0;
-      onProgress?.call(completed, picked.length);
-      for (var i = 0; i < picked.length; i++) {
-        try {
-          final file = picked[i];
-          final rawBytes = await file.readAsBytes().timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw TimeoutException('Timed out reading selected image bytes.');
-            },
-          );
-          if (rawBytes.isEmpty) {
-            firstError ??= 'Selected image is empty.';
-            continue;
-          }
-          if (rawBytes.lengthInBytes > _maxPortfolioUploadBytes) {
-            firstError ??=
-                'Selected image exceeds 2MB. Please choose a file smaller than 2MB.';
-            continue;
-          }
-          Uint8List bytes = rawBytes;
-          if (bytes.lengthInBytes > _preferredPortfolioUploadBytes) {
-            final optimized = _optimizePortfolioUploadBytes(bytes);
-            if (optimized != null && optimized.isNotEmpty) {
-              bytes = optimized;
-            }
-          }
-
-          Map<String, String>? uploadedData;
-          for (final base in storageBases) {
-            uploadedData = await uploadToBase(
-              base: base,
-              bytes: bytes,
-              index: i,
-              attempt: 1,
-            );
-            if (uploadedData != null) break;
-          }
-
-          // Last fallback: retry with a much smaller payload on slow links.
-          if (uploadedData == null) {
-            final tiny = _optimizePortfolioUploadBytes(
-              bytes,
-              maxEdge: 900,
-              maxBytes: 300 * 1024,
-            );
-            if (tiny != null && tiny.isNotEmpty) {
-              for (final base in storageBases) {
-                uploadedData = await uploadToBase(
-                  base: base,
-                  bytes: tiny,
-                  index: i,
-                  attempt: 2,
-                );
-                if (uploadedData != null) break;
-              }
-            }
-          }
-
-          // Storage timeout fallback: persist inline image so UI updates immediately.
-          if (uploadedData == null) {
-            final tiny =
-                _optimizePortfolioUploadBytes(
-                  bytes,
-                  maxEdge: 800,
-                  maxBytes: 220 * 1024,
-                ) ??
-                bytes;
-            final inline = 'data:image/jpeg;base64,${base64Encode(tiny)}';
-            uploadedData = <String, String>{'url': inline, 'path': ''};
-          }
-
-          final trimmedUrl = (uploadedData['url'] ?? '').trim();
-          final storagePath = (uploadedData['path'] ?? '').trim();
-          if (trimmedUrl.isEmpty) continue;
-          uploaded.add(trimmedUrl);
-          try {
-            await ref
-                .collection('portfolio_items')
-                .add({
-                  'imageUrl': trimmedUrl,
-                  'storagePath': storagePath,
-                  'style': 'All',
-                  'createdAt': FieldValue.serverTimestamp(),
-                  'updatedAt': FieldValue.serverTimestamp(),
-                })
-                .timeout(const Duration(seconds: 25));
-          } catch (e) {
-            firstError ??= e.toString();
-            // Don't block uploader on one failed metadata write.
-          }
-        } on FirebaseException catch (e) {
-          firstError ??=
-              '${e.code}${e.message == null ? '' : ' - ${e.message}'}';
-        } catch (e) {
-          firstError ??= e.toString();
-        } finally {
-          completed += 1;
-          onProgress?.call(completed, picked.length);
-        }
-      }
-
-      if (uploaded.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Could not upload photos.${firstError == null ? '' : ' $firstError'}',
-              ),
-            ),
-          );
-        }
-        return const <ArtistPortfolioItem>[];
-      }
-
-      final itemMaps = uploaded
-          .map((url) => <String, dynamic>{'imageUrl': url, 'style': 'All'})
-          .toList(growable: false);
-
-      try {
-        await ref
-            .set({
-              'portfolioImages': FieldValue.arrayUnion(uploaded),
-              'panel_portfolioImages': FieldValue.arrayUnion(uploaded),
-              'panel_artist_portfolioImages': FieldValue.arrayUnion(uploaded),
-              'portfolio': {
-                'images': FieldValue.arrayUnion(uploaded),
-                'items': FieldValue.arrayUnion(itemMaps),
-              },
-              'portfolioItems': FieldValue.arrayUnion(itemMaps),
-              'artist': {
-                'portfolioImages': FieldValue.arrayUnion(uploaded),
-                'portfolioItems': FieldValue.arrayUnion(itemMaps),
-                'portfolio': {
-                  'images': FieldValue.arrayUnion(uploaded),
-                  'items': FieldValue.arrayUnion(itemMaps),
-                },
-              },
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true))
-            .timeout(const Duration(seconds: 20));
-      } catch (e) {
-        firstError ??= e.toString();
-      }
-
-
-      if (_artistSupabaseTable.trim().isNotEmpty && _artistSupabaseId.trim().isNotEmpty) {
-        try {
-          final currentPortfolio = _asMap(_artistData['portfolio']);
-          final existingImages = <String>[
-            ...((currentPortfolio['images'] as List?) ?? const <dynamic>[]).map((e) => e.toString()),
-          ];
-          final mergedImages = <String>{...existingImages, ...uploaded}.toList(growable: false);
-          final existingItems = <dynamic>[
-            ...((currentPortfolio['items'] as List?) ?? const <dynamic>[]),
-          ];
-          final mergedItems = <dynamic>[...itemMaps, ...existingItems];
-
-          await SupabaseBootstrap.client.from(_artistSupabaseTable).update({
-            'portfolio': {
-              ...currentPortfolio,
-              'images': mergedImages,
-              'items': mergedItems,
-            },
-          }).eq('id', _artistSupabaseId);
-        } catch (e) {
-          debugPrint('Supabase portfolio save failed: $e');
-        }
-      }
-
-      // Success is reflected immediately in portfolio tiles; no success snackbar.
-
-      return uploaded
-          .map((url) => ArtistPortfolioItem(image: url, style: 'All'))
-          .toList(growable: false);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Upload failed.${firstError == null ? '' : ' $firstError'} ${e.toString()}',
-            ),
-          ),
-        );
-      }
-      return const <ArtistPortfolioItem>[];
-    }
-  }
-
-  Uint8List? _optimizePortfolioUploadBytes(
-    Uint8List source, {
-    int maxEdge = _portfolioMaxEdge,
-    int maxBytes = _maxPortfolioUploadBytes,
-  }) {
-    final decoded = img.decodeImage(source);
-    if (decoded == null) return null;
-
-    img.Image processed = decoded;
-    final maxSide = processed.width > processed.height
-        ? processed.width
-        : processed.height;
-    if (maxSide > maxEdge) {
-      final scale = maxEdge / maxSide;
-      processed = img.copyResize(
-        processed,
-        width: (processed.width * scale).round(),
-        height: (processed.height * scale).round(),
-        interpolation: img.Interpolation.average,
-      );
-    }
-
-    for (var quality = 88; quality >= 56; quality -= 8) {
-      final encoded = img.encodeJpg(processed, quality: quality);
-      final bytes = Uint8List.fromList(encoded);
-      if (bytes.lengthInBytes <= maxBytes) return bytes;
-    }
-    final fallback = img.encodeJpg(processed, quality: 50);
-    return Uint8List.fromList(fallback);
-  }
-
-  String _fileExt(String name) {
-    final value = name.trim().toLowerCase();
-    final dot = value.lastIndexOf('.');
-    if (dot == -1 || dot == value.length - 1) return 'jpg';
-    final ext = value.substring(dot + 1);
-    if (ext == 'jpg' ||
-        ext == 'jpeg' ||
-        ext == 'png' ||
-        ext == 'webp' ||
-        ext == 'gif') {
-      return ext == 'jpg' ? 'jpeg' : ext;
-    }
-    return 'jpeg';
   }
 
   Future<void> _openPayoutSettings() async {
@@ -1696,7 +1185,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               currentIndex: widget.bottomNavIndex,
               backgroundColor: AppColors.balletSlippers,
               selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: Colors.black.withOpacity(0.55),
+              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
               type: BottomNavigationBarType.fixed,
               onTap: (i) {
                 if (widget.onNavTap != null) {
@@ -1750,7 +1239,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         border: Border(bottom: const BorderSide(color: AppColors.alabaster)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: AppColors.blackCat.withValues(alpha: 0.03),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
@@ -1788,7 +1277,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       height: 44,
                       width: 44,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.06),
+                        color: AppColors.blackCat.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.zero,
                       ),
                       alignment: Alignment.center,
@@ -1800,7 +1289,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
-                        color: Colors.black.withOpacity(0.70),
+                        color: AppColors.blackCat.withValues(alpha: 0.70),
                       ),
                     ),
                   ],
@@ -1846,7 +1335,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Colors.black.withOpacity(0.90),
+              color: AppColors.blackCat.withValues(alpha: 0.90),
             ),
           ),
 
@@ -1865,7 +1354,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 Icon(
                   Icons.star_border_rounded,
                   size: 18,
-                  color: Colors.black.withOpacity(0.45),
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -1876,7 +1365,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
-                  color: Colors.black.withOpacity(0.70),
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
                 ),
               ),
             ],
@@ -1896,7 +1385,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.deepPlum,
+                  color: AppColors.blackCat,
                 ),
               ),
             ),
@@ -1927,7 +1416,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Icon(Icons.chevron_right_rounded, color: Colors.black.withOpacity(0.55)),
+                  // Icon(Icons.chevron_right_rounded, color: Colors.black.withValues(alpha: 0.55)),
                 ],
               ),
             ),
@@ -1958,7 +1447,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 22, color: Colors.black.withOpacity(0.75)),
+            Icon(
+              icon,
+              size: 22,
+              color: AppColors.blackCat.withValues(alpha: 0.75),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1976,7 +1469,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
                     ),
@@ -2007,7 +1500,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           Icon(
             Icons.mark_email_unread_outlined,
             size: 22,
-            color: Colors.black.withOpacity(0.75),
+            color: AppColors.blackCat.withValues(alpha: 0.75),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2028,7 +1521,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       ? 'Accepting requests now 😊'
                       : 'Not accepting requests',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.60),
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
                     fontWeight: FontWeight.w400,
                     fontSize: 14,
                   ),
@@ -2040,7 +1533,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             value: _directRequestsEnabled,
             activeThumbColor: AppColors.blackCat,
             inactiveThumbColor: AppColors.blackCatLight,
-            inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+            inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
             onChanged: _savingDirectRequestPref
                 ? null
                 : (v) => _setDirectRequestsEnabled(v),
@@ -2063,7 +1556,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           Icon(
             Icons.nfc_rounded,
             size: 22,
-            color: Colors.black.withOpacity(0.75),
+            color: AppColors.blackCat.withValues(alpha: 0.75),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2084,7 +1577,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       ? 'Accepting NFC upgrade requests'
                       : 'Not accepting NFC upgrade requests',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.60),
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
                     fontWeight: FontWeight.w400,
                     fontSize: 14,
                   ),
@@ -2096,7 +1589,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             value: _nfcRequestsEnabled,
             activeThumbColor: AppColors.blackCat,
             inactiveThumbColor: AppColors.blackCatLight,
-            inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+            inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
             onChanged: _savingNfcRequestPref
                 ? null
                 : (v) => _setNfcRequestsEnabled(v),
@@ -2121,7 +1614,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               Icon(
                 Icons.message_outlined,
                 size: 22,
-                color: Colors.black.withOpacity(0.75),
+                color: AppColors.blackCat.withValues(alpha: 0.75),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -2138,7 +1631,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 value: _allClientRequestNotificationsEnabled,
                 activeThumbColor: AppColors.blackCat,
                 inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                inactiveTrackColor: AppColors.blackCatLight.withValues(
+                  alpha: 0.35,
+                ),
                 onChanged: _savingAllClientRequestNotifications
                     ? null
                     : (v) => _setAllClientRequestNotificationsEnabled(v),
@@ -2146,14 +1641,14 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             ],
           ),
           const SizedBox(height: 8),
-          Divider(color: Colors.black.withOpacity(0.08), height: 1),
+          Divider(color: AppColors.blackCat.withValues(alpha: 0.08), height: 1),
           const SizedBox(height: 8),
           Row(
             children: [
               Icon(
                 Icons.alternate_email_rounded,
                 size: 22,
-                color: Colors.black.withOpacity(0.75),
+                color: AppColors.blackCat.withValues(alpha: 0.75),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -2171,7 +1666,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   value: true,
                   activeThumbColor: AppColors.blackCat,
                   inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                  inactiveTrackColor: AppColors.blackCatLight.withValues(
+                    alpha: 0.35,
+                  ),
                   onChanged: (_) {},
                 ),
               ),
@@ -2233,7 +1730,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: Colors.black.withOpacity(0.35),
+              color: AppColors.blackCat.withValues(alpha: 0.35),
             ),
           ],
         ),
@@ -2268,7 +1765,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           Icon(
             Icons.star_rounded,
             size: 18,
-            color: Colors.black.withOpacity(0.18),
+            color: AppColors.blackCat.withValues(alpha: 0.18),
           ),
         );
       }
@@ -2809,7 +2306,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
               'Manage your payout and banking details.',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.black.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
               ),
             ),
             const SizedBox(height: 16),
@@ -2944,29 +2441,13 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                   open
                       ? Icons.keyboard_arrow_up_rounded
                       : Icons.chevron_right_rounded,
-                  color: Colors.black.withOpacity(0.45),
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
               ],
             ),
           ),
           if (open) ...[const SizedBox(height: 6), ...children],
         ],
-      ),
-    );
-  }
-
-  Widget _logoBox(String text) {
-    return Container(
-      width: 48,
-      height: 30,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.2)),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
       ),
     );
   }
@@ -2982,7 +2463,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Colors.black.withOpacity(0.7),
+              color: AppColors.blackCat.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 5),
@@ -2992,7 +2473,9 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.snow,
-              hintStyle: TextStyle(color: AppColors.blackCat.withOpacity(0.45)),
+              hintStyle: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.45),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
                 borderSide: const BorderSide(
@@ -3031,7 +2514,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Colors.black.withOpacity(0.7),
+              color: AppColors.blackCat.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 5),
@@ -3108,9 +2591,6 @@ bool _isPortfolioImageValue(String raw) {
   ).hasMatch(value);
 }
 
-String _portfolioItemKey(String image, String style) =>
-    '${image.trim()}|${style.trim().toLowerCase()}';
-
 String _portfolioImageKey(String raw) {
   final value = raw.trim();
   if (value.isEmpty) return '';
@@ -3122,46 +2602,6 @@ String _portfolioImageKey(String raw) {
     }
   }
   return value;
-}
-
-ArtistPortfolioItem? _portfolioItemFromDocData(
-  Map<String, dynamic> data, [
-  String? docId,
-]) {
-  final image = [
-    data['imageUrl'],
-    data['downloadUrl'],
-    data['url'],
-    data['image'],
-    data['storagePath'],
-    data['path'],
-  ]
-      .map((raw) => (raw ?? '').toString().trim())
-      .firstWhere(
-        (value) => value.isNotEmpty && _isPortfolioImageValue(value),
-        orElse: () => '',
-      );
-  if (image.isEmpty) return null;
-  final style = [
-    data['style'],
-    data['category'],
-    data['type'],
-    'All',
-  ]
-      .map((raw) => (raw ?? '').toString().trim())
-      .firstWhere((value) => value.isNotEmpty, orElse: () => 'All');
-  return ArtistPortfolioItem(
-    image: image,
-    style: style,
-    docId: docId,
-    storagePath: [
-      data['storagePath'],
-      data['path'],
-    ].map((raw) => (raw ?? '').toString().trim()).firstWhere(
-      (value) => value.isNotEmpty,
-      orElse: () => '',
-    ),
-  );
 }
 
 class ArtistPortfolioModal extends StatefulWidget {
@@ -3523,7 +2963,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                       'Showcase your nail art designs.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black.withOpacity(0.6),
+                        color: AppColors.blackCat.withValues(alpha: 0.6),
                         fontWeight: FontWeight.w400,
                       ),
                     ),
@@ -3619,7 +3059,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                               'Unable to load portfolio. $_loadError',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.black.withOpacity(0.6),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.6,
+                                ),
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
@@ -3645,7 +3087,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                                   'No portfolio designs available.',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.black.withOpacity(0.6),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.6,
+                                    ),
                                     fontWeight: FontWeight.w400,
                                   ),
                                 ),
@@ -3767,7 +3211,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.zero,
-              color: Colors.black.withOpacity(0.03),
+              color: AppColors.blackCat.withValues(alpha: 0.03),
             ),
             child: _loadingMore
                 ? const SizedBox(
@@ -3798,7 +3242,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                     width: 24,
                     height: 24,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.65),
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
                       shape: BoxShape.circle,
                     ),
                     child: deleting
@@ -3807,14 +3251,14 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+                                AppColors.snow,
                               ),
                             ),
                           )
                         : const Icon(
                             Icons.close_rounded,
                             size: 16,
-                            color: Colors.white,
+                            color: AppColors.snow,
                           ),
                   ),
                 ),
@@ -3916,9 +3360,12 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   Widget _portfolioImage(String src) {
     final value = src.trim();
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.blackCat.withValues(alpha: 0.06),
       alignment: Alignment.center,
-      child: Icon(Icons.image_outlined, color: Colors.black.withOpacity(0.4)),
+      child: Icon(
+        Icons.image_outlined,
+        color: AppColors.blackCat.withValues(alpha: 0.4),
+      ),
     );
 
     if (value.startsWith('data:image/')) {
@@ -4252,7 +3699,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                     'Manage your schedule and turnaround time.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.black.withOpacity(0.55),
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
                     ),
                   ),
                 ),
@@ -4274,7 +3721,9 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                   value: _directRequestsEnabled,
                   activeThumbColor: AppColors.blackCat,
                   inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                  inactiveTrackColor: AppColors.blackCatLight.withValues(
+                    alpha: 0.35,
+                  ),
                   onChanged: _savingDirect ? null : _onDirectToggle,
                 ),
               ],
@@ -4347,7 +3796,10 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                       ],
                     ),
                   ),
-                  Container(height: 1, color: Colors.black.withOpacity(0.05)),
+                  Container(
+                    height: 1,
+                    color: AppColors.blackCat.withValues(alpha: 0.05),
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
@@ -4362,7 +3814,9 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                                   d,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.black.withOpacity(0.55),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.55,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -4447,7 +3901,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                   'Saving availability...',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.black.withOpacity(0.5),
+                    color: AppColors.blackCat.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -4457,7 +3911,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w500,
-                color: Colors.black.withOpacity(0.7),
+                color: AppColors.blackCat.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -4471,20 +3925,20 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
         day.month == _visibleMonth.month && day.year == _visibleMonth.year;
     final state = _dayStates[_dateKey(day)];
     Color bg = Colors.transparent;
-    Color text = Colors.black.withOpacity(0.78);
+    Color text = AppColors.blackCat.withValues(alpha: 0.78);
     final isUnavailable = state == 'unavailable';
     if (!isCurrentMonth) {
       bg = const Color(0xFFF0F0F6);
-      text = Colors.black.withOpacity(0.35);
+      text = AppColors.blackCat.withValues(alpha: 0.35);
     } else if (state == 'direct') {
       bg = AppColors.balletSlippers;
       text = AppColors.blackCat;
     } else if (state == 'blocked') {
       bg = const Color(0xFFD17A7A);
-      text = Colors.white;
+      text = AppColors.snow;
     } else if (isUnavailable) {
       bg = AppColors.alabaster;
-      text = Colors.black.withOpacity(0.55);
+      text = AppColors.blackCat.withValues(alpha: 0.55);
     }
 
     return InkWell(
@@ -4561,7 +4015,10 @@ class _AvailabilityLegend extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: Colors.black.withOpacity(0.6)),
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.blackCat.withValues(alpha: 0.6),
+          ),
         ),
       ],
     );
@@ -4978,38 +4435,46 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      final supabaseTable = (widget.initialData['__supabaseTable'] ?? '').toString().trim();
-      final supabaseId = (widget.initialData['__supabaseId'] ?? '').toString().trim();
+      final supabaseTable = (widget.initialData['__supabaseTable'] ?? '')
+          .toString()
+          .trim();
+      final supabaseId = (widget.initialData['__supabaseId'] ?? '')
+          .toString()
+          .trim();
       if (supabaseTable.isNotEmpty && supabaseId.isNotEmpty) {
         try {
-          await SupabaseBootstrap.client.from(supabaseTable).update({
-            'displayName': displayName,
-            'name': displayName,
-            'studioName': studioName,
-            'bio': bio,
-            'city': city,
-            'state': stateToSave,
-            'country': _selectedCountry,
-            'instagram': instagram,
-            'tiktok': tiktok,
-            'profileImageUrl': profilePhotoUrlToSave,
-            'photoUrl': profilePhotoUrlToSave,
-            'avatarUrl': profilePhotoUrlToSave,
-            'profile': {
-              ...((widget.initialData['profile'] as Map?) ?? const <String, dynamic>{}),
-              'displayName': displayName,
-              'studioName': studioName,
-              'bio': bio,
-              'city': city,
-              'state': stateToSave,
-              'country': _selectedCountry,
-              'instagram': instagram,
-              'tiktok': tiktok,
-              'photoUrl': profilePhotoUrlToSave,
-              'avatarUrl': profilePhotoUrlToSave,
-              'profileImageUrl': profilePhotoUrlToSave,
-            },
-          }).eq('id', supabaseId);
+          await SupabaseBootstrap.client
+              .from(supabaseTable)
+              .update({
+                'displayName': displayName,
+                'name': displayName,
+                'studioName': studioName,
+                'bio': bio,
+                'city': city,
+                'state': stateToSave,
+                'country': _selectedCountry,
+                'instagram': instagram,
+                'tiktok': tiktok,
+                'profileImageUrl': profilePhotoUrlToSave,
+                'photoUrl': profilePhotoUrlToSave,
+                'avatarUrl': profilePhotoUrlToSave,
+                'profile': {
+                  ...((widget.initialData['profile'] as Map?) ??
+                      const <String, dynamic>{}),
+                  'displayName': displayName,
+                  'studioName': studioName,
+                  'bio': bio,
+                  'city': city,
+                  'state': stateToSave,
+                  'country': _selectedCountry,
+                  'instagram': instagram,
+                  'tiktok': tiktok,
+                  'photoUrl': profilePhotoUrlToSave,
+                  'avatarUrl': profilePhotoUrlToSave,
+                  'profileImageUrl': profilePhotoUrlToSave,
+                },
+              })
+              .eq('id', supabaseId);
         } catch (e) {
           debugPrint('Supabase edit profile save failed: $e');
         }
@@ -5186,10 +4651,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
       await storage.uploadBinary(
         path,
         bytes,
-        fileOptions: const FileOptions(
-          contentType: 'image/jpeg',
-          upsert: true,
-        ),
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
       );
 
       final url = storage.getPublicUrl(path).trim();
@@ -5233,7 +4695,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                 color: AppColors.snow,
                 borderRadius: BorderRadius.zero,
                 border: Border.all(
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                   width: 1.4,
                 ),
               ),
@@ -5272,7 +4734,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                   border: Border.all(color: AppColors.blackCatBorderLight),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.blackCat.withOpacity(0.10),
+                      color: AppColors.blackCat.withValues(alpha: 0.10),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -5314,7 +4776,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 12,
-              color: Colors.black.withOpacity(0.7),
+              color: AppColors.blackCat.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 6),

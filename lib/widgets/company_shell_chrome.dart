@@ -270,7 +270,7 @@ class CompanyBottomNav extends StatelessWidget {
       backgroundColor: AppColors.balletSlippers,
       type: BottomNavigationBarType.fixed,
       selectedItemColor: AppColors.deepPlum,
-      unselectedItemColor: Colors.black.withOpacity(0.55),
+      unselectedItemColor: Colors.black.withValues(alpha: 0.55),
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.home_outlined),

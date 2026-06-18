@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../models/client_profile_models.dart';
@@ -839,7 +837,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                   Icon(
                     Icons.receipt_long_outlined,
                     size: 46,
-                    color: Colors.black.withOpacity(0.35),
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -855,7 +853,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                     'Try changing filters or place a new design request.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -925,7 +923,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       context: context,
       barrierLabel: 'Order details',
       barrierDismissible: true,
-      barrierColor: AppColors.blackCat.withOpacity(0.45),
+      barrierColor: AppColors.blackCat.withValues(alpha: 0.45),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, _, _) {
         return SafeArea(
@@ -1268,7 +1266,7 @@ class _FilterTabs extends StatelessWidget {
                   fontFamily: 'ArialBold',
                   color: isSelected
                       ? AppColors.blackCat
-                      : AppColors.blackCat.withOpacity(0.55),
+                      : AppColors.blackCat.withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -1408,7 +1406,7 @@ class _OrderCard extends StatelessWidget {
                     Text(
                       submittedLabel,
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.70),
+                        color: AppColors.blackCat.withValues(alpha: 0.70),
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                         fontFamily: 'Arial',
@@ -1439,7 +1437,7 @@ class _OrderCard extends StatelessWidget {
                     child: Text(
                       order.expectedOrDeliveredText,
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.55),
+                        color: AppColors.blackCat.withValues(alpha: 0.55),
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                         fontFamily: 'Arial',
@@ -1472,167 +1470,6 @@ class _OrderCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _Thumb extends StatelessWidget {
-  const _Thumb({required this.imageAsset});
-  final String imageAsset;
-
-  String _normalizeImagePath(String raw) {
-    var p = raw.trim();
-    if (p.isEmpty) return '';
-    if (p.startsWith('assets/')) {
-      final rest = p.substring('assets/'.length);
-      final decodedRest = Uri.decodeFull(rest);
-      if (rest.startsWith('data:') ||
-          rest.startsWith('blob:') ||
-          decodedRest.startsWith('data:') ||
-          decodedRest.startsWith('blob:') ||
-          decodedRest.startsWith('http://') ||
-          decodedRest.startsWith('https://')) {
-        p = decodedRest;
-      }
-    }
-    if (p.startsWith('data%3A') ||
-        p.startsWith('gs%3A') ||
-        p.startsWith('blob%3A') ||
-        p.startsWith('http%3A') ||
-        p.startsWith('https%3A')) {
-      p = Uri.decodeFull(p);
-    }
-    for (var i = 0; i < 2; i++) {
-      final decoded = Uri.decodeFull(p);
-      if (decoded == p) break;
-      p = decoded;
-    }
-    return p;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = _normalizeImagePath(imageAsset);
-    final isNetwork =
-        p.startsWith('http://') ||
-        p.startsWith('https://') ||
-        p.startsWith('gs://') ||
-        p.startsWith('blob:') ||
-        p.startsWith('data:') ||
-        p.startsWith('content://');
-    final isStoragePath = _looksLikeStoragePath(p);
-    final isAsset = p.startsWith('assets/');
-    final isFileUri = p.startsWith('file://');
-    final isFile = !kIsWeb && (p.startsWith('/') || p.contains(':\\'));
-    Widget fallback() => Container(
-      height: 64,
-      width: 64,
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-      ),
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.image_not_supported_outlined,
-        color: AppColors.blackCat.withOpacity(0.35),
-      ),
-    );
-    Widget image;
-    if (p.startsWith('data:image/')) {
-      image = Builder(
-        builder: (_) {
-          try {
-            final comma = p.indexOf(',');
-            if (comma > 0) {
-              final bytes = base64Decode(p.substring(comma + 1).trim());
-              return Image.memory(
-                bytes,
-                height: 64,
-                width: 64,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => fallback(),
-              );
-            }
-          } catch (_) {}
-          return fallback();
-        },
-      );
-    } else if (p.startsWith('gs://')) {
-      image = FutureBuilder<String>(
-        future: StorageUrlResolver.resolve(p).then((v) => v ?? ''),
-        builder: (_, snap) {
-          final url = snap.data?.trim() ?? '';
-          if (url.isEmpty) return fallback();
-          return Image.network(
-            url,
-            height: 64,
-            width: 64,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => fallback(),
-          );
-        },
-      );
-    } else if (isStoragePath) {
-      image = FutureBuilder<String>(
-        future: StorageUrlResolver.resolve(p).then((v) => v ?? ''),
-        builder: (_, snap) {
-          final url = snap.data?.trim() ?? '';
-          if (url.isEmpty) return fallback();
-          return Image.network(
-            url,
-            height: 64,
-            width: 64,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => fallback(),
-          );
-        },
-      );
-    } else if (isNetwork) {
-      image = Image.network(
-        p,
-        height: 64,
-        width: 64,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => fallback(),
-      );
-    } else if (isAsset) {
-      image = Image.asset(
-        p,
-        height: 64,
-        width: 64,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => fallback(),
-      );
-    } else if (isFileUri || isFile) {
-      final localPath = isFileUri ? p.replaceFirst('file://', '') : p;
-      image = Image.file(
-        File(localPath),
-        height: 64,
-        width: 64,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => fallback(),
-      );
-    } else {
-      image = fallback();
-    }
-    return ClipRRect(borderRadius: BorderRadius.zero, child: image);
-  }
-
-  bool _looksLikeStoragePath(String value) {
-    final v = value.trim().toLowerCase();
-    if (v.isEmpty) return false;
-    if (v.startsWith('/') ||
-        v.startsWith('assets/') ||
-        v.startsWith('file://') ||
-        v.startsWith('http://') ||
-        v.startsWith('https://') ||
-        v.startsWith('gs://') ||
-        v.startsWith('data:') ||
-        v.startsWith('blob:') ||
-        v.startsWith('content://')) {
-      return false;
-    }
-    if (v.contains(':\\')) return false;
-    return v.contains('/');
   }
 }
 
@@ -1681,40 +1518,6 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _ProgressBar extends StatelessWidget {
-  const _ProgressBar({required this.value});
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        height: 8,
-        color: AppColors.blackCat.withOpacity(0.06),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: value,
-            child: Container(
-              height: 8,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFF28B8B),
-                    AppColors.blackCat.withOpacity(0.60),
-                    const Color(0xFF7BD9A5),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _OrderDetailsLink extends StatelessWidget {
   const _OrderDetailsLink({required this.onTap});
 
@@ -1736,7 +1539,7 @@ class _OrderDetailsLink extends StatelessWidget {
             Text(
               'Order details',
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
               ),
@@ -1744,7 +1547,7 @@ class _OrderDetailsLink extends StatelessWidget {
             const SizedBox(width: 6),
             Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.blackCat.withOpacity(0.45),
+              color: AppColors.blackCat.withValues(alpha: 0.45),
             ),
           ],
         ),
@@ -1768,7 +1571,7 @@ class _Stars extends StatelessWidget {
           size: 14,
           color: filled
               ? const Color(0xFFFFB000)
-              : Colors.black.withOpacity(0.22),
+              : AppColors.blackCat.withValues(alpha: 0.22),
         );
       }),
     );
@@ -1792,10 +1595,10 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.80)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.80)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1970,3 +1773,5 @@ class OrderClientMeasurement {
     this.rightHandDimensions = const <String, String>{},
   });
 }
+
+

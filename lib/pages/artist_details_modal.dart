@@ -23,8 +23,6 @@ class ArtistDetailsModal extends StatefulWidget {
 }
 
 class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
-  static const double _titleFs = 14;
-  static const double _subFs = 12;
   static const double _inputFs = 11.5;
   final int _portfolioPage = 0;
 
@@ -167,87 +165,87 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
   }
 
   void _openPhotoPreview(String imageSrc) {
-  final closeFocusNode = FocusNode(debugLabel: 'closeImagePreview');
+    final closeFocusNode = FocusNode(debugLabel: 'closeImagePreview');
 
-  showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (dialogContext) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
 
-        if (Navigator.of(dialogContext).canPop() &&
-            MediaQuery.of(dialogContext).accessibleNavigation) {
-          closeFocusNode.requestFocus();
-        }
-      });
+          if (Navigator.of(dialogContext).canPop() &&
+              MediaQuery.of(dialogContext).accessibleNavigation) {
+            closeFocusNode.requestFocus();
+          }
+        });
 
-      return Dialog(
-        backgroundColor: AppColors.blackCat,
-        insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: ExcludeSemantics(
-                child: InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: _buildAnyImage(
-                      imageSrc,
-                      fit: BoxFit.contain,
-                      fallback: const Icon(
-                        Icons.image_not_supported_outlined,
-                        color: AppColors.snow,
-                        size: 40,
+        return Dialog(
+          backgroundColor: AppColors.blackCat,
+          insetPadding: const EdgeInsets.all(16),
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: ExcludeSemantics(
+                  child: InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Center(
+                      child: _buildAnyImage(
+                        imageSrc,
+                        fit: BoxFit.contain,
+                        fallback: const Icon(
+                          Icons.image_not_supported_outlined,
+                          color: AppColors.snow,
+                          size: 40,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-            Positioned(
-              right: 8,
-              top: 8,
-              child: Focus(
-                focusNode: closeFocusNode,
-                child: Semantics(
-                  button: true,
-                  label: 'Close image preview',
-                  hint: 'Double tap to close',
-                  onTap: () {
-                    closeFocusNode.dispose();
-                    Navigator.of(dialogContext).pop();
-                  },
-                  child: ExcludeSemantics(
-                    child: IconButton(
-                      tooltip: 'Close image preview',
-                      onPressed: () {
-                        closeFocusNode.dispose();
-                        Navigator.of(dialogContext).pop();
-                      },
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: AppColors.snow,
-                        size: 34,
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Focus(
+                  focusNode: closeFocusNode,
+                  child: Semantics(
+                    button: true,
+                    label: 'Close image preview',
+                    hint: 'Double tap to close',
+                    onTap: () {
+                      closeFocusNode.dispose();
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: ExcludeSemantics(
+                      child: IconButton(
+                        tooltip: 'Close image preview',
+                        onPressed: () {
+                          closeFocusNode.dispose();
+                          Navigator.of(dialogContext).pop();
+                        },
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.snow,
+                          size: 34,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-    },
-  ).whenComplete(() {
-    if (closeFocusNode.hasFocus) {
-      closeFocusNode.unfocus();
-    }
-    closeFocusNode.dispose();
-  });
-}
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      if (closeFocusNode.hasFocus) {
+        closeFocusNode.unfocus();
+      }
+      closeFocusNode.dispose();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -257,233 +255,336 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
       explicitChildNodes: true,
       label: 'Artist details',
       child: Material(
-        color: AppColors.blackCat.withOpacity(0.6),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: SafeArea(
-          top: false,
-          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: widget.docRef.snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  !snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
+        color: AppColors.blackCat.withValues(alpha: 0.6),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+          ),
+          child: SafeArea(
+            top: false,
+            child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: widget.docRef.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              final data = snapshot.data?.data();
-              if (data == null) {
-                return _ErrorState(
-                  onClose: () => Navigator.of(context).pop(),
-                  message: 'Artist details not found.',
-                );
-              }
-
-              final profile =
-                  (data['profile'] as Map<String, dynamic>?) ?? const {};
-              final address =
-                  (data['address'] as Map<String, dynamic>?) ?? const {};
-              final pricing =
-                  (data['pricing'] as Map<String, dynamic>?) ?? const {};
-              final artist =
-                  (data['artist'] as Map<String, dynamic>?) ?? const {};
-              final artistPricing =
-                  (artist['pricing'] as Map<String, dynamic>?) ?? const {};
-
-              final name = _first([
-                data['panel_displayName'],
-                profile['displayName'],
-                data['panel_studioName'],
-                profile['studioName'],
-                data['displayName'],
-                data['name'],
-              ]);
-
-              final city = _first([
-                data['panel_city'],
-                profile['city'],
-                address['city'],
-                data['city'],
-              ]);
-
-              final state = _first([
-                data['panel_state'],
-                profile['state'],
-                address['state'],
-                data['state'],
-              ]);
-
-              final avatarUrl = _first([
-                data['panel_profileImageUrl'],
-                profile['profileImageUrl'],
-                profile['profilePhotoUrl'],
-                profile['photoUrl'],
-                profile['avatarUrl'],
-                data['photoUrl'],
-                data['avatarUrl'],
-                artist['photoUrl'],
-                artist['avatarUrl'],
-              ]);
-
-              final bio = _first([
-                data['panel_bio'],
-                profile['bio'],
-                data['bio'],
-              ]);
-
-              final language = _first([
-                data['panel_languageSpoken'],
-                profile['languageSpoken'],
-                data['languageSpoken'],
-              ]);
-
-              final currency = _first([
-                data['panel_currency'],
-                profile['currency'],
-                data['currency'],
-              ]);
-
-              final techType = _titleCaseTechType(
-                _first([
-                  data['panel_nailTechType'],
-                  profile['nailTechType'],
-                  (data['credentials']
-                      as Map<String, dynamic>?)?['nailTechType'],
-                ]),
-              );
-              final yearsExperience = _buildExperience(data);
-
-              final specializations = _buildSpecializations(data);
-
-              final directRequestsEnabled = _asBool(
-                data['panel_directRequestsEnabled'] ??
-                    (data['availability']
-                        as Map<String, dynamic>?)?['directRequestsEnabled'],
-                fallback: false,
-              );
-              final acceptsNfcRequests = _asBool(
-                data['panel_nfcRequestEnabled'] ??
-                    (data['availability']
-                        as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
-                    (data['profile']
-                        as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
-                    (data['artist']
-                        as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
-                    ((data['artist'] as Map<String, dynamic>?)?['availability']
-                        as Map<String, dynamic>?)?['nfcRequestEnabled'],
-                fallback: false,
-              );
-
-              final rating = _asDouble(
-                ((data['stats'] as Map<String, dynamic>?)?['rating']) ??
-                    data['rating'],
-              );
-
-              final minPrice = _first([
-                data['panel_minPrice'],
-                pricing['minPrice'],
-                artistPricing['minPrice'],
-              ]);
-
-              final maxPrice = _first([
-                data['panel_maxPrice'],
-                pricing['maxPrice'],
-                artistPricing['maxPrice'],
-              ]);
-
-              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: widget.docRef.collection('portfolio_items').snapshots(),
-                builder: (context, portfolioSnapshot) {
-                  final portfolioImages = _mergePortfolioImages(
-                    data,
-                    portfolioSnapshot.data?.docs ??
-                        <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+                final data = snapshot.data?.data();
+                if (data == null) {
+                  return _ErrorState(
+                    onClose: () => Navigator.of(context).pop(),
+                    message: 'Artist details not found.',
                   );
+                }
 
-                  return Column(
-                    children: [
-                      Container(
-                        color: AppColors.alabaster,
-                        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Center(
-                              child: ExcludeSemantics(
-                                child: Image.asset(
-                                  'assets/images/jnt_logo_black.png',
-                                height: 50,
-                                fit: BoxFit.contain,
-                                  errorBuilder: (_, _, _) =>
-                                      const SizedBox.shrink(),
+                final profile =
+                    (data['profile'] as Map<String, dynamic>?) ?? const {};
+                final address =
+                    (data['address'] as Map<String, dynamic>?) ?? const {};
+                final pricing =
+                    (data['pricing'] as Map<String, dynamic>?) ?? const {};
+                final artist =
+                    (data['artist'] as Map<String, dynamic>?) ?? const {};
+                final artistPricing =
+                    (artist['pricing'] as Map<String, dynamic>?) ?? const {};
+
+                final name = _first([
+                  data['panel_displayName'],
+                  profile['displayName'],
+                  data['panel_studioName'],
+                  profile['studioName'],
+                  data['displayName'],
+                  data['name'],
+                ]);
+
+                final city = _first([
+                  data['panel_city'],
+                  profile['city'],
+                  address['city'],
+                  data['city'],
+                ]);
+
+                final state = _first([
+                  data['panel_state'],
+                  profile['state'],
+                  address['state'],
+                  data['state'],
+                ]);
+
+                final avatarUrl = _first([
+                  data['panel_profileImageUrl'],
+                  profile['profileImageUrl'],
+                  profile['profilePhotoUrl'],
+                  profile['photoUrl'],
+                  profile['avatarUrl'],
+                  data['photoUrl'],
+                  data['avatarUrl'],
+                  artist['photoUrl'],
+                  artist['avatarUrl'],
+                ]);
+
+                final bio = _first([
+                  data['panel_bio'],
+                  profile['bio'],
+                  data['bio'],
+                ]);
+
+                final language = _first([
+                  data['panel_languageSpoken'],
+                  profile['languageSpoken'],
+                  data['languageSpoken'],
+                ]);
+
+                final currency = _first([
+                  data['panel_currency'],
+                  profile['currency'],
+                  data['currency'],
+                ]);
+
+                final techType = _titleCaseTechType(
+                  _first([
+                    data['panel_nailTechType'],
+                    profile['nailTechType'],
+                    (data['credentials']
+                        as Map<String, dynamic>?)?['nailTechType'],
+                  ]),
+                );
+                final yearsExperience = _buildExperience(data);
+
+                final specializations = _buildSpecializations(data);
+
+                final directRequestsEnabled = _asBool(
+                  data['panel_directRequestsEnabled'] ??
+                      (data['availability']
+                          as Map<String, dynamic>?)?['directRequestsEnabled'],
+                  fallback: false,
+                );
+                final acceptsNfcRequests = _asBool(
+                  data['panel_nfcRequestEnabled'] ??
+                      (data['availability']
+                          as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
+                      (data['profile']
+                          as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
+                      (data['artist']
+                          as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
+                      ((data['artist']
+                              as Map<String, dynamic>?)?['availability']
+                          as Map<String, dynamic>?)?['nfcRequestEnabled'],
+                  fallback: false,
+                );
+
+                final rating = _asDouble(
+                  ((data['stats'] as Map<String, dynamic>?)?['rating']) ??
+                      data['rating'],
+                );
+
+                final minPrice = _first([
+                  data['panel_minPrice'],
+                  pricing['minPrice'],
+                  artistPricing['minPrice'],
+                ]);
+
+                final maxPrice = _first([
+                  data['panel_maxPrice'],
+                  pricing['maxPrice'],
+                  artistPricing['maxPrice'],
+                ]);
+
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: widget.docRef
+                      .collection('portfolio_items')
+                      .snapshots(),
+                  builder: (context, portfolioSnapshot) {
+                    final portfolioImages = _mergePortfolioImages(
+                      data,
+                      portfolioSnapshot.data?.docs ??
+                          <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+                    );
+
+                    return Column(
+                      children: [
+                        Container(
+                          color: AppColors.alabaster,
+                          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Center(
+                                child: ExcludeSemantics(
+                                  child: Image.asset(
+                                    'assets/images/jnt_logo_black.png',
+                                    height: 50,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, _, _) =>
+                                        const SizedBox.shrink(),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Semantics(
-                                button: true,
-                                label: 'Close artist details',
-                                child: IconButton(
-                                  tooltip: 'Close artist details',
-                                  autofocus: MediaQuery.of(context).accessibleNavigation,
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  icon: const Icon(Icons.close_rounded),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Semantics(
+                                  button: true,
+                                  label: 'Close artist details',
+                                  child: IconButton(
+                                    tooltip: 'Close artist details',
+                                    autofocus: MediaQuery.of(
+                                      context,
+                                    ).accessibleNavigation,
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-                          children: [
-                            const SizedBox(height: 2),
-                            Stack(
-                              children: [
-                                Center(
-                                  child: ExcludeSemantics(
-                                    child: _ArtistProfileImage(
-                                      url: avatarUrl,
-                                      displayName: name,
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+                            children: [
+                              const SizedBox(height: 2),
+                              Stack(
+                                children: [
+                                  Center(
+                                    child: ExcludeSemantics(
+                                      child: _ArtistProfileImage(
+                                        url: avatarUrl,
+                                        displayName: name,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Semantics(
+                                container: true,
+                                label:
+                                    '${name.isEmpty ? 'Artist' : name}, ${rating > 0 ? '${rating.toStringAsFixed(1)} star rating' : 'no rating available'}',
+                                child: ExcludeSemantics(
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          name.isEmpty ? 'Artist' : name,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.blackCat,
+                                            fontFamily: 'ArialBold',
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Icon(
+                                          Icons.star_rounded,
+                                          size: 20,
+                                          color: AppColors.balletSlippers,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          rating > 0
+                                              ? rating.toStringAsFixed(1)
+                                              : 'N/A',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppColors.blackCat,
+                                            fontFamily: 'Arial',
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            Semantics(
-                              container: true,
-                              label: '${name.isEmpty ? 'Artist' : name}, ${rating > 0 ? '${rating.toStringAsFixed(1)} star rating' : 'no rating available'}',
-                              child: ExcludeSemantics(
-                                child: Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        name.isEmpty ? 'Artist' : name,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.blackCat,
-                                          fontFamily: 'ArialBold',
+                              ),
+                              const SizedBox(height: 8),
+                              Center(
+                                child: Column(
+                                  children: [
+                                    if (techType.isNotEmpty)
+                                      Semantics(
+                                        container: true,
+                                        label: techType,
+                                        child: ExcludeSemantics(
+                                          child: Text(
+                                            techType,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: AppColors.blackCat,
+                                              fontFamily: 'Arial',
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      const Icon(
-                                        Icons.star_rounded,
-                                        size: 20,
-                                        color: AppColors.balletSlippers,
+                                    if (yearsExperience.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Semantics(
+                                        container: true,
+                                        label:
+                                            'Experience, ${_experienceSemanticLabel(yearsExperience)}',
+                                        child: ExcludeSemantics(
+                                          child: Text(
+                                            yearsExperience,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: AppColors.blackCat,
+                                              fontFamily: 'Arial',
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        rating > 0
-                                            ? rating.toStringAsFixed(1)
-                                            : 'N/A',
+                                    ],
+                                    if (minPrice.isNotEmpty ||
+                                        maxPrice.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Semantics(
+                                        container: true,
+                                        label: _budgetSemanticLabel(
+                                          minPrice,
+                                          maxPrice,
+                                        ),
+                                        child: ExcludeSemantics(
+                                          child: Text(
+                                            'Budget: ${_budgetDisplayValue(minPrice)} - ${_budgetDisplayValue(maxPrice)}',
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: AppColors.blackCat,
+                                              fontFamily: 'Arial',
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              if ([
+                                city,
+                                state,
+                              ].where((e) => e.trim().isNotEmpty).isNotEmpty)
+                                Semantics(
+                                  container: true,
+                                  label: [city, state]
+                                      .where((e) => e.trim().isNotEmpty)
+                                      .join(', '),
+                                  child: ExcludeSemantics(
+                                    child: Center(
+                                      child: Text(
+                                        [city, state]
+                                            .where((e) => e.trim().isNotEmpty)
+                                            .join(', '),
+                                        textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w500,
@@ -491,122 +592,38 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                                           fontFamily: 'Arial',
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Center(
-                              child: Column(
+                              const SizedBox(height: 10),
+
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (techType.isNotEmpty)
-                                    Semantics(
-                                      container: true,
-                                      label: techType,
-                                      child: ExcludeSemantics(
-                                        child: Text(
-                                          techType,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.blackCat,
-                                            fontFamily: 'Arial',
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  if (yearsExperience.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Semantics(
-                                      container: true,
-                                      label: 'Experience, ${_experienceSemanticLabel(yearsExperience)}',
-                                      child: ExcludeSemantics(
-                                        child: Text(
-                                          yearsExperience,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.blackCat,
-                                            fontFamily: 'Arial',
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  if (minPrice.isNotEmpty ||
-                                      maxPrice.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Semantics(
-                                      container: true,
-                                      label: _budgetSemanticLabel(minPrice, maxPrice),
-                                      child: ExcludeSemantics(
-                                        child: Text(
-                                          'Budget: ${_budgetDisplayValue(minPrice)} - ${_budgetDisplayValue(maxPrice)}',
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.blackCat,
-                                            fontFamily: 'Arial',
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  _metaBand(
+                                    language: language,
+                                    currency: currency,
+                                    directRequestsEnabled:
+                                        directRequestsEnabled,
+                                  ),
+                                  _artistBioSection(bio),
+                                  _specializationSection(
+                                    specializations: specializations,
+                                    acceptsNfcRequests: acceptsNfcRequests,
+                                  ),
+                                  _previousArtSection(portfolioImages),
                                 ],
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            if ([city, state].where((e) => e.trim().isNotEmpty).isNotEmpty)
-                              Semantics(
-                                container: true,
-                                label: [city, state].where((e) => e.trim().isNotEmpty).join(', '),
-                                child: ExcludeSemantics(
-                                  child: Center(
-                                    child: Text(
-                                      [city, state].where((e) => e.trim().isNotEmpty).join(', '),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.blackCat,
-                                        fontFamily: 'Arial',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 10),
-
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _metaBand(
-                                  language: language,
-                                  currency: currency,
-                                  directRequestsEnabled: directRequestsEnabled,
-                                ),
-                                _artistBioSection(bio),
-                                _specializationSection(
-                                  specializations: specializations,
-                                  acceptsNfcRequests: acceptsNfcRequests,
-                                ),
-                                _previousArtSection(portfolioImages),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -733,7 +750,6 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
     return Icons.brush_outlined;
   }
 
-
   Widget _artistBioSection(String bio) {
     final text = bio.trim().isEmpty ? 'No artist bio added yet.' : bio.trim();
     return Container(
@@ -756,10 +772,7 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
               children: [
                 const Text(
                   'Artist Bio',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -803,10 +816,7 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                 children: [
                   const Text(
                     'Specialization',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                   if (acceptsNfcRequests) ...[
                     const SizedBox(width: 8),
@@ -831,10 +841,7 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                 child: ExcludeSemantics(
                   child: Text(
                     'No specialization selected yet.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
+                    style: TextStyle(fontSize: 13, color: AppColors.blackCat),
                   ),
                 ),
               )
@@ -905,61 +912,13 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
             const ExcludeSemantics(
               child: Text(
                 'Previous Art',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ),
             const SizedBox(height: 10),
             _previousArtStrip(images),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _sectionCard({
-    required String title,
-    Widget? titleSuffix,
-    required Widget child,
-  }) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: const Border(
-          bottom: BorderSide(color: AppColors.blackCatBorderLight),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (titleSuffix != null) ...[
-                  const SizedBox(width: 8),
-                  titleSuffix,
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: child,
-          ),
-        ],
       ),
     );
   }
@@ -993,7 +952,7 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
             'No previous art uploaded yet.',
             style: TextStyle(
               fontSize: _inputFs,
-              color: AppColors.blackCat.withOpacity(0.55),
+              color: AppColors.blackCat.withValues(alpha: 0.55),
             ),
           ),
         ),
@@ -1020,7 +979,8 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                         : Semantics(
                             container: true,
                             button: true,
-                            label: 'Previous art image ${i + 1} of ${visible.length}',
+                            label:
+                                'Previous art image ${i + 1} of ${visible.length}',
                             hint: 'Double tap to open image preview',
                             onTap: () => _openPhotoPreview(src),
                             child: ExcludeSemantics(
@@ -1034,7 +994,9 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                                     height: tileSize,
                                     fit: BoxFit.cover,
                                     fallback: Container(
-                                      color: AppColors.blackCat.withOpacity(0.05),
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.05,
+                                      ),
                                       alignment: Alignment.center,
                                       child: const Icon(
                                         Icons.image_not_supported_outlined,
@@ -1056,17 +1018,17 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(images.length > 3 ? 4 : 3, (i) {
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: i == _portfolioPage
-                    ? AppColors.blackCat.withOpacity(0.35)
-                    : AppColors.blackCat.withOpacity(0.14),
-                shape: BoxShape.circle,
-              ),
-            );
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: i == _portfolioPage
+                      ? AppColors.blackCat.withValues(alpha: 0.35)
+                      : AppColors.blackCat.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+              );
             }),
           ),
         ),
@@ -1102,7 +1064,7 @@ class _ArtistProfileImage extends StatelessWidget {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: AppColors.blackCat.withOpacity(0.55),
+            color: AppColors.blackCat.withValues(alpha: 0.55),
           ),
         ),
       );
@@ -1124,7 +1086,7 @@ class _ArtistProfileImage extends StatelessWidget {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
               ),
             ),
           ),
@@ -1283,9 +1245,7 @@ Future<Uint8List?> _resolveStorageBytes(String raw) async {
         value.startsWith('profile-pictures/')) {
       final bucket = _storageBucketForArtistAsset(value);
       final path = _storagePathForArtistAsset(value, bucket);
-      return await Supabase.instance.client.storage
-          .from(bucket)
-          .download(path);
+      return await Supabase.instance.client.storage.from(bucket).download(path);
     }
   } catch (_) {}
 
@@ -1311,7 +1271,10 @@ Future<String> _resolveStorageUrl(String raw) async {
         value.startsWith('profile-pictures/')) {
       final bucket = _storageBucketForArtistAsset(value);
       final path = _storagePathForArtistAsset(value, bucket);
-      return Supabase.instance.client.storage.from(bucket).getPublicUrl(path).trim();
+      return Supabase.instance.client.storage
+          .from(bucket)
+          .getPublicUrl(path)
+          .trim();
     }
   } catch (_) {}
 

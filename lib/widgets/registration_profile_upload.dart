@@ -104,7 +104,7 @@ class RegistrationProfileUpload extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 11.5,
-              color: AppColors.blackCat.withOpacity(0.62),
+              color: AppColors.blackCat.withValues(alpha: 0.62),
               fontFamily: 'Arial',
             ),
           ),

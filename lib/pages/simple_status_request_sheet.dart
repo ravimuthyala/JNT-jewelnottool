@@ -70,7 +70,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                           height: 5,
                           width: 54,
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.12),
+                            color: Colors.black.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.zero,
                           ),
                         ),
@@ -126,7 +126,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w400,
                                       fontSize: 13.5,
-                                      color: Colors.black.withOpacity(0.62),
+                                      color: Colors.black.withValues(alpha: 0.62),
                                     ),
                                   ),
                                   if (_statusReason().isNotEmpty) ...[
@@ -136,7 +136,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                       style: TextStyle(
                                         fontWeight: FontWeight.w500,
                                         fontSize: 13.5,
-                                        color: Colors.black.withOpacity(0.70),
+                                        color: Colors.black.withValues(alpha: 0.70),
                                         height: 1.25,
                                       ),
                                     ),
@@ -158,7 +158,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
-                              color: Colors.black.withOpacity(0.85),
+                              color: Colors.black.withValues(alpha: 0.85),
                             ),
                           ),
                         ),
@@ -211,7 +211,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                   child: Icon(
                     Icons.close_rounded,
                     size: 24,
-                    color: Colors.black.withOpacity(0.70),
+                    color: Colors.black.withValues(alpha: 0.70),
                   ),
                 ),
               ),
@@ -248,7 +248,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
               color: AppColors.balletSlippers,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.10),
+                  color: Colors.black.withValues(alpha: 0.10),
                   blurRadius: 14,
                   offset: const Offset(0, 8),
                 ),
@@ -293,7 +293,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w500,
             fontSize: 13,
-            color: Colors.black.withOpacity(0.55),
+            color: Colors.black.withValues(alpha: 0.55),
           ),
         ),
       ],
@@ -327,10 +327,10 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
   Widget _imageForPath(String raw) {
     final path = _normalizeImagePath(raw);
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: Colors.black.withValues(alpha: 0.06),
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: Colors.black.withValues(alpha: 0.35),
       ),
     );
 

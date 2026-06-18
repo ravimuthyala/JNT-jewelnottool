@@ -1,6 +1,5 @@
 // lib/pages/client_registration_page.dart
 
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,15 +11,11 @@ import '../services/supabase_auth_service.dart';
 import '../services/supabase_bootstrap.dart';
 import '../theme/app_colors.dart';
 import '../config/auth_flags.dart';
-import '../models/checkout_info.dart';
 import '../models/client_profile_models.dart';
 import '../services/nail_measurement_service.dart';
-import '../services/auth_email_alias_service.dart';
 import '../services/notifications_service.dart';
-import '../utils/auth_test_email_alias.dart';
 import '../utils/registration_input_utils.dart';
 
-import 'checkout_page.dart';
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
 import 'client_shell_page.dart';
@@ -305,7 +300,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                       color: AppColors.snow,
                       borderRadius: BorderRadius.zero,
                       border: Border.all(
-                        color: AppColors.blackCat.withOpacity(0.10),
+                        color: AppColors.blackCat.withValues(alpha: 0.10),
                       ),
                     ),
                     child: const Column(
@@ -545,7 +540,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                                 border: Border.all(
                                   color: current
                                       ? AppColors.blackCat
-                                      : AppColors.blackCat.withOpacity(0.12),
+                                      : AppColors.blackCat.withValues(alpha: 0.12),
                                 ),
                                 borderRadius: BorderRadius.zero,
                               ),
@@ -716,37 +711,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
     setState(() => _profilePhotoBytes = bytes);
   }
 
-  PaymentMethod _parsePaymentMethodValue(String? value) {
-    switch ((value ?? '').trim()) {
-      case 'card':
-        return PaymentMethod.card;
-      case 'venmo':
-        return PaymentMethod.venmo;
-      case 'paypal':
-        return PaymentMethod.paypal;
-      case 'applePay':
-      default:
-        return PaymentMethod.applePay;
-    }
-  }
-
-  PaymentInfo _paymentFromCheckoutResult(Map<String, dynamic> result) {
-    final details =
-        (result['paymentDetails'] as Map?)?.cast<String, dynamic>() ??
-        const <String, dynamic>{};
-    return PaymentInfo(
-      method: _parsePaymentMethodValue(result['paymentMethod']?.toString()),
-      saveForFuture: true,
-      cardNumber: (details['cardNumber'] ?? '').toString(),
-      nameOnCard: (details['nameOnCard'] ?? '').toString(),
-      expiryMMYY: (details['expiryMMYY'] ?? '').toString(),
-      cvv: (details['cvv'] ?? '').toString(),
-      zip: (details['zip'] ?? '').toString(),
-      venmoHandle: (details['venmoHandle'] ?? '').toString(),
-      paypalEmail: (details['paypalEmail'] ?? '').toString(),
-    );
-  }
-
   double? _firestoreSafeDimension(double? value) {
     if (value == null || !value.isFinite || value <= 0) return null;
     return (value * 10).roundToDouble() / 10.0;
@@ -768,9 +732,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
     return values.any((v) => v != null && v.isFinite && v >= 8);
   }
 
-  String _firestoreSafeString(String? value) {
-    return (value ?? '').trim();
-  }
 
   Map<String, dynamic> _buildClientFirestorePayload({
     required String uid,
@@ -876,13 +837,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
       );
     }
     return Uint8List.fromList(img.encodeJpg(processed, quality: 62));
-  }
-
-  String _profileImageDataUriFallback() {
-    final bytes = _profilePhotoBytes;
-    if (bytes == null || bytes.isEmpty) return '';
-    final optimized = _optimizedProfileBytes(bytes) ?? bytes;
-    return 'data:image/jpeg;base64,${base64Encode(optimized)}';
   }
 
   Future<String> _uploadProfileImage(String uid) async {
@@ -1124,7 +1078,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
   static const double _labelFs = 16;
   static const double _inputFs = 14;
   static const double _hintFs = 13;
-  static const double _dropFs = 14;
   static const double _fieldHeight = 46;
   static const double _fieldVerticalPadding = 16;
 
@@ -1134,12 +1087,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: _hintFs,
-        color: _clientRegBrandInk.withOpacity(0.42),
+        color: _clientRegBrandInk.withValues(alpha: 0.42),
         fontFamily: 'Arial',
       ),
       labelStyle: TextStyle(
         fontSize: _labelFs,
-        color: _clientRegBrandInk.withOpacity(0.78),
+        color: _clientRegBrandInk.withValues(alpha: 0.78),
         fontFamily: 'Arial',
       ),
       errorStyle: const TextStyle(
@@ -1425,7 +1378,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                 height: 36,
                 width: 36,
                 decoration: BoxDecoration(
-                  color: _clientRegBrandAccent.withOpacity(0.45),
+                  color: _clientRegBrandAccent.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.zero,
                 ),
                 child: const Icon(
@@ -1447,7 +1400,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
             'To request a custom nail design, you must complete profile setup '
             'after receiving the Nail Sizing Kit.',
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
+              color: AppColors.blackCat.withValues(alpha: 0.70),
               height: 1.25,
             ),
           ),
@@ -1471,73 +1424,16 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
     return result ?? false;
   }
 
-  // -----------------------
-  // Checkout (scenario 2) ✅ UPDATED for your new CheckoutPage signature
-  // -----------------------
-  Future<void> _startCheckout() async {
-    if (_formKey.currentState?.validate() != true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please fill required details first',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
-      );
-      return;
-    }
-
-    final info = CheckoutInfo(
-      name: _nameCtrl.text.trim(),
-      phone: _fullPhone,
-      street: _streetCtrl.text.trim(),
-      city: _cityCtrl.text.trim(),
-      state: _resolvedState,
-      zip: _zipCtrl.text.trim(),
-      country: _selectedCountry.trim(),
-    );
-
-    final result = await Navigator.push<Map<String, dynamic>?>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CheckoutPage(
-          info: info,
-          includeSizingKit: true,
-          sizingKitPrice: 3.0,
-          sizingKitImageAsset: 'assets/images/nail_sizing_kit.png',
-          includeBundle: false,
-          backgroundColor: _clientRegBodyBg,
-          sectionColor: snow,
-          dropdownColor: snow,
-          primaryColor: _clientRegBrandInk,
-          onPrimaryColor: snow,
-          fontFamily: 'Arial',
-        ),
-      ),
-    );
-
-    if (result == null) return;
-
-    final bool kitPaid = result['kitPaid'] == true;
-
-    if (kitPaid) {
-      setState(() {
-        _kitPurchased = true;
-        _payment = _paymentFromCheckoutResult(result);
-      });
-    }
-  }
-
   Widget promosAndNailTipsCard() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -1553,16 +1449,15 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: snow,
               borderRadius: BorderRadius.zero,
-              //border: Border.all(color: Colors.black.withOpacity(0.04)),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.local_offer_outlined,
-                  color: AppColors.blackCat.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                   size: 18,
                 ),
                 const SizedBox(width: 10),
@@ -1572,7 +1467,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: AppColors.blackCat.withOpacity(0.75),
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
                       height: 1.2,
                     ),
                   ),
@@ -1960,7 +1855,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                                               hintStyle: TextStyle(
                                                 fontSize: _hintFs,
                                                 color: _clientRegBrandInk
-                                                    .withOpacity(0.42),
+                                                    .withValues(alpha: 0.42),
                                                 fontFamily: 'Arial',
                                               ),
                                               border: InputBorder.none,
@@ -2170,7 +2065,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                         color: snow,
                         borderRadius: BorderRadius.zero,
                         border: Border.all(
-                          color: AppColors.blackCat.withOpacity(0.06),
+                          color: AppColors.blackCat.withValues(alpha: 0.06),
                         ),
                       ),
                       child: Column(
@@ -2187,7 +2082,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                           Text(
                             'Use camera + coin reference to measure all 10 fingers (left and right hands).',
                             style: TextStyle(
-                              color: AppColors.blackCat.withOpacity(0.72),
+                              color: AppColors.blackCat.withValues(alpha: 0.72),
                               fontSize: 14,
                             ),
                           ),
@@ -2233,7 +2128,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                             'Purchase the Nail Sizing Kit to continue.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.red.withOpacity(0.85),
+                              color: Colors.red.withValues(alpha: 0.85),
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
                             ),
@@ -2358,7 +2253,7 @@ class _MeasureStepTile extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.black.withOpacity(0.72),
+                    color: Colors.black.withValues(alpha: 0.72),
                   ),
                 ),
               ],
@@ -2477,7 +2372,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
               ),
             ),
           ),
@@ -2492,7 +2387,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
             decoration: BoxDecoration(
               color: AppColors.snow,
               borderRadius: BorderRadius.zero,
-              border: Border.all(color: AppColors.blackCat.withOpacity(0.12)),
+              border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
             ),
             child: Row(
               children: [
@@ -2514,7 +2409,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
                         '${item.diameterMm.toStringAsFixed(2)}mm diameter',
                         style: TextStyle(
                           fontSize: 14,
-                          color: AppColors.blackCat.withOpacity(0.65),
+                          color: AppColors.blackCat.withValues(alpha: 0.65),
                         ),
                       ),
                     ],
@@ -2573,7 +2468,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(
-                      color: AppColors.blackCat.withOpacity(0.35),
+                      color: AppColors.blackCat.withValues(alpha: 0.35),
                     ),
                   ),
                   focusedBorder: const OutlineInputBorder(
@@ -2626,10 +2521,10 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
         /*boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.06),
+            color: AppColors.blackCat.withValues(alpha: 0.06),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -2652,7 +2547,7 @@ class _SectionCard extends StatelessWidget {
             subtitle,
             style: TextStyle(
               fontSize: 13,
-              color: AppColors.blackCat.withOpacity(0.60),
+              color: AppColors.blackCat.withValues(alpha: 0.60),
               height: 1.15,
             ),
           ),

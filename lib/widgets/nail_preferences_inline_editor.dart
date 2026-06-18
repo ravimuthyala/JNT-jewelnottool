@@ -69,7 +69,6 @@ class _NailPreferencesInlineEditorState
   final Set<String> _nfcSelections = <String>{};
   // Smaller font sizes to match registration fields
   static const double _titleFs = 16; // section titles
-  static const double _labelFs = 16; // finger labels / small labels
   static const double _hintFs = 13; // hint text
 
   // Update these to match what you want in the UI.
@@ -311,7 +310,7 @@ class _NailPreferencesInlineEditorState
     hintText: '0.0',
     hintStyle: TextStyle(
       fontSize: _hintFs,
-      color: AppColors.blackCat.withOpacity(0.35),
+      color: AppColors.blackCat.withValues(alpha: 0.35),
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
@@ -322,7 +321,7 @@ class _NailPreferencesInlineEditorState
             widget.nailDimensionBorderColor ??
             (widget.useBlackModalStyle
                 ? AppColors.blackCat
-                : AppColors.blackCat.withOpacity(0.35)),
+                : AppColors.blackCat.withValues(alpha: 0.35)),
       ),
     ),
     focusedBorder: OutlineInputBorder(
@@ -332,7 +331,7 @@ class _NailPreferencesInlineEditorState
             widget.nailDimensionBorderColor ??
             (widget.useBlackModalStyle
                 ? AppColors.blackCat
-                : AppColors.blackCat.withOpacity(0.35)),
+                : AppColors.blackCat.withValues(alpha: 0.35)),
         width: 1.6,
       ),
     ),
@@ -357,13 +356,13 @@ class _NailPreferencesInlineEditorState
                     widget.nailDimensionBorderColor ??
                     (widget.useBlackModalStyle
                         ? AppColors.blackCat
-                        : AppColors.blackCat.withOpacity(0.35)),
+                        : AppColors.blackCat.withValues(alpha: 0.35)),
               )
             : null,
         boxShadow: widget.showOuterContainer
             ? [
                 BoxShadow(
-                  color: AppColors.blackCat.withOpacity(0.04),
+                  color: AppColors.blackCat.withValues(alpha: 0.04),
                   blurRadius: 18,
                   offset: const Offset(0, 10),
                 ),
@@ -386,11 +385,11 @@ class _NailPreferencesInlineEditorState
 
           if (widget.showNfcOptions) ...[
             Text(
-              'NFC Eligible – Designs marked with this checkbox can be upgraded with an NFC chip',
+              'NFC Eligible â€“ Designs marked with this checkbox can be upgraded with an NFC chip',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: AppColors.blackCat.withOpacity(0.70),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
                 height: 1.3,
               ),
             ),
@@ -585,72 +584,6 @@ class _NailPreferencesInlineEditorState
     );
   }
 
-  Widget _tipsBox() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: widget.useBlackModalStyle ? AppColors.blackCat : AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(
-          color: widget.useBlackModalStyle
-              ? AppColors.blackCat
-              : AppColors.blackCat.withOpacity(0.35),
-        ),
-      ),
-      /*child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // If you don't have this svg, replace with Icon(Icons.info_outline)
-              SvgPicture.asset('assets/icons/tips.svg', height: 18, width: 18),
-              const SizedBox(width: 8),
-              const Text(
-                'Measurement Tips',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '• Measure the widest part of your nail bed',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
-              fontSize: 12,
-            ),
-          ),
-          Text(
-            '• Use the tape method for most accurate results',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
-              fontSize: 12,
-            ),
-          ),
-          Text(
-            '• Round to the nearest 0.5mm',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
-              fontSize: 12,
-            ),
-          ),
-          Text(
-            '• Each finger is different — measure all 10!',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
-              fontSize: 12,
-            ),
-          ),
-          Text(
-            '• Left and right hands often differ',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),*/
-    );
-  }
 }
 
 /// ---------------- UI helpers reused ----------------
@@ -771,7 +704,7 @@ class _FingerInput extends StatelessWidget {
                     width: 68,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: AppColors.blackCat.withOpacity(0.05),
+                      color: AppColors.blackCat.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.zero,
                     ),
                     child: const Icon(
@@ -866,13 +799,13 @@ class _ShapeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = useBlackModalStyle
-        ? AppColors.blackCat.withOpacity(0.35)
+        ? AppColors.blackCat.withValues(alpha: 0.35)
         : AppColors.snow;
     final border = useBlackModalStyle
         ? AppColors.blackCat
         : (selected
               ? AppColors.blackCat
-              : AppColors.blackCat.withOpacity(0.10));
+              : AppColors.blackCat.withValues(alpha: 0.10));
 
     return InkWell(
       onTap: onTap,
@@ -906,7 +839,7 @@ class _ShapeCard extends StatelessWidget {
                         ? AppColors.blackCat
                         : (selected
                               ? AppColors.blackCat
-                              : AppColors.blackCat.withOpacity(0.55)),
+                              : AppColors.blackCat.withValues(alpha: 0.55)),
                   ),
                 ),
               ),
@@ -922,7 +855,7 @@ class _ShapeCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat.withOpacity(0.85),
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
                     height: 1.15,
                   ),
                 ),
@@ -1025,13 +958,13 @@ class _LengthImageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = useBlackModalStyle
-        ? AppColors.blackCat.withOpacity(0.35)
+        ? AppColors.blackCat.withValues(alpha: 0.35)
         : AppColors.snow;
     final border = useBlackModalStyle
         ? AppColors.blackCat
         : (selected
               ? AppColors.blackCat
-              : AppColors.blackCat.withOpacity(0.10));
+              : AppColors.blackCat.withValues(alpha: 0.10));
 
     return InkWell(
       onTap: onTap,
@@ -1045,7 +978,7 @@ class _LengthImageCard extends StatelessWidget {
           border: Border.all(color: border, width: selected ? 1.6 : 1),
           boxShadow: [
             BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.04),
+              color: AppColors.blackCat.withValues(alpha: 0.04),
               blurRadius: 14,
               offset: const Offset(0, 8),
             ),
@@ -1064,7 +997,7 @@ class _LengthImageCard extends StatelessWidget {
                 errorBuilder: (_, _, _) => Container(
                   height: 96,
                   decoration: BoxDecoration(
-                    color: AppColors.blackCat.withOpacity(0.05),
+                    color: AppColors.blackCat.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.zero,
                   ),
                   alignment: Alignment.center,
@@ -1082,7 +1015,7 @@ class _LengthImageCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat.withOpacity(0.85),
+                  color: AppColors.blackCat.withValues(alpha: 0.85),
                 ),
               ),
             ),
@@ -1092,7 +1025,7 @@ class _LengthImageCard extends StatelessWidget {
               subtitle,
               style: TextStyle(
                 fontSize: 12.5,
-                color: AppColors.blackCat.withOpacity(0.60),
+                color: AppColors.blackCat.withValues(alpha: 0.60),
                 height: 1.15,
               ),
             ),*/

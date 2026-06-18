@@ -277,10 +277,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     }
   }
 
-  bool _isVisibleInCompanyOrders(SubmittedClientRequestSummary req) {
-    return req.sourceCollection == 'Company_Custom_Requests';
-  }
-
   Future<void> _syncExpiredRequests(
     List<SubmittedClientRequestSummary> items,
   ) async {
@@ -1013,7 +1009,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                   Icon(
                     Icons.receipt_long_outlined,
                     size: 46,
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -1029,7 +1025,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                     'Try changing filters or place a new design request.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1115,7 +1111,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       context: context,
       barrierLabel: 'Order details',
       barrierDismissible: true,
-      barrierColor: AppColors.blackCat.withOpacity(0.45),
+      barrierColor: AppColors.blackCat.withValues(alpha: 0.45),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, _, _) {
         return SafeArea(
@@ -1541,7 +1537,7 @@ class _FilterTabs extends StatelessWidget {
                       fontFamily: 'ArialBold',
                       color: isSelected
                           ? AppColors.blackCat
-                          : AppColors.blackCat.withOpacity(0.55),
+                          : AppColors.blackCat.withValues(alpha: 0.55),
                     ),
                   ),
                 ),
@@ -1580,7 +1576,6 @@ class _OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isProgress = order.status == OrderStatus.inProgress;
     final isBrandRequest =
         order.sourceCollection.trim() == 'Company_Custom_Requests';
 
@@ -1692,7 +1687,7 @@ class _OrderCard extends StatelessWidget {
                     Text(
                       'Brand: ${(order.brandName ?? '').trim()}',
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.72),
+                        color: AppColors.blackCat.withValues(alpha: 0.72),
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                         fontFamily: 'Arial',
@@ -1702,7 +1697,7 @@ class _OrderCard extends StatelessWidget {
                     Text(
                       'Campaign: ${(order.campaignName ?? '').trim()}',
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.72),
+                        color: AppColors.blackCat.withValues(alpha: 0.72),
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                         fontFamily: 'Arial',
@@ -1747,7 +1742,7 @@ class _OrderCard extends StatelessWidget {
                         child: Text(
                           order.expectedOrDeliveredText,
                           style: TextStyle(
-                            color: AppColors.blackCat.withOpacity(0.55),
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                             fontFamily: 'Arial',
@@ -1826,7 +1821,7 @@ class _Thumb extends StatelessWidget {
       alignment: Alignment.center,
       child: Icon(
         Icons.image_not_supported_outlined,
-        color: AppColors.blackCat.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
     Widget image;
@@ -2185,40 +2180,6 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _ProgressBar extends StatelessWidget {
-  const _ProgressBar({required this.value});
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        height: 8,
-        color: AppColors.blackCat.withOpacity(0.06),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: value,
-            child: Container(
-              height: 8,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFF28B8B),
-                    AppColors.blackCat.withOpacity(0.60),
-                    const Color(0xFF7BD9A5),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _OrderDetailsLink extends StatelessWidget {
   const _OrderDetailsLink({required this.onTap});
 
@@ -2246,7 +2207,7 @@ class _OrderDetailsLink extends StatelessWidget {
                 Text(
                   'Order details',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w500,
                     fontSize: 13,
                   ),
@@ -2254,35 +2215,13 @@ class _OrderDetailsLink extends StatelessWidget {
                 const SizedBox(width: 6),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: AppColors.blackCat.withOpacity(0.45),
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _Stars extends StatelessWidget {
-  const _Stars({required this.rating});
-  final double rating;
-
-  @override
-  Widget build(BuildContext context) {
-    final full = rating.floor().clamp(0, 5);
-    return Row(
-      children: List.generate(5, (i) {
-        final filled = i < full;
-        return Icon(
-          filled ? Icons.star_rounded : Icons.star_border_rounded,
-          size: 14,
-          color: filled
-              ? const Color(0xFFFFB000)
-              : Colors.black.withOpacity(0.22),
-        );
-      }),
     );
   }
 }
@@ -2304,10 +2243,10 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.80)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.80)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),

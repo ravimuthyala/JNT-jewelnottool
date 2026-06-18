@@ -20,7 +20,10 @@ import 'dart:typed_data';
 
 const int _maxInlineAvatarBytes = 12 * 1024 * 1024;
 
-Uint8List? _tryDecodeInlineImage(String src, {int maxBytes = _maxInlineAvatarBytes}) {
+Uint8List? _tryDecodeInlineImage(
+  String src, {
+  int maxBytes = _maxInlineAvatarBytes,
+}) {
   final value = src.trim();
   if (!value.startsWith('data:image/')) return null;
   final comma = value.indexOf(',');
@@ -32,14 +35,6 @@ Uint8List? _tryDecodeInlineImage(String src, {int maxBytes = _maxInlineAvatarByt
   } catch (_) {
     return null;
   }
-}
-
-Widget _avatarLoadingPlaceholder() {
-  return Container(
-    width: double.infinity,
-    height: double.infinity,
-    color: AppColors.blackCat.withValues(alpha: 0.10),
-  );
 }
 
 class ArtistHomePage extends StatefulWidget {
@@ -84,17 +79,6 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
 
   List<ClientRequestV2> _recentRequests = const <ClientRequestV2>[];
   String _artistDisplayName = '';
-  String _artistAvatarUrl = '';
-
-  String _cleanAvatarValue(String raw) {
-    final text = raw.trim();
-    if (text.isEmpty) return '';
-    final lower = text.toLowerCase();
-    if (lower.startsWith('assets/')) return '';
-    if (lower.contains('profile_placeholder')) return '';
-    if (lower.contains('avatar_placeholder')) return '';
-    return text;
-  }
 
   @override
   void initState() {
@@ -223,37 +207,9 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
       email.contains('@') ? email.split('@').first : email,
       'A',
     ]);
-    final nextAvatar = _cleanAvatarValue(
-      firstNonEmpty([
-        profile['photoUrl'],
-        profile['avatarUrl'],
-        profile['profileImageUrl'],
-        profile['profilePhotoUrl'],
-        profile['photoURL'],
-        profile['avatarURL'],
-        profile['profilePhoto'],
-        data['panel_profileImageUrl'],
-        data['profileImageUrl'],
-        data['profilePhotoUrl'],
-        data['profilePhoto'],
-        data['panel_avatarUrl'],
-        data['panel_photoUrl'],
-        data['photoUrl'],
-        data['avatarUrl'],
-        data['photoURL'],
-        data['avatarURL'],
-        (data['basic'] as Map<String, dynamic>?)?['profileImageUrl'],
-        (data['basic'] as Map<String, dynamic>?)?['avatarUrl'],
-        (data['basic'] as Map<String, dynamic>?)?['photoUrl'],
-        (data['basic'] as Map<String, dynamic>?)?['profilePhotoUrl'],
-        (data['basic'] as Map<String, dynamic>?)?['profilePhoto'],
-      ]),
-    );
-
     if (!mounted) return;
     setState(() {
       _artistDisplayName = nextName;
-      _artistAvatarUrl = nextAvatar;
     });
   }
 
@@ -380,28 +336,6 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
     });
   }
 
-  Future<void> _persistStatusUpdate({
-    required ClientRequestV2 request,
-    required String status,
-    Map<String, dynamic> summaryExtra = const <String, dynamic>{},
-    Map<String, dynamic> detailsExtra = const <String, dynamic>{},
-  }) async {
-    final docRef = FirebaseFirestore.instance
-        .collection(request.sourceCollection)
-        .doc(request.id);
-    final batch = FirebaseFirestore.instance.batch();
-    batch.set(docRef, {
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-      ...summaryExtra,
-    }, SetOptions(merge: true));
-    batch.set(docRef.collection('details').doc('payload'), {
-      'status': status,
-      ...detailsExtra,
-    }, SetOptions(merge: true));
-    await batch.commit();
-  }
-
   Future<void> _persistArtistDecline(ClientRequestV2 request) async {
     final artistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
         .trim()
@@ -510,7 +444,10 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
 
       final rootSnap = await docRef.get();
       final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef.collection('details').doc('payload').get();
+      final detailsSnap = await docRef
+          .collection('details')
+          .doc('payload')
+          .get();
       final detailsData = detailsSnap.data() ?? const <String, dynamic>{};
       final orderData =
           (detailsData['order'] as Map<String, dynamic>?) ??
@@ -529,7 +466,8 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
         rootData['title'],
         request.title,
       ], fallback: 'Campaign');
-      final artistName = (FirebaseAuth.instance.currentUser?.displayName ?? '')
+      final artistName =
+          (FirebaseAuth.instance.currentUser?.displayName ?? '')
               .trim()
               .isNotEmpty
           ? (FirebaseAuth.instance.currentUser?.displayName ?? '').trim()
@@ -830,121 +768,6 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
     );
   }
 
-  Widget _buildAnyRequestAvatar(String src, {required Widget fallback}) {
-    final value = src.trim();
-    if (value.isEmpty) return fallback;
-
-    Widget boxedImage(ImageProvider provider) {
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.zero,
-          image: DecorationImage(image: provider, fit: BoxFit.cover),
-        ),
-      );
-    }
-
-    if (value.startsWith('data:image/')) {
-      final bytes = _tryDecodeInlineImage(value);
-      if (bytes == null) return fallback;
-      return Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-        cacheWidth: 256,
-        cacheHeight: 256,
-        filterQuality: FilterQuality.low,
-        errorBuilder: (_, _, _) => fallback,
-      );
-    }
-
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return boxedImage(NetworkImage(value));
-    }
-
-    if (value.startsWith('gs://') ||
-        value.startsWith('clients/') ||
-        value.startsWith('client_artists/')) {
-      return FutureBuilder<String>(
-        future: _resolveRequestStorageUrl(value),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData &&
-              snapshot.connectionState != ConnectionState.done) {
-            return _avatarLoadingPlaceholder();
-          }
-          final resolved = (snapshot.data ?? '').trim();
-
-          if (resolved.isNotEmpty) {
-            return boxedImage(NetworkImage(resolved));
-          }
-
-          return FutureBuilder<Uint8List?>(
-            future: _resolveRequestStorageBytes(value),
-            builder: (context, bytesSnap) {
-              if (!bytesSnap.hasData &&
-                  bytesSnap.connectionState != ConnectionState.done) {
-                return _avatarLoadingPlaceholder();
-              }
-              final bytes = bytesSnap.data;
-              if (bytes == null || bytes.isEmpty) return fallback;
-              return Image.memory(
-                bytes,
-                fit: BoxFit.cover,
-                cacheWidth: 256,
-                cacheHeight: 256,
-                filterQuality: FilterQuality.low,
-                errorBuilder: (_, _, _) => fallback,
-              );
-            },
-          );
-        },
-      );
-    }
-
-    if (value.startsWith('assets/')) {
-      return boxedImage(AssetImage(value));
-    }
-
-    return fallback;
-  }
-
-  Future<Uint8List?> _resolveRequestStorageBytes(String raw) async {
-    final value = raw.trim();
-    if (value.isEmpty) return null;
-    try {
-      if (value.startsWith('gs://')) {
-        return await FirebaseStorage.instance
-            .refFromURL(value)
-            .getData(3 * 1024 * 1024);
-      }
-      if (value.startsWith('clients/') || value.startsWith('client_artists/')) {
-        return await FirebaseStorage.instance
-            .ref(value)
-            .getData(3 * 1024 * 1024);
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<String> _resolveRequestStorageUrl(String raw) async {
-    final value = raw.trim();
-    if (value.isEmpty) return '';
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    try {
-      if (value.startsWith('gs://')) {
-        return await FirebaseStorage.instance
-            .refFromURL(value)
-            .getDownloadURL();
-      }
-      if (value.startsWith('clients/') || value.startsWith('client_artists/')) {
-        return await FirebaseStorage.instance.ref(value).getDownloadURL();
-      }
-    } catch (_) {}
-    return '';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -973,7 +796,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat.withOpacity(0.55),
+                          color: AppColors.blackCat.withValues(alpha: 0.55),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1060,7 +883,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat.withOpacity(0.90),
+                    color: AppColors.blackCat.withValues(alpha: 0.90),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1069,7 +892,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                     children: [
                       Icon(
                         Icons.local_shipping_outlined,
-                        color: AppColors.blackCat.withOpacity(0.65),
+                        color: AppColors.blackCat.withValues(alpha: 0.65),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -1078,7 +901,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                               ? 'Loading delivered orders...'
                               : '$_deliveredCount delivered orders in your history.',
                           style: TextStyle(
-                            color: AppColors.blackCat.withOpacity(0.70),
+                            color: AppColors.blackCat.withValues(alpha: 0.70),
                             fontWeight: FontWeight.w400,
                             fontSize: 11.5,
                             height: 1.25,
@@ -1094,10 +917,10 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.blackCat.withOpacity(0.04),
+                            color: AppColors.blackCat.withValues(alpha: 0.04),
                             borderRadius: BorderRadius.zero,
                             border: Border.all(
-                              color: AppColors.blackCat.withOpacity(0.06),
+                              color: AppColors.blackCat.withValues(alpha: 0.06),
                             ),
                           ),
                           child: Row(
@@ -1113,7 +936,9 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                               Icon(
                                 Icons.chevron_right_rounded,
                                 size: 18,
-                                color: AppColors.blackCat.withOpacity(0.55),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.55,
+                                ),
                               ),
                             ],
                           ),
@@ -1128,7 +953,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat.withOpacity(0.90),
+                    color: AppColors.blackCat.withValues(alpha: 0.90),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1139,7 +964,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                       style: TextStyle(
                         fontWeight: FontWeight.w400,
                         fontSize: 11.5,
-                        color: AppColors.blackCat.withOpacity(0.65),
+                        color: AppColors.blackCat.withValues(alpha: 0.65),
                       ),
                     ),
                   )
@@ -1150,7 +975,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
                       style: TextStyle(
                         fontWeight: FontWeight.w400,
                         fontSize: 11.5,
-                        color: AppColors.blackCat.withOpacity(0.65),
+                        color: AppColors.blackCat.withValues(alpha: 0.65),
                       ),
                     ),
                   )
@@ -1189,14 +1014,6 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
         ],
       ),
     );
-  }
-
-  void _openManageProfile() {
-    widget.onManageProfile();
-  }
-
-  void _openInbox() {
-    widget.onOpenInbox();
   }
 
   Future<void> _signOut() async {
@@ -1250,7 +1067,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
 
   String _money(double v) => '\$${v.toStringAsFixed(2)}';
 
-  Widget _avatarContent() {
+  /*Widget _avatarContent() {
     Widget letterFallback() {
       final n = _artistDisplayName.trim();
       final letter = n.isEmpty ? 'A' : n.substring(0, 1).toUpperCase();
@@ -1262,7 +1079,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: AppColors.blackCat.withOpacity(0.78),
+            color: AppColors.blackCat.withValues(alpha: 0.78),
           ),
         ),
       );
@@ -1346,9 +1163,9 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
       );
     }
     return letterFallback();
-  }
+  }*/
 
-  Future<String> _resolveStorageAvatarUrl(String raw) async {
+  /*Future<String> _resolveStorageAvatarUrl(String raw) async {
     final value = raw.trim();
     if (value.isEmpty) return '';
     if (value.startsWith('http://') || value.startsWith('https://')) {
@@ -1365,9 +1182,9 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
       }
     } catch (_) {}
     return '';
-  }
+  }*/
 
-  Future<String> _resolveStorageAvatarFallback() async {
+  /*Future<String> _resolveStorageAvatarFallback() async {
     final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
     if (uid.isEmpty) return '';
     final candidates = <String>[
@@ -1415,7 +1232,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
       } catch (_) {}
     }
     return '';
-  }
+  }*/
 }
 
 Widget _buildAnyRequestAvatar(String src, {required Widget fallback}) {
@@ -1613,8 +1430,8 @@ class _HomeAcceptRequestDialogState extends State<_HomeAcceptRequestDialog> {
           height: 50,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.deepPlum,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.blackCat,
+              foregroundColor: AppColors.snow,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               elevation: 0,
             ),
@@ -1642,7 +1459,7 @@ class _HomeAcceptRequestDialogState extends State<_HomeAcceptRequestDialog> {
           child: Text(
             'Cancel',
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.6),
+              color: AppColors.blackCat.withValues(alpha: 0.6),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1659,7 +1476,7 @@ class _HomeAcceptRequestDialogState extends State<_HomeAcceptRequestDialog> {
           child: Text(
             label,
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.65),
+              color: AppColors.blackCat.withValues(alpha: 0.65),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1685,7 +1502,7 @@ class _HomeAcceptRequestDialogState extends State<_HomeAcceptRequestDialog> {
           child: Text(
             label,
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.65),
+              color: AppColors.blackCat.withValues(alpha: 0.65),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1701,7 +1518,7 @@ class _HomeAcceptRequestDialogState extends State<_HomeAcceptRequestDialog> {
             decoration: InputDecoration(
               prefixText: prefix,
               filled: true,
-              fillColor: Colors.white,
+              fillColor: AppColors.snow,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 6,
@@ -1731,7 +1548,7 @@ class _HeaderMenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.blackCat.withOpacity(0.70)),
+        Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.70)),
         const SizedBox(width: 10),
         Text(
           label,
@@ -1755,10 +1572,10 @@ class _OverviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -1772,7 +1589,7 @@ class _OverviewCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AppColors.blackCat.withOpacity(0.70),
+              color: AppColors.blackCat.withValues(alpha: 0.70),
             ),
           ),
           const SizedBox(height: 12),
@@ -1797,16 +1614,18 @@ class _OverviewCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w400,
                     fontSize: 11.5,
-                    color: AppColors.blackCat.withOpacity(0.70),
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
                   ),
                 ),
               ),
               Switch(
                 value: online,
                 onChanged: onToggleOnline,
-                activeThumbColor: AppColors.deepPlum,
+                activeThumbColor: AppColors.blackCat,
                 inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                inactiveTrackColor: AppColors.blackCatLight.withValues(
+                  alpha: 0.35,
+                ),
               ),
             ],
           ),
@@ -1839,10 +1658,10 @@ class _QuickTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCat.withOpacity(0.05)),
+          border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
           boxShadow: [
             BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.03),
+              color: AppColors.blackCat.withValues(alpha: 0.03),
               blurRadius: 14,
               offset: const Offset(0, 8),
             ),
@@ -1854,13 +1673,13 @@ class _QuickTile extends StatelessWidget {
               height: 44,
               width: 44,
               decoration: BoxDecoration(
-                color: AppColors.blackCat.withOpacity(0.10),
+                color: AppColors.blackCat.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.zero,
               ),
               child: Icon(
                 icon,
                 size: 18,
-                color: AppColors.blackCat.withOpacity(0.75),
+                color: AppColors.blackCat.withValues(alpha: 0.75),
               ),
             ),
             const SizedBox(width: 12),
@@ -1873,7 +1692,7 @@ class _QuickTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
-                      color: AppColors.blackCat.withOpacity(0.70),
+                      color: AppColors.blackCat.withValues(alpha: 0.70),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -1925,10 +1744,10 @@ class _RecentRequestTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCat.withOpacity(0.05)),
+          border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
           boxShadow: [
             BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.03),
+              color: AppColors.blackCat.withValues(alpha: 0.03),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
@@ -1943,7 +1762,7 @@ class _RecentRequestTile extends StatelessWidget {
                   height: 42,
                   width: 42,
                   decoration: BoxDecoration(
-                    color: AppColors.blackCat.withOpacity(0.10),
+                    color: AppColors.blackCat.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.zero,
                   ),
                   clipBehavior: Clip.antiAlias,
@@ -1968,7 +1787,7 @@ class _RecentRequestTile extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: AppColors.blackCat.withOpacity(0.45),
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
               ],
             ),
@@ -1978,7 +1797,7 @@ class _RecentRequestTile extends StatelessWidget {
                 Icon(
                   Icons.calendar_today_outlined,
                   size: 14,
-                  color: AppColors.blackCat.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1989,7 +1808,7 @@ class _RecentRequestTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 11.5,
-                      color: AppColors.blackCat.withOpacity(0.65),
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
                     ),
                   ),
                 ),
@@ -2005,7 +1824,10 @@ class _RecentRequestTile extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            Divider(height: 1, color: AppColors.blackCat.withOpacity(0.06)),
+            Divider(
+              height: 1,
+              color: AppColors.blackCat.withValues(alpha: 0.06),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -2019,7 +1841,7 @@ class _RecentRequestTile extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
-                      color: AppColors.blackCat.withOpacity(0.72),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
                     ),
                   ),
                 ),
@@ -2038,7 +1860,7 @@ class _RecentRequestTile extends StatelessWidget {
       width: double.infinity,
       height: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.blackCat.withOpacity(0.10),
+        color: AppColors.blackCat.withValues(alpha: 0.10),
         borderRadius: BorderRadius.zero,
       ),
       alignment: Alignment.center,
@@ -2059,19 +1881,23 @@ class _RecentRequestTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF7F7FB),
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.08)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.blackCat.withOpacity(0.55)),
+          Icon(
+            icon,
+            size: 14,
+            color: AppColors.blackCat.withValues(alpha: 0.55),
+          ),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
               fontWeight: FontWeight.w500,
               fontSize: 10.5,
-              color: AppColors.blackCat.withOpacity(0.72),
+              color: AppColors.blackCat.withValues(alpha: 0.72),
             ),
           ),
         ],
@@ -2091,10 +1917,10 @@ class _SoftCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -2104,4 +1930,3 @@ class _SoftCard extends StatelessWidget {
     );
   }
 }
-

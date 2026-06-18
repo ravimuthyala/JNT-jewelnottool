@@ -36,7 +36,7 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
               height: 34,
               width: 34,
               decoration: BoxDecoration(
-                color: AppColors.deepPlum.withOpacity(0.12),
+                color: AppColors.blackCat.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.zero,
               ),
               alignment: Alignment.center,
@@ -62,10 +62,10 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
               borderRadius: BorderRadius.zero,
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: Colors.black.withOpacity(0.08),
+                backgroundColor: AppColors.blackCat.withValues(alpha: 0.08),
                 child: Icon(
                   Icons.person_outline,
-                  color: Colors.black.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -202,8 +202,8 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
       // -----------------------
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.deepPlum,
-        unselectedItemColor: Colors.black.withOpacity(0.35),
+        selectedItemColor: AppColors.blackCat,
+        unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
         selectedFontSize: 11,
         unselectedFontSize: 11,
         currentIndex: 0,
@@ -214,7 +214,6 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (_) => ClientCustomRequestPage(
-                  // TODO: Replace mock with real logged-in client profile
                   profile: ClientProfileDraft.mock(),
                   onBackHome: () => Navigator.pop(context),
                 ),
@@ -268,12 +267,12 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -285,7 +284,7 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
             height: 42,
             width: 42,
             decoration: BoxDecoration(
-              color: AppColors.deepPlum.withOpacity(0.10),
+              color: AppColors.blackCat.withValues(alpha: 0.10),
               borderRadius: BorderRadius.zero,
             ),
             child: Icon(icon, color: AppColors.deepPlum),
@@ -300,7 +299,7 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -326,12 +325,12 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
     return Container(
       width: 170,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -344,10 +343,10 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
             child: Container(
               height: 150,
               width: double.infinity,
-              color: Colors.black.withOpacity(0.06),
+              color: AppColors.blackCat.withValues(alpha: 0.06),
               child: Icon(
                 Icons.image,
-                color: Colors.black.withOpacity(0.25),
+                color: AppColors.blackCat.withValues(alpha: 0.25),
                 size: 40,
               ),
             ),
@@ -402,12 +401,12 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -431,7 +430,7 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: Colors.black.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -441,14 +440,14 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.deepPlum.withOpacity(0.12),
+                color: AppColors.blackCat.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.zero,
               ),
               child: Text(
                 trailing,
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.deepPlum,
+                  color: AppColors.blackCat,
                   fontSize: 12,
                 ),
               ),

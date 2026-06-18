@@ -14,13 +14,11 @@ import 'package:flutter/services.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../config/auth_flags.dart';
-import '../models/client_profile_models.dart';
 import '../models/company_business_options.dart';
 import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
@@ -105,13 +103,6 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
   Uint8List? _logoBytes;
   String? _logoPath;
 
-  final NailPreferences _nailPrefs = NailPreferences.empty();
-
-  // Payment (kept)
-  final PaymentInfo _payment = const PaymentInfo(
-    method: PaymentMethod.applePay,
-    saveForFuture: true,
-  );
 
   // State/Country dropdown values (kept)
   String? _selectedState;
@@ -129,17 +120,6 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
   final _quantityMinCtrl = TextEditingController(); // optional defaults
   final _quantityMaxCtrl = TextEditingController(); // optional defaults
 
-  String? _brandMood; // required
-  final bool _includeLogoByDefault = false; // optional
-
-  // Request defaults (optional)
-  String? _defaultShape;
-  String? _defaultLength;
-  String? _defaultFinish;
-  String? _defaultPriority; // "Standard" or "Rush"
-
-  // Budget range (optional)
-  final RangeValues _budgetRange = const RangeValues(50, 500);
 
   // Shipping toggle + billing method
   bool _shippingSameAsBilling = true;
@@ -171,41 +151,6 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
   // -----------------------
   // Lists
   // -----------------------
-  static const List<String> moods = [
-    'Minimal / Clean',
-    'Luxury',
-    'Bold',
-    'Cute',
-    'Edgy',
-    'Glam',
-    'Neutral',
-    'Seasonal',
-  ];
-
-  static const List<String> nailShapes = [
-    'Almond',
-    'Coffin',
-    'Square',
-    'Round',
-    'Stiletto',
-    'Oval',
-  ];
-
-  static const List<String> nailLengths = ['Short', 'Medium', 'Long', 'XL'];
-
-  static const List<String> finishes = [
-    'Glossy',
-    'Matte',
-    'Chrome',
-    'Glitter',
-    'Jelly',
-    'Pearl',
-  ];
-
-  static const List<String> priorities = [
-    'Standard (5â€“7 days)',
-    'Rush (2â€“3 days)',
-  ];
 
   static const List<String> usStates = [
     'Alabama',
@@ -472,11 +417,11 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: _hintFs,
-        color: Colors.black.withOpacity(0.35),
+        color: Colors.black.withValues(alpha: 0.35),
       ),
       labelStyle: TextStyle(
         fontSize: _labelFs,
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
       ),
       errorStyle: const TextStyle(
         fontSize: 10.5,
@@ -725,14 +670,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
     return null;
   }
 
-  String? _areaCodeValidator(String? v) {
-    final value = (v ?? '').trim();
-    if (value.isEmpty) return 'Area code is required';
-    if (!RegistrationInputUtils.isValidAreaCode(value)) {
-      return 'Use + and 1-4 digits';
-    }
-    return null;
-  }
+
 
   String? _zipValidator(String? v, {bool enforceUsPattern = true}) {
     if (v == null || v.trim().isEmpty) {
@@ -767,20 +705,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
     return null;
   }
 
-  // brand colors required validator (simple)
-  String? _brandColorsValidator(String? v) {
-    if (v == null || v.trim().isEmpty) return 'Brand Colors is required';
-    return null;
-  }
 
-  // quantity defaults (optional but numeric if present)
-  String? _optionalIntValidator(String? v, String name) {
-    final value = (v ?? '').trim();
-    if (value.isEmpty) return null;
-    final n = int.tryParse(value);
-    if (n == null || n < 1) return '$name must be a valid number';
-    return null;
-  }
 
   String? _billingRequiredIfSelected(
     String? value, {
@@ -798,10 +723,10 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -820,13 +745,13 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
             decoration: BoxDecoration(
               color: const Color(0xFFEAF2FF),
               borderRadius: BorderRadius.zero,
-              border: Border.all(color: Colors.black.withOpacity(0.04)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.local_offer_outlined,
-                  color: Colors.black.withOpacity(0.55),
+                  color: Colors.black.withValues(alpha: 0.55),
                   size: 18,
                 ),
                 const SizedBox(width: 10),
@@ -836,7 +761,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
-                      color: Colors.black.withOpacity(0.75),
+                      color: Colors.black.withValues(alpha: 0.75),
                       height: 1.2,
                     ),
                   ),
@@ -1507,7 +1432,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                               hintText: 'Enter 10-digit phone',
                                               hintStyle: TextStyle(
                                                 fontSize: _hintFs,
-                                                color: Colors.black.withOpacity(
+                                                color: Colors.black.withValues(alpha:
                                                   0.35,
                                                 ),
                                               ),
@@ -1575,7 +1500,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                             'Password must include uppercase, lowercase, number, and symbol.',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.black.withOpacity(0.55),
+                              color: Colors.black.withValues(alpha: 0.55),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -1768,7 +1693,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                               hintText: 'Enter 10-digit phone',
                                               hintStyle: TextStyle(
                                                 fontSize: _hintFs,
-                                                color: Colors.black.withOpacity(
+                                                color: Colors.black.withValues(alpha:
                                                   0.35,
                                                 ),
                                               ),
@@ -1859,7 +1784,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.zero,
-                            border: Border.all(color: Colors.black.withOpacity(0.06)),
+                            border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
                           ),
                           child: Row(
                             children: [
@@ -1869,7 +1794,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.black.withOpacity(0.75),
+                                    color: Colors.black.withValues(alpha: 0.75),
                                   ),
                                 ),
                               ),
@@ -1878,7 +1803,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                 activeColor: AppColors.deepPlum,
                                 inactiveThumbColor: AppColors.blackCatLight,
                                 inactiveTrackColor:
-                                    AppColors.blackCatLight.withOpacity(0.35),
+                                    AppColors.blackCatLight.withValues(alpha: 0.35),
                                 onChanged: (v) => setState(() => _includeLogoByDefault = v),
                               ),
                             ],
@@ -2060,7 +1985,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                               color: Colors.white,
                               borderRadius: BorderRadius.zero,
                               border: Border.all(
-                                color: Colors.black.withOpacity(0.06),
+                                color: Colors.black.withValues(alpha: 0.06),
                               ),
                             ),
                             child: Row(
@@ -2071,7 +1996,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.black.withOpacity(0.75),
+                                      color: Colors.black.withValues(alpha: 0.75),
                                     ),
                                   ),
                                 ),
@@ -2080,7 +2005,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                   activeThumbColor: AppColors.deepPlum,
                                   inactiveThumbColor: AppColors.blackCatLight,
                                   inactiveTrackColor: AppColors.blackCatLight
-                                      .withOpacity(0.35),
+                                      .withValues(alpha: 0.35),
                                   onChanged: (v) => setState(
                                     () => _shippingSameAsBilling = v,
                                   ),
@@ -2366,7 +2291,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.zero,
-                            border: Border.all(color: Colors.black.withOpacity(0.06)),
+                            border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2402,7 +2327,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                     initial: _payment,
                     onChanged: (updated) => setState(() => _payment = updated),
                   ),
-                  
+
 
                   const SizedBox(height: 6),
                   promosAndNailTipsCard(),
@@ -2417,7 +2342,7 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                           'Purchase the Nail Sizing Kit to continue.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.red.withOpacity(0.85),
+                            color: Colors.red.withValues(alpha: 0.85),
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -2437,50 +2362,52 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                         children: [
                           //_FieldLabel.required('Billing Method'),
                           const SizedBox(height: 6),
-                          ..._billingMethods.map((method) {
-                            final selected = _billingMethod == method;
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.zero,
-                                border: Border.all(
-                                  color: selected
-                                      ? AppColors.deepPlum
-                                      : Colors.black.withOpacity(0.08),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  InkWell(
-                                    onTap: () =>
-                                        setState(() => _billingMethod = method),
-                                    child: Row(
-                                      children: [
-                                        Radio<String>(
-                                          value: method,
-                                          groupValue: _billingMethod,
-                                          onChanged: (v) {
-                                            if (v == null) return;
-                                            setState(() => _billingMethod = v);
-                                          },
-                                          activeColor: AppColors.deepPlum,
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            method,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                          RadioGroup<String>(
+                            groupValue: _billingMethod,
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() => _billingMethod = value);
+                            },
+                            child: Column(
+                              children: _billingMethods.map((method) {
+                                final selected = _billingMethod == method;
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.zero,
+                                    border: Border.all(
+                                      color: selected
+                                          ? AppColors.deepPlum
+                                          : Colors.black.withValues(alpha: 0.08),
                                     ),
                                   ),
-                                  if (selected) ...[
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      InkWell(
+                                        onTap: () =>
+                                            setState(() => _billingMethod = method),
+                                        child: Row(
+                                          children: [
+                                            Radio<String>(
+                                              value: method,
+                                              activeColor: AppColors.deepPlum,
+                                            ),
+                                            Expanded(
+                                              child: Text(
+                                                method,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (selected) ...[
                                     const SizedBox(height: 6),
                                     if (method == 'Credit/Debit Card') ...[
                                       TextFormField(
@@ -2695,11 +2622,13 @@ class _CompanyRegistrationPageV2State extends State<CompanyRegistrationPageV2> {
                                         },
                                       ),
                                     ],
-                                  ],
-                                ],
-                              ),
-                            );
-                          }),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
                           const SizedBox(height: 6),
                           CheckboxListTile(
                             contentPadding: EdgeInsets.zero,
@@ -2791,7 +2720,7 @@ class _SectionCard extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -2808,7 +2737,7 @@ class _SectionCard extends StatelessWidget {
           Text(
             subtitle,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.55),
+              color: Colors.black.withValues(alpha: 0.55),
               height: 1.25,
               fontWeight: FontWeight.w500,
               fontSize: 14,

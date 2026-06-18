@@ -878,9 +878,6 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         !isGroupOrder ||
         (selected.isNotEmpty && selected.every(accepted.contains));
     final artistStatus = allResponded ? 'in_review' : 'pending';
-    final overallStatus = allResponded
-        ? (accepted.isNotEmpty ? 'accepted' : 'declined')
-        : 'pending';
     List<dynamic>? updatedGroupClients;
     if (isGroupOrder) {
       final groupOrderMap =

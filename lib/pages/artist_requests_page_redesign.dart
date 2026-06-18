@@ -7,12 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import '../theme/app_colors.dart';
-import 'artist_accepted_request_sheet.dart';
 import 'artist_designing_request_sheet.dart';
 import '../models/client_request_v2.dart';
 import 'artist_completed_request_sheet.dart';
 import 'artist_shipped_request_sheet.dart';
-import 'simple_status_request_sheet.dart';
 import 'client_request_details_page.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/ascension_service.dart';
@@ -20,7 +18,6 @@ import '../services/notifications_service.dart';
 import '../services/shipping_qr_helper.dart';
 import '../services/supabase_firebase_compat.dart';
 import 'artist_profile_page.dart';
-import 'artist_inbox_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
 import '../utils/scenario_4_1.dart';
@@ -129,11 +126,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   String _sort = 'Newest';
 
   // Toggle filters
-  final bool _inspoOnly = false;
   bool _directOnly = false;
   bool _groupOnly = false;
-  final LayerLink _budgetLink = LayerLink();
-  final LayerLink _shipLink = LayerLink();
 
   OverlayEntry? _dropdownEntry;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientRequestsSub;
@@ -148,10 +142,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   late RangeValues _budgetRange;
   late final TextEditingController _budgetMinCtrl;
   late final TextEditingController _budgetMaxCtrl;
-  final GlobalKey _budgetKey = GlobalKey();
-  final GlobalKey _shipKey = GlobalKey();
-  // Shipping time filter
-  ShipTimeFilter _shipFilter = ShipTimeFilter.any;
 
   // Tabs (8 statuses)
   late final TabController _tabCtrl;
@@ -177,7 +167,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return TextStyle(
       fontSize: (size + 2) * s,
       fontWeight: w,
-      color: c ?? AppColors.blackCat.withOpacity(0.90),
+      color: c ?? AppColors.blackCat.withValues(alpha: 0.90),
       height: h,
     );
   }
@@ -223,9 +213,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   bool _matchesDirect(ClientRequestV2 r) => !_directOnly || r.isDirectRequest;
-
-  bool _matchesInspo(ClientRequestV2 r) =>
-      !_inspoOnly || r.hasInspo || r.clientImages.isNotEmpty;
   bool _matchesGroup(ClientRequestV2 r) =>
       !_groupOnly || r.orderType == RequestOrderTypeV2.group;
   bool _matchesBudget(ClientRequestV2 r) {
@@ -253,22 +240,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         _budgetRange.start.round() != defaultStart ||
         _budgetRange.end.round() != defaultEnd;
     return _directOnly || _groupOnly || budgetChanged || _sort != 'Newest';
-  }
-
-  void _clearFilters() {
-    final minPreset = widget.initialBudgetMin.clamp(15, 5000);
-    final maxPreset = widget.initialBudgetMax.clamp(15, 5000);
-    final start = minPreset <= maxPreset ? minPreset : maxPreset;
-    final end = minPreset <= maxPreset ? maxPreset : minPreset;
-    setState(() {
-      _directOnly = false;
-      _groupOnly = false;
-      _budgetRange = RangeValues(start.toDouble(), end.toDouble());
-      _budgetMinCtrl.text = start.toString();
-      _budgetMaxCtrl.text = end.toString();
-      _sort = 'Newest';
-      _shipFilter = ShipTimeFilter.any;
-    });
   }
 
   bool _applySharedFilters(ClientRequestV2 r) {
@@ -549,7 +520,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     for (final change in snapshot.docChanges) {
       if (change.type != DocumentChangeType.modified) continue;
       final data = change.doc.data();
-      if (data == null) continue;
 
       final paymentStatus = ((data['paymentStatus'] ?? '') as Object)
           .toString()
@@ -909,18 +879,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return 5;
   }
 
-  void _syncBudgetFromText() {
-    final min =
-        int.tryParse(_budgetMinCtrl.text.trim()) ?? _budgetRange.start.round();
-    final max =
-        int.tryParse(_budgetMaxCtrl.text.trim()) ?? _budgetRange.end.round();
-    final a = min.clamp(15, 5000).toDouble();
-    final b = max.clamp(15, 5000).toDouble();
-    final start = a <= b ? a : b;
-    final end = a <= b ? b : a;
-    setState(() => _budgetRange = RangeValues(start, end));
-  }
-
   // ----------------------------
   // Header actions (same as others)
   // ----------------------------
@@ -943,17 +901,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         builder: (_) =>
             const ArtistProfilePage(showBottomNav: true, bottomNavIndex: 1),
       ),
-    );
-  }
-
-  void _openInbox() {
-    if (widget.onOpenInbox != null) {
-      widget.onOpenInbox!.call();
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ArtistInboxPage()),
     );
   }
 
@@ -1075,7 +1022,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   @override
   Widget build(BuildContext context) {
-    final s = _reqScale(context);
     return Scaffold(
       backgroundColor: AppColors.snow,
 
@@ -1148,8 +1094,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       bottomNavigationBar: widget.showBottomNav
           ? BottomNavigationBar(
               currentIndex: widget.bottomNavIndex,
-              selectedItemColor: AppColors.deepPlum,
-              unselectedItemColor: Colors.black.withOpacity(0.35),
+              selectedItemColor: AppColors.blackCat,
+              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
               type: BottomNavigationBarType.fixed,
               onTap: (i) {
                 if (widget.onNavTap != null) {
@@ -1198,14 +1144,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.03),
+            color: AppColors.blackCat.withValues(alpha: 0.03),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
         ],
       ),
       child: TextField(
-        style: _t(13, w: FontWeight.w800, c: Colors.black.withOpacity(0.9)),
+        style: _t(13, w: FontWeight.w800, c: AppColors.blackCat.withValues(alpha: 0.9)),
         controller: _searchCtrl,
         onChanged: (_) => setState(() {}),
         decoration: InputDecoration(
@@ -1213,11 +1159,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           hintStyle: _t(
             12,
             w: FontWeight.w400,
-            c: AppColors.blackCat.withOpacity(0.45),
+            c: AppColors.blackCat.withValues(alpha: 0.45),
           ),
           prefixIcon: Icon(
             Icons.search,
-            color: AppColors.blackCat.withOpacity(0.45),
+            color: AppColors.blackCat.withValues(alpha: 0.45),
             size: 18,
           ),
           border: InputBorder.none,
@@ -1243,13 +1189,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             width: 44,
             decoration: BoxDecoration(
               color: _hasActiveFilters
-                  ? AppColors.alabaster.withOpacity(0.75)
+                  ? AppColors.alabaster.withValues(alpha: 0.75)
                   : AppColors.snow,
               borderRadius: BorderRadius.zero,
               border: Border.all(color: AppColors.blackCatBorderLight),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.blackCat.withOpacity(0.03),
+                  color: AppColors.blackCat.withValues(alpha: 0.03),
                   blurRadius: 14,
                   offset: const Offset(0, 8),
                 ),
@@ -1261,7 +1207,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 Icon(
                   Icons.filter_alt_outlined,
                   size: 20,
-                  color: AppColors.blackCat.withOpacity(0.75),
+                  color: AppColors.blackCat.withValues(alpha: 0.75),
                 ),
                 if (_hasActiveFilters)
                   Positioned(
@@ -1387,7 +1333,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                         'Budget',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat.withOpacity(0.8),
+                          color: AppColors.blackCat.withValues(alpha: 0.8),
                         ),
                       ),
                     ),
@@ -1428,8 +1374,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     SliderTheme(
                       data: SliderTheme.of(modalContext).copyWith(
                         activeTrackColor: AppColors.blackCat,
-                        inactiveTrackColor: AppColors.blackCat.withOpacity(
-                          0.18,
+                        inactiveTrackColor: AppColors.blackCat.withValues(
+                          alpha: 0.18,
                         ),
                         thumbColor: AppColors.blackCat,
                         overlayColor: Colors.transparent,
@@ -1467,7 +1413,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                         'Sort',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat.withOpacity(0.8),
+                          color: AppColors.blackCat.withValues(alpha: 0.8),
                         ),
                       ),
                     ),
@@ -1492,7 +1438,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                           ),
                           icon: Icon(
                             Icons.keyboard_arrow_down_rounded,
-                            color: AppColors.blackCat.withOpacity(0.7),
+                            color: AppColors.blackCat.withValues(alpha: 0.7),
                           ),
                           isExpanded: true,
                           items: [
@@ -1529,8 +1475,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                         Expanded(
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat.withOpacity(
-                                0.16,
+                              backgroundColor: AppColors.blackCat.withValues(
+                                alpha: 0.16,
                               ),
                               foregroundColor: AppColors.blackCat,
                               shape: RoundedRectangleBorder(
@@ -1627,64 +1573,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     });
   }
 
-  Widget _toggleChip({
-    required String label,
-    required bool value,
-    required VoidCallback onTap,
-    bool leadingCheck = false,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatBorderLight),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (leadingCheck) ...[
-              Icon(
-                value ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 16,
-                color: value
-                    ? AppColors.blackCat
-                    : AppColors.blackCat.withOpacity(0.35),
-              ),
-              const SizedBox(width: 8),
-            ] else ...[
-              Icon(
-                value ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 16,
-                color: value
-                    ? AppColors.blackCat
-                    : AppColors.blackCat.withOpacity(0.35),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Text(label, style: _t(12, w: FontWeight.w400)),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 16,
-              color: AppColors.blackCat.withOpacity(0.45),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _filterChip({
     required String label,
     required IconData icon,
@@ -1698,13 +1586,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.alabaster.withOpacity(0.7)
+              ? AppColors.alabaster.withValues(alpha: 0.7)
               : AppColors.snow,
           borderRadius: BorderRadius.zero,
           border: Border.all(color: AppColors.blackCatBorderLight),
           boxShadow: [
             BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.02),
+              color: AppColors.blackCat.withValues(alpha: 0.02),
               blurRadius: 10,
               offset: const Offset(0, 6),
             ),
@@ -1913,9 +1801,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           ? request.orderNumber.trim()
           : request.id;
       final amountText = '\$${roundedTotal.toString()}';
-      final now = DateTime.now();
-      final acceptedOn =
-          '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}';
       final artistLabel =
           (FirebaseAuth.instance.currentUser?.displayName ?? '')
               .trim()
@@ -1931,9 +1816,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                       .first
                       .trim()
                 : 'Artist');
-      final artistNotifyEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-          .trim()
-          .toLowerCase();
+      final artistNotifyEmail =
+          (FirebaseAuth.instance.currentUser?.email ?? '').trim().toLowerCase();
       final clientReceiver = firstNonEmpty(<Object?>[
         request.clientEmail,
         data['clientEmail'],
@@ -2779,166 +2663,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return const <String, dynamic>{};
   }
 
-  Widget _budgetChip() {
-    final label =
-        '\$${_budgetRange.start.round()} - \$${_budgetRange.end.round()}';
-    final minPreset = widget.initialBudgetMin.clamp(15, 5000);
-    final maxPreset = widget.initialBudgetMax.clamp(15, 5000);
-    final defaultStart = minPreset <= maxPreset ? minPreset : maxPreset;
-    final defaultEnd = minPreset <= maxPreset ? maxPreset : minPreset;
-    final isSelected =
-        _budgetRange.start.round() != defaultStart ||
-        _budgetRange.end.round() != defaultEnd;
-
-    return CompositedTransformTarget(
-      link: _budgetLink,
-      child: InkWell(
-        borderRadius: BorderRadius.zero,
-        onTap: () {
-          if (_dropdownEntry != null) {
-            _closeDropdown();
-          } else {
-            _showBudgetDropdown();
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.alabaster.withOpacity(0.7)
-                : AppColors.snow,
-            borderRadius: BorderRadius.zero,
-            border: Border.all(color: AppColors.blackCatBorderLight),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.attach_money_rounded,
-                size: 16,
-                color: AppColors.blackCat.withOpacity(0.70),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: _t(12, w: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: AppColors.blackCat.withOpacity(0.45),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showBudgetDropdown() {
-    void apply(RangeValues v) {
-      setState(() {
-        _budgetRange = v;
-        _budgetMinCtrl.text = v.start.round().toString();
-        _budgetMaxCtrl.text = v.end.round().toString();
-      });
-      _closeDropdown();
-    }
-
-    _showDropdown(
-      link: _budgetLink,
-      child: _DropdownCard(
-        width: 240,
-        children: [
-          _DropItem(
-            text: '\$15 - \$200',
-            onTap: () => apply(const RangeValues(15, 200)),
-          ),
-          _DropItem(
-            text: '\$201 - \$500',
-            onTap: () => apply(const RangeValues(201, 500)),
-          ),
-          _DropItem(
-            text: '\$501 - \$1000',
-            onTap: () => apply(const RangeValues(501, 1000)),
-          ),
-          _DropItem(
-            text: '\$1001 - \$2000',
-            onTap: () => apply(const RangeValues(1001, 2000)),
-          ),
-          _DropItem(
-            text: '\$2001 - \$3000',
-            onTap: () => apply(const RangeValues(2001, 3000)),
-          ),
-          _DropItem(
-            text: '\$3001 - \$4000',
-            onTap: () => apply(const RangeValues(3001, 4000)),
-          ),
-          _DropItem(
-            text: '\$4001 - \$5000',
-            onTap: () => apply(const RangeValues(4001, 5000)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openBudgetMenu() async {
-    final pos = _popupPosition(_budgetKey);
-
-    final selected = await showMenu<RangeValues>(
-      context: context,
-      position: pos,
-      color: AppColors.snow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      items: const [
-        PopupMenuItem(value: RangeValues(20, 100), child: Text('\$20 - \$100')),
-        PopupMenuItem(
-          value: RangeValues(101, 200),
-          child: Text('\$101 - \$200'),
-        ),
-        PopupMenuItem(
-          value: RangeValues(201, 500),
-          child: Text('\$201 - \$500'),
-        ),
-        PopupMenuItem(
-          value: RangeValues(501, 1000),
-          child: Text('\$501 - \$1000'),
-        ),
-        PopupMenuItem(
-          value: RangeValues(1001, 1500),
-          child: Text('\$1001 - \$1500'),
-        ),
-      ],
-    );
-
-    if (selected != null) {
-      setState(() => _budgetRange = selected);
-      _budgetMinCtrl.text = selected.start.round().toString();
-      _budgetMaxCtrl.text = selected.end.round().toString();
-    }
-  }
-
-  Future<void> _openAcceptedDetails(ClientRequestV2 r) async {
-    final shipDays = _estimateShipDays(
-      artistLocation: widget.artistLocation,
-      clientLocation: r.clientLocation,
-    );
-
-    await showAcceptedRequestSheet(
-      context: context,
-      request: r,
-      shipDays: shipDays,
-      onClose: () {}, // sheet already calls Navigator.pop internally
-      onMarkCompleted: (completed, artistPhotos) async =>
-          _handleMarkCompleted(r, completed, artistPhotos),
-    );
-  }
-
   Future<void> _openDesigningDetails(ClientRequestV2 r) async {
     final shipDays = _estimateShipDays(
       artistLocation: widget.artistLocation,
@@ -2969,7 +2693,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       final currentUser = FirebaseAuth.instance.currentUser;
       final artistId = (currentUser?.uid ?? '').trim();
       final artistEmail = (currentUser?.email ?? '').trim();
-      final artistNotifyEmail = artistEmail.toLowerCase();
       final orderNumber = r.orderNumber.trim().isNotEmpty
           ? r.orderNumber
           : r.id;
@@ -3216,9 +2939,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final acceptanceData =
         (detailData['acceptance'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-
-    String normalizeEmail(Object? value) =>
-        (value ?? '').toString().trim().toLowerCase();
 
     final companyUid = firstNonEmpty(<Object?>[
       data['companyUid'],
@@ -3628,310 +3348,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
   }
 
-  Future<void> _openBudgetSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.blackCat,
-      isScrollControlled: true,
-      builder: (_) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-          decoration: const BoxDecoration(
-            color: AppColors.alabaster,
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 5,
-                width: 54,
-                decoration: BoxDecoration(
-                  color: AppColors.blackCat.withOpacity(0.12),
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Budget',
-                  style: TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // Text fields
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _budgetMinCtrl,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => _syncBudgetFromText(),
-                      decoration: _miniDec(prefix: '\$', hint: 'Min'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _budgetMaxCtrl,
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => _syncBudgetFromText(),
-                      decoration: _miniDec(prefix: '\$', hint: 'Max'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // Slider
-              RangeSlider(
-                values: _budgetRange,
-                min: 15,
-                max: 5000,
-                divisions: 4985,
-                activeColor: AppColors.blackCat,
-                labels: RangeLabels(
-                  '\$${_budgetRange.start.round()}',
-                  '\$${_budgetRange.end.round()}',
-                ),
-                onChanged: (v) {
-                  setState(() => _budgetRange = v);
-                  _budgetMinCtrl.text = _budgetRange.start.round().toString();
-                  _budgetMaxCtrl.text = _budgetRange.end.round().toString();
-                },
-              ),
-
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat,
-                    foregroundColor: AppColors.snow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                    elevation: 0,
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Apply',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontFamily: 'Arial',
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _openCancelledDetails(ClientRequestV2 r) async {
-    await showSimpleStatusRequestSheet(
-      context: context,
-      request: r,
-      status: SimpleRequestStatus.cancelled,
-      // pick whatever date you track; fallback is ok for now
-      date: DateTime.now(),
-    );
-  }
-
-  Future<void> _openDeclinedDetails(ClientRequestV2 r) async {
-    await showSimpleStatusRequestSheet(
-      context: context,
-      request: r,
-      status: SimpleRequestStatus.declined,
-      date: DateTime.now(),
-    );
-  }
-
-  Future<void> _openExpiredDetails(ClientRequestV2 r) async {
-    await showSimpleStatusRequestSheet(
-      context: context,
-      request: r,
-      status: SimpleRequestStatus.expired,
-      date: DateTime.now(),
-    );
-  }
-
-  Widget _shippingChip() {
-    final label = switch (_shipFilter) {
-      ShipTimeFilter.any => 'Ship Time',
-      ShipTimeFilter.upTo2Days => 'Up to 2 days',
-      ShipTimeFilter.upTo3Days => 'Up to 3 days',
-      ShipTimeFilter.upTo5Days => 'Up to 5 days',
-    };
-
-    return CompositedTransformTarget(
-      link: _shipLink,
-      child: InkWell(
-        borderRadius: BorderRadius.zero,
-        onTap: () {
-          if (_dropdownEntry != null) {
-            _closeDropdown();
-          } else {
-            _showShipDropdown();
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.snow,
-            borderRadius: BorderRadius.zero,
-            border: Border.all(color: AppColors.blackCatBorderLight),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.local_shipping_outlined,
-                size: 16,
-                color: AppColors.blackCat.withOpacity(0.70),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: _t(12, w: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: AppColors.blackCat.withOpacity(0.45),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDropdown({
-    required LayerLink link,
-    required Widget child,
-    double yOffset = 8,
-  }) {
-    _closeDropdown();
-
-    _dropdownEntry = OverlayEntry(
-      builder: (context) {
-        return Stack(
-          children: [
-            // tap outside to close
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _closeDropdown,
-                behavior: HitTestBehavior.translucent,
-                child: const SizedBox(),
-              ),
-            ),
-
-            // anchored dropdown
-            CompositedTransformFollower(
-              link: link,
-              showWhenUnlinked: false,
-              offset: Offset(0, yOffset),
-              child: Material(color: AppColors.blackCat, child: child),
-            ),
-          ],
-        );
-      },
-    );
-
-    Overlay.of(context).insert(_dropdownEntry!);
-  }
-
-  void _showShipDropdown() {
-    _showDropdown(
-      link: _shipLink,
-      child: _DropdownCard(
-        width: 220, // tweak as you like
-        children: [
-          _DropItem(
-            text: 'Any',
-            onTap: () {
-              setState(() => _shipFilter = ShipTimeFilter.any);
-              _closeDropdown();
-            },
-          ),
-          _DropItem(
-            text: 'Up to 2 days',
-            onTap: () {
-              setState(() => _shipFilter = ShipTimeFilter.upTo2Days);
-              _closeDropdown();
-            },
-          ),
-          _DropItem(
-            text: 'Up to 3 days',
-            onTap: () {
-              setState(() => _shipFilter = ShipTimeFilter.upTo3Days);
-              _closeDropdown();
-            },
-          ),
-          _DropItem(
-            text: 'Up to 5 days',
-            onTap: () {
-              setState(() => _shipFilter = ShipTimeFilter.upTo5Days);
-              _closeDropdown();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  RelativeRect _popupPosition(GlobalKey key) {
-    final renderBox = key.currentContext!.findRenderObject() as RenderBox;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-
-    final topLeft = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
-    final size = renderBox.size;
-
-    // show menu just under the chip
-    return RelativeRect.fromRect(
-      Rect.fromLTWH(topLeft.dx, topLeft.dy + size.height + 6, size.width, 0),
-      Offset.zero & overlay.size,
-    );
-  }
-
-  Future<void> _openShipMenu() async {
-    final pos = _popupPosition(_shipKey);
-
-    final selected = await showMenu<ShipTimeFilter>(
-      context: context,
-      position: pos,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      items: const [
-        PopupMenuItem(value: ShipTimeFilter.any, child: Text('Any')),
-        PopupMenuItem(
-          value: ShipTimeFilter.upTo2Days,
-          child: Text('Up to 2 days'),
-        ),
-        PopupMenuItem(
-          value: ShipTimeFilter.upTo3Days,
-          child: Text('Up to 3 days'),
-        ),
-        PopupMenuItem(
-          value: ShipTimeFilter.upTo5Days,
-          child: Text('Up to 5 days'),
-        ),
-      ],
-    );
-
-    if (selected != null) setState(() => _shipFilter = selected);
-  }
-
   Future<void> _openInReviewDetails(ClientRequestV2 r) async {
     final request = await _hydrateRequestForDetails(r);
     if (!mounted) return;
@@ -4062,108 +3478,16 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
   }
 
-  Future<ShipTimeFilter?> _openShipSheet() async {
-    return showModalBottomSheet<ShipTimeFilter>(
-      context: context,
-      backgroundColor: AppColors.blackCat,
-      builder: (_) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-          decoration: const BoxDecoration(
-            color: AppColors.alabaster,
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 5,
-                width: 54,
-                decoration: BoxDecoration(
-                  color: AppColors.blackCat.withOpacity(0.12),
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Shipping time',
-                  style: TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _sheetOption('Any', ShipTimeFilter.any),
-              _sheetOption('Up to 2 days', ShipTimeFilter.upTo2Days),
-              _sheetOption('Up to 3 days', ShipTimeFilter.upTo3Days),
-              _sheetOption('Up to 5 days', ShipTimeFilter.upTo5Days),
-              const SizedBox(height: 10),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _sheetOption(String label, ShipTimeFilter v) {
-    return ListTile(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      tileColor: AppColors.snow,
-      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () => Navigator.pop(context, v),
-    );
-  }
-
-  Widget _sortChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          style: _t(
-            12,
-            w: FontWeight.w700,
-            c: AppColors.blackCat.withOpacity(0.85),
-          ),
-          value: _sort,
-          isExpanded: true,
-          borderRadius: BorderRadius.zero,
-          icon: Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: AppColors.blackCat.withOpacity(0.5),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'Newest', child: Text('Sort: Newest')),
-            DropdownMenuItem(
-              value: 'Soonest needed',
-              child: Text('Sort: Soonest needed'),
-            ),
-            DropdownMenuItem(
-              value: 'Higher budget',
-              child: Text('Sort: Higher budget'),
-            ),
-          ],
-          onChanged: (v) => setState(() => _sort = v ?? 'Newest'),
-        ),
-      ),
-    );
-  }
-
   InputDecoration _miniDec({String? prefix, String? hint}) {
     return InputDecoration(
       prefixText: prefix,
       prefixStyle: TextStyle(
-        color: AppColors.blackCat.withOpacity(0.78),
+        color: AppColors.blackCat.withValues(alpha: 0.78),
         fontWeight: FontWeight.w600,
       ),
       hintText: hint,
       hintStyle: TextStyle(
-        color: AppColors.blackCat.withOpacity(0.45),
+        color: AppColors.blackCat.withValues(alpha: 0.45),
         fontWeight: FontWeight.w500,
       ),
       filled: true,
@@ -4270,7 +3594,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         child: Text(
           'No requests in this status',
           style: TextStyle(
-            color: AppColors.blackCat.withOpacity(0.55),
+            color: AppColors.blackCat.withValues(alpha: 0.55),
             fontWeight: FontWeight.w400,
           ),
         ),
@@ -4540,7 +3864,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 11 * s,
-          color: AppColors.blackCat,
+          color: AppColors.blackCat.withValues(alpha: 0.85),
           height: 1.05,
         ),
       ),
@@ -4552,7 +3876,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       return _companyRequestCard(r);
     }
     final s = _reqScale(context);
-    final isInReview = r.status == RequestStatusV2.inReview;
 
     return InkWell(
       borderRadius: BorderRadius.zero,
@@ -4592,7 +3915,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           border: Border.all(color: AppColors.blackCatBorderLight),
           boxShadow: [
             BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.04),
+              color: AppColors.blackCat.withValues(alpha: 0.04),
               blurRadius: 16,
               offset: const Offset(0, 10),
             ),
@@ -4638,7 +3961,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.72),
+                        color: AppColors.blackCat.withValues(alpha: 0.72),
                         fontWeight: FontWeight.w500,
                         fontSize: 12.5 * s,
                       ),
@@ -4669,7 +3992,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.72),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
                       fontWeight: FontWeight.w500,
                       fontSize: 12.5 * s,
                     ),
@@ -4678,7 +4001,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   Text(
                     'Need by ${_formatNeedBy(r.neededBy)}',
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.72),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
                       fontWeight: FontWeight.w700,
                       fontSize: 14.5 * s,
                     ),
@@ -4699,7 +4022,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                           style: _t(
                             11.5,
                             w: FontWeight.w700,
-                            c: AppColors.blackCat,
+                            c: AppColors.blackCat.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -4720,7 +4043,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                           style: _t(
                             11.5,
                             w: FontWeight.w700,
-                            c: AppColors.blackCat,
+                            c: AppColors.blackCat.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -4743,7 +4066,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                           style: _t(
                             11.5,
                             w: FontWeight.w700,
-                            c: AppColors.blackCat,
+                            c: AppColors.blackCat.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -4763,7 +4086,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   r.status.label,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
                     fontSize: 14 * s,
                   ),
                 ),
@@ -4773,7 +4096,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   child: Container(
                     height: 64,
                     width: 84,
-                    color: AppColors.blackCat.withOpacity(0.05),
+                    color: AppColors.blackCat.withValues(alpha: 0.05),
                     child: _requestPreviewImage(r),
                   ),
                 ),
@@ -4980,7 +4303,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Icon(
                 Icons.image_outlined,
-                color: AppColors.blackCat.withOpacity(0.35),
+                color: AppColors.blackCat.withValues(alpha: 0.35),
               ),
             );
           }
@@ -4991,7 +4314,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               if (bytes == null || bytes.isEmpty) {
                 return Icon(
                   Icons.image_outlined,
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 );
               }
               return Image.memory(
@@ -4999,7 +4322,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(
                   Icons.image_outlined,
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 ),
               );
             },
@@ -5013,7 +4336,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => Icon(
           Icons.image_outlined,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
       );
     }
@@ -5023,7 +4346,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => Icon(
           Icons.image_outlined,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
       );
     }
@@ -5034,7 +4357,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => Icon(
           Icons.image_outlined,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
       );
     }
@@ -5048,7 +4371,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => Icon(
           Icons.image_outlined,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
       );
     }
@@ -5056,47 +4379,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return Center(
       child: Icon(
         Icons.image_outlined,
-        color: AppColors.blackCat.withOpacity(0.35),
-      ),
-    );
-  }
-
-  Widget _pill(String text, {required IconData icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppColors.blackCat),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: _t(11.5, w: FontWeight.w700, c: AppColors.blackCat),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _countPill(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.blackCat.withOpacity(0.06),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Text(
-        text,
-        style: _t(
-          11.5,
-          w: FontWeight.w700,
-          c: AppColors.blackCat.withOpacity(0.8),
-        ),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
   }
@@ -5416,7 +4699,7 @@ class InReviewDetailsSheet extends StatelessWidget {
               height: 5,
               width: 54,
               decoration: BoxDecoration(
-                color: AppColors.blackCat.withOpacity(0.12),
+                color: AppColors.blackCat.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.zero,
               ),
             ),
@@ -5436,7 +4719,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                       fontWeight: FontWeight.w400,
                       fontSize: 14.5,
                       height: 1.35,
-                      color: AppColors.blackCat.withOpacity(0.90),
+                      color: AppColors.blackCat.withValues(alpha: 0.90),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -5506,7 +4789,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                                 Text(
                                   'Nail Shape',
                                   style: TextStyle(
-                                    color: AppColors.blackCat.withOpacity(0.78),
+                                    color: AppColors.blackCat.withValues(alpha: 0.78),
                                     fontWeight: FontWeight.w400,
                                     fontSize: 14.5,
                                   ),
@@ -5534,7 +4817,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                                 Text(
                                   'Nail Length',
                                   style: TextStyle(
-                                    color: AppColors.blackCat.withOpacity(0.78),
+                                    color: AppColors.blackCat.withValues(alpha: 0.78),
                                     fontWeight: FontWeight.w400,
                                     fontSize: 14.5,
                                   ),
@@ -5588,7 +4871,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                             children: [
                               Icon(
                                 Icons.image_outlined,
-                                color: AppColors.blackCat.withOpacity(0.45),
+                                color: AppColors.blackCat.withValues(alpha: 0.45),
                               ),
                               const SizedBox(width: 10),
                               Text(
@@ -5597,7 +4880,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                                     ? 'No photos uploaded by Brand'
                                     : 'No images uploaded',
                                 style: TextStyle(
-                                  color: AppColors.blackCat.withOpacity(0.82),
+                                  color: AppColors.blackCat.withValues(alpha: 0.82),
                                   fontWeight: FontWeight.w400,
                                 ),
                               ),
@@ -5622,13 +4905,13 @@ class InReviewDetailsSheet extends StatelessWidget {
                     height: 52,
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat.withOpacity(0.16),
+                        backgroundColor: AppColors.blackCat.withValues(alpha: 0.16),
                         foregroundColor: AppColors.blackCat,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.zero,
                         ),
                         side: BorderSide(
-                          color: AppColors.blackCat.withOpacity(0.30),
+                          color: AppColors.blackCat.withValues(alpha: 0.30),
                         ),
                       ),
                       onPressed: onDecline,
@@ -5673,15 +4956,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  static String _lengthHint(String len) {
-    final v = len.trim().toLowerCase();
-    if (v == 'short') return ' (Just past tip)';
-    if (v == 'medium') return ' (About 2–3mm past tip)';
-    if (v == 'long') return ' (Noticeably past tip)';
-    if (v == 'xlong' || v == 'xl' || v == 'extra long') return ' (Very long)';
-    return '';
-  }
-
   static Widget _handCardCentered(
     String title,
     NailDimensionsV2 d, {
@@ -5722,33 +4996,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     ),
   );
 
-  static Widget _kvRow(String label, String value) {
-    final v = value.trim().isEmpty ? '-' : value.trim();
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 110,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.58),
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            v,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
-          ),
-        ),
-      ],
-    );
-  }
-
   static Widget _softBox(Widget child) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -5773,23 +5020,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  static String _lengthSubtitle(String l) {
-    switch (l.toLowerCase()) {
-      case 'short':
-        return 'Just past tip';
-      case 'medium':
-        return 'Classic';
-      case 'long':
-        return 'Extended';
-      case 'extra long':
-        return 'Statement';
-      case 'xl':
-        return 'Maximum';
-      default:
-        return '';
-    }
-  }
-
   static String _prettyLength(String raw) {
     final v = raw.trim();
     if (v.isEmpty) return v;
@@ -5807,76 +5037,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     return v[0].toUpperCase() + v.substring(1);
   }
 
-  static Widget _infoPillRow({
-    required BuildContext context,
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    final s = _reqScale(context);
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 14 * s, vertical: 12 * s),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18 * s, color: AppColors.blackCat.withOpacity(0.75)),
-          SizedBox(width: 10 * s),
-
-          Text(
-            '$label ',
-            style: TextStyle(
-              fontWeight: FontWeight.w400,
-              fontSize: 14 * s,
-              color: AppColors.blackCat.withOpacity(0.55),
-            ),
-          ),
-
-          Expanded(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w400,
-                fontSize: 14 * s,
-                color: AppColors.blackCat.withOpacity(0.90),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _handCard(String title, NailDimensionsV2 d) {
-    return _softBox(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 10),
-          _dimRow('Thumb', d.thumb),
-          _dimRow('Index', d.index),
-          _dimRow('Middle', d.middle),
-          _dimRow('Ring', d.ring),
-          _dimRow('Pinky', d.pinky),
-        ],
-      ),
-    );
-  }
-
   static Widget _dimRow(String k, String v, {bool nfcRequested = false}) {
     final value = v.trim().isEmpty ? '-' : v.trim();
     final valueMm = _dimensionValueMm(value);
@@ -5889,7 +5049,7 @@ class InReviewDetailsSheet extends StatelessWidget {
             child: Text(
               k,
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.82),
+                color: AppColors.blackCat.withValues(alpha: 0.82),
                 fontWeight: FontWeight.w400,
                 fontSize: 13.5,
               ),
@@ -5999,7 +5159,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 13.5 * s,
-                    color: AppColors.blackCat.withOpacity(0.72),
+                    color: AppColors.blackCat.withValues(alpha: 0.72),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -6027,7 +5187,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 'Order # ${request.orderNumber.trim().isNotEmpty ? request.orderNumber.trim() : request.id}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppColors.blackCat.withOpacity(0.78),
+                  color: AppColors.blackCat.withValues(alpha: 0.78),
                   fontWeight: FontWeight.w500,
                   fontSize: 12.5 * s,
                 ),
@@ -6293,7 +5453,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         Text(
           'No client measurements found for this order.',
           style: TextStyle(
-            color: AppColors.blackCat.withOpacity(0.65),
+            color: AppColors.blackCat.withValues(alpha: 0.65),
             fontWeight: FontWeight.w400,
             fontSize: 13.5,
           ),
@@ -6362,7 +5522,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                     Text(
                       'Nail Shape',
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.78),
+                        color: AppColors.blackCat.withValues(alpha: 0.78),
                         fontWeight: FontWeight.w400,
                         fontSize: 13.5,
                       ),
@@ -6388,7 +5548,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                     Text(
                       'Nail Length',
                       style: TextStyle(
-                        color: AppColors.blackCat.withOpacity(0.78),
+                        color: AppColors.blackCat.withValues(alpha: 0.78),
                         fontWeight: FontWeight.w400,
                         fontSize: 13.5,
                       ),
@@ -6662,11 +5822,11 @@ class InReviewDetailsSheet extends StatelessWidget {
                 final bytes = bytesSnap.data;
                 if (bytes == null || bytes.isEmpty)
                   return Container(
-                    color: AppColors.blackCat.withOpacity(0.05),
+                    color: AppColors.blackCat.withValues(alpha: 0.05),
                     alignment: Alignment.center,
                     child: Icon(
                       Icons.broken_image_outlined,
-                      color: AppColors.blackCat.withOpacity(0.35),
+                      color: AppColors.blackCat.withValues(alpha: 0.35),
                     ),
                   );
                 return Image.memory(bytes, fit: BoxFit.cover);
@@ -6680,11 +5840,11 @@ class InReviewDetailsSheet extends StatelessWidget {
           dataBytes,
           fit: BoxFit.cover,
           errorBuilder: (_, _, _) => Container(
-            color: AppColors.blackCat.withOpacity(0.05),
+            color: AppColors.blackCat.withValues(alpha: 0.05),
             alignment: Alignment.center,
             child: Icon(
               Icons.broken_image_outlined,
-              color: AppColors.blackCat.withOpacity(0.35),
+              color: AppColors.blackCat.withValues(alpha: 0.35),
             ),
           ),
         );
@@ -6695,11 +5855,11 @@ class InReviewDetailsSheet extends StatelessWidget {
           path,
           fit: BoxFit.cover,
           errorBuilder: (_, _, _) => Container(
-            color: AppColors.blackCat.withOpacity(0.05),
+            color: AppColors.blackCat.withValues(alpha: 0.05),
             alignment: Alignment.center,
             child: Icon(
               Icons.broken_image_outlined,
-              color: AppColors.blackCat.withOpacity(0.35),
+              color: AppColors.blackCat.withValues(alpha: 0.35),
             ),
           ),
         );
@@ -6710,21 +5870,21 @@ class InReviewDetailsSheet extends StatelessWidget {
           File(localPath),
           fit: BoxFit.cover,
           errorBuilder: (_, _, _) => Container(
-            color: AppColors.blackCat.withOpacity(0.05),
+            color: AppColors.blackCat.withValues(alpha: 0.05),
             alignment: Alignment.center,
             child: Icon(
               Icons.broken_image_outlined,
-              color: AppColors.blackCat.withOpacity(0.35),
+              color: AppColors.blackCat.withValues(alpha: 0.35),
             ),
           ),
         );
       }
       return Container(
-        color: AppColors.blackCat.withOpacity(0.05),
+        color: AppColors.blackCat.withValues(alpha: 0.05),
         alignment: Alignment.center,
         child: Icon(
           Icons.image_not_supported_outlined,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
       );
     }
@@ -6811,11 +5971,11 @@ class InReviewDetailsSheet extends StatelessWidget {
     final isStorageRef = _looksLikeStorageRef(path);
 
     Widget broken() => Container(
-      color: AppColors.blackCat.withOpacity(0.05),
+      color: AppColors.blackCat.withValues(alpha: 0.05),
       alignment: Alignment.center,
       child: Icon(
         Icons.broken_image_outlined,
-        color: AppColors.blackCat.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
 
@@ -7245,12 +6405,10 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
                         height: 48,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat.withOpacity(
-                              0.16,
-                            ),
+                            backgroundColor: AppColors.blackCat.withValues(alpha: 0.16),
                             foregroundColor: AppColors.blackCat,
                             side: BorderSide(
-                              color: AppColors.blackCat.withOpacity(0.30),
+                              color: AppColors.blackCat.withValues(alpha: 0.30),
                             ),
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.zero,
@@ -7327,7 +6485,7 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
           child: Text(
             a,
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.65),
+              color: AppColors.blackCat.withValues(alpha: 0.65),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -7353,7 +6511,7 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
           child: Text(
             label,
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.65),
+              color: AppColors.blackCat.withValues(alpha: 0.65),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -7379,13 +6537,13 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
                 borderSide: BorderSide(
-                  color: AppColors.blackCat.withOpacity(0.06),
+                  color: AppColors.blackCat.withValues(alpha: 0.06),
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
                 borderSide: BorderSide(
-                  color: AppColors.blackCat.withOpacity(0.06),
+                  color: AppColors.blackCat.withValues(alpha: 0.06),
                 ),
               ),
               focusedBorder: const OutlineInputBorder(
@@ -7396,69 +6554,6 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _DropdownCard extends StatelessWidget {
-  const _DropdownCard({required this.children, this.width = 220});
-
-  final List<Widget> children;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      margin: const EdgeInsets.only(left: 0),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.10),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: children),
-    );
-  }
-}
-
-class _DropItem extends StatelessWidget {
-  const _DropItem({required this.text, required this.onTap});
-
-  final String text;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.blackCat.withOpacity(0.45),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -7498,3 +6593,6 @@ class _HeaderMenuRow extends StatelessWidget {
     );
   }
 }
+
+
+

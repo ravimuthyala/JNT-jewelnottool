@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:jnt_app_0120/theme/app_colors.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -28,9 +29,9 @@ class LandingPage extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.10),
+                  AppColors.blackCat.withValues(alpha: 0.10),
                   Colors.transparent,
-                  Colors.black.withOpacity(0.25),
+                  AppColors.blackCat.withValues(alpha: 0.25),
                 ],
                 stops: const [0.0, 0.55, 1.0],
               ),
@@ -70,7 +71,6 @@ class LandingPage extends StatelessWidget {
                           ),
                         ),
                         onPressed: () {
-                          // TODO: Navigate to Login
                         },
                         child: const Text(
                           'Login',
@@ -93,10 +93,9 @@ class LandingPage extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          backgroundColor: Colors.white.withOpacity(0.95),
+                          backgroundColor: AppColors.snow.withValues(alpha: 0.95),
                         ),
                         onPressed: () {
-                          // TODO: Navigate to Register
                         },
                         child: const Text(
                           'Register',

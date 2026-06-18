@@ -83,7 +83,11 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
   void _announce(String message) {
     if (!mounted) return;
     if (!_shouldUseAccessibilityEnhancements(context)) return;
-    SemanticsService.announce(message, Directionality.of(context));
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
   }
 
   Future<void> _pickPhoto() async {
@@ -394,19 +398,19 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
                 borderSide: BorderSide(
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
                 borderSide: BorderSide(
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
                 borderSide: BorderSide(
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 ),
               ),
             ),
@@ -458,7 +462,7 @@ class _ProfileUploadPicker extends StatelessWidget {
                     color: AppColors.snow,
                     borderRadius: BorderRadius.zero,
                     border: Border.all(
-                      color: AppColors.blackCat.withOpacity(0.35),
+                      color: AppColors.blackCat.withValues(alpha: 0.35),
                       width: 1.4,
                     ),
                   ),
@@ -497,7 +501,7 @@ class _ProfileUploadPicker extends StatelessWidget {
                       border: Border.all(color: AppColors.blackCatBorderLight),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.blackCat.withOpacity(0.10),
+                          color: AppColors.blackCat.withValues(alpha: 0.10),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),

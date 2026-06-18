@@ -12,7 +12,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart'
-    show ClientProfileDraft, NailDimensions, NailLength, nailShapes;
+    show ClientProfileDraft,  NailLength, nailShapes;
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../services/artist_directory_service.dart';
@@ -21,12 +21,9 @@ import '../utils/scenario_4_1.dart';
 
 const Color _requestSnow = Color(0xFFFAF9F9);
 final BorderSide _requestBorder = BorderSide(
-  color: AppColors.blackCat.withOpacity(0.35),
+  color: AppColors.blackCat.withValues(alpha: 0.35),
 );
-const double _requestHeaderFs = 15;
-const double _requestInputFs = 13.5;
-const double _requestHintFs = 12.5;
-const double _requestLabelFs = 13.5;
+
 const int _maxInspirationPhotos = 10;
 const int _nfcBudgetSurcharge = 7;
 
@@ -219,22 +216,16 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
   // -----------------------------
   // Company fields
   // -----------------------------
-  String? _requestType;
   final TextEditingController _campaignNameCtrl = TextEditingController();
   final TextEditingController _setsNeededCtrl = TextEditingController();
-  String? _moodVibe;
-  final bool _includeLogo = false;
   String? _requestedClient;
   String? _requestedArtist;
   bool _fallbackToPool = true;
-  final bool _sendToRequestPool = true;
-  final bool _isGroupOrder = false;
   int _quantity = 1;
   bool _shippingAddressDifferentFromProfile = false;
   _ClientRecipientMode _clientRecipientMode = _ClientRecipientMode.pool;
   _DesignCreatorMode _designCreatorMode = _DesignCreatorMode.pool;
   List<String> _brandPartnerClients = <String>[];
-  List<String> _allClients = <String>[];
   List<String> _directRequestArtists = <String>[];
   final Map<String, String> _clientEmailByNameLower = <String, String>{};
   final Map<String, bool> _clientNfcEligibleByNameLower = <String, bool>{};
@@ -249,15 +240,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     text: 'United States',
   );
 
-  // Brand colors chips
-  final List<Color> _brandColors = [
-    const Color(0xFFF2A3AE),
-    const Color(0xFF2ECC71),
-    Color(0xFFB57EDC),
-    const Color(0xFFFFD6A5),
-    const Color(0xFF7C6AE6),
-  ];
-
+  
   // Uploads
   final ImagePicker _picker = ImagePicker();
   final List<_UploadedReferenceImage> _uploadedFiles = [];
@@ -275,21 +258,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
   // -----------------------------
   late String _shape;
   late NailLength _length;
-  String? _finish;
 
-  // Inspiration checkbox
-  final bool _allowNonLicensed = true;
-
-  // -----------------------------
-  // Options
-  // -----------------------------
-  static const List<String> _requestTypes = [
-    'Campaign / Brand Launch',
-    'Influencer PR Package',
-    'Event / Activation',
-    'Employee Gifting',
-    'Seasonal Drop',
-  ];
+ 
 
   static const List<String> _defaultArtistOptions = [
     'Artist Mia',
@@ -297,27 +267,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     'Artist Lana',
   ];
 
-  static const List<String> _defaultClientOptions = <String>[];
 
-  static const List<String> _moods = [
-    'Minimal / Clean',
-    'Luxury',
-    'Bold',
-    'Cute',
-    'Edgy',
-    'Glam',
-    'Neutral',
-    'Seasonal',
-  ];
-
-  static const List<String> _finishes = [
-    'Glossy',
-    'Matte',
-    'Chrome',
-    'Glitter',
-    'Jelly',
-    'Pearl',
-  ];
   late final ClientProfileDraft _profile;
 
   @override
@@ -338,7 +288,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         ? NailLength.medium
         : profileLength;
 
-    _finish = _finishes.first;
+   // _finish = _finishes.first;
     final initialArtist = widget.initialRequestedArtist?.trim() ?? '';
     _requestedArtist = initialArtist.isEmpty ? null : initialArtist;
     if (widget.defaultSpecificArtistSelection &&
@@ -917,10 +867,10 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
       setState(() {
         _brandPartnerClients = clientNames.toList()
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-        _allClients =
+        /*_allClients =
             (allClientNames.isEmpty ? _clientOptions.toSet() : allClientNames)
                 .toList()
-              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));*/
         final allowed =
             (_nfcRequest
                     ? _nfcFilteredBrandPartnerClients
@@ -953,7 +903,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
       if (!mounted) return;
       setState(() {
         _brandPartnerClients = <String>[];
-        _allClients = _clientOptions;
+        //_allClients = _clientOptions;
         _requestedClient = null;
         _groupClientToAdd = '';
         _groupSelectedClients.clear();
@@ -1044,62 +994,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     });
   }
 
-  void _showAddColorSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      builder: (_) {
-        final presets = <Color>[
-          const Color(0xFFF2A3AE),
-          const Color(0xFF7C6AE6),
-          const Color(0xFFFFD6A5),
-          const Color(0xFF2ECC71),
-          const Color(0xFF111827),
-          const Color(0xFFFFFFFF),
-        ];
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Add Brand Color',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: presets.map((c) {
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() => _brandColors.add(c));
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      height: 34,
-                      width: 34,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.blackCat.withOpacity(0.12),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _submitRequest() async {
+    Future<void> _submitRequest() async {
     if (_isSubmitting || _pendingRequestDocId != null) return;
     final campaignOk = _campaignNameCtrl.text.trim().isNotEmpty;
     final needByOk = _needBy != null;
@@ -2191,7 +2086,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   fontFamily: 'Arial',
-                  color: AppColors.blackCat.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -2278,7 +2173,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'Arial',
-                color: AppColors.blackCat.withOpacity(0.60),
+                color: AppColors.blackCat.withValues(alpha: 0.60),
               ),
             ),
             const SizedBox(height: 10),
@@ -2297,7 +2192,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                           label: const Text('Gallery'),
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size(0, 52),
-                            backgroundColor: AppColors.blackCat.withOpacity(
+                            backgroundColor: AppColors.blackCat.withValues(alpha:
                               0.12,
                             ),
                             foregroundColor: AppColors.blackCat,
@@ -2349,7 +2244,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         fontFamily: 'Arial',
-                        color: AppColors.blackCat.withOpacity(0.58),
+                        color: AppColors.blackCat.withValues(alpha: 0.58),
                       ),
                     ),
                   ),
@@ -2369,7 +2264,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                                     height: 74,
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: AppColors.blackCat.withOpacity(
+                                        color: AppColors.blackCat.withValues(alpha:
                                           0.25,
                                         ),
                                       ),
@@ -2440,7 +2335,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         fontFamily: 'Arial',
-                        color: AppColors.blackCat.withOpacity(0.62),
+                        color: AppColors.blackCat.withValues(alpha: 0.62),
                       ),
                     ),
                     onChanged: (v) => _setNfcRequest(v ?? false),
@@ -2658,7 +2553,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                             'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
                             style: TextStyle(
                               fontWeight: FontWeight.w400,
-                              color: AppColors.blackCat.withOpacity(0.75),
+                              color: AppColors.blackCat.withValues(alpha: 0.75),
                               height: 1.2,
                               fontSize: 13,
                             ),
@@ -2684,7 +2579,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                                       : AppColors.blackCat,
                                 ),
                                 side: BorderSide(
-                                  color: AppColors.blackCat.withOpacity(0.08),
+                                  color: AppColors.blackCat.withValues(alpha: 0.08),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -2706,7 +2601,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                                       : AppColors.blackCat,
                                 ),
                                 side: BorderSide(
-                                  color: AppColors.blackCat.withOpacity(0.08),
+                                  color: AppColors.blackCat.withValues(alpha: 0.08),
                                 ),
                               ),
                             ],
@@ -2733,7 +2628,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'Arial',
-                color: AppColors.blackCat.withOpacity(0.60),
+                color: AppColors.blackCat.withValues(alpha: 0.60),
               ),
             ),
             const SizedBox(height: 10),
@@ -2761,7 +2656,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'Arial',
-                color: AppColors.blackCat.withOpacity(0.60),
+                color: AppColors.blackCat.withValues(alpha: 0.60),
               ),
             ),
             const SizedBox(height: 10),
@@ -2827,7 +2722,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Arial',
-                      color: AppColors.blackCat.withOpacity(0.58),
+                      color: AppColors.blackCat.withValues(alpha: 0.58),
                     ),
                   ),
                 ],
@@ -2931,7 +2826,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Arial',
-                  color: AppColors.blackCat.withOpacity(0.60),
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
                 ),
               ),
             ),
@@ -2942,7 +2837,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                 Icon(
                   Icons.info_outline_rounded,
                   size: 16,
-                  color: AppColors.blackCat.withOpacity(0.75),
+                  color: AppColors.blackCat.withValues(alpha: 0.75),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -2952,7 +2847,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Arial',
-                      color: AppColors.blackCat.withOpacity(0.75),
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
                       height: 1.3,
                     ),
                   ),
@@ -2999,8 +2894,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     );
   }
 
-  List<NailLength> get _lengthOptions =>
-      NailLength.values.where((e) => e != NailLength.none).toList();
+  
 
   List<String> get _artistOptions {
     final seen = <String>{};
@@ -3022,20 +2916,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     return result;
   }
 
-  List<String> get _clientOptions {
-    final seen = <String>{};
-    final result = <String>[];
-    for (final raw in _defaultClientOptions) {
-      final name = raw.trim();
-      if (name.isEmpty) continue;
-      if (seen.add(name.toLowerCase())) {
-        result.add(name);
-      }
-    }
-    result.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return result;
-  }
-
+  
   Widget _fieldLabel(String t) {
     return Text(
       t,
@@ -3055,7 +2936,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         height: 34,
         width: 34,
         decoration: BoxDecoration(
-          border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
+          border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
           borderRadius: BorderRadius.zero,
         ),
         child: Icon(icon, size: 16),
@@ -3079,7 +2960,7 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
       ),
       child: child,
     );
@@ -3111,7 +2992,7 @@ class _OptionCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           border: Border.all(
-            color: AppColors.blackCat.withOpacity(0.35),
+            color: AppColors.blackCat.withValues(alpha: 0.35),
             width: selected ? 2 : 1,
           ),
           borderRadius: BorderRadius.zero,
@@ -3147,7 +3028,7 @@ class _OptionCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: badge == 'POOL'
-                              ? AppColors.blackCat.withOpacity(0.14)
+                              ? AppColors.blackCat.withValues(alpha: 0.14)
                               : AppColors.blackCat,
                           borderRadius: BorderRadius.circular(999),
                         ),
@@ -3171,7 +3052,7 @@ class _OptionCard extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Arial',
-                      color: AppColors.blackCat.withOpacity(0.65),
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
                     ),
                   ),
                 ],
@@ -3184,132 +3065,6 @@ class _OptionCard extends StatelessWidget {
   }
 }
 
-class _SegmentPill extends StatelessWidget {
-  const _SegmentPill({
-    required this.selected,
-    required this.label,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: _requestSnow,
-          border: Border.all(
-            color: AppColors.blackCat.withOpacity(0.35),
-            width: selected ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.zero,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat.withOpacity(0.85),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DropdownField extends StatelessWidget {
-  const _DropdownField({
-    required this.value,
-    required this.hint,
-    required this.items,
-    required this.onChanged,
-  });
-
-  final String? value;
-  final String hint;
-  final List<String> items;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final safeValue = (value != null && items.contains(value)) ? value : null;
-
-    return DropdownButtonFormField<String>(
-      initialValue: safeValue,
-      menuMaxHeight: 280,
-      isExpanded: true,
-      dropdownColor: _requestSnow,
-      style: const TextStyle(
-        fontSize: _requestInputFs,
-        fontWeight: FontWeight.w600,
-        fontFamily: 'Arial',
-        color: AppColors.blackCat,
-      ),
-      icon: Icon(
-        Icons.keyboard_arrow_down_rounded,
-        size: 16,
-        color: AppColors.blackCat.withOpacity(0.45),
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(
-          fontSize: _requestHintFs,
-          fontWeight: FontWeight.w400,
-          fontFamily: 'Arial',
-          color: AppColors.blackCat.withOpacity(0.35),
-        ),
-        isDense: true,
-        filled: true,
-        fillColor: _requestSnow,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-      ),
-      items: items
-          .map(
-            (s) => DropdownMenuItem(
-              value: s,
-              child: Text(
-                s,
-                style: const TextStyle(
-                  fontSize: _requestInputFs,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Arial',
-                ),
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: onChanged,
-    );
-  }
-}
 
 class _SearchableSelectField extends StatelessWidget {
   const _SearchableSelectField({
@@ -3386,7 +3141,7 @@ class _SearchableSelectField extends StatelessWidget {
                   fontSize: 12.5,
                   fontWeight: FontWeight.w400,
                   fontFamily: 'Arial',
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 ),
                 isDense: true,
                 filled: true,
@@ -3398,7 +3153,7 @@ class _SearchableSelectField extends StatelessWidget {
                 suffixIcon: Icon(
                   Icons.search_rounded,
                   size: 16,
-                  color: AppColors.blackCat.withOpacity(0.45),
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.zero,
@@ -3502,7 +3257,7 @@ class _DateField extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
         isDense: true,
         filled: true,
@@ -3514,7 +3269,7 @@ class _DateField extends StatelessWidget {
           icon: Icon(
             Icons.calendar_month_rounded,
             size: 14,
-            color: AppColors.blackCat.withOpacity(0.45),
+            color: AppColors.blackCat.withValues(alpha: 0.45),
           ),
         ),
         border: OutlineInputBorder(
@@ -3551,7 +3306,7 @@ class _TextArea extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
         isDense: true,
         filled: true,
@@ -3598,7 +3353,7 @@ class _InputField extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
         isDense: true,
         filled: true,
@@ -3625,111 +3380,9 @@ class _InputField extends StatelessWidget {
   }
 }
 
-class _LogoToggleCard extends StatelessWidget {
-  const _LogoToggleCard({required this.includeLogo, required this.onChanged});
-  final bool includeLogo;
-  final ValueChanged<bool> onChanged;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: _requestSnow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Include Logo?',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.blackCat.withOpacity(0.75),
-              ),
-            ),
-          ),
-          Switch(
-            value: includeLogo,
-            activeThumbColor: AppColors.deepPlum,
-            inactiveThumbColor: AppColors.blackCat.withOpacity(0.35),
-            inactiveTrackColor: AppColors.blackCat.withOpacity(0.35),
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-}
 
-class _BrandColorsRow extends StatelessWidget {
-  const _BrandColorsRow({
-    required this.colors,
-    required this.onAdd,
-    required this.onRemove,
-  });
 
-  final List<Color> colors;
-  final VoidCallback onAdd;
-  final ValueChanged<int> onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        ...List.generate(colors.length, (i) {
-          return GestureDetector(
-            onLongPress: () => onRemove(i),
-            child: Container(
-              height: 28,
-              width: 28,
-              decoration: BoxDecoration(
-                color: colors[i],
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
-              ),
-            ),
-          );
-        }),
-        InkWell(
-          onTap: onAdd,
-          borderRadius: BorderRadius.zero,
-          child: Container(
-            height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: _requestSnow,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.add,
-                  size: 16,
-                  color: AppColors.blackCat.withOpacity(0.65),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Add color',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: AppColors.blackCat.withOpacity(0.75),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _BudgetCard extends StatelessWidget {
   const _BudgetCard({
@@ -3762,10 +3415,10 @@ class _BudgetCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, -5),
           ),
@@ -3783,9 +3436,9 @@ class _BudgetCard extends StatelessWidget {
             data: Theme.of(context).copyWith(
               sliderTheme: SliderTheme.of(context).copyWith(
                 activeTrackColor: AppColors.blackCat,
-                inactiveTrackColor: AppColors.blackCat.withOpacity(0.10),
+                inactiveTrackColor: AppColors.blackCat.withValues(alpha: 0.10),
                 thumbColor: AppColors.blackCat,
-                overlayColor: AppColors.blackCat.withOpacity(0.10),
+                overlayColor: AppColors.blackCat.withValues(alpha: 0.10),
                 rangeThumbShape: const RoundRangeSliderThumbShape(
                   enabledThumbRadius: 9,
                 ),
@@ -3811,7 +3464,7 @@ class _BudgetCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
               ),
               Text(
@@ -3819,7 +3472,7 @@ class _BudgetCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
               ),
             ],
@@ -3833,197 +3486,7 @@ class _BudgetCard extends StatelessWidget {
 // ----------
 // Nail pieces you already use
 // ----------
-class _NailDimensionsReadOnlyCard extends StatelessWidget {
-  const _NailDimensionsReadOnlyCard({required this.dimensions});
-  final NailDimensions dimensions;
 
-  String _mm(double? v) {
-    if (v == null || !v.isFinite) return '-';
-    return '${v.toStringAsFixed(0)} mm';
-  }
-
-  Widget _pill(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: _requestSnow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
-      ),
-    );
-  }
-
-  Widget _handRow(String title, List<String> labels, List<double?> values) {
-    return Column(
-      children: [
-        Center(
-          child: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(5, (i) {
-            return SizedBox(
-              width: 62,
-              child: Column(
-                children: [
-                  Text(
-                    labels[i],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.blackCat.withOpacity(0.70),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    height: 46,
-                    width: 34,
-                    decoration: BoxDecoration(
-                      color: _requestSnow,
-                      borderRadius: BorderRadius.zero,
-                      border: Border.all(
-                        color: AppColors.blackCat.withOpacity(0.35),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _pill(_mm(values[i])),
-                ],
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Nail Dimension (in mm)',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Measurement tips: Use a soft measuring tape or ruler. Enter width in millimeters (mm).',
-            style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.55),
-              fontWeight: FontWeight.w400,
-              fontSize: 11.5,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _handRow(
-            'Left Hand',
-            const ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'],
-            [
-              dimensions.lThumb,
-              dimensions.lIndex,
-              dimensions.lMiddle,
-              dimensions.lRing,
-              dimensions.lPinky,
-            ],
-          ),
-          const SizedBox(height: 18),
-          _handRow(
-            'Right Hand',
-            const ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'],
-            [
-              dimensions.rThumb,
-              dimensions.rIndex,
-              dimensions.rMiddle,
-              dimensions.rRing,
-              dimensions.rPinky,
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShapeCard extends StatelessWidget {
-  const _ShapeCard({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : Colors.white;
-    final border = selected
-        ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.35);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        width: 110,
-        height: 120,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: border, width: selected ? 1.6 : 1),
-        ),
-        child: Column(
-          children: [
-            Container(
-              height: 44,
-              width: 44,
-              decoration: BoxDecoration(
-                color: AppColors.blackCat.withOpacity(0.04),
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: border),
-              ),
-              child: Icon(
-                Icons.front_hand_outlined,
-                size: 20,
-                color: selected
-                    ? AppColors.blackCat
-                    : AppColors.blackCat.withOpacity(0.5),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Center(
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 String _lengthTitle(NailLength l) {
   switch (l) {
@@ -4039,99 +3502,5 @@ String _lengthTitle(NailLength l) {
       return 'XXL Long';
     case NailLength.none:
       return 'Select';
-  }
-}
-
-String _lengthImage(NailLength l) {
-  switch (l) {
-    case NailLength.short:
-      return 'assets/images/length_short.png';
-    case NailLength.medium:
-      return 'assets/images/length_medium.png';
-    case NailLength.long:
-      return 'assets/images/length_long.png';
-    case NailLength.extraLong:
-      return 'assets/images/length_extra_long.png';
-    case NailLength.xlLong:
-      return 'assets/images/length_xl_long.png';
-    case NailLength.none:
-      return 'assets/images/length_short.png';
-  }
-}
-
-class _LengthImageCard extends StatelessWidget {
-  const _LengthImageCard({
-    required this.title,
-    required this.subtitle,
-    required this.imageAsset,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final String imageAsset;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : Colors.white;
-    final border = selected
-        ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.35);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        width: 132,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: border, width: selected ? 1.6 : 1),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withOpacity(0.04),
-              blurRadius: 14,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.zero,
-              child: Image.asset(
-                imageAsset,
-                height: 58,
-                width: double.infinity,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => Container(
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: AppColors.blackCat.withOpacity(0.05),
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.image_not_supported_outlined,
-                    size: 16,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

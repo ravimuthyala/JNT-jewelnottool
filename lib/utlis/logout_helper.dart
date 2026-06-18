@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 ///
 /// IMPORTANT: Make sure your MaterialApp has a route named '/'.
 Future<void> logoutAndGoHome(BuildContext context) async {
-  // TODO: Add real sign out here later (Firebase/Auth/etc.)
-  // await FirebaseAuth.instance.signOut();
 
   if (!context.mounted) return;
 

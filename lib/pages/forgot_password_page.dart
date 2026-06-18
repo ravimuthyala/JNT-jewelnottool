@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -10,7 +12,7 @@ Future<void> showForgotPasswordModal(BuildContext context) async {
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withOpacity(0.40),
+    barrierColor: Colors.black.withValues(alpha: 0.40),
     isDismissible: true,
     enableDrag: true,
     builder: (_) => const _ForgotPasswordSheet(),
@@ -26,9 +28,7 @@ class _ForgotPasswordSheet extends StatefulWidget {
 
 class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
   static const Color _alabaster = AppColors.alabaster;
-  static const Color _blackCat = AppColors.blackCat;
   static const Color _snow = AppColors.snow;
-  static const Color _linkShade = AppColors.blackCatLight;
   static const Color _focusRing = Color(0xFFFFBF47);
   static const double _fieldHeight = 46;
   static const double _fieldVerticalPadding = 14;
@@ -83,11 +83,11 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AppColors.blackCat.withOpacity(0.35)),
+        borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide:  BorderSide(color: AppColors.blackCat.withOpacity(0.35)),
+        borderSide:  BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
@@ -138,22 +138,24 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
   }
 
   Future<void> _onSend() async {
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+
     if (_formKey.currentState?.validate() != true) {
       final error = _emailValidator(_emailCtrl.text);
       if (error != null) {
-        SemanticsService.announce(error, Directionality.of(context));
+        SemanticsService.sendAnnouncement(error as FlutterView, view as String, Directionality.of(context));
       }
       return;
     }
 
     final email = _emailCtrl.text.trim();
     setState(() => _loading = true);
-    SemanticsService.announce('Sending reset link', Directionality.of(context));
+    SemanticsService.sendAnnouncement('Sending reset link' as FlutterView, view as String, Directionality.of(context));
 
     try {
       await _sendResetEmail(email);
       if (!mounted) return;
-      SemanticsService.announce('Reset link sent', Directionality.of(context));
+      SemanticsService.sendAnnouncement('Reset link sent' as FlutterView, view as String, Directionality.of(context));
 
       await showDialog<void>(
         context: context,
@@ -166,7 +168,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     } catch (e) {
       if (!mounted) return;
       final message = 'Failed to send reset link: $e';
-      SemanticsService.announce(message, Directionality.of(context));
+      SemanticsService.sendAnnouncement(message as FlutterView, view as String, Directionality.of(context));
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -243,7 +245,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                                 ),
                               ),
                               overlayColor: WidgetStateProperty.all(
-                                AppColors.blackCat.withOpacity(0.08),
+                                AppColors.blackCat.withValues(alpha: 0.08),
                               ),
                               side: WidgetStateProperty.resolveWith((states) {
                                 if (states.contains(WidgetState.focused)) {
@@ -431,7 +433,7 @@ class _ResetLinkSentDialog extends StatelessWidget {
                 height: 36,
                 width: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.blackCat.withOpacity(0.12),
+                  color: AppColors.blackCat.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.zero,
                 ),
                 child: const Icon(

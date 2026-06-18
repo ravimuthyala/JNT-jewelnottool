@@ -359,13 +359,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         _card(
           title: 'Payment Method',
-          child: Column(
-            children: [
-              _radio(PaymentMethod.applePay, 'Apple Pay'),
-              _radio(PaymentMethod.venmo, 'Venmo'),
-              _radio(PaymentMethod.paypal, 'PayPal'),
-              _radio(PaymentMethod.card, 'Credit / Debit Card'),
-              const SizedBox(height: 10),
+          child: RadioGroup<PaymentMethod>(
+            groupValue: _method,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _method = value);
+            },
+            child: Column(
+              children: [
+                _radio(PaymentMethod.applePay, 'Apple Pay'),
+                _radio(PaymentMethod.venmo, 'Venmo'),
+                _radio(PaymentMethod.paypal, 'PayPal'),
+                _radio(PaymentMethod.card, 'Credit / Debit Card'),
+                const SizedBox(height: 10),
               if (_isVenmo) ...[
                 TextField(
                   controller: _venmoCtrl,
@@ -457,7 +463,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 checkColor: widget.onPrimaryColor,
                 controlAffinity: ListTileControlAffinity.leading,
               ),
-            ],
+              ],
+            ),
           ),
         ),
 
@@ -567,8 +574,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _radio(PaymentMethod value, String label) {
     return RadioListTile<PaymentMethod>(
       value: value,
-      groupValue: _method,
-      onChanged: (v) => setState(() => _method = v ?? _method),
       title: Text(label, style: _bodyStyle(context)),
       activeColor: widget.primaryColor,
       contentPadding: EdgeInsets.zero,
@@ -643,7 +648,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -660,4 +665,3 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 }
-

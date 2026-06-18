@@ -638,15 +638,13 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
       for (final table in const <String>['client', 'client_artist']) {
         try {
           final rows = await supabase.from(table).select().limit(200);
-          if (rows is List) {
-            allRows.addAll(
-              rows
-                  .whereType<Map>()
-                  .map((row) => Map<String, dynamic>.from(row))
-                  .toList(growable: false),
-            );
-          }
-        } catch (e) {
+          allRows.addAll(
+            rows
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList(growable: false),
+          );
+                } catch (e) {
           debugPrint('CLIENT CUSTOM REQUEST V2 client load failed [$table]: $e');
         }
       }
@@ -863,7 +861,6 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
   }
 
   Future<void> _saveBudgetToDb(RangeValues v) async {
-    // TODO: Firestore integration if needed
   }
 
   // -----------------------
@@ -1446,7 +1443,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           ..['needBy'] = 'Need By Date is required';
       });
       _needByFocusNode.requestFocus();
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Need By Date is required',
         Directionality.of(context),
       );
@@ -1460,7 +1458,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           ..['description'] = 'Description is required';
       });
       _descriptionFocusNode.requestFocus();
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Description is required',
         Directionality.of(context),
       );
@@ -1971,14 +1970,14 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                         height: 34,
                         width: 34,
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.06),
+                          color: AppColors.blackCat.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.zero,
                         ),
                         alignment: Alignment.center,
                         child: Icon(
                           Icons.auto_awesome_rounded,
                           size: 18,
-                          color: AppColors.blackCat.withOpacity(0.85),
+                          color: AppColors.blackCat.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
@@ -1987,7 +1986,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                   Text(
                     "Tell artists what you're looking for. Your profile nail sizing stays synced.",
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.55),
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
                       fontWeight: FontWeight.w500,
                       fontSize: 14,
                       height: 1.25,
@@ -2200,11 +2199,11 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              backgroundColor: AppColors.blackCat.withOpacity(
+                              backgroundColor: AppColors.blackCat.withValues(alpha:
                                 0.08,
                               ),
                               side: BorderSide(
-                                color: AppColors.blackCat.withOpacity(0.18),
+                                color: AppColors.blackCat.withValues(alpha: 0.18),
                               ),
                               deleteIcon: const Icon(
                                 Icons.close_rounded,
@@ -2248,7 +2247,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               'Allow non-licensed nail technicians to work on your design?',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black.withOpacity(0.75),
+                                color: Colors.black.withValues(alpha: 0.75),
                                 height: 1.2,
                                 fontSize: 12,
                               ),
@@ -2369,7 +2368,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                             Text(
                               'Loading clients from database...',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(alpha: 0.65),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 11.5,
                               ),
@@ -2382,7 +2381,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                         child: Text(
                           'No completed client profiles found in database.',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.65),
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
                             fontWeight: FontWeight.w600,
                             fontSize: 11.5,
                           ),
@@ -2393,7 +2392,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                         child: Text(
                           'Add clients to the group order. Only clients with completed profiles appear here.',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.65),
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
                             fontWeight: FontWeight.w500,
                             fontSize: 12,
                           ),
@@ -2443,7 +2442,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                 icon: Icon(
                                   Icons.keyboard_arrow_down_rounded,
                                   size: 16,
-                                  color: Colors.black.withOpacity(0.45),
+                                  color: AppColors.blackCat.withValues(alpha: 0.45),
                                 ),
                                 decoration: _ddDeco('Select Client'),
                                 items: <DropdownMenuItem<String>>[
@@ -2481,7 +2480,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                 Text(
                                   'Select a client to view nail dimensions and edit preferences.',
                                   style: TextStyle(
-                                    color: Colors.black.withOpacity(0.60),
+                                    color: AppColors.blackCat.withValues(alpha: 0.60),
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                   ),
@@ -2496,7 +2495,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                   showDimensionImages: false,
                                   showNfcOptions: true,
                                   nailDimensionBorderColor: AppColors.blackCat
-                                      .withOpacity(0.25),
+                                      .withValues(alpha: 0.25),
                                   onChanged: (updated) {
                                     setState(() {
                                       slot.draftNails = updated;
@@ -2566,7 +2565,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                     'If the artist cannot complete the request, do you want it to go into the request pool?',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.black.withOpacity(0.75),
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
                       height: 1.2,
                       fontSize: 12,
                     ),
@@ -2587,7 +2586,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               ? AppColors.snow
                               : AppColors.blackCat,
                         ),
-                        side: BorderSide(color: Colors.black.withOpacity(0.08)),
+                        side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.08)),
                         visualDensity: const VisualDensity(
                           horizontal: -2,
                           vertical: -2,
@@ -2607,7 +2606,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               ? AppColors.snow
                               : AppColors.blackCat,
                         ),
-                        side: BorderSide(color: Colors.black.withOpacity(0.08)),
+                        side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.08)),
                         visualDensity: const VisualDensity(
                           horizontal: -2,
                           vertical: -2,
@@ -2725,7 +2724,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               'Shipping address different from profile address?',
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
-                                color: Colors.black.withOpacity(0.75),
+                                color: AppColors.blackCat.withValues(alpha: 0.75),
                                 height: 1.2,
                                 fontSize: 14,
                               ),
@@ -2787,7 +2786,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(
-                                color: Colors.black.withOpacity(0.12),
+                                color: AppColors.blackCat.withValues(alpha: 0.12),
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.zero,
@@ -2799,7 +2798,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 13,
-                                color: Colors.black87,
+                                color: AppColors.blackCat,
                               ),
                             ),
                           ),
@@ -2826,7 +2825,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
+                                        AppColors.snow,
                                       ),
                                     ),
                                   )
@@ -2854,7 +2853,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
             ? BottomNavigationBar(
                 currentIndex: widget.bottomNavIndex,
                 selectedItemColor: AppColors.blackCat,
-                unselectedItemColor: Colors.black.withOpacity(0.35),
+                unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
                 type: BottomNavigationBarType.fixed,
                 onTap: (i) {
                   if (widget.onNavTap != null) {
@@ -2969,7 +2968,7 @@ class _ModalShell extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: AppColors.blackCat.withValues(alpha: 0.06),
             blurRadius: 26,
             offset: const Offset(0, 16),
           ),
@@ -2983,7 +2982,7 @@ class _ModalShell extends StatelessWidget {
 class _DividerLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(height: 1, color: Colors.black.withOpacity(0.06));
+    return Container(height: 1, color: AppColors.blackCat.withValues(alpha: 0.06));
   }
 }
 
@@ -3014,7 +3013,7 @@ class _SectionTitle extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.blackCat.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     height: 1.2,
                   ),
                 ),
@@ -3026,14 +3025,14 @@ class _SectionTitle extends StatelessWidget {
           height: 26,
           width: 26,
           decoration: BoxDecoration(
-            color: AppColors.blackCat.withOpacity(0.10),
+            color: AppColors.blackCat.withValues(alpha: 0.10),
             borderRadius: BorderRadius.zero,
           ),
           alignment: Alignment.center,
           child: Icon(
             Icons.chevron_right_rounded,
             size: 18,
-            color: AppColors.blackCat.withOpacity(0.70),
+            color: AppColors.blackCat.withValues(alpha: 0.70),
           ),
         ),
       ],
@@ -3089,13 +3088,13 @@ class _PillInfo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.blackCat.withOpacity(0.06),
+        color: AppColors.blackCat.withValues(alpha: 0.06),
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.12)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppColors.blackCat.withOpacity(0.85)),
+          Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.85)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -3103,7 +3102,7 @@ class _PillInfo extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: Colors.black.withOpacity(0.70),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
               ),
             ),
           ),
@@ -3154,7 +3153,7 @@ class _ToggleRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black.withOpacity(0.55),
+                    color: Colors.black.withValues(alpha: 0.55),
                     height: 1.2,
                   ),
                 ),
@@ -3165,7 +3164,7 @@ class _ToggleRow extends StatelessWidget {
             value: value,
             activeThumbColor: AppColors.blackCat,
             inactiveThumbColor: AppColors.blackCatLight,
-            inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+            inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
             onChanged: onChanged,
           ),
         ],
@@ -3179,7 +3178,7 @@ InputDecoration _ddDeco(String hint) {
     hintText: hint,
     hintStyle: TextStyle(
       fontSize: 12.5,
-      color: Colors.black.withOpacity(0.35),
+      color: Colors.black.withValues(alpha: 0.35),
       fontWeight: FontWeight.w600,
     ),
     filled: true,
@@ -3215,7 +3214,7 @@ class _CardLite extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -3257,7 +3256,7 @@ class _DropdownField extends StatelessWidget {
       icon: Icon(
         Icons.keyboard_arrow_down_rounded,
         size: 18,
-        color: Colors.black.withOpacity(0.45),
+        color: Colors.black.withValues(alpha: 0.45),
       ),
       decoration: _ddDeco(hint),
       items: items
@@ -3331,7 +3330,7 @@ class _SearchableSelectField extends StatelessWidget {
             hintText: hint,
             hintStyle: TextStyle(
               fontSize: 12.5,
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withValues(alpha: 0.35),
               fontWeight: FontWeight.w600,
             ),
             isDense: true,
@@ -3345,7 +3344,7 @@ class _SearchableSelectField extends StatelessWidget {
             suffixIcon: Icon(
               Icons.search_rounded,
               size: 16,
-              color: Colors.black.withOpacity(0.45),
+              color: Colors.black.withValues(alpha: 0.45),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.zero,
@@ -3451,7 +3450,7 @@ class _DateField extends StatelessWidget {
         hintText: 'MM/DD/YYYY',
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
           fontWeight: FontWeight.w600,
         ),
         isDense: true,
@@ -3461,7 +3460,7 @@ class _DateField extends StatelessWidget {
         suffixIcon: Icon(
           Icons.calendar_month_rounded,
           size: 18,
-          color: Colors.black.withOpacity(0.45),
+          color: Colors.black.withValues(alpha: 0.45),
         ),
         errorText: (errorText ?? '').trim().isEmpty ? null : errorText,
         border: OutlineInputBorder(
@@ -3507,7 +3506,7 @@ class _TextArea extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
           fontWeight: FontWeight.w600,
         ),
         isDense: true,
@@ -3616,7 +3615,7 @@ class _InputField extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
           fontWeight: FontWeight.w600,
         ),
         isDense: true,
@@ -3666,7 +3665,7 @@ class _SoftButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: AppColors.blackCat.withOpacity(0.9)),
+            Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.9)),
             const SizedBox(width: 8),
             Text(
               label,
@@ -3697,14 +3696,14 @@ class _SoftButtonWide extends StatelessWidget {
       child: Container(
         height: 46,
         decoration: BoxDecoration(
-          color: AppColors.blackCat.withOpacity(0.08),
+          color: AppColors.blackCat.withValues(alpha: 0.08),
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCat.withOpacity(0.16)),
+          border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.16)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: AppColors.blackCat.withOpacity(0.95)),
+            Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.95)),
             const SizedBox(width: 8),
             Text(
               label,
@@ -3745,7 +3744,7 @@ class _BudgetCard extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, -5),
           ),
@@ -3763,9 +3762,9 @@ class _BudgetCard extends StatelessWidget {
             data: Theme.of(context).copyWith(
               sliderTheme: SliderTheme.of(context).copyWith(
                 activeTrackColor: AppColors.blackCat,
-                inactiveTrackColor: Colors.black.withOpacity(0.10),
+                inactiveTrackColor: Colors.black.withValues(alpha: 0.10),
                 thumbColor: AppColors.blackCat,
-                overlayColor: AppColors.blackCat.withOpacity(0.10),
+                overlayColor: AppColors.blackCat.withValues(alpha: 0.10),
                 rangeThumbShape: const RoundRangeSliderThumbShape(
                   enabledThumbRadius: 9,
                 ),
@@ -3800,10 +3799,10 @@ class _RadioPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : AppColors.snow;
+    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : AppColors.snow;
     final border = selected
         ? AppColors.blackCat
-        : Colors.black.withOpacity(0.08);
+        : Colors.black.withValues(alpha: 0.08);
 
     return InkWell(
       onTap: onTap,
@@ -3823,7 +3822,7 @@ class _RadioPill extends StatelessWidget {
               size: 18,
               color: selected
                   ? AppColors.blackCat
-                  : Colors.black.withOpacity(0.35),
+                  : Colors.black.withValues(alpha: 0.35),
             ),
             const SizedBox(width: 10),
             Text(
@@ -3921,7 +3920,7 @@ class _NailDimensionsReadOnlyCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      color: Colors.black.withOpacity(0.70),
+                      color: Colors.black.withValues(alpha: 0.70),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -3932,7 +3931,7 @@ class _NailDimensionsReadOnlyCard extends StatelessWidget {
                       color: AppColors.snow,
                       borderRadius: BorderRadius.zero,
                       border: Border.all(
-                        color: AppColors.blackCat.withOpacity(0.35),
+                        color: AppColors.blackCat.withValues(alpha: 0.35),
                       ),
                     ),
                   ),
@@ -3963,7 +3962,7 @@ class _NailDimensionsReadOnlyCard extends StatelessWidget {
           Text(
             'Measurement tips: use a soft tape or ruler; enter width in mm.',
             style: TextStyle(
-              color: Colors.black.withOpacity(0.55),
+              color: Colors.black.withValues(alpha: 0.55),
               fontWeight: FontWeight.w600,
               fontSize: 11.5,
             ),
@@ -4024,10 +4023,10 @@ class _ShapeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : Colors.white;
+    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : Colors.white;
     final border = selected
         ? AppColors.blackCat
-        : Colors.black.withOpacity(0.10);
+        : Colors.black.withValues(alpha: 0.10);
 
     return InkWell(
       onTap: onTap,
@@ -4046,7 +4045,7 @@ class _ShapeCard extends StatelessWidget {
               height: 44,
               width: 44,
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.zero,
                 border: Border.all(color: border),
               ),
@@ -4055,7 +4054,7 @@ class _ShapeCard extends StatelessWidget {
                 size: 20,
                 color: selected
                     ? AppColors.blackCat
-                    : Colors.black.withOpacity(0.5),
+                    : Colors.black.withValues(alpha: 0.5),
               ),
             ),
             const SizedBox(height: 8),
@@ -4095,10 +4094,10 @@ class _LengthImageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : Colors.white;
+    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : Colors.white;
     final border = selected
         ? AppColors.blackCat
-        : Colors.black.withOpacity(0.10);
+        : Colors.black.withValues(alpha: 0.10);
 
     return InkWell(
       onTap: onTap,
@@ -4112,7 +4111,7 @@ class _LengthImageCard extends StatelessWidget {
           border: Border.all(color: border, width: selected ? 1.6 : 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 14,
               offset: const Offset(0, 8),
             ),
@@ -4130,7 +4129,7 @@ class _LengthImageCard extends StatelessWidget {
                 errorBuilder: (_, _, _) => Container(
                   height: 58,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.zero,
                   ),
                   alignment: Alignment.center,

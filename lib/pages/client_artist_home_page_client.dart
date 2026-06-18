@@ -153,7 +153,7 @@ class _ClientBottomNav extends StatelessWidget {
       onTap: onTap,
       type: BottomNavigationBarType.fixed,
       selectedItemColor: AppColors.deepPlum,
-      unselectedItemColor: Colors.black.withOpacity(0.55),
+      unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
       items: [
         _item(Icons.home_outlined, Icons.home, 'Home', true),
         _item(

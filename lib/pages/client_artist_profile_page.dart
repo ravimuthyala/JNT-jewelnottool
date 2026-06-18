@@ -1632,7 +1632,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                             height: 42,
                             width: 42,
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.06),
+                              color: AppColors.blackCat.withValues(alpha: 0.06),
                               borderRadius: BorderRadius.zero,
                             ),
                             alignment: Alignment.center,
@@ -1650,7 +1650,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                               fontSize: 10,
                               height: 1,
                               fontWeight: FontWeight.w800,
-                              color: Colors.black.withOpacity(0.70),
+                              color: AppColors.blackCat.withValues(alpha: 0.70),
                             ),
                           ),
                         ],
@@ -1704,7 +1704,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                             : _profile.basic.email.trim(),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: AppColors.blackCat.withOpacity(0.65),
+                          color: AppColors.blackCat.withValues(alpha: 0.65),
                           fontWeight: FontWeight.w400,
                           fontSize: 12.5,
                         ),
@@ -1714,7 +1714,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                         '${_profile.address.city.trim()}, ${_profile.address.state.trim()}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: AppColors.blackCat.withOpacity(0.60),
+                          color: AppColors.blackCat.withValues(alpha: 0.60),
                           fontWeight: FontWeight.w400,
                           fontSize: 12,
                         ),
@@ -1818,7 +1818,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                                 : 'Not accepting requests',
                             style: TextStyle(
                               fontSize: 11.5,
-                              color: Colors.black.withOpacity(0.55),
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
                               fontWeight: FontWeight.w400,
                             ),
                           ),
@@ -1829,9 +1829,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                       value: _directRequestsOn,
                       activeThumbColor: AppColors.blackCat,
                       inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withOpacity(
-                        0.35,
-                      ),
+                      inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
                       onChanged: _savingDirectRequestPref
                           ? null
                           : (v) => _setDirectRequestsEnabled(v),
@@ -1875,7 +1873,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                                 : 'Not accepting NFC upgrade requests',
                             style: TextStyle(
                               fontSize: 11.5,
-                              color: Colors.black.withOpacity(0.55),
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
                               fontWeight: FontWeight.w400,
                             ),
                           ),
@@ -1886,9 +1884,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                       value: _nfcRequestsOn,
                       activeThumbColor: AppColors.blackCat,
                       inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withOpacity(
-                        0.35,
-                      ),
+                      inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
                       onChanged: _savingNfcRequestPref
                           ? null
                           : (v) => _setNfcRequestsEnabled(v),
@@ -1939,7 +1935,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         currentIndex: _index,
         backgroundColor: AppColors.balletSlippers,
         selectedItemColor: AppColors.blackCat,
-        unselectedItemColor: Colors.black.withOpacity(0.35),
+        unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
         type: BottomNavigationBarType.fixed,
         onTap: _onBottomNavTap,
         items: const [
@@ -2038,7 +2034,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             fontWeight: FontWeight.w700,
             color: selected
                 ? AppColors.blackCat
-                : Colors.black.withOpacity(0.60),
+                : AppColors.blackCat.withValues(alpha: 0.60),
             fontSize: 12.5,
           ),
         ),
@@ -2076,7 +2072,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: Colors.black.withOpacity(0.35),
+              color: AppColors.blackCat.withValues(alpha: 0.35),
             ),
           ],
         ),
@@ -2111,73 +2107,6 @@ class _CommunicationPreferences {
   final bool newsUpdates;
   final _PreferredContactMethod preferredContact;
   final bool marketingConsent;
-
-  factory _CommunicationPreferences.defaults() {
-    return const _CommunicationPreferences(
-      emailNotifications: true,
-      smsNotifications: false,
-      pushNotifications: true,
-      accountActivity: true,
-      securityAlerts: true,
-      promotionsOffers: false,
-      reminders: true,
-      newsUpdates: true,
-      preferredContact: _PreferredContactMethod.sms,
-      marketingConsent: true,
-    );
-  }
-
-  factory _CommunicationPreferences.fromMap(Map<String, dynamic> map) {
-    _PreferredContactMethod parsePreferred(dynamic raw) {
-      switch ((raw ?? '').toString().trim()) {
-        case 'email':
-          return _PreferredContactMethod.email;
-        case 'push':
-          return _PreferredContactMethod.push;
-        case 'sms':
-        default:
-          return _PreferredContactMethod.sms;
-      }
-    }
-
-    bool asBool(dynamic raw, bool fallback) {
-      if (raw is bool) return raw;
-      if (raw is num) return raw != 0;
-      final text = (raw ?? '').toString().trim().toLowerCase();
-      if (text == 'true') return true;
-      if (text == 'false') return false;
-      return fallback;
-    }
-
-    final defaults = _CommunicationPreferences.defaults();
-    return _CommunicationPreferences(
-      emailNotifications: asBool(
-        map['emailNotifications'],
-        defaults.emailNotifications,
-      ),
-      smsNotifications: asBool(
-        map['smsNotifications'],
-        defaults.smsNotifications,
-      ),
-      pushNotifications: asBool(
-        map['pushNotifications'],
-        defaults.pushNotifications,
-      ),
-      accountActivity: asBool(map['accountActivity'], defaults.accountActivity),
-      securityAlerts: asBool(map['securityAlerts'], defaults.securityAlerts),
-      promotionsOffers: asBool(
-        map['promotionsOffers'],
-        defaults.promotionsOffers,
-      ),
-      reminders: asBool(map['reminders'], defaults.reminders),
-      newsUpdates: asBool(map['newsUpdates'], defaults.newsUpdates),
-      preferredContact: parsePreferred(map['preferredContact']),
-      marketingConsent: asBool(
-        map['marketingConsent'],
-        defaults.marketingConsent,
-      ),
-    );
-  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -2253,7 +2182,7 @@ class _CommunicationPreferencePopupState
                   height: 4,
                   width: 44,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.12),
+                    color: AppColors.blackCat.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
@@ -2268,7 +2197,7 @@ class _CommunicationPreferencePopupState
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 12.5,
-                          color: Colors.black.withOpacity(0.90),
+                          color: AppColors.blackCat.withValues(alpha: 0.90),
                         ),
                       ),
                     ),
@@ -2277,7 +2206,7 @@ class _CommunicationPreferencePopupState
                       icon: Icon(
                         Icons.close_rounded,
                         size: 20,
-                        color: Colors.black.withOpacity(0.75),
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
                       ),
                     ),
                   ],
@@ -2408,7 +2337,7 @@ class _CommunicationPreferencePopupState
               value: value,
               activeThumbColor: AppColors.blackCat,
               inactiveThumbColor: AppColors.blackCatLight,
-              inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+              inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
               onChanged: onChanged,
             ),
           ),
