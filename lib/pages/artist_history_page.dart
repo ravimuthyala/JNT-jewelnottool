@@ -12,7 +12,6 @@ import '../services/artist_requests_repository.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 import 'artist_delivered_request_sheet.dart';
-import 'artist_inbox_page.dart';
 import 'artist_profile_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -533,17 +532,6 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     );
   }
 
-  void _openInbox() {
-    if (widget.onOpenInbox != null) {
-      widget.onOpenInbox!.call();
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ArtistInboxPage()),
-    );
-  }
-
   Future<void> _signOut() async {
     if (widget.onSignOut != null) {
       widget.onSignOut!.call();
@@ -755,7 +743,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
                   Icon(
                     Icons.history_rounded,
                     size: 46,
-                    color: Colors.black.withOpacity(0.35),
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -767,7 +755,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
                     'Only real-time delivered, declined, expired, and cancelled orders appear here.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
                     ),
@@ -796,7 +784,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
           ? BottomNavigationBar(
               currentIndex: widget.bottomNavIndex,
               selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: Colors.black.withOpacity(0.35),
+              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
               type: BottomNavigationBarType.fixed,
               onTap: (i) {
                 if (widget.onNavTap != null) {
@@ -891,7 +879,7 @@ class _HistoryTabs extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: isSelected
                     ? AppColors.blackCat
-                    : Colors.black.withOpacity(0.55),
+                    : AppColors.blackCat.withValues(alpha: 0.55),
               ),
             ),
             const SizedBox(height: 4),
@@ -969,7 +957,7 @@ class _HistoryCard extends StatelessWidget {
                   Text(
                     order.statusText,
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.72),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
                       fontWeight: FontWeight.w400,
                       fontSize: 13.5,
                     ),
@@ -1152,7 +1140,7 @@ class _Card extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1238,7 +1226,7 @@ class _HistorySection extends StatelessWidget {
             child: Text(
               'No $title found.',
               style: TextStyle(
-                color: Colors.black.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
               ),

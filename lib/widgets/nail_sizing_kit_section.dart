@@ -22,11 +22,11 @@ class NailSizingKitSection extends StatelessWidget {
         color: snow,
         borderRadius: BorderRadius.zero,
         border: Border.all(
-          color: purchased ? blackCat.withOpacity(0.35) : alabaster,
+          color: purchased ? blackCat.withValues(alpha: 0.35) : alabaster,
         ),
         boxShadow: [
           BoxShadow(
-            color: blackCat.withOpacity(0.04),
+            color: blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -46,7 +46,7 @@ class NailSizingKitSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Purchase a sizing kit to ensure perfect fit for your nails. The kit includes sample sizes and a measuring tool.',
-            style: TextStyle(color: blackCat.withOpacity(0.55), height: 1.25,fontSize: 14, fontWeight: FontWeight.w400),
+            style: TextStyle(color: blackCat.withValues(alpha: 0.55), height: 1.25,fontSize: 14, fontWeight: FontWeight.w400),
           ),
           const SizedBox(height: 14),
 
@@ -78,7 +78,7 @@ class NailSizingKitSection extends StatelessWidget {
                     Text(
                       '\$3.00',
                       style: TextStyle(
-                        color: blackCat.withOpacity(0.70),
+                        color: blackCat.withValues(alpha: 0.70),
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         fontFamily: 'Arial',

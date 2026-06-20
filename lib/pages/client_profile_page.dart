@@ -55,12 +55,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     debugLabel: 'profileNotificationsButton',
   );
 
-  static const Color _focusRing = Color(0xFFFFBF47);
 
   // Match ClientRegistrationPage sizing (same family you used there)
-  static const double _titleFs = 14.5;
-  static const double _subFs = 14;
-  static const double _inputFs = 14;
+
   static const double _smallFs = 13.5;
 
   @override
@@ -196,12 +193,12 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       try {
         if (uid.isNotEmpty) {
           final rows = await supabase.from(table).select('id').eq('id', uid).limit(1);
-          if (rows is List && rows.isNotEmpty) return table;
+          if (rows.isNotEmpty) return table;
         }
 
         if (email.isNotEmpty) {
           final rows = await supabase.from(table).select('id').eq('email', email).limit(1);
-          if (rows is List && rows.isNotEmpty) return table;
+          if (rows.isNotEmpty) return table;
         }
       } catch (_) {}
     }
@@ -221,14 +218,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       try {
         if (uid.isNotEmpty) {
           final rows = await supabase.from(table).select().eq('id', uid).limit(1);
-          if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
 
         if (email.isNotEmpty) {
           final rows = await supabase.from(table).select().eq('email', email).limit(1);
-          if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
@@ -250,9 +247,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     final clientProfile = _asMap(client['profile']);
     final address = _asMap(data['address']);
     final clientAddress = _asMap(client['address']);
-    final paymentMap = _asMap(data['payment']).isNotEmpty
-        ? _asMap(data['payment'])
-        : _asMap(client['payment']);
     final nailMap = _asMap(data['nailPreferences']).isNotEmpty
         ? _asMap(data['nailPreferences'])
         : _asMap(data['nail_preferences']).isNotEmpty
@@ -542,13 +536,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     if (!profileChanged) return;
   }
 
-  Future<void> _syncPersonalInfoToRequests({
-    required BasicInfo previous,
-    required BasicInfo next,
-  }) async {
-    // TODO: move Client_Custom_Requests to Supabase, then sync profile snapshots here.
-  }
-
   Future<void> _editAddress() async {
     final updatedAddress = await showModalBottomSheet<AddressInfo>(
       context: context,
@@ -688,9 +675,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       await _saveCommunicationPreferences(updatedPreference);
       if (!mounted) return;
       setState(() => _communicationPreferences = updatedPreference);
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Communication preferences saved',
         Directionality.of(context),
+        assertiveness: Assertiveness.polite,
       );
     }
   }
@@ -833,7 +822,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                               style: TextStyle(
                                 fontSize: _smallFs,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.blackCat.withOpacity(0.75),
+                                color: AppColors.blackCat.withValues(alpha: 0.75),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -842,7 +831,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                               style: TextStyle(
                                 fontSize: _smallFs,
                                 fontWeight: FontWeight.w400,
-                                color: AppColors.blackCat.withOpacity(0.75),
+                                color: AppColors.blackCat.withValues(alpha: 0.75),
                               ),
                             ),
                           ],
@@ -1071,7 +1060,7 @@ class _ProfileTopRow extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                   size: 22,
                 ),
               ],
@@ -1162,7 +1151,7 @@ class _RowChevronTile extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: AppColors.blackCat.withOpacity(0.35),
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                   size: 18,
                 ),
               ],
@@ -1186,10 +1175,7 @@ class _CommunicationPreferencePopup extends StatefulWidget {
 
 class _CommunicationPreferencePopupState
     extends State<_CommunicationPreferencePopup> {
-  static const double _modalTitleFs = 16;
   static const double _sectionTitleFs = 14.5;
-  static const double _bodyFs = 14;
-  static const double _helperFs = 13.5;
 
   late bool _emailNotifications;
   bool _smsNotifications = false;
@@ -1289,7 +1275,7 @@ class _CommunicationPreferencePopupState
                               icon: Icon(
                                 Icons.close_rounded,
                                 size: 22,
-                                color: AppColors.blackCat.withOpacity(0.75),
+                                color: AppColors.blackCat.withValues(alpha: 0.75),
                               ),
                               onPressed: () => Navigator.pop(context),
                             ),
@@ -1588,7 +1574,7 @@ class _CommunicationPreferencePopupState
                 value: value,
                 activeThumbColor: AppColors.blackCat,
                 inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
                 onChanged: onChanged,
               ),
             ),
@@ -1651,35 +1637,37 @@ class _CommunicationPreferencePopupState
         label: '$label contact method',
         checked: _preferredContact == value,
         inMutuallyExclusiveGroup: true,
-        child: InkWell(
-          onTap: () => setState(() => _preferredContact = value),
-          borderRadius: BorderRadius.zero,
-          child: Row(
-            children: [
-              Radio<_PreferredContactMethod>(
-                value: value,
-                groupValue: _preferredContact,
-                activeColor: AppColors.blackCat,
-                onChanged: (next) {
-                  if (next != null) {
-                    setState(() => _preferredContact = next);
-                  }
-                },
-              ),
-              Flexible(
-                child: ExcludeSemantics(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.blackCat,
-                      fontFamily: 'Arialbold',
+        child: RadioGroup<_PreferredContactMethod>(
+          groupValue: _preferredContact,
+          onChanged: (next) {
+            if (next != null) {
+              setState(() => _preferredContact = next);
+            }
+          },
+          child: InkWell(
+            onTap: () => setState(() => _preferredContact = value),
+            borderRadius: BorderRadius.zero,
+            child: Row(
+              children: [
+                Radio<_PreferredContactMethod>(
+                  value: value,
+                  activeColor: AppColors.blackCat,
+                ),
+                Flexible(
+                  child: ExcludeSemantics(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.blackCat,
+                        fontFamily: 'Arialbold',
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1689,7 +1677,7 @@ class _CommunicationPreferencePopupState
   Widget _divider() => ExcludeSemantics(
         child: Divider(
           height: 18,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
         ),
       );
 }

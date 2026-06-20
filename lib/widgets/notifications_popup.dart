@@ -99,7 +99,7 @@ class _NotificationsPopupState extends State<NotificationsPopup> {
               borderRadius: BorderRadius.zero,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.18),
+                  color: Colors.black.withValues(alpha: 0.18),
                   blurRadius: 30,
                   offset: const Offset(-280, 44),
                 ),
@@ -338,7 +338,7 @@ class _NotifTile extends StatelessWidget {
                             body,
                             style: TextStyle(
                               fontSize: 11.5,
-                              color: Colors.black.withOpacity(0.6),
+                              color: Colors.black.withValues(alpha: 0.6),
                               height: 1.25,
                             ),
                           ),
@@ -350,7 +350,7 @@ class _NotifTile extends StatelessWidget {
                       time,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.black.withOpacity(0.45),
+                        color: Colors.black.withValues(alpha: 0.45),
                         fontWeight: FontWeight.w700,
                       ),
                     ),

@@ -237,7 +237,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -435,7 +435,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
                 Text(
                   _info.productSubtitle,
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w500,
                   ),

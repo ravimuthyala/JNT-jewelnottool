@@ -144,7 +144,6 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
       final idx = _orders.indexWhere((o) => o.id == updated.id);
       if (idx != -1) _orders[idx] = updated;
     });
-    // TODO: save updated order to Firestore here
   }
 
   @override
@@ -218,7 +217,7 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
                   Icon(
                     Icons.receipt_long_outlined,
                     size: 46,
-                    color: Colors.black.withOpacity(0.35),
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -230,7 +229,7 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
                     'Try changing filters.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -372,8 +371,8 @@ class _ArtistFilterTabs extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
                 color: isSelected
-                    ? AppColors.deepPlum
-                    : Colors.black.withOpacity(0.55),
+                    ? AppColors.blackCat
+                    : AppColors.blackCat.withValues(alpha: 0.55),
               ),
             ),
             const SizedBox(height: 4),
@@ -382,7 +381,7 @@ class _ArtistFilterTabs extends StatelessWidget {
               height: 2.5,
               width: isSelected ? 24 : 0,
               decoration: BoxDecoration(
-                color: AppColors.deepPlum,
+                color: AppColors.blackCat,
                 borderRadius: BorderRadius.zero,
               ),
             ),
@@ -440,7 +439,7 @@ class _ArtistOrderCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.70),
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -450,7 +449,7 @@ class _ArtistOrderCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w700,
                     fontStyle: FontStyle.italic,
                   ),
@@ -468,7 +467,7 @@ class _ArtistOrderCard extends StatelessWidget {
                       child: Text(
                         order.statusText,
                         style: TextStyle(
-                          color: Colors.black.withOpacity(0.55),
+                          color: AppColors.blackCat.withValues(alpha: 0.55),
                           fontWeight: FontWeight.w700,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -488,14 +487,14 @@ class _ArtistOrderCard extends StatelessWidget {
                             Text(
                               'Order details',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.55),
+                                color: AppColors.blackCat.withValues(alpha: 0.55),
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
                             const SizedBox(width: 6),
                             Icon(
                               Icons.chevron_right_rounded,
-                              color: Colors.black.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                           ],
                         ),
@@ -530,13 +529,13 @@ class _Thumb extends StatelessWidget {
           height: 64,
           width: 64,
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.06),
+            color: AppColors.blackCat.withValues(alpha: 0.06),
             borderRadius: BorderRadius.zero,
           ),
           alignment: Alignment.center,
           child: Icon(
             Icons.image_not_supported_outlined,
-            color: Colors.black.withOpacity(0.35),
+            color: AppColors.blackCat.withValues(alpha: 0.35),
           ),
         ),
       ),
@@ -612,7 +611,7 @@ class _ArtistStatusChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.04)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.04)),
       ),
       child: Text(
         text,
@@ -636,7 +635,7 @@ class _ProgressBar extends StatelessWidget {
       borderRadius: BorderRadius.zero,
       child: Container(
         height: 8,
-        color: Colors.black.withOpacity(0.06),
+        color: AppColors.blackCat.withValues(alpha: 0.06),
         child: Align(
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
@@ -647,7 +646,7 @@ class _ProgressBar extends StatelessWidget {
                 gradient: LinearGradient(
                   colors: [
                     const Color(0xFFF28B8B),
-                    AppColors.deepPlum.withOpacity(0.60),
+                    AppColors.blackCat.withValues(alpha: 0.60),
                     const Color(0xFF7BD9A5),
                   ],
                 ),
@@ -674,12 +673,12 @@ class _Card extends StatelessWidget {
     return Container(
       padding: padding ?? const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),

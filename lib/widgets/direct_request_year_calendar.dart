@@ -157,7 +157,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withOpacity(0.10)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.10)),
         ),
         child: Center(child: child),
       ),
@@ -266,8 +266,6 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
         // Header controls - responsive (no overflow)
         LayoutBuilder(
           builder: (context, constraints) {
-            final compact = constraints.maxWidth < 430;
-
             return Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -351,7 +349,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                 value: _directRequestsOn,
                 activeThumbColor: AppColors.deepPlum,
                 inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
                 onChanged: (v) {
                   setState(() => _directRequestsOn = v);
                   _emit();
@@ -364,7 +362,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                 ? 'Clients can send Direct Requests on unblocked dates.'
                 : 'Direct Requests are currently turned OFF.',
             style: TextStyle(
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.black.withValues(alpha: 0.6),
               fontWeight: FontWeight.w400,
               fontSize: 9.5,
             ),
@@ -398,10 +396,10 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.08)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
@@ -460,7 +458,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                           width: 10,
                           margin: const EdgeInsets.only(right: 6),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.zero,
                           ),
                         ),
@@ -493,7 +491,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                                           ? Border.all(
                                               color: const Color(
                                                 0xFFF06C7A,
-                                              ).withOpacity(0.55),
+                                              ).withValues(alpha: 0.55),
                                             )
                                           : null,
                                     ),
@@ -502,7 +500,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                                       style: TextStyle(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w700,
-                                        color: Colors.black.withOpacity(0.75),
+                                        color: Colors.black.withValues(alpha: 0.75),
                                       ),
                                     ),
                                   ),
@@ -554,7 +552,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
           decoration: BoxDecoration(
             color: const Color(0xFFFFE6EA),
             borderRadius: BorderRadius.zero,
-            border: Border.all(color: Colors.black.withOpacity(0.10)),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.10)),
           ),
           child: CustomPaint(painter: _HatchPainter()),
         ),
@@ -581,7 +579,7 @@ class _Wday extends StatelessWidget {
         style: TextStyle(
           fontSize: 10.5,
           fontWeight: FontWeight.w700,
-          color: Colors.black.withOpacity(0.55),
+          color: Colors.black.withValues(alpha: 0.55),
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -594,7 +592,7 @@ class _HatchPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final p = Paint()
-      ..color = const Color(0xFFF06C7A).withOpacity(0.35)
+      ..color = const Color(0xFFF06C7A).withValues(alpha: 0.35)
       ..strokeWidth = 2;
     for (double x = -size.height; x < size.width; x += 6) {
       canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), p);

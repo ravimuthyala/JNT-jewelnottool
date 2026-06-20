@@ -7,8 +7,6 @@ import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 import '../widgets/group_client_measurements_tabs.dart';
-import '../pages/review_artist_page.dart';
-import '../pages/tip_artist_page.dart';
 
 Future<void> showDeliveredRequestSheet({
   required BuildContext context,
@@ -65,10 +63,10 @@ class _DeliveredRequestSheet extends StatelessWidget {
     final path = _normalizeImagePath(raw);
 
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.blackCat.withValues(alpha: 0.06),
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
 
@@ -189,7 +187,9 @@ class _DeliveredRequestSheet extends StatelessWidget {
                                     ? '-'
                                     : request.bio.trim(),
                                 style: TextStyle(
-                                  color: Colors.black.withOpacity(0.78),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.78,
+                                  ),
                                   fontWeight: FontWeight.w400,
                                   fontSize: 14,
                                 ),
@@ -259,7 +259,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
     height: 5,
     width: 54,
     decoration: BoxDecoration(
-      color: Colors.black.withOpacity(0.12),
+      color: AppColors.blackCat.withValues(alpha: 0.12),
       borderRadius: BorderRadius.zero,
     ),
   );
@@ -292,7 +292,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
               width: 78,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.zero,
-                color: Colors.black.withOpacity(0.06),
+                color: AppColors.blackCat.withValues(alpha: 0.06),
               ),
               alignment: Alignment.center,
               child: Text(
@@ -315,7 +315,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: Colors.black.withOpacity(0.75),
+                color: AppColors.blackCat.withValues(alpha: 0.75),
               ),
             ),
             const SizedBox(height: 6),
@@ -333,7 +333,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: Colors.black.withOpacity(0.55),
+              color: AppColors.blackCat.withValues(alpha: 0.55),
             ),
           ),
         ],
@@ -479,7 +479,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
                 Text(
                   'Shipped by: ${(request.shippedByCourier ?? '').trim().isEmpty ? '-' : (request.shippedByCourier ?? '').trim()}',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
                   ),
@@ -496,7 +496,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
                 Text(
                   'Shipped on: ${_fmtDate(request.shippedAt)}',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
                   ),
@@ -528,13 +528,13 @@ class _DeliveredRequestSheet extends StatelessWidget {
               children: [
                 Icon(
                   Icons.image_outlined,
-                  color: Colors.black.withOpacity(0.45),
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
                 const SizedBox(width: 10),
                 Text(
                   'No photos uploaded',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
                   ),
@@ -623,7 +623,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  color: Colors.black.withOpacity(0.60),
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
                   fontWeight: FontWeight.w600,
                   fontSize: 13.5,
                 ),
@@ -669,7 +669,7 @@ class _DeliveredRequestSheet extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.60),
+              color: AppColors.blackCat.withValues(alpha: 0.60),
               fontWeight: FontWeight.w600,
               fontSize: 13.5,
             ),
@@ -728,181 +728,6 @@ class _DeliveredRequestSheet extends StatelessWidget {
       'ring': dims.ring,
       'pinky': dims.pinky,
     };
-  }
-
-  Widget _clientReviewSection(BuildContext context) {
-    final artistIdentifier = request.acceptedByArtistEmail.trim().isNotEmpty
-        ? request.acceptedByArtistEmail.trim()
-        : (request.selectedArtistEmail.trim().isNotEmpty
-              ? request.selectedArtistEmail.trim()
-              : request.selectedArtist.trim());
-    final rating = request.clientRating ?? 0;
-    final reviewText = request.clientReviewText.trim();
-    final submittedAt = request.clientReviewSubmittedAt;
-    final hasReview =
-        rating > 0 || reviewText.isNotEmpty || submittedAt != null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Client Review',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-        ),
-        const SizedBox(height: 10),
-        _softBox(
-          hasReview
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'Rating:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _stars(rating),
-                        const SizedBox(width: 8),
-                        Text(
-                          rating > 0 ? rating.toStringAsFixed(1) : '-',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (reviewText.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        reviewText,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.black.withOpacity(0.75),
-                          height: 1.25,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                    if (submittedAt != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Submitted on: ${_fmtDate(submittedAt)}',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          color: Colors.black.withOpacity(0.6),
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.rate_review_outlined,
-                          color: Colors.black.withOpacity(0.45),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Client has not submitted a review yet',
-                            style: TextStyle(
-                              color: Colors.black.withOpacity(0.65),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ReviewArtistPage(
-                                      orderId: request.id,
-                                      artistId: artistIdentifier,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: const Text('Rate Artist'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => TipArtistPage(
-                                      orderId: request.id,
-                                      artistId: artistIdentifier,
-                                      tipPercent: 15,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: const Text('Tip Artist'),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _stars(double rating) {
-    final full = rating.floor().clamp(0, 5);
-    final hasHalf = (rating - full) >= 0.5 && full < 5;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        if (i < full) {
-          return const Icon(
-            Icons.star_rounded,
-            size: 16,
-            color: Color(0xFFFFB800),
-          );
-        }
-        if (i == full && hasHalf) {
-          return const Icon(
-            Icons.star_half_rounded,
-            size: 16,
-            color: Color(0xFFFFB800),
-          );
-        }
-        return const Icon(
-          Icons.star_border_rounded,
-          size: 16,
-          color: Color(0xFFFFB800),
-        );
-      }),
-    );
   }
 
   Widget _softBox(Widget child) {

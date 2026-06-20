@@ -42,14 +42,14 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
       ),
       child: Row(
         children: [
           Text(
             label,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.60),
+              color: Colors.black.withValues(alpha: 0.60),
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -84,7 +84,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  color: Colors.black.withOpacity(0.60),
+                  color: Colors.black.withValues(alpha: 0.60),
                   fontWeight: FontWeight.w600,
                   fontSize: 11.5,
                 ),
@@ -108,7 +108,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withOpacity(0.06)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,12 +147,12 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.snow,
               borderRadius: BorderRadius.zero,
-              border: Border.all(color: Colors.black.withOpacity(0.06)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
             ),
             child: Text(
               'Only this client’s measurements are visible to the account owner.',
               style: TextStyle(
-                color: Colors.black.withOpacity(0.65),
+                color: Colors.black.withValues(alpha: 0.65),
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
               ),
@@ -169,7 +169,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
           Text(
             'Nail Dimensions (mm)',
             style: TextStyle(
-              color: Colors.black.withOpacity(0.90),
+              color: Colors.black.withValues(alpha: 0.90),
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -226,12 +226,12 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withOpacity(0.06)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
         ),
         child: Text(
           'No client measurements found.',
           style: TextStyle(
-            color: Colors.black.withOpacity(0.65),
+            color: Colors.black.withValues(alpha: 0.65),
             fontWeight: FontWeight.w600,
             fontSize: 12,
           ),
@@ -247,13 +247,13 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
           TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            labelColor: Colors.black.withOpacity(0.90),
-            unselectedLabelColor: Colors.black.withOpacity(0.62),
+            labelColor: Colors.black.withValues(alpha: 0.90),
+            unselectedLabelColor: Colors.black.withValues(alpha: 0.62),
             indicatorColor: AppColors.alabaster,
             overlayColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.hovered) ||
                   states.contains(WidgetState.pressed)) {
-                return AppColors.alabaster.withOpacity(0.9);
+                return AppColors.alabaster.withValues(alpha: 0.9);
               }
               return null;
             }),

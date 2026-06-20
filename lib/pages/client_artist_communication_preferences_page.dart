@@ -254,7 +254,7 @@ class _ClientArtistCommunicationPreferencePopupState
                               icon: Icon(
                                 Icons.close_rounded,
                                 size: 22,
-                                color: AppColors.blackCat.withOpacity(0.75),
+                                color: AppColors.blackCat.withValues(alpha: 0.75),
                               ),
                               onPressed: _close,
                             ),
@@ -347,36 +347,43 @@ class _ClientArtistCommunicationPreferencePopupState
                         const SizedBox(height: 14),
                         _sectionCard(
                           title: 'Preferred Contact Method',
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _radioOption(
-                                      label: 'Email',
-                                      value: ClientArtistPreferredContactMethod.email,
+                          child: RadioGroup<ClientArtistPreferredContactMethod>(
+                            groupValue: _preferredContact,
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() => _preferredContact = value);
+                            },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _radioOption(
+                                        label: 'Email',
+                                        value: ClientArtistPreferredContactMethod.email,
+                                      ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: _radioOption(
-                                      label: 'Push',
-                                      value: ClientArtistPreferredContactMethod.push,
+                                    Expanded(
+                                      child: _radioOption(
+                                        label: 'Push',
+                                        value: ClientArtistPreferredContactMethod.push,
+                                      ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: _radioOption(
-                                      label: 'SMS',
-                                      value: ClientArtistPreferredContactMethod.sms,
+                                    Expanded(
+                                      child: _radioOption(
+                                        label: 'SMS',
+                                        value: ClientArtistPreferredContactMethod.sms,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              _divider(),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                _divider(),
                               const SizedBox(height: 10),
                               _marketingConsentTile(),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -493,7 +500,7 @@ class _ClientArtistCommunicationPreferencePopupState
                 value: value,
                 activeThumbColor: AppColors.blackCat,
                 inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
                 onChanged: onChanged,
               ),
             ),
@@ -563,13 +570,7 @@ class _ClientArtistCommunicationPreferencePopupState
             children: [
               Radio<ClientArtistPreferredContactMethod>(
                 value: value,
-                groupValue: _preferredContact,
                 activeColor: AppColors.blackCat,
-                onChanged: (next) {
-                  if (next != null) {
-                    setState(() => _preferredContact = next);
-                  }
-                },
               ),
               Flexible(
                 child: ExcludeSemantics(
@@ -632,6 +633,6 @@ class _ClientArtistCommunicationPreferencePopupState
   }
 
   Widget _divider() => ExcludeSemantics(
-        child: Divider(height: 18, color: AppColors.blackCat.withOpacity(0.35)),
+        child: Divider(height: 18, color: AppColors.blackCat.withValues(alpha: 0.35)),
       );
 }

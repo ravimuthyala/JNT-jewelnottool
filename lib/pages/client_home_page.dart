@@ -1,7 +1,6 @@
 // lib/pages/client_home_page.dart
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -182,7 +181,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
     try {
       if (uid.isNotEmpty) {
         final rows = await supabase.from(table).select().eq('id', uid).limit(1);
-        if (rows is List && rows.isNotEmpty && rows.first is Map) {
+        if (rows.isNotEmpty) {
           return Map<String, dynamic>.from(rows.first as Map);
         }
       }
@@ -193,7 +192,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
             .select()
             .eq('email', email)
             .limit(1);
-        if (rows is List && rows.isNotEmpty && rows.first is Map) {
+        if (rows.isNotEmpty) {
           return Map<String, dynamic>.from(rows.first as Map);
         }
       }
@@ -241,8 +240,6 @@ class _ClientHomePageState extends State<ClientHomePage> {
   Future<List<Map<String, dynamic>>> _readArtistRows(String table) async {
     try {
       final rows = await Supabase.instance.client.from(table).select().limit(300);
-
-      if (rows is! List) return const <Map<String, dynamic>>[];
 
       return rows
           .whereType<Map>()
@@ -869,10 +866,10 @@ class _ProductTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 16,
               offset: const Offset(0, 10),
             ),
@@ -934,7 +931,7 @@ class _ProductTile extends StatelessWidget {
   Widget _fallbackImage() {
     return Container(
       width: double.infinity,
-      color: Colors.black.withOpacity(0.04),
+      color: Colors.black.withValues(alpha: 0.04),
       alignment: Alignment.center,
       child: const Icon(Icons.image_not_supported_outlined),
     );
@@ -1159,7 +1156,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                           width: 44,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.16),
+                            color: Colors.black.withValues(alpha: 0.16),
                             borderRadius: BorderRadius.zero,
                           ),
                         ),
@@ -1237,7 +1234,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                         : '${product.city}, ${product.state}',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.black.withOpacity(0.6),
+                                      color: Colors.black.withValues(alpha: 0.6),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -1245,7 +1242,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                     'Budget: \$${product.budgetMin} - \$${product.budgetMax}',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.black.withOpacity(0.7),
+                                      color: Colors.black.withValues(alpha: 0.7),
                                     ),
                                   ),
                                 ],
@@ -1286,7 +1283,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                             product.bio.trim(),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.black.withOpacity(0.75),
+                              color: Colors.black.withValues(alpha: 0.75),
                               height: 1.35,
                             ),
                           ),
@@ -1305,7 +1302,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                             product.projectNotes.trim(),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.black.withOpacity(0.75),
+                              color: Colors.black.withValues(alpha: 0.75),
                               height: 1.35,
                             ),
                           ),
@@ -1325,7 +1322,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                               ? Container(
                                   width: double.infinity,
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.03),
+                                    color: Colors.black.withValues(alpha: 0.03),
                                     borderRadius: BorderRadius.zero,
                                   ),
                                   alignment: Alignment.center,
@@ -1333,7 +1330,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                     'No previous art uploaded yet',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.black.withOpacity(0.55),
+                                      color: Colors.black.withValues(alpha: 0.55),
                                     ),
                                   ),
                                 )
@@ -1360,7 +1357,7 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                         fallback: Container(
                                           width: 120,
                                           height: 120,
-                                          color: Colors.black.withOpacity(0.04),
+                                          color: Colors.black.withValues(alpha: 0.04),
                                           alignment: Alignment.center,
                                           child: const Icon(
                                             Icons.image_not_supported_outlined,

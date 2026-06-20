@@ -1,6 +1,5 @@
 // lib/pages/artist_registration_page.dart
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,7 +13,6 @@ import 'package:image/image.dart' as img;
 import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../services/auth_email_alias_service.dart';
-import '../services/notifications_service.dart';
 import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
 import '../utils/registration_input_utils.dart';
@@ -27,12 +25,8 @@ import '../widgets/direct_request_year_calendar.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 
-const Color _artistRegAlabaster = Color(0xFFF4EFE1);
 const Color _artistRegSnow = AppColors.snow;
 const Color _artistRegInk = AppColors.blackCat;
-const Color _clientRegBrandBg = Color(0xFFF4EFE1);
-const Color _clientRegBrandAccent = Color(0xFFEDD9C9);
-const Color _clientRegBrandInk = Color(0xFF292222);
 const Color snow = AppColors.snow;
 
 class ArtistRegistrationPage extends StatefulWidget {
@@ -220,7 +214,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   static const double _inputFs = 13; // typed text
   static const double _paymentInputFs = 12; // payment method field text
   static const double _chipFs = 13; // chip text
-  static const double _smallFs = 11.5; // tiny helper lines
   static const double _fieldHeight = 46;
   static const double _fieldVerticalPadding = 14;
 
@@ -917,10 +910,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       await storage.uploadBinary(
         path,
         optimizedBytes,
-        fileOptions: const FileOptions(
-          contentType: 'image/jpeg',
-          upsert: true,
-        ),
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
       );
 
       final publicUrl = storage.getPublicUrl(path).trim();
@@ -943,16 +933,16 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: _hintFs,
-        color: _artistRegInk.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
-      labelStyle: TextStyle(fontSize: _labelFs, color: _artistRegInk),
+      labelStyle: TextStyle(fontSize: _labelFs, color: AppColors.blackCat),
       errorStyle: const TextStyle(
         fontSize: 10.5,
         height: 1.1,
         fontWeight: FontWeight.w500,
       ),
       filled: true,
-      fillColor: _artistRegSnow,
+      fillColor: AppColors.snow,
       suffixIcon: suffixIcon,
       isDense: false,
       constraints: const BoxConstraints(minHeight: _fieldHeight),
@@ -962,16 +952,20 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AppColors.blackCat.withOpacity(0.35)),
+        borderSide: BorderSide(
+          color: AppColors.blackCat.withValues(alpha: 0.35),
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AppColors.blackCat.withOpacity(0.35)),
+        borderSide: BorderSide(
+          color: AppColors.blackCat.withValues(alpha: 0.35),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
         borderSide: BorderSide(
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
           width: 1.4,
         ),
       ),
@@ -1169,7 +1163,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       decoration: BoxDecoration(
         color: _artistRegSnow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1209,12 +1203,14 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.blackCat.withOpacity(0.12) : Colors.white,
+          color: selected
+              ? AppColors.blackCat.withValues(alpha: 0.12)
+              : Colors.white,
           borderRadius: BorderRadius.zero,
           border: Border.all(
             color: selected
                 ? AppColors.blackCat
-                : AppColors.blackCat.withOpacity(0.08),
+                : AppColors.blackCat.withValues(alpha: 0.08),
           ),
         ),
         child: Row(
@@ -1261,7 +1257,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
               border: Border.all(
                 color: selected
                     ? AppColors.blackCat
-                    : AppColors.blackCat.withOpacity(0.08),
+                    : AppColors.blackCat.withValues(alpha: 0.08),
                 width: selected ? 1.6 : 1.0,
               ),
             ),
@@ -1633,10 +1629,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
 
       try {
         firebaseUserCred = await firebaseAuth
-            .createUserWithEmailAndPassword(
-              email: email,
-              password: password,
-            )
+            .createUserWithEmailAndPassword(email: email, password: password)
             .timeout(const Duration(seconds: 20));
         createdFirebaseUser = true;
       } on FirebaseAuthException catch (e) {
@@ -1645,10 +1638,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           rethrow;
         }
         firebaseUserCred = await firebaseAuth
-            .signInWithEmailAndPassword(
-              email: email,
-              password: password,
-            )
+            .signInWithEmailAndPassword(email: email, password: password)
             .timeout(const Duration(seconds: 20));
       }
       final firebaseUid = firebaseUserCred.user?.uid;
@@ -1719,22 +1709,23 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         'id': supabaseUid,
         'email': email,
         'account_type': 'artist',
-        'displayName': _displayNameCtrl.text.trim(),
-        'studioName': _studioNameCtrl.text.trim(),
-        'name': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _studioNameCtrl.text.trim(),
-        'fullName': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _studioNameCtrl.text.trim(),
-        'profileImageUrl': profilePhotoUrl.trim(),
-        'profilePhotoUrl': profilePhotoUrl.trim(),
-        'photoUrl': profilePhotoUrl.trim(),
-        'avatarUrl': profilePhotoUrl.trim(),
-        'panel_displayName': _displayNameCtrl.text.trim(),
-        'panel_studioName': _studioNameCtrl.text.trim(),
-        'panel_profileImageUrl': profilePhotoUrl.trim(),
-        'profile': payload['profile'],
+
+        'profile': {
+          ...Map<String, dynamic>.from(payload['profile'] as Map),
+          'displayName': _displayNameCtrl.text.trim(),
+          'studioName': _studioNameCtrl.text.trim(),
+          'name': _displayNameCtrl.text.trim().isNotEmpty
+              ? _displayNameCtrl.text.trim()
+              : _studioNameCtrl.text.trim(),
+          'fullName': _displayNameCtrl.text.trim().isNotEmpty
+              ? _displayNameCtrl.text.trim()
+              : _studioNameCtrl.text.trim(),
+          'profileImageUrl': profilePhotoUrl.trim(),
+          'profilePhotoUrl': profilePhotoUrl.trim(),
+          'photoUrl': profilePhotoUrl.trim(),
+          'avatarUrl': profilePhotoUrl.trim(),
+        },
+
         'services': payload['services'],
         'pricing': payload['pricing'],
         'availability': payload['availability'],
@@ -1828,31 +1819,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         });
       }
     }
-  }
-
-  Future<void> _seedPortfolioItems(String uid, List<String> urls) async {
-    if (urls.isEmpty) return;
-    final ref = FirebaseFirestore.instance.collection('artist').doc(uid);
-    final seen = <String>{};
-    final writes = <Future<void>>[];
-    for (final raw in urls) {
-      final url = raw.trim();
-      if (url.isEmpty || !seen.add(url)) continue;
-      writes.add(
-        ref
-            .collection('portfolio_items')
-            .add({
-              'imageUrl': url,
-              'storagePath': '',
-              'style': 'All',
-              'createdAt': FieldValue.serverTimestamp(),
-              'updatedAt': FieldValue.serverTimestamp(),
-            })
-            .timeout(const Duration(seconds: 4))
-            .catchError((_) {}),
-      );
-    }
-    await Future.wait(writes);
   }
 
   // -----------------------
@@ -2033,7 +1999,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               _obscurePassword
                                   ? Icons.visibility_off
                                   : Icons.visibility,
-                              color: AppColors.blackCat.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                           ),
                         ),
@@ -2051,7 +2017,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         'Password must include uppercase, lowercase, number, and symbol.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.blackCat.withOpacity(0.55),
+                          color: AppColors.blackCat.withValues(alpha: 0.55),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -2074,7 +2040,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               _obscureConfirmPassword
                                   ? Icons.visibility_off
                                   : Icons.visibility,
-                              color: AppColors.blackCat.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                           ),
                         ),
@@ -2109,7 +2075,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                   color: AppColors.snow,
                                   borderRadius: BorderRadius.zero,
                                   border: Border.all(
-                                    color: AppColors.blackCat.withOpacity(0.35),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.35,
+                                    ),
                                   ),
                                 ),
                                 child: Row(
@@ -2601,10 +2569,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               activeThumbColor: const Color(0xFF1F1B24),
                               activeTrackColor: const Color(
                                 0xFF1F1B24,
-                              ).withOpacity(0.45),
+                              ).withValues(alpha: 0.45),
                               inactiveThumbColor: AppColors.blackCatLight,
                               inactiveTrackColor: AppColors.blackCatLight
-                                  .withOpacity(0.35),
+                                  .withValues(alpha: 0.35),
                             ),
                           ),
                         ],
@@ -2652,10 +2620,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               activeThumbColor: const Color(0xFF1F1B24),
                               activeTrackColor: const Color(
                                 0xFF1F1B24,
-                              ).withOpacity(0.45),
+                              ).withValues(alpha: 0.45),
                               inactiveThumbColor: AppColors.blackCatLight,
                               inactiveTrackColor: AppColors.blackCatLight
-                                  .withOpacity(0.35),
+                                  .withValues(alpha: 0.35),
                             ),
                           ),
                         ],
@@ -2699,7 +2667,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                             color: AppColors.snow,
                             borderRadius: BorderRadius.zero,
                             border: Border.all(
-                              color: AppColors.blackCat.withOpacity(0.35),
+                              color: AppColors.blackCat.withValues(alpha: 0.35),
                             ),
                           ),
                           child: Column(
@@ -2722,9 +2690,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                       ..clear()
                                       ..addAll(blocked);
                                   });
-
-                                  // TODO: persist to Firestore later
-                                  // debugPrint('directOn=$directOn year=$year blocked=${blocked.length}');
                                 },
                               ),
 
@@ -2739,8 +2704,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                       'Tip: Tap a day to block it. Tap the left week strip to block a week. '
                                       'Tap the month title to block the whole month.',
                                       style: TextStyle(
-                                        color: AppColors.blackCat.withOpacity(
-                                          0.6,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.6,
                                         ),
                                         fontWeight: FontWeight.w400,
                                         fontSize: 13,
@@ -2788,9 +2753,103 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
 
                     Row(
                       children: [
-                        Expanded(child: _timeTile('Start Time', _startTime, () => setState(() => _startTime = '10:00 AM'))),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _startTime = '10:00 AM'),
+                            borderRadius: BorderRadius.zero,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.zero,
+                                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.06)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.access_time_rounded,
+                                    size: 18,
+                                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Start Time',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.blackCat.withValues(alpha: 0.55),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _startTime,
+                                          style: const TextStyle(fontWeight: FontWeight.w900),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _timeTile('End Time', _endTime, () => setState(() => _endTime = '6:00 PM'))),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() => _endTime = '6:00 PM'),
+                            borderRadius: BorderRadius.zero,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.zero,
+                                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.06)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.access_time_rounded,
+                                    size: 18,
+                                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'End Time',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.blackCat.withValues(alpha: 0.55),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _endTime,
+                                          style: const TextStyle(fontWeight: FontWeight.w900),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -2852,7 +2911,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           activeColor: AppColors.deepPlum,
                           inactiveThumbColor: AppColors.blackCatLight,
                           inactiveTrackColor:
-                              AppColors.blackCatLight.withOpacity(0.35),
+                              AppColors.blackCatLight.withValues(alpha: 0.35),
                         ),
                       ],
                     ),
@@ -2891,7 +2950,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.blackCat.withOpacity(0.8),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.8,
+                                ),
                               ),
                             ),
                           ),
@@ -2911,7 +2972,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB.',
                         style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.blackCat.withOpacity(0.6),
+                          color: AppColors.blackCat.withValues(alpha: 0.6),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -2942,7 +3003,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                 color: AppColors.snow,
                                 borderRadius: BorderRadius.zero,
                                 border: Border.all(
-                                  color: AppColors.blackCat.withOpacity(0.35),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.35,
+                                  ),
                                 ),
                               ),
                               child: Column(
@@ -2950,7 +3013,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                 children: [
                                   Icon(
                                     Icons.add_photo_alternate_outlined,
-                                    color: AppColors.blackCat.withOpacity(0.9),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.9,
+                                    ),
                                   ),
                                   const SizedBox(height: 6),
                                   const Text(
@@ -2976,14 +3041,16 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                             color: AppColors.snow,
                             borderRadius: BorderRadius.zero,
                             border: Border.all(
-                              color: AppColors.blackCat.withOpacity(0.35),
+                              color: AppColors.blackCat.withValues(alpha: 0.35),
                             ),
                           ),
                           child: Row(
                             children: [
                               Icon(
                                 Icons.image_outlined,
-                                color: AppColors.blackCat.withOpacity(0.55),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.55,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               const Expanded(
@@ -3239,7 +3306,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         children: [
                           Icon(
                             Icons.info_outline,
-                            color: AppColors.blackCat.withOpacity(0.55),
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
                             size: _inputFs * 1.2,
                           ),
                           const SizedBox(width: 8),
@@ -3629,7 +3696,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                 style: TextStyle(
                                   fontSize: _inputFs,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.blackCat.withOpacity(0.75),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.75,
+                                  ),
                                 ),
                               ),
                             ),
@@ -3642,7 +3711,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                 activeThumbColor: AppColors.blackCat,
                                 inactiveThumbColor: AppColors.blackCatLight,
                                 inactiveTrackColor: AppColors.blackCatLight
-                                    .withOpacity(0.35),
+                                    .withValues(alpha: 0.35),
                               ),
                             ),
                           ],
@@ -3663,8 +3732,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blackCat,
                       foregroundColor: AppColors.snow,
-                      disabledBackgroundColor: AppColors.blackCat.withOpacity(
-                        0.35,
+                      disabledBackgroundColor: AppColors.blackCat.withValues(
+                        alpha: 0.35,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.zero,
@@ -3717,55 +3786,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   // -----------------------
   // Small widgets
   // -----------------------
-  Widget _timeTile(String title, String value, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withOpacity(0.06)),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.access_time_rounded,
-              size: 18,
-              color: Colors.black.withOpacity(0.55),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black.withOpacity(0.55),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.black.withOpacity(0.35),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _bundleCard({
     required String title,
     required String subtitle,
@@ -3788,13 +3808,13 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           borderRadius: BorderRadius.zero,
           border: Border.all(
             color: selected
-                ? AppColors.deepPlum.withOpacity(0.45)
-                : Colors.black.withOpacity(0.06),
+                ? AppColors.blackCat.withValues(alpha: 0.45)
+                : AppColors.blackCat.withValues(alpha: 0.06),
             width: selected ? 1.4 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: AppColors.blackCat.withValues(alpha: 0.04),
               blurRadius: 16,
               offset: const Offset(0, 10),
             ),
@@ -3821,7 +3841,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                     errorBuilder: (_, _, _) => Text(
                       'Image',
                       style: TextStyle(
-                        color: Colors.black.withOpacity(0.35),
+                        color: AppColors.blackCat.withValues(alpha: 0.35),
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -3846,7 +3866,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: _subFs,
-                color: Colors.black.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
                 height: 1.25,
                 fontWeight: FontWeight.w500,
               ),
@@ -3865,8 +3885,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
               height: 40,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.deepPlum,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
@@ -3896,7 +3916,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.zero,
       overlayColor: WidgetStateColor.resolveWith(
-        (_) => AppColors.blackCat.withOpacity(0.12),
+        (_) => AppColors.blackCat.withValues(alpha: 0.12),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),

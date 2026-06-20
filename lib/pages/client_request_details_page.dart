@@ -1477,9 +1477,7 @@ class _RequestDetailsVm {
         asDate(root['requestAcceptBy']) ??
         asDate(requestDetails['requestAcceptBy']) ??
         asDate(details['requestAcceptBy']) ??
-        (needBy == null
-            ? null
-            : DateTime(
+        (DateTime(
                 needBy.year,
                 needBy.month,
                 needBy.day,
@@ -1600,9 +1598,7 @@ class _RequestDetailsVm {
       leftHand: leftHand,
       rightHand: rightHand,
       requiresNfc: _requestRequiresNfcFromMaps(root, details, payload),
-      requestAcceptByLabel: requestAcceptBy == null
-          ? '-'
-          : _dateLabel(requestAcceptBy),
+      requestAcceptByLabel: _dateLabel(requestAcceptBy),
     );
   }
 

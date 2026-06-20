@@ -100,7 +100,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 height: 5,
                 width: 54,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.12),
+                  color: AppColors.blackCat.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.zero,
                 ),
               ),
@@ -161,7 +161,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                                     Text(
                                       'Tracking Number: ',
                                       style: TextStyle(
-                                        color: Colors.black.withOpacity(0.60),
+                                        color: AppColors.blackCat.withValues(alpha: 0.60),
                                         fontWeight: FontWeight.w700,
                                         fontSize: 13.5,
                                       ),
@@ -243,13 +243,13 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                           children: [
                             Icon(
                               Icons.image_outlined,
-                              color: Colors.black.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                             const SizedBox(width: 10),
                             Text(
                               'No images uploaded',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(alpha: 0.65),
                                 fontWeight: FontWeight.w400,
                                 fontSize: 12,
                               ),
@@ -275,13 +275,13 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                           children: [
                             Icon(
                               Icons.image_outlined,
-                              color: Colors.black.withOpacity(0.45),
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
                             ),
                             const SizedBox(width: 10),
                             Text(
                               'No artist photos uploaded',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.65),
+                                color: AppColors.blackCat.withValues(alpha: 0.65),
                                 fontWeight: FontWeight.w400,
                                 fontSize: 12,
                               ),
@@ -305,7 +305,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                         children: [
                           Icon(
                             Icons.local_shipping_outlined,
-                            color: Colors.black.withOpacity(0.65),
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
                             size: 16,
                           ),
                           const SizedBox(width: 8),
@@ -313,7 +313,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                             child: Text(
                               'Delivery status updates automatically from courier tracking.',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.72),
+                                color: AppColors.blackCat.withValues(alpha: 0.72),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13.5,
                               ),
@@ -364,7 +364,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                       Text(
                         'Temporary test action until courier integration is connected.',
                         style: TextStyle(
-                          color: Colors.black.withOpacity(0.58),
+                          color: AppColors.blackCat.withValues(alpha: 0.58),
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
@@ -463,7 +463,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 13.5,
-                    color: Colors.black.withOpacity(0.75),
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -476,7 +476,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 style: TextStyle(
                   fontWeight: FontWeight.w500,
                   fontSize: 12.5,
-                  color: Colors.black.withOpacity(0.60),
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
                 ),
               ),
               const SizedBox(height: 10),
@@ -516,7 +516,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               child: Icon(
                 Icons.close_rounded,
                 size: 24,
-                color: Colors.black.withOpacity(0.70),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
               ),
             ),
           ),
@@ -758,7 +758,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               child: Text(
                 label,
                 style: TextStyle(
-                  color: Colors.black.withOpacity(0.60),
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
                   fontWeight: FontWeight.w600,
                   fontSize: 13.5,
                 ),
@@ -847,7 +847,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
           Text(
             label,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.60),
+              color: AppColors.blackCat.withValues(alpha: 0.60),
               fontWeight: FontWeight.w600,
               fontSize: 13.5,
             ),
@@ -902,10 +902,10 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     final path = _normalizeImagePath(raw);
 
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.blackCat.withValues(alpha: 0.06),
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
 

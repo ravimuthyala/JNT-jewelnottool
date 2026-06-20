@@ -81,7 +81,7 @@ class _ArtistInboxPageState extends State<ArtistInboxPage>
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        color: Colors.black.withOpacity(0.90),
+                        color: AppColors.blackCat.withValues(alpha: 0.90),
                       ),
                     ),
                   ),
@@ -267,13 +267,13 @@ class _SearchBar extends StatelessWidget {
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.55),
+        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
       ),
       child: Row(
         children: [
-          Icon(Icons.search_rounded, color: Colors.black.withOpacity(0.35)),
+          Icon(Icons.search_rounded, color: AppColors.blackCat.withValues(alpha: 0.35)),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
@@ -284,7 +284,7 @@ class _SearchBar extends StatelessWidget {
                 hintText: 'Search or start a new message...',
                 hintStyle: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: Colors.black.withOpacity(0.35),
+                  color: Colors.black.withValues(alpha: 0.35),
                 ),
               ),
             ),
@@ -308,15 +308,15 @@ class _TopTabs extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.transparent,
         border: Border(
-          bottom: BorderSide(color: Colors.black.withOpacity(0.06)),
+          bottom: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
         ),
       ),
       child: TabBar(
         controller: controller,
-        indicatorColor: AppColors.deepPlum,
+        indicatorColor: AppColors.blackCat,
         indicatorWeight: 3,
-        labelColor: Colors.black.withOpacity(0.88),
-        unselectedLabelColor: Colors.black.withOpacity(0.45),
+        labelColor: AppColors.blackCat.withValues(alpha: 0.88),
+        unselectedLabelColor: AppColors.blackCat.withValues(alpha: 0.45),
         labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
         tabs: const [
           Tab(text: 'All'),
@@ -354,7 +354,7 @@ class _InboxList extends StatelessWidget {
           'Pinned conversations',
           style: TextStyle(
             fontWeight: FontWeight.w800,
-            color: Colors.black.withOpacity(0.45),
+            color: AppColors.blackCat.withValues(alpha: 0.45),
             fontSize: 14,
           ),
         ),
@@ -371,7 +371,7 @@ class _InboxList extends StatelessWidget {
           showRecentRequestsLabel ? 'Recent requests' : 'New',
           style: TextStyle(
             fontWeight: FontWeight.w800,
-            color: Colors.black.withOpacity(0.45),
+            color: AppColors.blackCat.withValues(alpha: 0.45),
             fontSize: 14,
           ),
         ),
@@ -395,12 +395,12 @@ class _CardList extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.62),
+        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.06)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: AppColors.blackCat.withValues(alpha: 0.03),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -415,7 +415,7 @@ class _CardList extends StatelessWidget {
     for (int i = 0; i < items.length; i++) {
       out.add(items[i]);
       if (i != items.length - 1) {
-        out.add(Divider(height: 1, color: Colors.black.withOpacity(0.06)));
+        out.add(Divider(height: 1, color: AppColors.blackCat.withValues(alpha: 0.06)));
       }
     }
     return out;
@@ -432,13 +432,13 @@ class _ThreadRow extends StatelessWidget {
     final nameStyle = TextStyle(
       fontWeight: FontWeight.w900,
       fontSize: 16,
-      color: Colors.black.withOpacity(0.90),
+      color: AppColors.blackCat.withValues(alpha: 0.90),
     );
 
     final msgStyle = TextStyle(
       fontWeight: FontWeight.w700,
       fontSize: 14,
-      color: Colors.black.withOpacity(0.55),
+      color: AppColors.blackCat.withValues(alpha: 0.55),
     );
 
     return InkWell(
@@ -469,7 +469,7 @@ class _ThreadRow extends StatelessWidget {
                           child: Icon(
                             Icons.photo_camera_rounded,
                             size: 16,
-                            color: Colors.black.withOpacity(0.55),
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
                           ),
                         ),
                       Expanded(
@@ -498,7 +498,7 @@ class _ThreadRow extends StatelessWidget {
                       thread.time,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Colors.black.withOpacity(0.45),
+                        color: AppColors.blackCat.withValues(alpha: 0.45),
                       ),
                     ),
                     if (thread.pinned) ...[
@@ -506,7 +506,7 @@ class _ThreadRow extends StatelessWidget {
                       Icon(
                         Icons.push_pin_rounded,
                         size: 16,
-                        color: Colors.black.withOpacity(0.45),
+                        color: AppColors.blackCat.withValues(alpha: 0.45),
                       ),
                     ],
                     if (thread.expandedChevron) ...[
@@ -514,7 +514,7 @@ class _ThreadRow extends StatelessWidget {
                       Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 18,
-                        color: Colors.black.withOpacity(0.55),
+                        color: AppColors.blackCat.withValues(alpha: 0.55),
                       ),
                     ],
                   ],
@@ -543,7 +543,7 @@ class _RightDot extends StatelessWidget {
         width: 10,
         height: 10,
         decoration: BoxDecoration(
-          color: AppColors.deepPlum,
+          color: AppColors.blackCat,
           shape: BoxShape.circle,
         ),
       );
@@ -556,7 +556,7 @@ class _RightDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.transparent,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black.withOpacity(0.18)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
       ),
     );
   }
@@ -573,14 +573,14 @@ class _Avatar extends StatelessWidget {
         height: 46,
         width: 46,
         decoration: BoxDecoration(
-          color: AppColors.deepPlum.withOpacity(0.12),
+          color: AppColors.blackCat.withValues(alpha: 0.12),
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.white, width: 2),
+          border: Border.all(color: AppColors.snow, width: 2),
         ),
         alignment: Alignment.center,
         child: Icon(
           thread.systemIcon ?? Icons.notifications_rounded,
-          color: Colors.black.withOpacity(0.75),
+          color: AppColors.blackCat.withValues(alpha: 0.75),
         ),
       );
     }
@@ -590,8 +590,8 @@ class _Avatar extends StatelessWidget {
       width: 46,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.black.withOpacity(0.06),
-        border: Border.all(color: Colors.white, width: 2),
+        color: AppColors.blackCat.withValues(alpha: 0.06),
+        border: Border.all(color: AppColors.snow, width: 2),
       ),
       child: ClipOval(
         child: Image.asset(
@@ -624,7 +624,7 @@ class _AvatarMenu extends StatelessWidget {
       tooltip: '',
       position: PopupMenuPosition.under,
       elevation: 12,
-      color: Colors.white,
+      color: AppColors.snow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       onSelected: (v) {
         switch (v) {
@@ -679,7 +679,7 @@ class _MenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: Colors.black.withOpacity(0.70)),
+        Icon(icon, size: 20, color: AppColors.blackCat.withValues(alpha: 0.70)),
         const SizedBox(width: 10),
         Text(
           label,

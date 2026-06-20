@@ -210,7 +210,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                 SwitchListTile.adaptive(
                   value: _saveForFuture,
                   onChanged: (v) => setState(() => _saveForFuture = v),
-                  activeColor: AppColors.blackCat,
+                  activeThumbColor : AppColors.blackCat,
                   title: const Text(
                     'Save for future',
                     style: TextStyle(fontWeight: FontWeight.w900),
@@ -355,7 +355,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                     child: Text(
                       'Apple Pay will be used at checkout.',
                       style: TextStyle(
-                        color: Colors.black.withOpacity(0.65),
+                        color: Colors.black.withValues(alpha: 0.65),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -403,7 +403,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
               icon,
               color: selected
                   ? AppColors.blackCat
-                  : Colors.black.withOpacity(0.55),
+                  : Colors.black.withValues(alpha: 0.55),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -411,7 +411,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                 _label(m),
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: Colors.black.withOpacity(0.85),
+                  color: Colors.black.withValues(alpha: 0.85),
                 ),
               ),
             ),
@@ -419,7 +419,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
               selected ? Icons.radio_button_checked : Icons.radio_button_off,
               color: selected
                   ? AppColors.blackCat
-                  : Colors.black.withOpacity(0.30),
+                  : Colors.black.withValues(alpha: 0.30),
             ),
           ],
         ),
@@ -450,7 +450,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
         border: Border.all(color: AppColors.alabaster),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),

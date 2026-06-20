@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -12,7 +14,7 @@ Future<void> showRegisterModal(BuildContext context) async {
   await showDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierColor: Color(0xFF292222).withOpacity(0.45),
+    barrierColor: Color(0xFF292222).withValues(alpha: 0.45),
     builder: (_) => Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -31,9 +33,7 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  static const Color _alabaster = AppColors.alabaster;
   static const Color _blackCat = AppColors.blackCat;
-  static const Color _snow = AppColors.snow;
   static const Color _linkShade = AppColors.blackCat;
   static const Color _focusRing = Color(0xFFFFBF47);
   final FocusNode _clientFocusNode = FocusNode(debugLabel: 'clientRoleTile');
@@ -63,9 +63,10 @@ class _RegisterPageState extends State<RegisterPage> {
         await Future<void>.delayed(const Duration(milliseconds: 40));
         if (!mounted) return;
         _focusClientTile();
-        SemanticsService.announce(
-          'Client. Collaborate with top artists on personalized designs.',
-          Directionality.of(context),
+        SemanticsService.sendAnnouncement(
+          'Client. Collaborate with top artists on personalized designs.' as FlutterView,
+          Directionality.of(context) as String,
+          WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
         );
         await Future<void>.delayed(const Duration(milliseconds: 350));
         if (!mounted) return;
@@ -90,9 +91,10 @@ class _RegisterPageState extends State<RegisterPage> {
       client = !client;
       if (client || artist) branding = false;
     });
-    SemanticsService.announce(
-      client ? 'Client selected' : 'Client not selected',
-      Directionality.of(context),
+    SemanticsService.sendAnnouncement (
+      (client ? 'Client selected' : 'Client not selected') as FlutterView,
+      Directionality.of(context) as String,
+      WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
     );
   }
 
@@ -102,7 +104,7 @@ class _RegisterPageState extends State<RegisterPage> {
       if (client || artist) branding = false;
     });
     if (artist) {
-      SemanticsService.announce('Artist selected', Directionality.of(context));
+      SemanticsService.sendAnnouncement('Artist selected' as FlutterView, Directionality.of(context) as String, WidgetsBinding.instance.platformDispatcher.views.first as TextDirection);
     }
   }
 
@@ -117,9 +119,10 @@ class _RegisterPageState extends State<RegisterPage> {
       }
     });
     if (!wasBranding && branding) {
-      SemanticsService.announce(
-        'Brands selected. Client and Artist cleared.',
-        Directionality.of(context),
+      SemanticsService.sendAnnouncement(
+        'Brands selected. Client and Artist cleared.' as FlutterView,
+        Directionality.of(context) as String,
+        WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
       );
     }
   }
@@ -200,9 +203,10 @@ class _RegisterPageState extends State<RegisterPage> {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
                   _focusClientTile();
-                  SemanticsService.announce(
-                    'Client. Collaborate with top artists on personalized designs.',
-                    Directionality.of(context),
+                  SemanticsService.sendAnnouncement(
+                    'Client. Collaborate with top artists on personalized designs.' as FlutterView,
+                    Directionality.of(context) as String,
+                    WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
                   );
                 });
               },
@@ -283,7 +287,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     child: ExcludeSemantics(
                       child: Divider(
                         thickness: 1,
-                        color: AppColors.blackCat.withOpacity(0.15),
+                        color: AppColors.blackCat.withValues(alpha: 0.15),
                       ),
                     ),
                   ),
@@ -303,7 +307,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     child: ExcludeSemantics(
                       child: Divider(
                         thickness: 1,
-                        color: AppColors.blackCat.withOpacity(0.15),
+                        color: AppColors.blackCat.withValues(alpha: 0.15),
                       ),
                     ),
                   ),
@@ -333,7 +337,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           backgroundColor: AppColors.blackCat,
                           foregroundColor: AppColors.snow,
                           disabledBackgroundColor: AppColors.blackCat
-                              .withOpacity(0.35),
+                              .withValues(alpha: 0.35),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.zero,
                           ),
@@ -408,7 +412,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           rootNavigator: true,
                         ).context,
                         barrierDismissible: true,
-                        barrierColor: _blackCat.withOpacity(0.45),
+                        barrierColor: _blackCat.withValues(alpha: 0.45),
                         builder: (_) => const LoginDialog(),
                       );
                     },

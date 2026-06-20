@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -43,7 +42,6 @@ class BrandingCompanyShellPage extends StatefulWidget {
 class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
   late int _index;
   bool _loadingEnrolledArtists = true;
-  bool _avatarBackfillAttempted = false;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _artistFeedSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientArtistFeedSub;
   Timer? _feedRefreshDebounce;
@@ -84,82 +82,6 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       if (!mounted) return;
       unawaited(_loadEnrolledArtists());
     });
-  }
-
-  Future<void> _backfillCompanyAvatarFields() async {
-    if (_avatarBackfillAttempted) return;
-    _avatarBackfillAttempted = true;
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    if (uid.isEmpty) return;
-
-    final ref = FirebaseFirestore.instance.collection('company').doc(uid);
-    try {
-      final snap = await ref.get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-      final company = (data['company'] as Map<String, dynamic>?) ?? const {};
-
-      String firstNonEmpty(List<Object?> values) {
-        for (final raw in values) {
-          final value = (raw ?? '').toString().trim();
-          if (value.isNotEmpty) return value;
-        }
-        return '';
-      }
-
-      final avatar = firstNonEmpty(<Object?>[
-        data['panel_logoUrl'],
-        data['companyLogoUrl'],
-        data['brandLogoUrl'],
-        data['logoUrl'],
-        data['panel_profileImageUrl'],
-        data['profileImageUrl'],
-        data['photoUrl'],
-        data['avatarUrl'],
-        profile['logoUrl'],
-        profile['profileImageUrl'],
-        profile['photoUrl'],
-        profile['avatarUrl'],
-        basic['profileImageUrl'],
-        basic['photoUrl'],
-        basic['avatarUrl'],
-        company['logoUrl'],
-        company['profileImageUrl'],
-        company['photoUrl'],
-        company['avatarUrl'],
-      ]);
-      if (avatar.isEmpty) return;
-
-      await ref.set({
-        'panel_logoUrl': avatar,
-        'companyLogoUrl': avatar,
-        'brandLogoUrl': avatar,
-        'logoUrl': avatar,
-        'panel_profileImageUrl': avatar,
-        'profileImageUrl': avatar,
-        'photoUrl': avatar,
-        'avatarUrl': avatar,
-        'profile': {
-          'logoUrl': avatar,
-          'profileImageUrl': avatar,
-          'photoUrl': avatar,
-          'avatarUrl': avatar,
-        },
-        'basic': {
-          'profileImageUrl': avatar,
-          'photoUrl': avatar,
-          'avatarUrl': avatar,
-        },
-        'company': {
-          'logoUrl': avatar,
-          'profileImageUrl': avatar,
-          'photoUrl': avatar,
-          'avatarUrl': avatar,
-        },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (_) {}
   }
 
   Future<void> _loadEnrolledArtists() async {
@@ -402,7 +324,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           .eq('id', uid)
           .limit(1);
 
-      if (rows is List && rows.isNotEmpty && rows.first is Map) {
+      if (rows.isNotEmpty) {
         final data = Map<String, dynamic>.from(rows.first as Map);
         debugPrint('COMPANY SHELL SUPABASE DATA = $data');
         return data;

@@ -123,12 +123,10 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
     if (uid.isNotEmpty) {
       final rows = await supabase.from(table).select().eq('id', uid).limit(1);
 
-      if (rows is List && rows.isNotEmpty) {
+      if (rows.isNotEmpty) {
         final first = rows.first;
-        if (first is Map) {
-          return Map<String, dynamic>.from(first);
-        }
-      }
+        return Map<String, dynamic>.from(first);
+            }
     }
 
     if (email.isNotEmpty) {
@@ -138,12 +136,10 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
           .eq('email', email)
           .limit(1);
 
-      if (rows is List && rows.isNotEmpty) {
+      if (rows.isNotEmpty) {
         final first = rows.first;
-        if (first is Map) {
-          return Map<String, dynamic>.from(first);
-        }
-      }
+        return Map<String, dynamic>.from(first);
+            }
     }
 
     return null;

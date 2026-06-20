@@ -16,7 +16,6 @@ import '../services/storage_url_resolver.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import 'request_chat_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:qr_flutter/qr_flutter.dart';
 
 Future<void> showAcceptedRequestSheet({
   required BuildContext context,
@@ -107,13 +106,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   /// Local photos selected for the final completed set.
   final List<XFile> _artistPhotos = [];
 
-  /// Local photos selected for design preview/approval.
-  final List<XFile> _designPreviewPhotos = [];
-  final List<String> _submittedDesignPreviewUrls = <String>[];
-
   bool _markingCompleted = false;
-  bool _submittingDesignPreview = false;
-  late String _designApprovalStatus;
 
   List<String> _clientModalPhotos() {
     final out = <String>[];
@@ -136,34 +129,15 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       widget.request.completionReviewStatus.trim().toLowerCase() == 'declined';
 
   bool get _isDesigningMode => widget.mode == _AcceptedSheetMode.designing;
-  bool get _isDesignApproved =>
-      _designApprovalStatus.trim().toLowerCase() == 'approved';
-  bool get _isDesignPending =>
-      _designApprovalStatus.trim().toLowerCase() == 'pending';
-
-  bool get _isPaymentDone {
-    final paymentStatus = widget.request.paymentStatus.trim().toLowerCase();
-    return paymentStatus == 'paid' || paymentStatus == 'completed';
-  }
 
   @override
   void initState() {
     super.initState();
-    _designApprovalStatus = widget.request.designApprovalStatus;
-    _submittedDesignPreviewUrls.addAll(widget.request.designPreviewPhotos);
   }
 
   @override
   void didUpdateWidget(covariant _AcceptedRequestSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Rebuild when request data changes to ensure images are synced
-    if (oldWidget.request != widget.request) {
-      setState(() {
-        _designApprovalStatus = widget.request.designApprovalStatus;
-        _submittedDesignPreviewUrls.clear();
-        _submittedDesignPreviewUrls.addAll(widget.request.designPreviewPhotos);
-      });
-    }
   }
 
   @override
@@ -186,7 +160,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               height: 5,
               width: 54,
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.12),
+                color: AppColors.blackCat.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.zero,
               ),
             ),
@@ -222,7 +196,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         child: RichText(
                           text: TextSpan(
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.78),
+                              color: AppColors.blackCat.withValues(alpha: 0.78),
                               fontWeight: FontWeight.w600,
                               height: 1.25,
                               fontSize: 13.5,
@@ -292,7 +266,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         ? '—'
                         : widget.request.bio.trim(),
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.75),
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
                       fontWeight: FontWeight.w400,
                       height: 1.25,
                       fontSize: 14,
@@ -331,13 +305,13 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         children: [
                           Icon(
                             Icons.image_outlined,
-                            color: Colors.black.withOpacity(0.45),
+                            color: AppColors.blackCat.withValues(alpha: 0.45),
                           ),
                           const SizedBox(width: 10),
                           Text(
                             'No images uploaded',
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.65),
+                              color: AppColors.blackCat.withValues(alpha: 0.65),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -377,8 +351,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                   horizontal: 18,
                                 ),
                               ),
-                              onPressed: () =>
-                                  _openPickOptions(_UploadTarget.completedSet),
+                              onPressed: () => _openPickOptions(),
                               icon: const Icon(Icons.add_a_photo_outlined),
                               label: const Text(
                                 'Upload',
@@ -394,7 +367,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         Text(
                           'Allowed formats: JPG, JPEG, PNG. Max file size: < 2 MB each. Maximum 10 photos.',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.55),
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
                             fontWeight: FontWeight.w500,
                             fontSize: 11.5,
                           ),
@@ -408,7 +381,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                           Text(
                             'Add photos of the finished nails before marking as completed.',
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.60),
+                              color: AppColors.blackCat.withValues(alpha: 0.60),
                               fontWeight: FontWeight.w400,
                               fontSize: 12,
                             ),
@@ -435,10 +408,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                       height: 54,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat.withOpacity(0.16),
+                          backgroundColor: AppColors.blackCat.withValues(
+                            alpha: 0.16,
+                          ),
                           foregroundColor: AppColors.blackCat,
                           side: BorderSide(
-                            color: AppColors.blackCat.withOpacity(0.30),
+                            color: AppColors.blackCat.withValues(alpha: 0.30),
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.zero,
@@ -540,7 +515,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   // -----------------------
   // Actions
   // -----------------------
-  Future<void> _openPickOptions(_UploadTarget target) async {
+  Future<void> _openPickOptions() async {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -558,7 +533,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 height: 5,
                 width: 54,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.12),
+                  color: AppColors.blackCat.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.zero,
                 ),
               ),
@@ -601,7 +576,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         ),
                         onPressed: () async {
                           Navigator.pop(context);
-                          await _pickFromGallery(target);
+                          await _pickFromGallery();
                         },
                       ),
                     ),
@@ -635,7 +610,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         ),
                         onPressed: () async {
                           Navigator.pop(context);
-                          await _takePhoto(target);
+                          await _takePhoto();
                         },
                       ),
                     ),
@@ -650,7 +625,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  Future<void> _pickFromGallery(_UploadTarget target) async {
+  Future<void> _pickFromGallery() async {
     final picked = await _picker.pickMultiImage(
       imageQuality: 70,
       maxWidth: 1280,
@@ -658,10 +633,10 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
     if (picked.isEmpty) return;
 
-    await _validateAndAddPhotos(picked, target);
+    await _validateAndAddPhotos(picked);
   }
 
-  Future<void> _takePhoto(_UploadTarget target) async {
+  Future<void> _takePhoto() async {
     final x = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 70,
@@ -670,7 +645,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
     if (x == null) return;
 
-    await _validateAndAddPhotos([x], target);
+    await _validateAndAddPhotos([x]);
   }
 
   bool _isAllowedImageExtension(String value) {
@@ -712,23 +687,16 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     }
   }
 
-  Future<void> _validateAndAddPhotos(
-    List<XFile> files,
-    _UploadTarget target,
-  ) async {
+  Future<void> _validateAndAddPhotos(List<XFile> files) async {
     final accepted = <XFile>[];
     var invalidType = 0;
     var invalidSize = 0;
     var skippedForLimit = 0;
-    final maxPhotos = target == _UploadTarget.completedSet
-        ? _maxArtistCompletedPhotos
-        : null;
-    final existingCount = target == _UploadTarget.completedSet
-        ? _artistPhotos.length
-        : _designPreviewPhotos.length;
+    const maxPhotos = _maxArtistCompletedPhotos;
+    final existingCount = _artistPhotos.length;
 
     for (final file in files) {
-      if (maxPhotos != null && existingCount + accepted.length >= maxPhotos) {
+      if (existingCount + accepted.length >= maxPhotos) {
         skippedForLimit++;
         continue;
       }
@@ -746,11 +714,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
     if (accepted.isNotEmpty) {
       setState(() {
-        if (target == _UploadTarget.completedSet) {
-          _artistPhotos.addAll(accepted);
-        } else {
-          _designPreviewPhotos.addAll(accepted);
-        }
+        _artistPhotos.addAll(accepted);
       });
     }
 
@@ -912,16 +876,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final orderNo = widget.request.orderNumber.trim().isNotEmpty
         ? widget.request.orderNumber.trim()
         : widget.request.id;
-    final sourceCollection = widget.request.sourceCollection.trim().isNotEmpty
-        ? widget.request.sourceCollection.trim()
-        : 'Client_Custom_Requests';
-    final title = 'Order Completed';
-    final artistName =
-        (FirebaseAuth.instance.currentUser?.displayName ?? '').trim().isNotEmpty
-        ? (FirebaseAuth.instance.currentUser?.displayName ?? '').trim()
-        : (FirebaseAuth.instance.currentUser?.email ?? 'Artist')
-              .split('@')
-              .first;
 
     final snapshot = await docRef.get();
     final data = snapshot.data() ?? const <String, dynamic>{};
@@ -1140,91 +1094,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     }
   }
 
-  Future<void> _submitDesignForApproval() async {
-    if (_designPreviewPhotos.isEmpty && _submittedDesignPreviewUrls.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload at least 1 design image.')),
-      );
-      return;
-    }
-
-    setState(() => _submittingDesignPreview = true);
-    try {
-      final uploaded = <String>[..._submittedDesignPreviewUrls];
-      if (_designPreviewPhotos.isNotEmpty) {
-        uploaded.addAll(
-          await _uploadPhotosFor(
-            photos: _designPreviewPhotos,
-            storageFolder: 'artist_design_previews',
-          ),
-        );
-      }
-      if (uploaded.isEmpty) {
-        throw Exception('Unable to upload design previews.');
-      }
-
-      final dueAt = DateTime.now().add(const Duration(days: 1));
-      final docRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(widget.request.id);
-      await docRef.set({
-        'status': 'designing',
-        'designApprovalStatus': 'pending',
-        'clientDesignApprovalStatus': 'pending',
-        'designPreviewPhotos': uploaded,
-        'designSubmittedAt': FieldValue.serverTimestamp(),
-        'designApprovalDueAt': Timestamp.fromDate(dueAt),
-        'designReminderSentAt': null,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await docRef.collection('details').doc('payload').set({
-        'designApproval': {
-          'status': 'pending',
-          'submittedAt': FieldValue.serverTimestamp(),
-          'dueAt': Timestamp.fromDate(dueAt),
-          'previewPhotos': uploaded,
-          'reminderSentAt': null,
-        },
-      }, SetOptions(merge: true));
-
-      final clientEmail = widget.request.clientEmail.trim().toLowerCase();
-      if (clientEmail.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: clientEmail,
-          title: 'Design Ready for Approval',
-          body:
-              'Your artist shared a design preview. Please accept within 1 day so work can begin.',
-          type: 'design_approval_required',
-          orderId: widget.request.id,
-          sourceCollection: 'Client_Custom_Requests',
-        );
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _designApprovalStatus = 'pending';
-        _submittedDesignPreviewUrls
-          ..clear()
-          ..addAll(uploaded);
-        _designPreviewPhotos.clear();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Design submitted for client approval. Work starts after approval.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to submit design: $e')));
-    } finally {
-      if (mounted) setState(() => _submittingDesignPreview = false);
-    }
-  }
-
   Future<List<String>> _uploadArtistPhotos() async {
     return _uploadPhotosFor(
       photos: _artistPhotos,
@@ -1409,7 +1278,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                       height: 26,
                       width: 26,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.70),
+                        color: AppColors.blackCat.withValues(alpha: 0.70),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1450,7 +1319,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w600,
-            color: Colors.black.withOpacity(0.80),
+            color: AppColors.blackCat.withValues(alpha: 0.80),
           ),
         ),
         const SizedBox(height: 8),
@@ -1459,7 +1328,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w500,
-            color: Colors.black.withOpacity(0.72),
+            color: AppColors.blackCat.withValues(alpha: 0.72),
           ),
         ),
       ],
@@ -1495,7 +1364,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w500,
-                  color: Colors.black.withOpacity(0.65),
+                  color: AppColors.blackCat.withValues(alpha: 0.65),
                 ),
               ),
               const Spacer(),
@@ -1507,7 +1376,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 decoration: BoxDecoration(
                   color: AppColors.balletSlippers,
                   borderRadius: BorderRadius.zero,
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                  border: Border.all(
+                    color: AppColors.blackCat.withValues(alpha: 0.05),
+                  ),
                 ),
                 child: Text(
                   amountText,
@@ -1528,7 +1399,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 style: TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w500,
-                  color: Colors.black.withOpacity(0.65),
+                  color: AppColors.blackCat.withValues(alpha: 0.65),
                 ),
               ),
               const Spacer(),
@@ -1540,7 +1411,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 decoration: BoxDecoration(
                   color: statusBg,
                   borderRadius: BorderRadius.zero,
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                  border: Border.all(
+                    color: AppColors.blackCat.withValues(alpha: 0.05),
+                  ),
                 ),
                 child: Text(
                   statusText,
@@ -1559,7 +1432,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             decoration: BoxDecoration(
               color: isPaid ? const Color(0xFFEAF7F2) : const Color(0xFFF8F8FB),
               borderRadius: BorderRadius.zero,
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: 0.05),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1569,7 +1444,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                   size: 14,
                   color: isPaid
                       ? const Color(0xFF2E8B57)
-                      : Colors.black.withOpacity(0.6),
+                      : AppColors.blackCat.withValues(alpha: 0.6),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1583,7 +1458,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
                       height: 1.25,
-                      color: Colors.black.withOpacity(0.72),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
                     ),
                   ),
                 ),
@@ -1658,7 +1533,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             child: Text(
               k,
               style: TextStyle(
-                color: Colors.black.withOpacity(0.65),
+                color: AppColors.blackCat.withValues(alpha: 0.65),
                 fontWeight: FontWeight.w600,
                 fontSize: 11.5,
               ),
@@ -1744,7 +1619,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     Text(
                       'Nail Shape ',
                       style: TextStyle(
-                        color: Colors.black.withOpacity(0.60),
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
@@ -1771,7 +1646,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     Text(
                       'Nail Length ',
                       style: TextStyle(
-                        color: Colors.black.withOpacity(0.60),
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
@@ -1899,7 +1774,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 13.5,
-                    color: Colors.black.withOpacity(0.75),
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1912,7 +1787,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 style: TextStyle(
                   fontWeight: FontWeight.w500,
                   fontSize: 12.5,
-                  color: Colors.black.withOpacity(0.60),
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1957,7 +1832,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               child: Icon(
                 Icons.close_rounded,
                 size: 22,
-                color: Colors.black.withOpacity(0.70),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
               ),
             ),
           ),
@@ -2095,20 +1970,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  static Widget _miniChip(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 16, color: AppColors.blackCat),
-        const SizedBox(width: 8),
-        Text(
-          text,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
-        ),
-      ],
-    );
-  }
-
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
       children: [
@@ -2123,44 +1984,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           ),
         ),
       ],
-    );
-  }
-
-  static Widget _infoPill(IconData icon, String a, String b) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.black.withOpacity(0.75)),
-          const SizedBox(width: 10),
-          Text(
-            a,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 11.5,
-              color: Colors.black.withOpacity(0.55),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              b,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -2215,11 +2038,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   Widget _clientImage(String path) {
     final p = _normalizeImagePath(path);
     Widget fallback() => Container(
-      color: Colors.black.withOpacity(0.06),
+      color: AppColors.blackCat.withValues(alpha: 0.06),
       alignment: Alignment.center,
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
     );
     final dataBytes = _decodeDataImageBytes(p);
@@ -2316,7 +2139,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w500,
-                color: Colors.black.withOpacity(0.65),
+                color: AppColors.blackCat.withValues(alpha: 0.65),
               ),
             ),
           ),
@@ -2433,130 +2256,3 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 }
 
 enum _AcceptedSheetMode { accepted, designing }
-
-enum _UploadTarget { completedSet, designPreview }
-
-class _ShippingQrDialog extends StatelessWidget {
-  const _ShippingQrDialog({
-    required this.qrCode,
-    required this.orderNumber,
-    required this.artistId,
-  });
-
-  final String qrCode;
-  final String orderNumber;
-  final String artistId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'SHIPPING QR CODE',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Show the QR code below to the carrier when shipping the item.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.black.withOpacity(0.65),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // ✅ Replace with real QR widget later (qr_flutter)
-            Container(
-              height: 210,
-              width: 210,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.05),
-                borderRadius: BorderRadius.zero,
-              ),
-              alignment: Alignment.center,
-              child: QrImageView(
-                data: qrCode,
-                size: 180,
-                backgroundColor: Colors.white,
-              ),
-            ),
-
-            const SizedBox(height: 16),
-            Text(
-              'Order #: $orderNumber',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Artist ID: ${artistId.isEmpty ? '-' : artistId}',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2F6FED),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  elevation: 0,
-                ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Download/Print will be enabled in next step.',
-                      ),
-                    ),
-                  );
-                },
-                child: const Text(
-                  'Download / Print QR',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 46,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  elevation: 0,
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Confirm Shipment Later',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Close',
-                style: TextStyle(
-                  color: Colors.black.withOpacity(0.6),
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

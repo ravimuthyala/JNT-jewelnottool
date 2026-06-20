@@ -31,12 +31,12 @@ class RoleTileModern extends StatelessWidget {
           border: Border.all(
             color: selected
                 ? AppColors.deepPlum
-                : Colors.black.withOpacity(0.08),
+                : Colors.black.withValues(alpha: 0.08),
             width: selected ? 1.6 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 16,
               offset: const Offset(0, 10),
             ),
@@ -75,7 +75,7 @@ class RoleTileModern extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.35,
-                      color: Colors.black.withOpacity(0.6),
+                      color: Colors.black.withValues(alpha: 0.6),
                       fontWeight: FontWeight.w400,
                     ),
                   ),

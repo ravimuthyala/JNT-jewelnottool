@@ -157,7 +157,7 @@ class NewArtistOrderDetailsPage extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.zero,
                       ),
-                      side: BorderSide(color: Colors.black.withOpacity(0.15)),
+                      side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.15)),
                     ),
                     onPressed: () {
                       onUpdate(
@@ -238,13 +238,13 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
           _Card(
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.black.withOpacity(0.55)),
+                Icon(Icons.info_outline, color: AppColors.blackCat.withValues(alpha: 0.55)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Review the client’s details. Accept when you’re ready.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -265,7 +265,7 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.zero,
                       ),
-                      side: BorderSide(color: Colors.black.withOpacity(0.15)),
+                      side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.15)),
                     ),
                     onPressed: () {
                       onUpdate(
@@ -290,8 +290,8 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
                   height: 52,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.deepPlum,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.zero,
@@ -348,7 +348,7 @@ class AcceptedArtistOrderDetailsPage extends StatelessWidget {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2F6FED),
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.snow,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
               onPressed: () {
@@ -446,14 +446,14 @@ class DeclinedArtistOrderDetailsPage extends StatelessWidget {
               children: [
                 Icon(
                   Icons.close_rounded,
-                  color: Colors.black.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'This request was declined.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -501,7 +501,7 @@ class DeliveredArtistOrderDetailsPage extends StatelessWidget {
                       ? 'Delivered'
                       : 'Delivered on ${_fmtDate(order.deliveredAt!)}',
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.65),
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -555,14 +555,14 @@ class ExpiredArtistOrderDetailsPage extends StatelessWidget {
               children: [
                 Icon(
                   Icons.timer_off_outlined,
-                  color: Colors.black.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'This order is marked as expired. If you need to re-open it, handle via admin tools / backend.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -601,14 +601,14 @@ class CancelledArtistOrderDetailsPage extends StatelessWidget {
               children: [
                 Icon(
                   Icons.block_flipped,
-                  color: Colors.black.withOpacity(0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'This order is cancelled.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.60),
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -769,14 +769,14 @@ class _InProgressScaffoldState extends State<_InProgressScaffold> {
                     children: [
                       Icon(
                         Icons.image_outlined,
-                        color: Colors.black.withOpacity(0.50),
+                        color: AppColors.blackCat.withValues(alpha: 0.50),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'No completed photos yet.',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.65),
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -801,7 +801,7 @@ class _InProgressScaffoldState extends State<_InProgressScaffold> {
                               borderRadius: BorderRadius.zero,
                             ),
                             side: BorderSide(
-                              color: Colors.black.withOpacity(0.12),
+                              color: AppColors.blackCat.withValues(alpha: 0.12),
                             ),
                           ),
                           onPressed: _uploadCompletedPhotos,
@@ -820,8 +820,8 @@ class _InProgressScaffoldState extends State<_InProgressScaffold> {
                         height: 48,
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.deepPlum,
-                            foregroundColor: Colors.white,
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.zero,
                             ),
@@ -849,7 +849,7 @@ class _InProgressScaffoldState extends State<_InProgressScaffold> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2F6FED),
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.snow,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
               onPressed: _markCompleted,
@@ -968,8 +968,8 @@ class _CompletedScaffoldState extends State<_CompletedScaffold> {
                   height: 52,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.deepPlum,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.zero,
                       ),
@@ -1058,7 +1058,7 @@ class _ShippedScaffold extends StatelessWidget {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2E8B57),
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.snow,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
               onPressed: () => _markDelivered(context),
@@ -1102,7 +1102,7 @@ class _OrderDetailsShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7FB),
+      backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
         surfaceTintColor: AppColors.alabaster,
@@ -1157,7 +1157,7 @@ class _TopSummary extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.75),
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1167,7 +1167,7 @@ class _TopSummary extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w700,
                     fontStyle: FontStyle.italic,
                   ),
@@ -1180,7 +1180,7 @@ class _TopSummary extends StatelessWidget {
                 Text(
                   order.statusText,
                   style: TextStyle(
-                    color: Colors.black.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1225,9 +1225,9 @@ class _NotesBlock extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.03),
+        color: AppColors.blackCat.withValues(alpha: 0.03),
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.06)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1237,7 +1237,7 @@ class _NotesBlock extends StatelessWidget {
           Text(
             text,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.75),
+              color: AppColors.blackCat.withValues(alpha: 0.75),
               fontWeight: FontWeight.w600,
               height: 1.25,
             ),
@@ -1326,13 +1326,13 @@ class _Thumb extends StatelessWidget {
               height: 64,
               width: 64,
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.06),
+                color: AppColors.blackCat.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.zero,
               ),
               alignment: Alignment.center,
               child: Icon(
                 Icons.image_not_supported_outlined,
-                color: Colors.black.withOpacity(0.35),
+                color: AppColors.blackCat.withValues(alpha: 0.35),
               ),
             )
           : image,
@@ -1408,7 +1408,7 @@ class _StatusChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.04)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.04)),
       ),
       child: Text(
         text,
@@ -1432,7 +1432,7 @@ class _ProgressBar extends StatelessWidget {
       borderRadius: BorderRadius.zero,
       child: Container(
         height: 8,
-        color: Colors.black.withOpacity(0.06),
+        color: AppColors.blackCat.withValues(alpha: 0.06),
         child: Align(
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
@@ -1443,7 +1443,7 @@ class _ProgressBar extends StatelessWidget {
                 gradient: LinearGradient(
                   colors: [
                     const Color(0xFFF28B8B),
-                    AppColors.deepPlum.withOpacity(0.60),
+                    AppColors.blackCat.withValues(alpha: 0.60),
                     const Color(0xFF7BD9A5),
                   ],
                 ),
@@ -1498,13 +1498,13 @@ class _PhotoGrid extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: AppColors.blackCat.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.zero,
                         ),
                         child: const Icon(
                           Icons.delete_outline,
                           size: 16,
-                          color: Colors.white,
+                          color: AppColors.snow,
                         ),
                       ),
                     ),
@@ -1532,10 +1532,10 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.05)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1550,10 +1550,10 @@ InputDecoration _dec(String label, String hint) {
   return InputDecoration(
     labelText: label,
     hintText: hint,
-    hintStyle: TextStyle(fontSize: 12, color: Colors.black.withOpacity(0.35)),
-    labelStyle: TextStyle(fontSize: 13, color: Colors.black.withOpacity(0.7)),
+    hintStyle: TextStyle(fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.35)),
+    labelStyle: TextStyle(fontSize: 13, color: AppColors.blackCat.withValues(alpha: 0.7)),
     filled: true,
-    fillColor: Colors.white,
+    fillColor: AppColors.snow,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.zero,
@@ -1566,7 +1566,7 @@ InputDecoration _dec(String label, String hint) {
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.zero,
       borderSide: BorderSide(
-        color: AppColors.deepPlum.withOpacity(0.55),
+        color: AppColors.blackCat.withValues(alpha: 0.55),
         width: 1.6,
       ),
     ),
@@ -1582,7 +1582,7 @@ Widget _kv(String k, String v) {
           child: Text(
             k,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.60),
+              color: AppColors.blackCat.withValues(alpha: 0.60),
               fontWeight: FontWeight.w800,
             ),
           ),

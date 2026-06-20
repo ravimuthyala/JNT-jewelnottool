@@ -351,8 +351,8 @@ class _HistoryHeader extends StatelessWidget {
             width: 50,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.zero,
-              color: Colors.black.withOpacity(0.06),
-              border: Border.all(color: Colors.black.withOpacity(0.08)),
+              color: Colors.black.withValues(alpha: 0.06),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -387,7 +387,7 @@ class _HistoryHeader extends StatelessWidget {
             subtitle,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.45),
+              color: Colors.black.withValues(alpha: 0.45),
               fontWeight: FontWeight.w600,
               fontSize: 12, // ✅ smaller
             ),
@@ -493,7 +493,7 @@ class _DeliveredHistorySheet extends StatelessWidget {
                   height: 5,
                   width: 54,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.12),
+                    color: Colors.black.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
@@ -525,13 +525,13 @@ class _DeliveredHistorySheet extends StatelessWidget {
                             children: [
                               Icon(
                                 Icons.image_outlined,
-                                color: Colors.black.withOpacity(0.45),
+                                color: Colors.black.withValues(alpha: 0.45),
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 'No images uploaded',
                                 style: TextStyle(
-                                  color: Colors.black.withOpacity(0.65),
+                                  color: Colors.black.withValues(alpha: 0.65),
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13,
                                 ),
@@ -560,13 +560,13 @@ class _DeliveredHistorySheet extends StatelessWidget {
                             children: [
                               Icon(
                                 Icons.image_outlined,
-                                color: Colors.black.withOpacity(0.45),
+                                color: Colors.black.withValues(alpha: 0.45),
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 'No artist photos uploaded',
                                 style: TextStyle(
-                                  color: Colors.black.withOpacity(0.65),
+                                  color: Colors.black.withValues(alpha: 0.65),
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13,
                                 ),
@@ -642,7 +642,7 @@ class _DeliveredHistorySheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFEFEAFB),
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withOpacity(0.04)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -651,9 +651,9 @@ class _DeliveredHistorySheet extends StatelessWidget {
             height: 28,
             width: 28,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
+              color: Colors.white.withValues(alpha: 0.85),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
+              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
             ),
             alignment: Alignment.center,
             child: const Icon(
@@ -695,7 +695,7 @@ class _DeliveredHistorySheet extends StatelessWidget {
           child: Text(
             k,
             style: TextStyle(
-              color: Colors.black.withOpacity(0.55),
+              color: Colors.black.withValues(alpha: 0.55),
               fontWeight: FontWeight.w700,
               fontSize: 12.5,
             ),
@@ -781,7 +781,7 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
                     height: 5,
                     width: 54,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.zero,
                     ),
                   ),
@@ -801,7 +801,7 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
                         color: bg,
                         borderRadius: BorderRadius.zero,
                         border: Border.all(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                         ),
                       ),
                       child: Row(
@@ -811,7 +811,7 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
                             height: 32,
                             width: 32,
                             decoration: BoxDecoration(
-                              color: tint.withOpacity(0.20),
+                              color: tint.withValues(alpha: 0.20),
                               shape: BoxShape.circle,
                             ),
                             alignment: Alignment.center,
@@ -835,7 +835,7 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
                                 Text(
                                   '$statusTitle on: Tue, Apr 23',
                                   style: TextStyle(
-                                    color: Colors.black.withOpacity(0.60),
+                                    color: Colors.black.withValues(alpha: 0.60),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12.5, // ✅ smaller
                                   ),
@@ -845,7 +845,7 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
                                   Text(
                                     'Reason: Client canceled request',
                                     style: TextStyle(
-                                      color: Colors.black.withOpacity(0.60),
+                                      color: Colors.black.withValues(alpha: 0.60),
                                       fontWeight: FontWeight.w700,
                                       fontSize: 12.5, // ✅ smaller
                                     ),
@@ -923,7 +923,7 @@ Widget _softBox(Widget child) {
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.zero,
-      border: Border.all(color: Colors.black.withOpacity(0.05)),
+      border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
     ),
     child: child,
   );
@@ -970,10 +970,10 @@ Widget _photoGrid({
                     image: provider,
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => Container(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withValues(alpha: 0.06),
                       child: Icon(
                         Icons.broken_image_outlined,
-                        color: Colors.black.withOpacity(0.35),
+                        color: Colors.black.withValues(alpha: 0.35),
                       ),
                     ),
                   ),
@@ -1025,7 +1025,6 @@ class _RequestDetailsSheet extends StatefulWidget {
 class _RequestDetailsSheetState extends State<_RequestDetailsSheet> {
   @override
   Widget build(BuildContext context) {
-    // TODO: paste your current full sheet code here (the long one)
     return const SizedBox.shrink();
   }
 }

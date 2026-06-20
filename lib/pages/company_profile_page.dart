@@ -573,7 +573,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.withValues(alpha: 0.55),
               ),
               textAlign: TextAlign.center,
             ),
@@ -585,7 +585,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w400,
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.withValues(alpha: 0.55),
               ),
             ),
           ),
@@ -716,37 +716,12 @@ class _RowChevronTile extends StatelessWidget {
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withValues(alpha: 0.35),
               size: 18,
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _SoftCard extends StatelessWidget {
-  const _SoftCard({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.alabaster,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatLight),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: child,
     );
   }
 }
@@ -954,7 +929,7 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
   InputDecoration _dec(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(fontSize: 12, color: Colors.black.withOpacity(0.35)),
+      hintStyle: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.35)),
       isDense: true,
       filled: true,
       fillColor: AppColors.snow,
@@ -1035,39 +1010,43 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ..._methods.map((m) {
-            final selected = _method == m;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  InkWell(
-                    onTap: () => setState(() => _method = m),
-                    borderRadius: BorderRadius.zero,
-                    child: Row(
-                      children: [
-                        Radio<String>(
-                          value: m,
-                          groupValue: _method,
-                          onChanged: (v) =>
-                              setState(() => _method = v ?? _method),
-                          activeColor: AppColors.blackCat,
-                        ),
-                        Expanded(
-                          child: Text(
-                            m,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+          RadioGroup<String>(
+            groupValue: _method,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _method = value);
+            },
+            child: Column(
+              children: _methods.map((m) {
+                final selected = _method == m;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        onTap: () => setState(() => _method = m),
+                        borderRadius: BorderRadius.zero,
+                        child: Row(
+                          children: [
+                            Radio<String>(
+                              value: m,
+                              activeColor: AppColors.blackCat,
                             ),
-                          ),
+                            Expanded(
+                              child: Text(
+                                m,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  Divider(height: 1, color: Colors.black.withOpacity(0.12)),
-                  if (selected) ...[
+                      ),
+                      Divider(height: 1, color: Colors.black.withValues(alpha: 0.12)),
+                      if (selected) ...[
                     const SizedBox(height: 8),
                     if (m == 'Credit/Debit Card') ...[
                       TextField(
@@ -1136,11 +1115,13 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                         keyboardType: TextInputType.emailAddress,
                       ),
                     const SizedBox(height: 8),
-                  ],
-                ],
-              ),
-            );
-          }),
+                      ],
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
@@ -1235,7 +1216,7 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
   InputDecoration _dec(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(fontSize: 12, color: Colors.black.withOpacity(0.35)),
+      hintStyle: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.35)),
       isDense: true,
       filled: true,
       fillColor: AppColors.snow,
@@ -1370,7 +1351,7 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
-                    color: Colors.black.withOpacity(0.75),
+                    color: Colors.black.withValues(alpha: 0.75),
                   ),
                 ),
               ),
@@ -1380,7 +1361,7 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
                   value: _shippingSameAsBilling,
                   activeThumbColor: AppColors.blackCat,
                   inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withOpacity(0.35),
+                  inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
                   onChanged: (v) => setState(() => _shippingSameAsBilling = v),
                 ),
               ),
@@ -1463,7 +1444,7 @@ class _CompanyPopupScaffold extends StatelessWidget {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Container(
-        color: Colors.black.withOpacity(0.25),
+        color: Colors.black.withValues(alpha: 0.25),
         child: SafeArea(
           child: Align(
             alignment: Alignment.bottomCenter,

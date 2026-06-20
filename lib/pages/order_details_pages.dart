@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'dart:convert';
@@ -9,7 +11,6 @@ import '../services/notifications_service.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
-final Set<String> _designReminderCheckInFlight = <String>{};
 
 /// If you already have this model elsewhere, you can delete this class
 /// and import the correct model file instead.
@@ -499,7 +500,7 @@ class InReviewOrderDetailsPage extends StatelessWidget {
       statusPillText: 'Pending',
       statusPillColor: AppColors.balletSlippers,
       statusPillIcon: Icons.hourglass_bottom_rounded,
-      statusPillIconColor: Colors.black.withOpacity(0.65),
+      statusPillIconColor: Colors.black.withValues(alpha: 0.65),
       order: o,
       isBrandViewer: isBrandViewer,
       rightPanel: const _InfoCard(
@@ -534,7 +535,7 @@ class NewOrderDetailsPage extends StatelessWidget {
       statusPillText: 'New',
       statusPillColor: AppColors.balletSlippers,
       statusPillIcon: Icons.fiber_new_rounded,
-      statusPillIconColor: Colors.black.withOpacity(0.65),
+      statusPillIconColor: Colors.black.withValues(alpha: 0.65),
       order: o,
       isBrandViewer: isBrandViewer,
       rightPanel: const SizedBox.shrink(),
@@ -771,7 +772,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 child: Text(
                   line,
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.85),
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     height: 1.25,
@@ -916,7 +917,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 Icon(
                   Icons.info_outline_rounded,
                   size: 18,
-                  color: Colors.black.withOpacity(0.60),
+                  color: Colors.black.withValues(alpha: 0.60),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -967,7 +968,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         height: 56,
                         width: 56,
                         decoration: BoxDecoration(
-                          color: AppColors.blackCat.withOpacity(0.06),
+                          color: AppColors.blackCat.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.zero,
                         ),
                         clipBehavior: Clip.antiAlias,
@@ -1004,7 +1005,7 @@ class _BaseOrderDetails extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400,
-                                        color: AppColors.blackCat.withOpacity(
+                                        color: AppColors.blackCat.withValues(alpha:
                                           0.85,
                                         ),
                                       ),
@@ -1022,7 +1023,7 @@ class _BaseOrderDetails extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
-                                          color: AppColors.blackCat.withOpacity(
+                                          color: AppColors.blackCat.withValues(alpha:
                                             0.55,
                                           ),
                                         ),
@@ -1076,7 +1077,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ? order.cancelReason.trim()
                         : 'No reason provided.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.82),
+                      color: Colors.black.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.25,
@@ -1101,7 +1102,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ? order.cancelReason.trim()
                         : 'This request expired before an artist could complete acceptance and confirmation in time.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.82),
+                      color: Colors.black.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.25,
@@ -1111,7 +1112,7 @@ class _BaseOrderDetails extends StatelessWidget {
                   Text(
                     'Common reasons:',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.82),
+                      color: Colors.black.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w700,
                       fontSize: 12.5,
                     ),
@@ -1122,7 +1123,7 @@ class _BaseOrderDetails extends StatelessWidget {
                     '2. The request was not confirmed in time.\n'
                     '3. Required details needed to proceed were incomplete.',
                     style: TextStyle(
-                      color: Colors.black.withOpacity(0.82),
+                      color: Colors.black.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.25,
@@ -1149,7 +1150,7 @@ class _BaseOrderDetails extends StatelessWidget {
                   Text(
                     order.clientDescription.trim(),
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.82),
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                       height: 1.25,
@@ -1182,7 +1183,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ? order.clientDescription.trim()
                         : 'No description provided.',
                     style: TextStyle(
-                      color: AppColors.blackCat.withOpacity(0.82),
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                       fontFamily: 'Arial',
@@ -1190,7 +1191,7 @@ class _BaseOrderDetails extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withOpacity(0.08)),
+                  Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
                   const SizedBox(height: 8),
                   const Text(
                     'Uploaded Photos',
@@ -1210,7 +1211,7 @@ class _BaseOrderDetails extends StatelessWidget {
                     enableFirestoreFallback: true,
                   ),
                   const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withOpacity(0.08)),
+                  Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
                   const SizedBox(height: 8),
                   const Text(
                     'Order Details',
@@ -1237,7 +1238,7 @@ class _BaseOrderDetails extends StatelessWidget {
                   const SizedBox(height: 5),
                   _nailDimensionsRightAligned(),
                   const SizedBox(height: 8),
-                  Divider(color: Colors.black.withOpacity(0.08)),
+                  Divider(color: Colors.black.withValues(alpha: 0.08)),
                   const SizedBox(height: 5),
                   _paymentSection(context),
                 ],
@@ -1692,7 +1693,7 @@ class _BaseOrderDetails extends StatelessWidget {
           Text(
             'Payment link has been sent to your notifications and email.',
             style: TextStyle(
-              color: Colors.black.withOpacity(0.55),
+              color: Colors.black.withValues(alpha: 0.55),
               fontWeight: FontWeight.w400,
               fontSize: 12,
             ),
@@ -2026,180 +2027,7 @@ class _BaseOrderDetails extends StatelessWidget {
     }
   }
 
-  Widget _designApprovalSection(BuildContext context) {
-    final status = order.designApprovalStatus.trim().toLowerCase();
-    final approved = status == 'approved';
-    final pending = status == 'pending';
-    final hasPreviewPhotos = order.designPreviewPhotos.isNotEmpty;
-    final approvedOn = _dateText(order.designApprovedAt);
-    if (pending) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _ensureDesignApprovalReminderIfDue(context);
-      });
-    }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Design Approval',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          approved
-              ? 'You accepted the finalized design.'
-              : (pending
-                    ? 'Your artist shared a design preview. Accept it to let the artist start production.'
-                    : 'Your artist will upload a design preview here for your approval.'),
-          style: TextStyle(
-            color: Colors.black.withOpacity(0.60),
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        if (hasPreviewPhotos) ...[
-          const SizedBox(height: 10),
-          if (order.inspirationPhotos.isNotEmpty) ...[
-            const Text(
-              'Uploaded Photos (Client)',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                fontFamily: 'ArialBold',
-                color: AppColors.blackCat,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _SubmittedPhotosStrip(
-              paths: order.inspirationPhotos,
-              fallbackOrderId: order.id,
-              fallbackOrderNumber: order.orderNumber,
-              sourceCollection: order.sourceCollection,
-              enableFirestoreFallback: true,
-            ),
-            const SizedBox(height: 14),
-          ],
-        ],
-        if (pending) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8F8FB),
-              borderRadius: BorderRadius.zero,
-              border: Border.all(color: AppColors.blackCatBorderLight),
-            ),
-            child: Text(
-              _designDueText(),
-              style: TextStyle(
-                color: Colors.black.withOpacity(0.65),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 10),
-        if (approved)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF7F2),
-              borderRadius: BorderRadius.zero,
-              border: Border.all(color: const Color(0xFFB9DEC9)),
-            ),
-            child: Text(
-              approvedOn == null ? 'Accepted' : 'Accepted on $approvedOn',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF2E8B57),
-              ),
-            ),
-          )
-        else
-          SizedBox(
-            height: 44,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.blackCat,
-                foregroundColor: AppColors.snow,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                elevation: 0,
-              ),
-              onPressed: () => _clientAcceptDesign(context),
-              child: const Text(
-                'Accept Design',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  String _designDueText() {
-    final due = order.designApprovalDueAt;
-    if (due == null) return 'Please accept within 1 day.';
-    final now = DateTime.now();
-    if (due.isBefore(now)) {
-      return 'Please accept as soon as possible. A reminder notification was sent.';
-    }
-    final hours = due.difference(now).inHours;
-    if (hours <= 1) return 'Please accept within the next hour.';
-    return 'Please accept within ${hours}h.';
-  }
-
-  Future<void> _ensureDesignApprovalReminderIfDue(BuildContext context) async {
-    final orderId = order.id.trim();
-    if (orderId.isEmpty) return;
-    if (_designReminderCheckInFlight.contains(orderId)) return;
-    _designReminderCheckInFlight.add(orderId);
-    try {
-      final docRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(orderId);
-      final snap = await docRef.get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      final status = ((data['designApprovalStatus'] ?? '') as Object)
-          .toString()
-          .trim()
-          .toLowerCase();
-      if (status == 'approved') return;
-      final dueTs = data['designApprovalDueAt'] is Timestamp
-          ? data['designApprovalDueAt'] as Timestamp
-          : null;
-      final reminderSent = data['designReminderSentAt'] != null;
-      if (dueTs == null || reminderSent) return;
-      if (!DateTime.now().isAfter(dueTs.toDate())) return;
-
-      final receiver = order.clientEmail.trim().toLowerCase();
-      if (receiver.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: receiver,
-          title: 'Reminder: Approve Your Nail Design',
-          body:
-              'Please review and accept your design so the artist can begin working on your order.',
-          type: 'design_approval_reminder',
-          orderId: order.id,
-          sourceCollection: 'Client_Custom_Requests',
-        );
-      }
-
-      await docRef.set({
-        'designReminderSentAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await docRef.collection('details').doc('payload').set({
-        'designApproval': {'reminderSentAt': FieldValue.serverTimestamp()},
-      }, SetOptions(merge: true));
-    } catch (_) {
-      // Ignore reminder failures to avoid interrupting order details UX.
-    } finally {
-      _designReminderCheckInFlight.remove(orderId);
-    }
-  }
 
   Widget _artistProfileImage(String raw) {
     final src = raw.trim();
@@ -2230,7 +2058,7 @@ class _BaseOrderDetails extends StatelessWidget {
       width: 56,
       color: AppColors.balletSlippers,
       alignment: Alignment.center,
-      child: Icon(Icons.person_outline, color: Colors.black.withOpacity(0.5)),
+      child: Icon(Icons.person_outline, color: Colors.black.withValues(alpha: 0.5)),
     );
   }
 
@@ -2246,7 +2074,7 @@ class _BaseOrderDetails extends StatelessWidget {
         child: Text(
           name.trim().isEmpty ? 'A' : name.trim().substring(0, 1).toUpperCase(),
           style: TextStyle(
-            color: Colors.black.withOpacity(0.65),
+            color: Colors.black.withValues(alpha: 0.65),
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
@@ -2269,600 +2097,6 @@ class _BaseOrderDetails extends StatelessWidget {
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
-  }
-
-  /*Widget _clientReviewSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Completed Set Review',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Artist uploaded completed set photos. Please accept or decline.',
-          style: TextStyle(
-            color: Colors.black.withOpacity(0.6),
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 120,
-          child: _SubmittedPhotosStrip(paths: order.artistCompletedPhotos),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: () => _clientDeclineCompletedProject(context),
-                child: const Text('Decline'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: () => _clientAcceptCompletedProject(context),
-                child: const Text('Accept'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }*/
-
-  /*Widget _clientReviewAcceptedSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Completed Set Review',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Artist uploaded completed set photos.',
-          style: TextStyle(
-            color: Colors.black.withOpacity(0.6),
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 120,
-          child: _SubmittedPhotosStrip(paths: order.artistCompletedPhotos),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAF7F2),
-            borderRadius: BorderRadius.zero,
-            border: Border.all(color: const Color(0xFFB9DEC9)),
-          ),
-          child: const Text(
-            'Accepted',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF2E8B57),
-            ),
-          ),
-        ),
-      ],
-    );
-  }*/
-
-  /*Widget _completionDeclineSection() {
-    final declinedDateText = _dateText(order.completionDeclinedAt) ?? '—';
-    final raw = order.completionDeclineReason.trim();
-    final tokens = raw
-        .split(RegExp(r'\s*[|,]\s*'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-
-    String otherReason = '';
-    final regularReasons = <String>[];
-    for (final t in tokens) {
-      final m = RegExp(
-        r'^Other\s*:\s*(.+)$',
-        caseSensitive: false,
-      ).firstMatch(t);
-      if (m != null) {
-        final extracted = (m.group(1) ?? '').trim();
-        if (extracted.isNotEmpty) otherReason = extracted;
-      } else {
-        regularReasons.add(t);
-      }
-    }
-
-    final reasonText = regularReasons.isNotEmpty
-        ? regularReasons.join(', ')
-        : (otherReason.isNotEmpty ? 'Other' : 'No reason provided.');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Decline Reason',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 10),
-        _bullet('Reason to decline', reasonText),
-        if (otherReason.isNotEmpty) _bullet('Other reason', otherReason),
-        _bullet('Date declined', declinedDateText),
-      ],
-    );
-  }*/
-
-  /*Future<void> _clientAcceptCompletedProject(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text(
-          'Accept Completed Set',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-        content: const Text(
-          'Do you confirm the uploaded set is approved for shipping?',
-          style: TextStyle(fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'No',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Yes, Accept',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-
-    try {
-      final isPaid = const {
-        'paid',
-        'completed',
-      }.contains(order.paymentStatus.trim().toLowerCase());
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final generatedTracking =
-          'JNT${(nowMs % 1000000000).toString().padLeft(9, '0')}';
-      final generatedCarrier = 'USPS';
-      final generatedPdfUrl =
-          'jnt://shipping/label?order=${order.id}&download=1';
-      final generatedQrData =
-          'jnt://shipping/scan?order=${order.id}&tracking=$generatedTracking';
-
-      final docRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(order.id);
-      await docRef.set({
-        'completionReviewStatus': 'approved',
-        'completionReviewedAt': FieldValue.serverTimestamp(),
-        'shippingLabelReady': isPaid,
-        'shippingLabelCarrier': isPaid ? generatedCarrier : '',
-        'shippingLabelTrackingNumber': isPaid ? generatedTracking : '',
-        'shippingLabelPdfUrl': isPaid ? generatedPdfUrl : '',
-        'shippingLabelQrData': isPaid ? generatedQrData : '',
-        'shippingLabelCreatedAt': isPaid ? FieldValue.serverTimestamp() : null,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await docRef.collection('details').doc('payload').set({
-        'artistCompletion': {
-          'reviewStatus': 'approved',
-          'reviewedAt': FieldValue.serverTimestamp(),
-        },
-        'shippingLabel': {
-          'ready': isPaid,
-          'carrier': isPaid ? generatedCarrier : '',
-          'trackingNumber': isPaid ? generatedTracking : '',
-          'pdfUrl': isPaid ? generatedPdfUrl : '',
-          'qrData': isPaid ? generatedQrData : '',
-          'createdAt': isPaid ? FieldValue.serverTimestamp() : null,
-        },
-      }, SetOptions(merge: true));
-
-      final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
-      if (artistEmail.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: artistEmail,
-          title: isPaid
-              ? 'Client Approved - Ready to Ship'
-              : 'Client Approved - Awaiting Payment',
-          body: isPaid
-              ? 'Client approved and paid. Shipping label is ready with tracking auto-filled.'
-              : 'Client approved the completed set. Shipping label will be generated once payment is completed.',
-          type: 'client_approved_shipping',
-          orderId: order.id,
-          sourceCollection: 'Client_Custom_Requests',
-        );
-      }
-
-      if (!context.mounted) return;
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to accept completed set: $e')),
-      );
-    }
-  }*/
-
-  Future<void> _clientAcceptDesign(BuildContext context) async {
-    if (order.designPreviewPhotos.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Design preview is not available yet.')),
-      );
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text(
-          'Accept Design',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        content: const Text(
-          'Do you approve this finalized design and allow the artist to start work?',
-          style: TextStyle(fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'No',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Yes, Accept',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-
-    try {
-      final docRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(order.id);
-
-      await docRef.set({
-        'designApprovalStatus': 'approved',
-        'designApprovedAt': FieldValue.serverTimestamp(),
-        'clientDesignApprovalStatus': 'approved',
-        'clientDesignApprovedAt': FieldValue.serverTimestamp(),
-        'designReminderSentAt': null,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await docRef.collection('details').doc('payload').set({
-        'designApproval': {
-          'status': 'approved',
-          'approvedAt': FieldValue.serverTimestamp(),
-          'approvedByClient': true,
-          'reminderSentAt': null,
-        },
-      }, SetOptions(merge: true));
-
-      final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
-      if (artistEmail.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: artistEmail,
-          title: 'Design Approved by Client',
-          body: 'Client approved the finalized design. You can begin work.',
-          type: 'design_approved',
-          orderId: order.id,
-          sourceCollection: 'Client_Custom_Requests',
-        );
-      }
-
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Design accepted. Artist notified.')),
-      );
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to accept design: $e')));
-    }
-  }
-
-  Future<void> _clientDeclineCompletedProject(BuildContext context) async {
-    final otherReasonCtrl = TextEditingController();
-    final selectedReasons = <String>{};
-    const otherOption = 'Other (please specify)';
-    String? modalError;
-    const groupedReasons = <String, List<String>>{
-      'Design & Accuracy': <String>[
-        'The design does not match my original request',
-        'Colors are different from what I approved',
-        'Nail shape is incorrect',
-        'Nail length is incorrect',
-        'Missing design elements/details',
-        'Overall design feels different from inspiration photos',
-      ],
-      'Measurements & Fit': <String>[
-        'Nail measurements look incorrect',
-        'Size does not match my profile measurements',
-      ],
-      'Quality Concerns': <String>[
-        'Finish looks uneven',
-        'Embellishments are misplaced',
-        'Art details look incomplete',
-        'Quality does not meet expectations',
-      ],
-      'Communication / Revision': <String>[
-        'I requested changes that were not applied',
-        'I would like minor revisions before shipping',
-      ],
-      'Other': <String>['I changed my mind about the design', otherOption],
-    };
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            title: const Text(
-              'Decline Completed Set',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            content: SizedBox(
-              width: 560,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Select a decline reason:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black.withOpacity(0.75),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ...groupedReasons.entries.map((entry) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 6),
-                          Text(
-                            entry.key,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          ...entry.value.map((reason) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                checkboxTheme: const CheckboxThemeData(
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity(
-                                    horizontal: -4,
-                                    vertical: -4,
-                                  ),
-                                ),
-                              ),
-                              child: Transform.scale(
-                                scale: 0.9,
-                                child: CheckboxListTile(
-                                  dense: true,
-                                  controlAffinity:
-                                      ListTileControlAffinity.leading,
-                                  contentPadding: EdgeInsets.zero,
-                                  visualDensity: const VisualDensity(
-                                    horizontal: -4,
-                                    vertical: -4,
-                                  ),
-                                  title: Text(
-                                    reason,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  value: selectedReasons.contains(reason),
-                                  onChanged: (checked) {
-                                    setStateDialog(() {
-                                      if (checked == true) {
-                                        selectedReasons.add(reason);
-                                      } else {
-                                        selectedReasons.remove(reason);
-                                      }
-                                      modalError = null;
-                                    });
-                                  },
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      );
-                    }),
-                    if (selectedReasons.contains(otherOption)) ...[
-                      TextField(
-                        controller: otherReasonCtrl,
-                        onChanged: (_) {
-                          if (modalError != null) {
-                            setStateDialog(() {
-                              modalError = null;
-                            });
-                          }
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Other reason',
-                          hintText: 'Enter custom reason',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (modalError != null) ...[
-                      Text(
-                        modalError!,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                ),
-                onPressed: () {
-                  if (selectedReasons.isEmpty) {
-                    setStateDialog(() {
-                      modalError = 'Please select at least one decline reason.';
-                    });
-                    return;
-                  }
-                  if (selectedReasons.contains(otherOption) &&
-                      otherReasonCtrl.text.trim().isEmpty) {
-                    setStateDialog(() {
-                      modalError = 'Please specify the other reason.';
-                    });
-                    return;
-                  }
-                  setStateDialog(() {
-                    modalError = null;
-                  });
-                  Navigator.of(context).pop(true);
-                },
-                child: const Text(
-                  'Submit Decline',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    final orderedSelectedReasons = groupedReasons.values
-        .expand((v) => v)
-        .where(selectedReasons.contains)
-        .toList(growable: false);
-    final reason = orderedSelectedReasons
-        .map(
-          (r) => r == otherOption ? 'Other: ${otherReasonCtrl.text.trim()}' : r,
-        )
-        .join(', ')
-        .trim();
-    otherReasonCtrl.dispose();
-    if (ok != true || !context.mounted) return;
-
-    try {
-      final docRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(order.id);
-      await docRef.set({
-        'status': 'designing',
-        'completionReviewStatus': 'declined',
-        'completionDeclineReason': reason,
-        'completionDeclineDescription': '',
-        'completionDeclinedAt': FieldValue.serverTimestamp(),
-        'completionReviewedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await docRef.collection('details').doc('payload').set({
-        'status': 'designing',
-        'artistCompletion': {
-          'reviewStatus': 'declined',
-          'declineReason': reason,
-          'declineDescription': '',
-          'reviewedAt': FieldValue.serverTimestamp(),
-        },
-      }, SetOptions(merge: true));
-
-      final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
-      if (artistEmail.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: artistEmail,
-          title: 'Completed Set Declined',
-          body:
-              'Client declined the completed set. Please redo and resubmit. Reason: $reason',
-          type: 'client_declined_redo',
-          orderId: order.id,
-          sourceCollection: 'Client_Custom_Requests',
-        );
-      }
-
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Declined. Artist notified and order moved back to Designing.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to decline completed set: $e')),
-      );
-    }
   }
 
   Future<void> _simulatePayment(BuildContext context) async {
@@ -3248,7 +2482,7 @@ class _BaseOrderDetails extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
+              color: AppColors.blackCat.withValues(alpha: 0.70),
               fontSize: 12,
               fontWeight: FontWeight.w600,
               fontFamily: 'Arial',
@@ -3271,10 +2505,6 @@ class _BaseOrderDetails extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  Widget _metaValueCard(String label, String value) {
-    return _measurementSummaryItem(label, value);
   }
 
   Widget _dimensionHandCard(
@@ -3392,7 +2622,7 @@ class _BaseOrderDetails extends StatelessWidget {
           child: RichText(
             text: TextSpan(
               style: TextStyle(
-                color: AppColors.blackCat.withOpacity(0.75),
+                color: AppColors.blackCat.withValues(alpha: 0.75),
                 fontWeight: FontWeight.w400,
                 fontSize: 14,
               ),
@@ -3732,7 +2962,7 @@ class _LocalGroupClientMeasurementsTabsState
                       style: TextStyle(
                         color: selectedTab
                             ? AppColors.blackCat
-                            : AppColors.blackCat.withOpacity(0.62),
+                            : AppColors.blackCat.withValues(alpha: 0.62),
                         fontSize: 12,
                         fontWeight: selectedTab
                             ? FontWeight.w700
@@ -3864,7 +3094,7 @@ class _LocalMeasurementsBody extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: AppColors.blackCat.withOpacity(0.70),
+              color: AppColors.blackCat.withValues(alpha: 0.70),
               fontSize: 12,
               fontWeight: FontWeight.w600,
               fontFamily: 'Arial',
@@ -3889,9 +3119,6 @@ class _LocalMeasurementsBody extends StatelessWidget {
     );
   }
 
-  Widget _metaCard(String label, String value) {
-    return _summaryItem(label, value);
-  }
 
   Widget _handCard(
     String title,
@@ -3999,84 +3226,7 @@ class _LocalMeasurementsBody extends StatelessWidget {
 /// ------------------------
 /// Right panels
 /// ------------------------
-class _QrShippingCard extends StatelessWidget {
-  const _QrShippingCard({
-    required this.tracking,
-    required this.carrierLine,
-    required this.buttonText,
-    required this.onTap,
-  });
 
-  final String tracking;
-  final String carrierLine;
-  final String buttonText;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        children: [
-          Container(
-            height: 96,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.blackCat.withOpacity(0.04),
-              borderRadius: BorderRadius.zero,
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'QR',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            tracking,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            carrierLine,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.black.withOpacity(0.6),
-              fontWeight: FontWeight.w400,
-              fontSize: 12,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 40,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.blackCat,
-                foregroundColor: AppColors.snow,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                elevation: 0,
-              ),
-              onPressed: onTap,
-              child: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ProgressCard extends StatelessWidget {
   const _ProgressCard({required this.steps});
@@ -4145,65 +3295,6 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-class _ProjectCard extends StatelessWidget {
-  const _ProjectCard({required this.title, required this.image});
-  final String title;
-  final String image;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.zero,
-            child: Image.asset(
-              image,
-              height: 92,
-              width: 150,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                height: 92,
-                width: 150,
-                color: Colors.black.withOpacity(0.06),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.image_outlined,
-                  color: Colors.black.withOpacity(0.35),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _Card extends StatelessWidget {
   const _Card({required this.child});
   final Widget child;
@@ -4218,7 +3309,7 @@ class _Card extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -4284,13 +3375,13 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                     shape: BoxShape.circle,
                     color: AppColors.balletSlippers,
                     border: Border.all(
-                      color: AppColors.blackCat.withOpacity(0.06),
+                      color: AppColors.blackCat.withValues(alpha: 0.06),
                     ),
                   ),
                   child: Icon(
                     Icons.warning_amber_rounded,
                     size: 38,
-                    color: AppColors.blackCat.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                   ),
                 ),
               ),
@@ -4325,18 +3416,22 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                 ),
               ),
               const SizedBox(height: 10),
-              ..._reasons.map(
-                (r) => RadioListTile<String>(
-                  value: r,
-                  groupValue: _selected,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  activeColor: AppColors.blackCat,
-                  title: Text(r, style: const TextStyle(fontSize: 13)),
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => _selected = v);
-                  },
+              RadioGroup<String>(
+                groupValue: _selected,
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _selected = value);
+                },
+                child: Column(
+                  children: _reasons.map(
+                    (r) => RadioListTile<String>(
+                      value: r,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      activeColor: AppColors.blackCat,
+                      title: Text(r, style: const TextStyle(fontSize: 13)),
+                    ),
+                  ).toList(),
                 ),
               ),
               TextField(
@@ -4355,13 +3450,13 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(
-                      color: AppColors.blackCat.withOpacity(0.08),
+                      color: AppColors.blackCat.withValues(alpha: 0.08),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(
-                      color: AppColors.blackCat.withOpacity(0.08),
+                      color: AppColors.blackCat.withValues(alpha: 0.08),
                     ),
                   ),
                 ),
@@ -4683,7 +3778,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
             return Text(
               'No photos were uploaded by client.',
               style: TextStyle(
-                color: Colors.black.withOpacity(0.62),
+                color: Colors.black.withValues(alpha: 0.62),
                 fontWeight: FontWeight.w500,
                 fontSize: 12,
               ),
@@ -4694,7 +3789,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       return Text(
         'No photos were uploaded by client.',
         style: TextStyle(
-          color: Colors.black.withOpacity(0.62),
+          color: Colors.black.withValues(alpha: 0.62),
           fontWeight: FontWeight.w500,
           fontSize: 12,
         ),
@@ -4790,7 +3885,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
 
       Widget broken() => Icon(
         Icons.broken_image_outlined,
-        color: AppColors.blackCat.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       );
 
       final isNetwork =
@@ -4902,7 +3997,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
                         child: Container(
                           width: tileSize,
                           height: tileSize,
-                          color: AppColors.blackCat.withOpacity(0.04),
+                          color: AppColors.blackCat.withValues(alpha: 0.04),
                           child: imageForPath(path),
                         ),
                       ),
@@ -5630,7 +4725,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                         Text(
                           'Rate your delivered order, leave comments, and add an optional tip.',
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.62),
+                            color: Colors.black.withValues(alpha: 0.62),
                             fontSize: 12.5,
                           ),
                         ),
@@ -5661,13 +4756,13 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(alpha: 0.08),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withOpacity(0.08),
+                                color: AppColors.blackCat.withValues(alpha: 0.08),
                               ),
                             ),
                             focusedBorder: const OutlineInputBorder(
@@ -5755,13 +4850,13 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withOpacity(0.08),
+                                  color: AppColors.blackCat.withValues(alpha: 0.08),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withOpacity(0.08),
+                                  color: AppColors.blackCat.withValues(alpha: 0.08),
                                 ),
                               ),
                               focusedBorder: const OutlineInputBorder(
@@ -5872,7 +4967,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         Text(
           'Delivered successfully. Add an Artist Review Rating and optional tip (charged from your bank account).',
           style: TextStyle(
-            color: Colors.black.withOpacity(0.62),
+            color: Colors.black.withValues(alpha: 0.62),
             fontSize: 12,
             fontWeight: FontWeight.w400,
           ),

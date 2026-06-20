@@ -13,7 +13,7 @@ class NotificationsPage extends StatefulWidget {
       context: context,
       barrierLabel: 'Notifications',
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.45),
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, _, _) {
         return SafeArea(
@@ -152,7 +152,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
     if (item.id.isEmpty) return;
 
     if (!item.unread) {
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Notification already read',
         Directionality.of(context),
       );
@@ -170,7 +171,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     if (!mounted) return;
 
-    SemanticsService.announce(
+    SemanticsService.sendAnnouncement(
+      View.of(context),
       'Notification marked as read',
       Directionality.of(context),
     );
@@ -446,7 +448,7 @@ class _SectionLabel extends StatelessWidget {
             letterSpacing: 1.4,
             fontWeight: FontWeight.w900,
             fontSize: 10.5,
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withValues(alpha: 0.35),
           ),
         ),
       ),
@@ -519,7 +521,7 @@ class _NotifCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: smallFs,
                                   fontWeight: FontWeight.w800,
-                                  color: Colors.black.withOpacity(0.45),
+                                  color: Colors.black.withValues(alpha: 0.45),
                                 ),
                               ),
                             ],
@@ -531,7 +533,7 @@ class _NotifCard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: inputFs,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black.withOpacity(0.60),
+                                color: Colors.black.withValues(alpha: 0.60),
                                 height: 1.2,
                               ),
                             ),

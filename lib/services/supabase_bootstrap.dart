@@ -30,7 +30,7 @@ class SupabaseBootstrap {
 
   static String userMessage() {
     if (kIsWeb) {
-      return 'Supabase is not initialized for Web. Check your Supabase URL and anon key.';
+      return 'Supabase is not initialized for Web. Check your Supabase URL and publishable key.';
     }
     return 'Supabase is not initialized. Check Supabase setup and restart the app.';
   }

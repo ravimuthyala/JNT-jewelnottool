@@ -18,7 +18,7 @@ class SelectableRoleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = selected ? AppColors.deepPlum : Colors.grey.shade300;
-    final bgColor = selected ? AppColors.deepPlum.withOpacity(0.08) : Colors.white;
+    final bgColor = selected ? AppColors.deepPlum.withValues(alpha: 0.08) : Colors.white;
 
     return InkWell(
       onTap: onTap,
@@ -33,7 +33,7 @@ class SelectableRoleTile extends StatelessWidget {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: AppColors.deepPlum.withOpacity(0.10),
+                    color: AppColors.deepPlum.withValues(alpha: 0.10),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
@@ -51,7 +51,7 @@ class SelectableRoleTile extends StatelessWidget {
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.black.withOpacity(0.65),
+                color: Colors.black.withValues(alpha: 0.65),
                 height: 1.25,
               ),
             ),

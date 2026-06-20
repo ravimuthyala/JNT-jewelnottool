@@ -96,7 +96,7 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
                       onPressed: () => Navigator.pop(context),
                       icon: Icon(
                         Icons.close_rounded,
-                        color: Colors.black.withOpacity(0.55),
+                        color: Colors.black.withValues(alpha: 0.55),
                       ),
                     ),
                   ],

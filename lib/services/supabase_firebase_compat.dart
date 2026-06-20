@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -166,7 +165,7 @@ class DocumentReference<T extends Map<String, dynamic>> {
 
   String get path => _parent == null
       ? '$_collection/$id'
-      : '${_parent!.path}/$_collection/$id';
+      : '${_parent.path}/$_collection/$id';
 
   CollectionReference<Map<String, dynamic>> get parent =>
       CollectionReference<Map<String, dynamic>>._root(_collection);
@@ -237,7 +236,7 @@ class DocumentReference<T extends Map<String, dynamic>> {
 
     controller.onCancel = () async {
       if (channel != null) {
-        await Supabase.instance.client.removeChannel(channel!);
+        await Supabase.instance.client.removeChannel(channel);
       }
     };
 
@@ -379,7 +378,7 @@ class Query<T extends Map<String, dynamic>> {
 
     controller.onCancel = () async {
       if (channel != null) {
-        await Supabase.instance.client.removeChannel(channel!);
+        await Supabase.instance.client.removeChannel(channel);
       }
     };
 

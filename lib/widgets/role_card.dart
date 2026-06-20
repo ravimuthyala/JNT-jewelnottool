@@ -18,7 +18,7 @@ class RoleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = selected ? AppColors.deepPlum : Colors.grey.shade300;
-    final fill = selected ? AppColors.deepPlum.withOpacity(0.10) : Colors.white;
+    final fill = selected ? AppColors.deepPlum.withValues(alpha: 0.10) : Colors.white;
 
     return InkWell(
       onTap: onTap,
@@ -33,7 +33,7 @@ class RoleCard extends StatelessWidget {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: AppColors.deepPlum.withOpacity(0.10),
+                    color: AppColors.deepPlum.withValues(alpha: 0.10),
                     blurRadius: 18,
                     offset: const Offset(0, 7),
                   ),
@@ -53,7 +53,7 @@ class RoleCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.25,
-                color: Colors.black.withOpacity(0.65),
+                color: Colors.black.withValues(alpha: 0.65),
               ),
             ),
           ],

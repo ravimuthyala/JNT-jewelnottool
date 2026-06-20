@@ -71,7 +71,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
       labelStyle: TextStyle(fontSize: _labelFs),
       hintStyle: TextStyle(
         fontSize: _hintFs,
-        color: AppColors.blackCat.withOpacity(0.35),
+        color: AppColors.blackCat.withValues(alpha: 0.35),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       filled: true,
@@ -117,7 +117,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                       onPressed: () => Navigator.pop(context),
                       icon: Icon(
                         Icons.close_rounded,
-                        color: AppColors.blackCat.withOpacity(0.55),
+                        color: AppColors.blackCat.withValues(alpha: 0.55),
                       ),
                     ),
                   ],
@@ -125,39 +125,42 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
 
                 const SizedBox(height: 6),
 
-                RadioListTile<PaymentMethod>(
-                  value: PaymentMethod.applePay,
+                RadioGroup<PaymentMethod>(
                   groupValue: _method,
-                  onChanged: (v) => setState(() => _method = v!),
-                  title: const Text(
-                    'Apple Pay',
-                    style: TextStyle(fontSize: _inputFs),
-                  ),
-                  activeColor: AppColors.blackCat,
-                  tileColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                    side: const BorderSide(color: AppColors.alabaster),
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                ),
-
-                RadioListTile<PaymentMethod>(
-                  value: PaymentMethod.venmo,
-                  groupValue: _method,
-                  onChanged: (v) => setState(() => _method = v!),
-                  title: const Text(
-                    'Venmo',
-                    style: TextStyle(fontSize: _inputFs),
-                  ),
-                  activeColor: AppColors.blackCat,
-                  tileColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                    side: const BorderSide(color: AppColors.alabaster),
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _method = value);
+                  },
+                  child: Column(
+                    children: [
+                      RadioListTile<PaymentMethod>(
+                        value: PaymentMethod.applePay,
+                        title: const Text(
+                          'Apple Pay',
+                          style: TextStyle(fontSize: _inputFs),
+                        ),
+                        activeColor: AppColors.blackCat,
+                        tileColor: AppColors.snow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                          side: const BorderSide(color: AppColors.alabaster),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      RadioListTile<PaymentMethod>(
+                        value: PaymentMethod.venmo,
+                        title: const Text(
+                          'Venmo',
+                          style: TextStyle(fontSize: _inputFs),
+                        ),
+                        activeColor: AppColors.blackCat,
+                        tileColor: AppColors.snow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                          side: const BorderSide(color: AppColors.alabaster),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
 
                 if (_method == PaymentMethod.venmo)
                   _MethodFieldsCard(
@@ -170,22 +173,20 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                     ),
                   ),
 
-                RadioListTile<PaymentMethod>(
-                  value: PaymentMethod.paypal,
-                  groupValue: _method,
-                  onChanged: (v) => setState(() => _method = v!),
-                  title: const Text(
-                    'PayPal',
-                    style: TextStyle(fontSize: _inputFs),
-                  ),
-                  activeColor: AppColors.blackCat,
-                  tileColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                    side: const BorderSide(color: AppColors.alabaster),
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                ),
+                      RadioListTile<PaymentMethod>(
+                        value: PaymentMethod.paypal,
+                        title: const Text(
+                          'PayPal',
+                          style: TextStyle(fontSize: _inputFs),
+                        ),
+                        activeColor: AppColors.blackCat,
+                        tileColor: AppColors.snow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                          side: const BorderSide(color: AppColors.alabaster),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
 
                 if (_method == PaymentMethod.paypal)
                   _MethodFieldsCard(
@@ -199,21 +200,22 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                     ),
                   ),
 
-                RadioListTile<PaymentMethod>(
-                  value: PaymentMethod.card,
-                  groupValue: _method,
-                  onChanged: (v) => setState(() => _method = v!),
-                  title: const Text(
-                    'Credit / Debit Card',
-                    style: TextStyle(fontSize: _inputFs),
+                      RadioListTile<PaymentMethod>(
+                        value: PaymentMethod.card,
+                        title: const Text(
+                          'Credit / Debit Card',
+                          style: TextStyle(fontSize: _inputFs),
+                        ),
+                        activeColor: AppColors.blackCat,
+                        tileColor: AppColors.snow,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                          side: const BorderSide(color: AppColors.alabaster),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ],
                   ),
-                  activeColor: AppColors.blackCat,
-                  tileColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                    side: const BorderSide(color: AppColors.alabaster),
-                  ),
-                  contentPadding: EdgeInsets.zero,
                 ),
 
                 if (_method == PaymentMethod.card)

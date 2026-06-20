@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import '../theme/app_colors.dart';
 import 'client_custom_request_with_artist_page.dart';
@@ -11,7 +10,6 @@ import '../models/client_profile_models.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/notification_bell_button.dart';
-import '../services/artist_directory_service.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 
 class ClientArtistsPage extends StatefulWidget {
@@ -165,7 +163,9 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       final resolvedProfiles = dedup.values.toList(growable: false)
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-      debugPrint('CLIENT ARTISTS PAGE DISPLAY PROFILES = ${resolvedProfiles.length}');
+      debugPrint(
+        'CLIENT ARTISTS PAGE DISPLAY PROFILES = ${resolvedProfiles.length}',
+      );
 
       if (!mounted) return;
       setState(() {
@@ -194,11 +194,6 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
           .from(table)
           .select()
           .limit(500);
-
-      if (rows is! List) {
-        debugPrint('ClientArtistsPage Supabase rows not List [$table]: $rows');
-        return const <Map<String, dynamic>>[];
-      }
 
       debugPrint('ClientArtistsPage Supabase rows [$table] = ${rows.length}');
 
@@ -403,9 +398,9 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
     _collectImageUrls(artist['portfolioImages'], urls);
     _collectImageUrls(artist['portfolioItems'], urls);
 
-    final uniqueUrls = _dedupeImageUrls(urls)
-        .where((url) => _isDisplayableImageUrl(url))
-        .toList(growable: false);
+    final uniqueUrls = _dedupeImageUrls(
+      urls,
+    ).where((url) => _isDisplayableImageUrl(url)).toList(growable: false);
 
     return ArtistProfile(
       id: _firstNonEmpty([data['id'], data['uid'], data['email']]),
@@ -443,14 +438,14 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       ),
       credential:
           _firstNonEmpty([
-                    credentials['nailTechType'],
-                    artistCredentials['nailTechType'],
-                    data['panel_nailTechType'],
-                    profile['nailTechType'],
-                  ]).toLowerCase() ==
-                  'student'
-              ? 'Student/Unlicensed'
-              : 'Professional',
+                credentials['nailTechType'],
+                artistCredentials['nailTechType'],
+                data['panel_nailTechType'],
+                profile['nailTechType'],
+              ]).toLowerCase() ==
+              'student'
+          ? 'Student/Unlicensed'
+          : 'Professional',
       avatarUrl: avatar,
       bio: bio,
       language: language,
@@ -709,8 +704,8 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                                           : '$location • $rating',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: AppColors.blackCat.withOpacity(
-                                          0.65,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.65,
                                         ),
                                       ),
                                     ),
@@ -786,7 +781,7 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
               hintText: 'Select Artist',
               hintStyle: TextStyle(
                 fontSize: 12.5,
-                color: AppColors.blackCat.withOpacity(0.35),
+                color: AppColors.blackCat.withValues(alpha: 0.35),
                 fontFamily: 'Arial',
                 fontWeight: FontWeight.w400,
               ),
@@ -827,7 +822,7 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                 fontWeight: FontWeight.w400,
                 fontFamily: 'Arial',
                 color: selectedName.isEmpty
-                    ? AppColors.blackCat.withOpacity(0.35)
+                    ? AppColors.blackCat.withValues(alpha: 0.35)
                     : AppColors.blackCat,
               ),
             ),
@@ -1016,7 +1011,9 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                                 hintText: 'Select Artist',
                                 hintStyle: TextStyle(
                                   fontSize: 12.5,
-                                  color: AppColors.blackCat.withOpacity(0.35),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.35,
+                                  ),
                                   fontFamily: 'Arial',
                                   fontWeight: FontWeight.w400,
                                 ),
@@ -1033,7 +1030,9 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                                 suffixIcon: Icon(
                                   Icons.search_rounded,
                                   size: 22,
-                                  color: AppColors.blackCat.withOpacity(0.55),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.55,
+                                  ),
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.zero,
@@ -1138,7 +1137,7 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                 child: Text(
                   'No registered artists found.',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w400,
                     fontSize: 13,
                   ),
@@ -1423,7 +1422,7 @@ class _ArtistCard extends StatelessWidget {
     final clamped = rating.clamp(1.0, 5.0);
     final t = ((clamped - 1.0) / 4.0).clamp(0.0, 1.0);
     final opacity = 0.35 + (0.65 * t);
-    return AppColors.balletSlippers.withOpacity(opacity);
+    return AppColors.balletSlippers.withValues(alpha: opacity);
   }
 
   String _artistSummaryLabel() {
@@ -1580,10 +1579,12 @@ class _ArtistCard extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: canRequest
                   ? AppColors.blackCat
-                  : AppColors.blackCat.withOpacity(0.28),
+                  : AppColors.blackCat.withValues(alpha: 0.28),
               foregroundColor: AppColors.snow,
-              disabledBackgroundColor: AppColors.blackCat.withOpacity(0.28),
-              disabledForegroundColor: AppColors.snow.withOpacity(0.78),
+              disabledBackgroundColor: AppColors.blackCat.withValues(
+                alpha: 0.28,
+              ),
+              disabledForegroundColor: AppColors.snow.withValues(alpha: 0.78),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             onPressed: canRequest ? onDesign : null,
@@ -1635,7 +1636,7 @@ class _ArtistCard extends StatelessWidget {
                 child: Text(
                   'No projects uploaded yet.',
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.55),
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w500,
                     fontSize: 12,
                     fontFamily: 'Arial',
@@ -1762,7 +1763,7 @@ class _ProjectTile extends StatelessWidget {
                       height: double.infinity,
                       fit: BoxFit.cover,
                       fallback: Container(
-                        color: Colors.black.withOpacity(0.05),
+                        color: AppColors.blackCat.withValues(alpha: 0.05),
                         alignment: Alignment.center,
                         child: const Icon(
                           Icons.image_not_supported_outlined,
@@ -1771,7 +1772,7 @@ class _ProjectTile extends StatelessWidget {
                       ),
                     )
                   : Container(
-                      color: Colors.black.withOpacity(0.05),
+                      color: AppColors.blackCat.withValues(alpha: 0.05),
                       alignment: Alignment.center,
                       child: const Icon(
                         Icons.image_not_supported_outlined,
@@ -1790,14 +1791,10 @@ class _ProjectTile extends StatelessWidget {
 /// Shared card style
 /// ---------------------------
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.child,
-    this.backgroundColor = AppColors.snow,
-    this.borderColor,
-  });
+  const _Card({required this.child});
   final Widget child;
-  final Color backgroundColor;
-  final Color? borderColor;
+  final Color backgroundColor = AppColors.snow;
+  final Color? borderColor = null;
 
   @override
   Widget build(BuildContext context) {
@@ -1809,7 +1806,7 @@ class _Card extends StatelessWidget {
         border: Border.all(color: borderColor ?? AppColors.blackCatBorderLight),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -2062,7 +2059,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
       context: context,
       builder: (_) {
         return Dialog(
-          backgroundColor: Colors.black,
+          backgroundColor: AppColors.blackCat,
           insetPadding: const EdgeInsets.all(16),
           child: Stack(
             children: <Widget>[
@@ -2076,7 +2073,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                       fit: BoxFit.contain,
                       fallback: const Icon(
                         Icons.image_not_supported_outlined,
-                        color: Colors.white70,
+                        color: AppColors.snow,
                         size: 40,
                       ),
                     ),
@@ -2089,10 +2086,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                 child: IconButton(
                   tooltip: 'Close photo preview',
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: AppColors.snow,
-                  ),
+                  icon: const Icon(Icons.close_rounded, color: AppColors.snow),
                 ),
               ),
             ],
@@ -2115,16 +2109,15 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
       fallback: 'Professional Nail Technician',
     );
     final language = _safeText(artist.language, fallback: 'English');
-    final currency = _safeText(
-      artist.currency,
-      fallback: 'US Dollar (USD)',
-    );
+    final currency = _safeText(artist.currency, fallback: 'US Dollar (USD)');
     final directRequestLabel = artist.acceptsDirectRequests
         ? 'Direct Request'
         : 'Standard Request';
     final bio = _safeText(artist.bio);
     final specializations = artist.services.isNotEmpty
-        ? artist.services.where((item) => _safeText(item).isNotEmpty).toList(growable: false)
+        ? artist.services
+              .where((item) => _safeText(item).isNotEmpty)
+              .toList(growable: false)
         : const <String>[];
     final yearsExperience = _safeText(artist.yearsExperience);
     final projects = artist.projects
@@ -2175,7 +2168,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                               height: 92,
                               fit: BoxFit.cover,
                               fallback: _avatarFallback(artistName),
-                      )
+                            )
                           : _avatarFallback(artistName),
                     ),
                   ),
@@ -2202,7 +2195,9 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          artist.rating > 0 ? artist.rating.toStringAsFixed(1) : 'N/A',
+                          artist.rating > 0
+                              ? artist.rating.toStringAsFixed(1)
+                              : 'N/A',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -2232,7 +2227,8 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                         if (yearsExperience.isNotEmpty)
                           Semantics(
                             container: true,
-                            label: 'Experience, ${_yearsExperienceSemantic(yearsExperience)}',
+                            label:
+                                'Experience, ${_yearsExperienceSemantic(yearsExperience)}',
                             child: ExcludeSemantics(
                               child: Text(
                                 yearsExperience,
@@ -2303,43 +2299,48 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                             'No specialization selected yet.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.blackCat.withOpacity(0.75),
+                              color: AppColors.blackCat.withValues(alpha: 0.75),
                             ),
                           )
                         : LayoutBuilder(
                             builder: (context, constraints) {
                               const spacing = 12.0;
-                              final tileWidth = (constraints.maxWidth - spacing) / 2;
+                              final tileWidth =
+                                  (constraints.maxWidth - spacing) / 2;
                               return Wrap(
                                 spacing: spacing,
                                 runSpacing: 8,
-                                children: List.generate(specializations.length, (index) {
-                                  final item = specializations[index];
-                                  return SizedBox(
-                                    width: tileWidth,
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          _specializationIcon(item),
-                                          size: 22,
-                                          color: AppColors.blackCat,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            item,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.blackCat,
+                                children: List.generate(
+                                  specializations.length,
+                                  (index) {
+                                    final item = specializations[index];
+                                    return SizedBox(
+                                      width: tileWidth,
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(
+                                            _specializationIcon(item),
+                                            size: 22,
+                                            color: AppColors.blackCat,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              item,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.blackCat,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
                               );
                             },
                           ),
@@ -2348,11 +2349,11 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                   _SectionDivider(),
                   _SectionHeading(title: 'Previous Art'),
                   const SizedBox(height: 10),
-                    _PreviousArtStrip(
-                      images: projects.map((p) => p.imageUrl).toList(),
-                      onImageTap: (imageUrl) =>
-                          _openPhotoPreview(context, imageUrl),
-                    ),
+                  _PreviousArtStrip(
+                    images: projects.map((p) => p.imageUrl).toList(),
+                    onImageTap: (imageUrl) =>
+                        _openPhotoPreview(context, imageUrl),
+                  ),
                 ],
               ),
             ),
@@ -2378,7 +2379,9 @@ class _MetaBand extends StatelessWidget {
   Widget build(BuildContext context) {
     final languageText = language.trim().isEmpty ? 'N/A' : language.trim();
     final currencyText = currency.trim().isEmpty ? 'N/A' : currency.trim();
-    final requestText = requestType.trim().isEmpty ? 'Standard Request' : requestType.trim();
+    final requestText = requestType.trim().isEmpty
+        ? 'Standard Request'
+        : requestType.trim();
 
     return Column(
       children: [
@@ -2486,10 +2489,7 @@ class _SectionHeading extends StatelessWidget {
 }
 
 class _PreviousArtStrip extends StatelessWidget {
-  const _PreviousArtStrip({
-    required this.images,
-    required this.onImageTap,
-  });
+  const _PreviousArtStrip({required this.images, required this.onImageTap});
 
   final List<String> images;
   final ValueChanged<String> onImageTap;
@@ -2503,7 +2503,7 @@ class _PreviousArtStrip extends StatelessWidget {
           'No previous art uploaded yet.',
           style: TextStyle(
             fontSize: 13,
-            color: AppColors.blackCat.withOpacity(0.55),
+            color: AppColors.blackCat.withValues(alpha: 0.55),
           ),
         ),
       );
@@ -2537,7 +2537,9 @@ class _PreviousArtStrip extends StatelessWidget {
                                 height: tileSize,
                                 fit: BoxFit.cover,
                                 fallback: Container(
-                                  color: Colors.black.withOpacity(0.05),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.05,
+                                  ),
                                   alignment: Alignment.center,
                                   child: const Icon(
                                     Icons.image_not_supported_outlined,
@@ -2564,8 +2566,8 @@ class _PreviousArtStrip extends StatelessWidget {
                 height: 10,
                 decoration: BoxDecoration(
                   color: index == 0
-                      ? AppColors.blackCat.withOpacity(0.32)
-                      : AppColors.blackCat.withOpacity(0.18),
+                      ? AppColors.blackCat.withValues(alpha: 0.32)
+                      : AppColors.blackCat.withValues(alpha: 0.18),
                   shape: BoxShape.circle,
                 ),
               ),

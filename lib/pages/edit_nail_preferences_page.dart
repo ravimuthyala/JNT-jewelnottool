@@ -115,19 +115,19 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
         hintText: '0.0',
         hintStyle: TextStyle(
           fontSize: 12,
-          color: AppColors.blackCat.withOpacity(0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.35),
           fontWeight: FontWeight.w400,
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         border: OutlineInputBorder(borderRadius: BorderRadius.zero),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: AppColors.blackCat.withOpacity(0.35)),
+          borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.zero,
           borderSide: BorderSide(
-            color: AppColors.blackCat.withOpacity(0.35),
+            color: AppColors.blackCat.withValues(alpha: 0.35),
             width: 1.8,
           ),
         ),
@@ -136,7 +136,7 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
   TextStyle _subhead() => TextStyle(
         fontWeight: FontWeight.w900,
         fontSize: 15.5,
-        color: AppColors.blackCat.withOpacity(0.85),
+        color: AppColors.blackCat.withValues(alpha: 0.85),
       );
 
   Future<void> _save() async {
@@ -157,7 +157,8 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter all 10 nail measurements.')),
       );
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Please enter all 10 nail measurements.',
         Directionality.of(context),
       );
@@ -171,7 +172,8 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a nail shape.')),
       );
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Please select a nail shape.',
         Directionality.of(context),
       );
@@ -182,7 +184,8 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a nail length.')),
       );
-      SemanticsService.announce(
+      SemanticsService.sendAnnouncement(
+        View.of(context),
         'Please select a nail length.',
         Directionality.of(context),
       );
@@ -461,19 +464,19 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
           const SizedBox(height: 8),
           Text(
             '• Measure the widest part of your nail bed',
-            style: TextStyle(color: Colors.black.withOpacity(0.70)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
           ),
           Text(
             '• Round to the nearest 0.5mm (optional)',
-            style: TextStyle(color: Colors.black.withOpacity(0.70)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
           ),
           Text(
             '• Left and right hands can be different',
-            style: TextStyle(color: Colors.black.withOpacity(0.70)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
           ),
           Text(
             '• Each finger is unique — measure all 10',
-            style: TextStyle(color: Colors.black.withOpacity(0.70)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
           ),
         ],
       ),
@@ -500,10 +503,10 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withOpacity(0.35)),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.blackCat.withOpacity(0.04),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -527,7 +530,7 @@ class _Card extends StatelessWidget {
             Text(
               subtitle!,
               style: TextStyle(
-                color: Colors.black.withOpacity(0.55),
+                color: Colors.black.withValues(alpha: 0.55),
                 height: 1.2,
               ),
             ),
@@ -661,7 +664,7 @@ class _FingerInputState extends State<_FingerInput> {
                     width: 54,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.zero,
                     ),
                     child: const Icon(
@@ -703,7 +706,7 @@ class _FingerInputState extends State<_FingerInput> {
               'mm',
               style: TextStyle(
                 fontSize: 12,
-                color: AppColors.blackCat.withOpacity(0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.55),
               ),
             ),
           ),
@@ -726,10 +729,10 @@ class _ShapeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : AppColors.snow;
+    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : AppColors.snow;
     final border = selected
         ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.10);
+        : AppColors.blackCat.withValues(alpha: 0.10);
 
     return Semantics(
       button: true,
@@ -754,19 +757,19 @@ class _ShapeCard extends StatelessWidget {
                   height: 48,
                   width: 48,
                   decoration: BoxDecoration(
-                    color: AppColors.blackCat.withOpacity(0.04),
+                    color: AppColors.blackCat.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.zero,
                     border: Border.all(
                       color: selected
                           ? AppColors.deepPlum
-                          : AppColors.blackCat.withOpacity(0.35),
+                          : AppColors.blackCat.withValues(alpha: 0.35),
                     ),
                   ),
                   child: Icon(
                     Icons.front_hand_outlined,
                     color: selected
                         ? AppColors.blackCat
-                        : AppColors.blackCat.withOpacity(0.5),
+                        : AppColors.blackCat.withValues(alpha: 0.5),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -778,7 +781,7 @@ class _ShapeCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 12.5,
-                    color: AppColors.blackCat.withOpacity(0.85),
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
                   ),
                 ),
               ],
@@ -805,10 +808,10 @@ class _LengthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withOpacity(0.10) : AppColors.snow;
+    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : AppColors.snow;
     final border = selected
         ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.10);
+        : AppColors.blackCat.withValues(alpha: 0.10);
 
     return Semantics(
       button: true,
@@ -835,7 +838,7 @@ class _LengthCard extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: AppColors.blackCat.withOpacity(0.60),
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
                     height: 1.15,
                     fontSize: 12.5,
                   ),

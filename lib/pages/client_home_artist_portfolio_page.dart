@@ -166,7 +166,7 @@ class _ClientHomeArtistPortfolioPageState
 
         if (uid.isNotEmpty) {
           final rows = await supabase.from(table).select().eq('id', uid).limit(1);
-          if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          if (rows.isNotEmpty) {
             data = Map<String, dynamic>.from(rows.first as Map);
           }
         }
@@ -177,7 +177,7 @@ class _ClientHomeArtistPortfolioPageState
               .select()
               .eq('email', email)
               .limit(1);
-          if (rows is List && rows.isNotEmpty && rows.first is Map) {
+          if (rows.isNotEmpty) {
             data = Map<String, dynamic>.from(rows.first as Map);
           }
         }
@@ -981,7 +981,7 @@ class _ClientHomeArtistPortfolioPageState
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withValues(alpha: 0.55),
                         ),
                       ),
                     )
@@ -1160,10 +1160,10 @@ class _PortfolioTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withOpacity(0.06)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 14,
               offset: const Offset(0, 8),
             ),
@@ -1202,7 +1202,7 @@ class _PortfolioTile extends StatelessWidget {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.zero,
                           border: Border.all(
-                            color: Colors.black.withOpacity(0.10),
+                            color: Colors.black.withValues(alpha: 0.10),
                           ),
                         ),
                         clipBehavior: Clip.antiAlias,
@@ -1263,11 +1263,11 @@ class _ResolvedPortfolioImage extends StatelessWidget {
 
   Widget _fallback() {
     return Container(
-      color: Colors.black.withOpacity(0.04),
+      color: Colors.black.withValues(alpha: 0.04),
       alignment: Alignment.center,
       child: Icon(
         Icons.broken_image_outlined,
-        color: Colors.black.withOpacity(0.35),
+        color: Colors.black.withValues(alpha: 0.35),
       ),
     );
   }
