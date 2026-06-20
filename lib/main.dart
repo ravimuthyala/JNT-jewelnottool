@@ -28,6 +28,12 @@ import 'pages/tip_artist_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   StartupFrameGate.deferFirstFrame();
+  final supabaseOk = await SupabaseBootstrap.ensureInitialized();
+  if (!supabaseOk) {
+    debugPrint(
+      'Supabase initialization failed: ${SupabaseBootstrap.lastError}',
+    );
+  }
   runApp(const JntApp());
 }
 
@@ -313,14 +319,6 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
     if (!firebaseOk) {
       debugPrint(
         'Firebase initialization failed: ${FirebaseBootstrap.lastError}',
-      );
-    }
-
-    final supabaseOk = await SupabaseBootstrap.ensureInitialized();
-
-    if (!supabaseOk) {
-      debugPrint(
-        'Supabase initialization failed: ${SupabaseBootstrap.lastError}',
       );
     }
 

@@ -11,6 +11,11 @@ class SupabaseBootstrap {
       await Supabase.initialize(
         url: 'https://mjvypuwrwcjylhizuhfw.supabase.co',
         anonKey: 'sb_publishable_VPMJRDPaTI7xdm5ti7HEjg_S_aJIPXD',
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+          autoRefreshToken: true,
+        ),
+        debug: false,
       );
 
       _lastError = null;

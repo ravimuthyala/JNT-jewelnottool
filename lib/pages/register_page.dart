@@ -435,7 +435,7 @@ class _RegisterPageState extends State<RegisterPage> {
 /// Role tile (NO ICON, NO CHECKBOX)
 /// Tap selection → color highlight only
 /// ---------------------------------------------------------------------------
-class _RoleTileNoIcon extends StatelessWidget {
+class _RoleTileNoIcon extends StatefulWidget {
   const _RoleTileNoIcon({
     required this.title,
     required this.subtitle,
@@ -457,113 +457,71 @@ class _RoleTileNoIcon extends StatelessWidget {
   final double? semanticSortOrder;
 
   @override
-  Widget build(BuildContext context) {
-    const blackCat = AppColors.blackCat;
-    const snow = AppColors.snow;
-    final borderColor = selected
-        ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.35);
-    const bgColor = AppColors.snow;
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '$title. $subtitle',
-      value: selected ? 'Selected' : 'Not selected',
-      onTap: onTap,
-      sortKey: semanticSortOrder == null
-          ? null
-          : OrdinalSortKey(semanticSortOrder!),
-      child: ExcludeSemantics(
-        child: _RoleTileNoIconBody(
-          title: title,
-          subtitle: subtitle,
-          selected: selected,
-          onTap: onTap,
-          focusNode: focusNode,
-          autofocus: autofocus,
-          borderColor: borderColor,
-          bgColor: bgColor,
-          focusRingColor: focusRingColor,
-        ),
-      ),
-    );
-  }
+  State<_RoleTileNoIcon> createState() => _RoleTileNoIconState();
 }
 
-class _RoleTileNoIconBody extends StatefulWidget {
-  const _RoleTileNoIconBody({
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-    required this.borderColor,
-    required this.bgColor,
-    required this.focusRingColor,
-    this.focusNode,
-    this.autofocus = false,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-  final FocusNode? focusNode;
-  final bool autofocus;
-  final Color borderColor;
-  final Color bgColor;
-  final Color focusRingColor;
-
-  @override
-  State<_RoleTileNoIconBody> createState() => _RoleTileNoIconBodyState();
-}
-
-class _RoleTileNoIconBodyState extends State<_RoleTileNoIconBody> {
+class _RoleTileNoIconState extends State<_RoleTileNoIcon> {
   bool _isFocused = false;
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) => setState(() => _isFocused = focused),
-      child: InkWell(
-        onTap: widget.onTap,
-        autofocus: widget.autofocus,
-        borderRadius: BorderRadius.zero,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: widget.bgColor,
+    final borderColor = widget.selected
+        ? AppColors.blackCat
+        : AppColors.blackCat.withOpacity(0.35);
+
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: '${widget.title}. ${widget.subtitle}',
+      value: widget.selected ? 'Selected' : 'Not selected',
+      onTap: widget.onTap,
+      sortKey: widget.semanticSortOrder == null
+          ? null
+          : OrdinalSortKey(widget.semanticSortOrder!),
+      child: ExcludeSemantics(
+        child: Focus(
+          focusNode: widget.focusNode,
+          onFocusChange: (focused) => setState(() => _isFocused = focused),
+          child: InkWell(
+            onTap: widget.onTap,
+            autofocus: widget.autofocus,
             borderRadius: BorderRadius.zero,
-            border: Border.all(
-              color: _isFocused ? widget.focusRingColor : widget.borderColor,
-              width: _isFocused ? 2 : (widget.selected ? 1.6 : 1.2),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: _isFocused ? widget.focusRingColor : borderColor,
+                  width: _isFocused ? 2 : (widget.selected ? 1.6 : 1.2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                      fontFamily: 'ArialBold',
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.subtitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.25,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.blackCat,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
-                  fontFamily: 'ArialBold',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.subtitle,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.25,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.blackCat,
-                  fontFamily: 'Arial',
-                ),
-              ),
-            ],
           ),
         ),
       ),

@@ -24,6 +24,8 @@ class ClientProfileAvatarIcon extends StatelessWidget {
       return SizedBox.square(dimension: size, child: _fallback());
     }
 
+    final cacheSize = (size * (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2.0)).round();
+
     if (src.startsWith('data:image/')) {
       try {
         final comma = src.indexOf(',');
@@ -34,6 +36,8 @@ class ClientProfileAvatarIcon extends StatelessWidget {
           child: Image.memory(
             bytes,
             fit: BoxFit.cover,
+            cacheWidth: cacheSize,
+            cacheHeight: cacheSize,
             errorBuilder: (context, error, stackTrace) => _fallback(),
           ),
         );
@@ -48,6 +52,8 @@ class ClientProfileAvatarIcon extends StatelessWidget {
         child: Image.network(
           src,
           fit: BoxFit.cover,
+          cacheWidth: cacheSize,
+          cacheHeight: cacheSize,
           errorBuilder: (context, error, stackTrace) => _fallback(),
         ),
       );
