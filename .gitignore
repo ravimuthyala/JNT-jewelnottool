@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 
 device-logcat.txt
+
+# Graphify knowledge graph output
+graphify-out/
