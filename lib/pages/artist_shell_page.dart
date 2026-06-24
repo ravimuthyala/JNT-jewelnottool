@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/supabase_auth_service.dart';
 import '../theme/app_colors.dart';
 
 import 'artist_requests_page_redesign.dart';
@@ -9,11 +11,9 @@ import 'artist_profile_page.dart';
 import 'artist_inbox_page.dart';
 import 'artist_history_page.dart';
 import 'notifications_page.dart';
-// ✅ use your existing history page (currently ArtistOrdersPage)
 
-// ✅ reuse your existing model
 import '../models/artist_request_legacy_models.dart'
-    show ClientRequest, NailDimensions, RequestStatus;
+    show ClientRequest;
 
 class ArtistShellPage extends StatefulWidget {
   const ArtistShellPage({super.key});
@@ -23,7 +23,48 @@ class ArtistShellPage extends StatefulWidget {
 }
 
 class _ArtistShellPageState extends State<ArtistShellPage> {
-  int _index = 0; // Default: Requests
+  int _index = 0;
+
+  String _artistLocation = '';
+  int _budgetMin = 15;
+  int _budgetMax = 5000;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadArtistProfile();
+  }
+
+  Future<void> _loadArtistProfile() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final row = await Supabase.instance.client
+          .from('artist')
+          .select('profile, pricing')
+          .eq('id', uid)
+          .maybeSingle();
+      if (row == null || !mounted) return;
+      final profile = (row['profile'] as Map<String, dynamic>?) ?? {};
+      final pricing = (row['pricing'] as Map<String, dynamic>?) ?? {};
+      final city = (profile['city'] as String? ?? '').trim();
+      final state = (profile['state'] as String? ?? '').trim();
+      final minPrice =
+          int.tryParse(pricing['minPrice']?.toString() ?? '') ?? 15;
+      final maxPrice =
+          int.tryParse(pricing['maxPrice']?.toString() ?? '') ?? 5000;
+      if (!mounted) return;
+      setState(() {
+        _artistLocation =
+            [city, state].where((s) => s.isNotEmpty).join(', ');
+        _budgetMin = minPrice;
+        _budgetMax = maxPrice;
+      });
+    } catch (_) {
+      // silently keep defaults
+    }
+  }
+
   void _goToTab(int i) => setState(() => _index = i);
 
   void _openNotifications() {
@@ -40,85 +81,18 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
   }
 
   Future<void> _signOut() async {
-    await FirebaseAuth.instance.signOut();
+    await SupabaseAuthService.logout();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final sampleRequests = <ClientRequest>[
-      ClientRequest(
-        id: 'REQ-1001',
-        clientName: 'Mia',
-        title: 'Chrome French',
-        subtitle: 'White tips + chrome',
-        neededBy: DateTime.now().add(const Duration(days: 2)),
-        budgetMin: 80,
-        budgetMax: 110,
-        nailShape: 'Square',
-        nailLength: 'Short',
-        bio: 'Clean and minimal.',
-        leftHand: const NailDimensions(
-          thumb: "17mm",
-          index: "13mm",
-          middle: "14mm",
-          ring: "13mm",
-          pinky: "9mm",
-        ),
-        rightHand: const NailDimensions(
-          thumb: "17mm",
-          index: "13mm",
-          middle: "14mm",
-          ring: "13mm",
-          pinky: "9mm",
-        ),
-        images: const [],
-        status: RequestStatus.accepted,
-        isDirectRequest: false,
-        estimatedShipDays: 2,
-      ),
-      ClientRequest(
-        id: 'REQ-1002',
-        clientName: 'Alex',
-        title: 'Hailey Bieber & Rihanna',
-        subtitle: 'Inspo Nails',
-        neededBy: DateTime.now().add(const Duration(days: 6)),
-        budgetMin: 120,
-        budgetMax: 140,
-        nailShape: 'Almond',
-        nailLength: 'Medium',
-        bio: 'Soft glam, pearl accents, prefer neutral tones.',
-        leftHand: const NailDimensions(
-          thumb: "18mm",
-          index: "14mm",
-          middle: "15mm",
-          ring: "14mm",
-          pinky: "10mm",
-        ),
-        rightHand: const NailDimensions(
-          thumb: "18mm",
-          index: "14mm",
-          middle: "15mm",
-          ring: "14mm",
-          pinky: "10mm",
-        ),
-        images: const [
-          'assets/images/nail_design_1.png',
-          'assets/images/nail_design_2.png',
-          'assets/images/nail_design_3.png',
-        ],
-        status: RequestStatus.newRequest,
-        isDirectRequest: true,
-        estimatedShipDays: 3,
-      ),
-    ];
-
     final pages = <Widget>[
       ArtistRequestsPageRedesign(
-        initialBudgetMin: 80,
-        initialBudgetMax: 150,
-        artistLocation: 'Los Angeles, CA',
+        initialBudgetMin: _budgetMin,
+        initialBudgetMax: _budgetMax,
+        artistLocation: _artistLocation,
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,
         onOpenInbox: _openInbox,
@@ -126,7 +100,7 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
       ),
 
       ArtistCalendarPage(
-        requests: sampleRequests,
+        requests: const <ClientRequest>[],
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,
         onOpenInbox: _openInbox,
@@ -141,7 +115,6 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         onSignOut: () => _signOut(),
       ),
 
-      // ✅ Earnings tab
       ArtistEarningsPage(
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
@@ -67,9 +67,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
   bool _online = true;
   bool _isLoading = true;
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientRequestsSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _companyRequestsSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notificationsSub;
+  RealtimeChannel? _requestsChannel;
 
   int _newRequests = 0;
   int _inProgress = 0;
@@ -89,100 +87,53 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
 
   @override
   void dispose() {
-    _clientRequestsSub?.cancel();
-    _companyRequestsSub?.cancel();
-    _notificationsSub?.cancel();
+    _requestsChannel?.unsubscribe();
     super.dispose();
   }
 
   void _bindRealtime() {
-    _clientRequestsSub?.cancel();
-    _companyRequestsSub?.cancel();
-    _notificationsSub?.cancel();
-
-    _clientRequestsSub = FirebaseFirestore.instance
-        .collection('Client_Custom_Requests')
-        .snapshots()
-        .listen(
-          (_) => _reloadDashboard(),
-          onError: (Object e, StackTrace st) {
-            debugPrint('Artist home listener failed: $e');
-            if (!mounted) return;
-            setState(() => _isLoading = false);
-          },
-        );
-
-    _companyRequestsSub = FirebaseFirestore.instance
-        .collection('Company_Custom_Requests')
-        .snapshots()
-        .listen(
-          (_) => _reloadDashboard(),
-          onError: (Object e, StackTrace st) {
-            debugPrint('Artist home listener failed: $e');
-            if (!mounted) return;
-            setState(() => _isLoading = false);
-          },
-        );
-
-    final userEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-    if (userEmail.isNotEmpty) {
-      _notificationsSub = FirebaseFirestore.instance
-          .collection('user_notifications')
-          .where('receiverEmail', isEqualTo: userEmail)
-          .where('read', isEqualTo: false)
-          .snapshots()
-          .listen(
-            (snap) {
-              if (!mounted) return;
-              setState(() => _inboxCount = snap.docs.length);
-            },
-            onError: (Object e, StackTrace st) {
-              debugPrint('Notifications listener error: $e');
-
-              if (!mounted) return;
-
-              setState(() {
-                _inboxCount = 0;
-              });
-            },
-          );
-    }
+    _requestsChannel?.unsubscribe();
+    _requestsChannel = Supabase.instance.client
+        .channel('artist_home_requests')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'client_custom_requests',
+          callback: (_) => _reloadDashboard(),
+        )
+        .subscribe((status, [error]) {
+          if (error != null) {
+            debugPrint('Artist home realtime error: $error');
+          }
+        });
   }
 
   Future<void> _loadArtistIdentity() async {
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final supabase = Supabase.instance.client;
+    final uid = (supabase.auth.currentUser?.id ?? '').trim();
+    final email =
+        (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
     if (uid.isEmpty && email.isEmpty) return;
 
-    DocumentSnapshot<Map<String, dynamic>>? snap;
-    if (uid.isNotEmpty) {
-      for (final col in const <String>['artist', 'client_artist']) {
-        final s = await FirebaseFirestore.instance
-            .collection(col)
-            .doc(uid)
-            .get();
-        if (s.exists) {
-          snap = s;
-          break;
+    Map<String, dynamic>? row;
+    for (final table in const <String>['artist', 'client_artist']) {
+      try {
+        if (uid.isNotEmpty) {
+          row = await supabase
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .maybeSingle();
         }
-      }
-    }
-    if ((snap == null || !snap.exists) && email.isNotEmpty) {
-      for (final col in const <String>['artist', 'client_artist']) {
-        final q = await FirebaseFirestore.instance
-            .collection(col)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (q.docs.isNotEmpty) {
-          snap = q.docs.first;
-          break;
+        if (row == null && email.isNotEmpty) {
+          row = await supabase
+              .from(table)
+              .select()
+              .eq('email', email)
+              .maybeSingle();
         }
-      }
+        if (row != null) break;
+      } catch (_) {}
     }
 
     String firstNonEmpty(List<Object?> values) {
@@ -193,17 +144,16 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
       return '';
     }
 
-    final data = snap?.data() ?? const <String, dynamic>{};
+    final data = row ?? const <String, dynamic>{};
     final profile =
         (data['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
     final nextName = firstNonEmpty([
       profile['displayName'],
       profile['studioName'],
-      data['panel_displayName'],
-      data['panel_studioName'],
       data['displayName'],
+      data['display_name'],
       data['name'],
-      FirebaseAuth.instance.currentUser?.displayName,
+      (supabase.auth.currentUser?.userMetadata?['display_name'] as String?),
       email.contains('@') ? email.split('@').first : email,
       'A',
     ]);
@@ -217,7 +167,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
     try {
       await _loadArtistIdentity();
       final currentArtistEmail =
-          (FirebaseAuth.instance.currentUser?.email ?? '').trim().toLowerCase();
+          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
       final all = await ArtistRequestsRepository.fetchAllRequests();
       if (!mounted) return;
 
@@ -337,20 +287,13 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
   }
 
   Future<void> _persistArtistDecline(ClientRequestV2 request) async {
-    final artistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final artistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
-    if (artistEmail.isEmpty) {
-      throw Exception('Missing signed-in artist email.');
-    }
+    if (artistEmail.isEmpty) throw Exception('Missing signed-in artist email.');
 
-    final docRef = FirebaseFirestore.instance
-        .collection(request.sourceCollection)
-        .doc(request.id);
     final selectedArtistByName = request.selectedArtist.trim().toLowerCase();
-    final selectedArtistEmail = request.selectedArtistEmail
-        .trim()
-        .toLowerCase();
+    final selectedArtistEmail = request.selectedArtistEmail.trim().toLowerCase();
     final artistDisplayNameLower = _artistDisplayName.trim().toLowerCase();
     final artistEmailLocalLower = artistEmail.contains('@')
         ? artistEmail.split('@').first.trim().toLowerCase()
@@ -368,8 +311,144 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
         isDirectForCurrentArtist && request.fallbackToPool;
     final cancelDirectRequest =
         isDirectForCurrentArtist && !request.fallbackToPool;
-    const artistCancelReasonText = 'Declined by selected artist';
-    final artistCancelReason = artistCancelReasonText;
+    const artistCancelReason = 'Declined by selected artist';
+
+    final supabase = Supabase.instance.client;
+
+    // Supabase: read-modify-write the declined list (primary write)
+    final currentRow = await supabase
+        .from('client_custom_requests')
+        .select('declined_by_artist_emails')
+        .eq('id', request.id)
+        .maybeSingle();
+    final declined = List<String>.from(
+      ((currentRow?['declined_by_artist_emails'] as List?) ?? [])
+          .map((e) => e.toString()),
+    );
+    if (!declined.contains(artistEmail)) declined.add(artistEmail);
+
+    final updates = <String, dynamic>{
+      'declined_by_artist_emails': declined,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (releaseDirectToPool) {
+      updates['status'] = 'in_review';
+      updates['client_status'] = 'pending';
+      updates['artist_status'] = 'in_review';
+      updates['is_direct_request'] = false;
+      updates['selected_artist'] = '';
+      updates['selected_artist_email'] = '';
+    }
+    if (cancelDirectRequest) {
+      updates['status'] = 'cancelled';
+      updates['client_status'] = 'cancelled';
+      updates['artist_status'] = 'cancelled';
+      updates['cancel_reason'] = artistCancelReason;
+      updates['cancelled_at'] = DateTime.now().toIso8601String();
+    }
+    await supabase
+        .from('client_custom_requests')
+        .update(updates)
+        .eq('id', request.id);
+
+    // Firestore mirror (fire-and-forget for backward compat)
+    unawaited(
+      _mirrorDeclineToFirestore(
+        request: request,
+        artistEmail: artistEmail,
+        releaseDirectToPool: releaseDirectToPool,
+        cancelDirectRequest: cancelDirectRequest,
+        artistCancelReason: artistCancelReason,
+      ).catchError((_) {}),
+    );
+
+    // Notifications — use request fields directly; no Firestore doc reads needed
+    String _firstNE(List<Object?> values, {String fallback = ''}) {
+      for (final v in values) {
+        final t = (v ?? '').toString().trim();
+        if (t.isNotEmpty) return t;
+      }
+      return fallback;
+    }
+
+    final artistName = _firstNE([
+      Supabase.instance.client.auth.currentUser?.userMetadata?['display_name'],
+    ], fallback: artistEmail.split('@').first);
+
+    if (releaseDirectToPool) {
+      final orderRef = _firstNE([request.orderNumber], fallback: request.id);
+      final brandName =
+          _firstNE([request.brandName, request.clientName], fallback: 'Brand');
+      final campaignName = _firstNE([request.title], fallback: 'Campaign');
+      final acceptedClientName = _firstNE(
+        [request.acceptedClientName, request.selectedClient],
+        fallback: 'Client',
+      );
+
+      final brandRecipientEmails =
+          await NotificationsService.resolveBrandRecipientEmails(
+            rootData: <String, dynamic>{
+              'requesterEmail': request.clientEmail,
+              'companyEmail': request.clientEmail,
+            },
+            excludeEmails: <String>[artistEmail],
+          );
+
+      for (final brandEmail in brandRecipientEmails) {
+        await NotificationsService.createUserNotification(
+          receiverEmail: brandEmail,
+          title: 'Brand Request Declined',
+          body: scenario43BrandReceiveOnDirectArtistDecline(
+            artistName: artistName,
+            brandName: brandName,
+            campaignName: campaignName,
+            orderRef: orderRef,
+            clientName: acceptedClientName,
+          ),
+          type: 'brand_request_declined_by_direct_artist',
+          orderId: request.id,
+          orderNumber: request.orderNumber,
+          sourceCollection: request.sourceCollection,
+        );
+      }
+
+      await NotificationsService.notifyArtistsForBrandClientAcceptedRequest(
+        clientName: acceptedClientName,
+        brandName: brandName,
+        campaignName: campaignName,
+        isDirectRequest: false,
+        selectedArtistEmail: '',
+        selectedArtistName: '',
+        orderId: request.id,
+        sourceCollection: request.sourceCollection,
+        orderNumber: request.orderNumber,
+        allowNonLicensed: request.allowNonLicensed,
+        excludeArtistEmails: <String>[artistEmail],
+      );
+    }
+    if (cancelDirectRequest && request.clientEmail.trim().isNotEmpty) {
+      await NotificationsService.createUserNotification(
+        receiverEmail: request.clientEmail.trim().toLowerCase(),
+        title: 'Request Cancelled',
+        body: 'Declined by Artist $artistName',
+        type: 'direct_request_declined_cancelled',
+        orderId: request.id,
+        orderNumber: request.orderNumber,
+        sourceCollection: request.sourceCollection,
+      );
+    }
+  }
+
+  Future<void> _mirrorDeclineToFirestore({
+    required ClientRequestV2 request,
+    required String artistEmail,
+    required bool releaseDirectToPool,
+    required bool cancelDirectRequest,
+    required String artistCancelReason,
+  }) async {
+    final docRef = FirebaseFirestore.instance
+        .collection(request.sourceCollection)
+        .doc(request.id);
     final batch = FirebaseFirestore.instance.batch();
     batch.set(docRef, {
       'updatedAt': FieldValue.serverTimestamp(),
@@ -432,110 +511,6 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
         },
     }, SetOptions(merge: true));
     await batch.commit();
-
-    if (releaseDirectToPool) {
-      String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
-        for (final value in values) {
-          final text = (value ?? '').toString().trim();
-          if (text.isNotEmpty) return text;
-        }
-        return fallback;
-      }
-
-      final rootSnap = await docRef.get();
-      final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef
-          .collection('details')
-          .doc('payload')
-          .get();
-      final detailsData = detailsSnap.data() ?? const <String, dynamic>{};
-      final orderData =
-          (detailsData['order'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final orderRef = request.orderNumber.trim().isNotEmpty
-          ? request.orderNumber.trim()
-          : request.id;
-      final brandName = firstNonEmpty(<Object?>[
-        rootData['companyName'],
-        rootData['brandName'],
-        request.brandName,
-        request.clientName,
-      ], fallback: 'Brand');
-      final campaignName = firstNonEmpty(<Object?>[
-        rootData['campaignName'],
-        rootData['title'],
-        request.title,
-      ], fallback: 'Campaign');
-      final artistName =
-          (FirebaseAuth.instance.currentUser?.displayName ?? '')
-              .trim()
-              .isNotEmpty
-          ? (FirebaseAuth.instance.currentUser?.displayName ?? '').trim()
-          : artistEmail.split('@').first;
-      final acceptedClientName = firstNonEmpty(<Object?>[
-        rootData['acceptedClientName'],
-        rootData['selectedClient'],
-        request.acceptedClientName,
-        request.selectedClient,
-        'Client',
-      ], fallback: 'Client');
-
-      final brandRecipientEmails =
-          await NotificationsService.resolveBrandRecipientEmails(
-            rootData: rootData,
-            orderData: orderData,
-            excludeEmails: <String>[artistEmail],
-          );
-
-      for (final brandCompanyEmail in brandRecipientEmails) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: brandCompanyEmail,
-          title: 'Brand Request Declined',
-          body: scenario43BrandReceiveOnDirectArtistDecline(
-            artistName: artistName,
-            brandName: brandName,
-            campaignName: campaignName,
-            orderRef: orderRef,
-            clientName: acceptedClientName,
-          ),
-          type: 'brand_request_declined_by_direct_artist',
-          orderId: request.id,
-          orderNumber: request.orderNumber,
-          sourceCollection: request.sourceCollection,
-        );
-      }
-
-      await NotificationsService.notifyArtistsForBrandClientAcceptedRequest(
-        clientName: acceptedClientName,
-        brandName: brandName,
-        campaignName: campaignName,
-        isDirectRequest: false,
-        selectedArtistEmail: '',
-        selectedArtistName: '',
-        orderId: request.id,
-        sourceCollection: request.sourceCollection,
-        orderNumber: request.orderNumber,
-        allowNonLicensed: request.allowNonLicensed,
-        excludeArtistEmails: <String>[artistEmail],
-      );
-    }
-    if (cancelDirectRequest && request.clientEmail.trim().isNotEmpty) {
-      final artistName =
-          (FirebaseAuth.instance.currentUser?.displayName ?? '').trim().isEmpty
-          ? (FirebaseAuth.instance.currentUser?.email ?? 'Artist')
-                .split('@')
-                .first
-          : (FirebaseAuth.instance.currentUser?.displayName ?? '').trim();
-      await NotificationsService.createUserNotification(
-        receiverEmail: request.clientEmail.trim().toLowerCase(),
-        title: 'Request Cancelled',
-        body: 'Declined by Artist $artistName',
-        type: 'direct_request_declined_cancelled',
-        orderId: request.id,
-        orderNumber: request.orderNumber,
-        sourceCollection: request.sourceCollection,
-      );
-    }
   }
 
   Future<bool> _persistArtistAcceptance(
@@ -545,57 +520,47 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
     final total = accepted.yourPrice + accepted.shipping + accepted.extra;
     final normalizedTotal = double.parse(total.toStringAsFixed(2));
     final roundedTotal = normalizedTotal.round();
+    final artistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    final paymentLink =
+        'jnt://payment?order=${request.id}&collection=${request.sourceCollection}';
+    final now = DateTime.now().toIso8601String();
 
-    Future<bool> persistToDoc(
-      DocumentReference<Map<String, dynamic>> docRef,
-    ) async {
-      final snap = await docRef.get();
-      if (!snap.exists) return false;
-      final data = snap.data() ?? const <String, dynamic>{};
+    final supabase = Supabase.instance.client;
 
-      final artistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-          .trim()
-          .toLowerCase();
-      final paymentLink =
-          'jnt://payment?order=${request.id}&collection=${request.sourceCollection}';
-      final batch = FirebaseFirestore.instance.batch();
-      final detailSnap = await docRef
-          .collection('details')
-          .doc('payload')
-          .get();
-      final detailData = detailSnap.data() ?? const <String, dynamic>{};
-      final orderData =
-          (detailData['order'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
+    // Find the row in Supabase (try ID first, then orderNumber fallback)
+    Map<String, dynamic>? existingRow = await supabase
+        .from('client_custom_requests')
+        .select('id, details')
+        .eq('id', request.id)
+        .maybeSingle();
+    if (existingRow == null && request.orderNumber.trim().isNotEmpty) {
+      existingRow = await supabase
+          .from('client_custom_requests')
+          .select('id, details')
+          .eq('order_number', request.orderNumber.trim())
+          .maybeSingle();
+    }
+    if (existingRow == null) return false;
 
-      String firstNonEmpty(List<Object?> values) {
-        for (final value in values) {
-          final text = (value ?? '').toString().trim();
-          if (text.isNotEmpty) return text;
-        }
-        return '';
-      }
+    final rowId = (existingRow['id'] as String?) ?? request.id;
+    final currentDetails =
+        (existingRow['details'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
 
-      batch.set(docRef, {
-        'status': 'designing',
-        'updatedAt': FieldValue.serverTimestamp(),
-        'artistAcceptedAt': FieldValue.serverTimestamp(),
-        'acceptedByArtistEmail': artistEmail,
-        'brandStatus': 'in_progress',
-        'clientStatus': 'in_progress',
-        'artistStatus': 'designing',
-        'artistFinalAmount': normalizedTotal,
-        'paymentStatus': 'pending',
-        'paymentLink': paymentLink,
-        'artistQuote': {
-          'yourPrice': accepted.yourPrice,
-          'shipping': accepted.shipping,
-          'extra': accepted.extra,
-          'total': normalizedTotal,
-        },
-      }, SetOptions(merge: true));
-
-      batch.set(docRef.collection('details').doc('payload'), {
+    // Supabase write (primary)
+    await supabase.from('client_custom_requests').update({
+      'status': 'designing',
+      'client_status': 'in_progress',
+      'artist_status': 'designing',
+      'accepted_by_artist_email': artistEmail,
+      'artist_final_amount': normalizedTotal,
+      'payment_status': 'pending',
+      'payment_link': paymentLink,
+      'updated_at': now,
+      'details': {
+        ...currentDetails,
         'artistQuote': {
           'yourPrice': accepted.yourPrice,
           'shipping': accepted.shipping,
@@ -604,109 +569,134 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
         },
         'acceptance': {
           'status': 'accepted',
-          'acceptedAt': FieldValue.serverTimestamp(),
+          'acceptedAt': now,
           'acceptedByArtistEmail': artistEmail,
         },
-        'status': 'designing',
-        'roleStatuses': {
-          'brand': 'in_progress',
-          'client': 'in_progress',
-          'artist': 'designing',
-        },
         'payment': {
+          ...((currentDetails['payment'] as Map<String, dynamic>?) ??
+              const <String, dynamic>{}),
           'status': 'pending',
           'paymentLink': paymentLink,
-          'requestedAt': FieldValue.serverTimestamp(),
+          'requestedAt': now,
         },
-      }, SetOptions(merge: true));
+      },
+    }).eq('id', rowId);
 
-      await batch.commit();
+    // Firestore mirror (fire-and-forget for backward compat)
+    unawaited(
+      _mirrorAcceptanceToFirestore(
+        request: request,
+        artistEmail: artistEmail,
+        normalizedTotal: normalizedTotal,
+        paymentLink: paymentLink,
+        accepted: accepted,
+      ).catchError((_) {}),
+    );
 
-      final orderNumber = request.orderNumber.trim().isNotEmpty
-          ? request.orderNumber.trim()
-          : request.id;
-      final amountText = '\$${roundedTotal.toString()}';
-      final artistName = firstNonEmpty(<Object?>[
-        FirebaseAuth.instance.currentUser?.displayName,
-        data['acceptedByArtistName'],
-        data['artistName'],
-        data['artistDisplayName'],
-        artistEmail.split('@').first,
-      ]);
-      final clientReceiver = firstNonEmpty(<Object?>[
-        request.clientEmail,
-        data['clientEmail'],
-        data['email'],
-        data['requesterEmail'],
-        data['createdByEmail'],
-        orderData['clientEmail'],
-        orderData['email'],
-        orderData['requesterEmail'],
-      ]).toLowerCase();
-      if (clientReceiver.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: clientReceiver,
-          title: 'Request Accepted',
-          body:
-              'Great news! $artistName accepted your request. Final amount: $amountText',
-          type: 'request_accepted_designing',
-          orderId: request.id,
-          orderNumber: orderNumber,
-          sourceCollection: request.sourceCollection,
-        );
+    // Notifications — use request fields directly
+    String _firstNE(List<Object?> values) {
+      for (final v in values) {
+        final t = (v ?? '').toString().trim();
+        if (t.isNotEmpty) return t;
       }
-      if (request.sourceCollection == 'Company_Custom_Requests' &&
-          artistEmail.isNotEmpty) {
-        final campaignName = firstNonEmpty(<Object?>[
-          data['campaignName'],
-          data['title'],
-          request.title,
-        ]);
-        var acceptedClientName = firstNonEmpty(<Object?>[
-          data['acceptedClientName'],
-          data['selectedClient'],
-          request.selectedClient,
-          data['clientName'],
-        ]);
-        if (acceptedClientName.trim().isEmpty) {
-          acceptedClientName = 'Client';
-        }
-        await NotificationsService.createUserNotification(
-          receiverEmail: artistEmail,
-          title: 'Brand Request Accepted',
-          body:
-              'You accepted $campaignName brand request $orderNumber for $acceptedClientName.',
-          type: 'artist_brand_request_accepted_self',
-          orderId: request.id,
-          orderNumber: orderNumber,
-          sourceCollection: request.sourceCollection,
-        );
-      }
-      return true;
+      return '';
     }
 
-    final directRef = FirebaseFirestore.instance
+    final orderNumber =
+        request.orderNumber.trim().isNotEmpty ? request.orderNumber.trim() : rowId;
+    final amountText = '\$${roundedTotal.toString()}';
+    final artistName = _firstNE([
+      Supabase.instance.client.auth.currentUser?.userMetadata?['display_name'],
+      artistEmail.split('@').first,
+    ]);
+    final clientReceiver =
+        _firstNE([request.clientEmail]).toLowerCase();
+    if (clientReceiver.isNotEmpty) {
+      await NotificationsService.createUserNotification(
+        receiverEmail: clientReceiver,
+        title: 'Request Accepted',
+        body: 'Great news! $artistName accepted your request. Final amount: $amountText',
+        type: 'request_accepted_designing',
+        orderId: rowId,
+        orderNumber: orderNumber,
+        sourceCollection: request.sourceCollection,
+      );
+    }
+    if (request.sourceCollection == 'Company_Custom_Requests' &&
+        artistEmail.isNotEmpty) {
+      final campaignName = _firstNE([request.title]);
+      var acceptedClientName =
+          _firstNE([request.acceptedClientName, request.selectedClient]);
+      if (acceptedClientName.isEmpty) acceptedClientName = 'Client';
+      await NotificationsService.createUserNotification(
+        receiverEmail: artistEmail,
+        title: 'Brand Request Accepted',
+        body: 'You accepted $campaignName brand request $orderNumber for $acceptedClientName.',
+        type: 'artist_brand_request_accepted_self',
+        orderId: rowId,
+        orderNumber: orderNumber,
+        sourceCollection: request.sourceCollection,
+      );
+    }
+    return true;
+  }
+
+  Future<void> _mirrorAcceptanceToFirestore({
+    required ClientRequestV2 request,
+    required String artistEmail,
+    required double normalizedTotal,
+    required String paymentLink,
+    required _HomeAcceptResult accepted,
+  }) async {
+    final docRef = FirebaseFirestore.instance
         .collection(request.sourceCollection)
         .doc(request.id);
-    if (await persistToDoc(directRef)) return true;
-
-    final orderNo = request.orderNumber.trim();
-    if (orderNo.isNotEmpty) {
-      for (final collection in const <String>[
-        'Client_Custom_Requests',
-        'Company_Custom_Requests',
-      ]) {
-        final query = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('orderNumber', isEqualTo: orderNo)
-            .limit(1)
-            .get();
-        if (query.docs.isEmpty) continue;
-        if (await persistToDoc(query.docs.first.reference)) return true;
-      }
-    }
-
-    return false;
+    final snap = await docRef.get();
+    if (!snap.exists) return;
+    final batch = FirebaseFirestore.instance.batch();
+    batch.set(docRef, {
+      'status': 'designing',
+      'updatedAt': FieldValue.serverTimestamp(),
+      'artistAcceptedAt': FieldValue.serverTimestamp(),
+      'acceptedByArtistEmail': artistEmail,
+      'brandStatus': 'in_progress',
+      'clientStatus': 'in_progress',
+      'artistStatus': 'designing',
+      'artistFinalAmount': normalizedTotal,
+      'paymentStatus': 'pending',
+      'paymentLink': paymentLink,
+      'artistQuote': {
+        'yourPrice': accepted.yourPrice,
+        'shipping': accepted.shipping,
+        'extra': accepted.extra,
+        'total': normalizedTotal,
+      },
+    }, SetOptions(merge: true));
+    batch.set(docRef.collection('details').doc('payload'), {
+      'artistQuote': {
+        'yourPrice': accepted.yourPrice,
+        'shipping': accepted.shipping,
+        'extra': accepted.extra,
+        'total': normalizedTotal,
+      },
+      'acceptance': {
+        'status': 'accepted',
+        'acceptedAt': FieldValue.serverTimestamp(),
+        'acceptedByArtistEmail': artistEmail,
+      },
+      'status': 'designing',
+      'roleStatuses': {
+        'brand': 'in_progress',
+        'client': 'in_progress',
+        'artist': 'designing',
+      },
+      'payment': {
+        'status': 'pending',
+        'paymentLink': paymentLink,
+        'requestedAt': FieldValue.serverTimestamp(),
+      },
+    }, SetOptions(merge: true));
+    await batch.commit();
   }
 
   Future<void> _openRecentRequest(ClientRequestV2 request) async {
@@ -1185,7 +1175,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
   }*/
 
   /*Future<String> _resolveStorageAvatarFallback() async {
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    final uid = (Supabase.instance.client.auth.currentUser?.id ?? '').trim();
     if (uid.isEmpty) return '';
     final candidates = <String>[
       'artists/$uid/profile/avatar.jpg',
