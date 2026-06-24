@@ -3,8 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -49,7 +47,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   static const int _maxPortfolioUploadBytes = 2 * 1024 * 1024; // 2MB
   static const int _preferredPortfolioUploadBytes = 650 * 1024; // ~650KB
   static const int _portfolioMaxEdge = 1600;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
   bool _loggingOutFromProfile = false;
   bool _directRequestsEnabled = true;
   bool _savingDirectRequestPref = false;
@@ -57,26 +54,20 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   bool _savingNfcRequestPref = false;
   bool _allClientRequestNotificationsEnabled = true;
   bool _savingAllClientRequestNotifications = false;
-  DocumentReference<Map<String, dynamic>>? _artistDocRef;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _artistSub;
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   String _artistSupabaseTable = '';
   String _artistSupabaseId = '';
 
   Future<_ArtistIdentity> _resolveArtistIdentity() async {
-    final firebaseUser = FirebaseAuth.instance.currentUser;
-    final firebaseUid = (firebaseUser?.uid ?? '').trim();
-    final firebaseEmail = (firebaseUser?.email ?? '').trim().toLowerCase();
-    final supabaseEmail = (SupabaseAuthService.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-    final loginEmail = firebaseEmail.isNotEmpty ? firebaseEmail : supabaseEmail;
-    final aliasUid = loginEmail.isNotEmpty
-        ? await AuthEmailAliasService.resolveUidForLogin(loginEmail)
+    final supabaseUser = SupabaseAuthService.currentUser;
+    final supabaseId = (supabaseUser?.id ?? '').trim();
+    final supabaseEmail = (supabaseUser?.email ?? '').trim().toLowerCase();
+    final aliasUid = supabaseEmail.isNotEmpty
+        ? await AuthEmailAliasService.resolveUidForLogin(supabaseEmail)
         : null;
     return _ArtistIdentity(
-      uid: firebaseUid.isNotEmpty ? firebaseUid : (aliasUid ?? ''),
-      email: loginEmail,
+      uid: supabaseId.isNotEmpty ? supabaseId : (aliasUid ?? ''),
+      email: supabaseEmail,
     );
   }
 
@@ -88,7 +79,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
   @override
   void dispose() {
-    _artistSub?.cancel();
     super.dispose();
   }
 
@@ -97,14 +87,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     if (value is Map)
       return value.map((key, value) => MapEntry(key.toString(), value));
     return const <String, dynamic>{};
-  }
-
-  Map<String, dynamic> _withSupabaseMeta(Map<String, dynamic> data) {
-    return <String, dynamic>{
-      ...data,
-      '__supabaseTable': _artistSupabaseTable,
-      '__supabaseId': _artistSupabaseId,
-    };
   }
 
   Future<Map<String, dynamic>?> _readSupabaseArtistRow({
@@ -238,7 +220,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         if (avatar.isNotEmpty) 'photoUrl': avatar,
         if (avatar.isNotEmpty) 'avatarUrl': avatar,
       },
-      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 
@@ -249,297 +230,40 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     }
 
     final supabaseRow = await _loadSupabaseArtistProfile(identity);
-    if (supabaseRow != null) {
-      final compatData = _firestoreCompatArtistData(supabaseRow);
-      final nextDirect = _readBool(
-        compatData['panel_directRequestsEnabled'],
-        (compatData['availability']
-            as Map<String, dynamic>?)?['directRequestsEnabled'],
-        (compatData['profile']
-            as Map<String, dynamic>?)?['directRequestsEnabled'],
-      );
-      final nextNfc =
-          _readMaybeBool(
-            compatData['panel_nfcRequestEnabled'],
-            (compatData['availability']
-                as Map<String, dynamic>?)?['nfcRequestEnabled'],
-            (compatData['profile']
-                as Map<String, dynamic>?)?['nfcRequestEnabled'],
-          ) ??
-          false;
-      final nextAllClientNotifications = _readBool(
-        compatData['panel_allClientRequestNotificationsEnabled'],
-        (compatData['notifications']
-            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-        (compatData['profile']
-            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-      );
+    if (supabaseRow == null) return;
 
-      final docId = _firstNonEmpty([
-        _artistSupabaseId,
-        identity.uid,
-        identity.email,
-      ]).replaceAll('/', '_');
+    final compatData = _firestoreCompatArtistData(supabaseRow);
+    final nextDirect = _readBool(
+      compatData['panel_directRequestsEnabled'],
+      (compatData['availability']
+          as Map<String, dynamic>?)?['directRequestsEnabled'],
+      (compatData['profile']
+          as Map<String, dynamic>?)?['directRequestsEnabled'],
+    );
+    final nextNfc =
+        _readMaybeBool(
+          compatData['panel_nfcRequestEnabled'],
+          (compatData['availability']
+              as Map<String, dynamic>?)?['nfcRequestEnabled'],
+          (compatData['profile']
+              as Map<String, dynamic>?)?['nfcRequestEnabled'],
+        ) ??
+        false;
+    final nextAllClientNotifications = _readBool(
+      compatData['panel_allClientRequestNotificationsEnabled'],
+      (compatData['notifications']
+          as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+      (compatData['profile']
+          as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+    );
 
-      final streamRef = _db
-          .collection(
-            _artistSupabaseTable == 'client_artist'
-                ? 'client_artist'
-                : 'artist',
-          )
-          .doc(docId);
-      _artistDocRef = streamRef;
-
-      if (mounted) {
-        setState(() {
-          _artistData = compatData;
-          _directRequestsEnabled = nextDirect;
-          _nfcRequestsEnabled = nextNfc;
-          _allClientRequestNotificationsEnabled = nextAllClientNotifications;
-        });
-      }
-
-      try {
-        await streamRef.set(compatData, SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('Firestore compatibility mirror failed: $e');
-      }
-
-      _artistSub?.cancel();
-      _artistSub = streamRef.snapshots().listen((snap) {
-        if (!mounted) return;
-        final data = snap.data() ?? compatData;
-        setState(() {
-          _artistData = data;
-          _directRequestsEnabled = _readBool(
-            data['panel_directRequestsEnabled'],
-            (data['availability']
-                as Map<String, dynamic>?)?['directRequestsEnabled'],
-            (data['profile']
-                as Map<String, dynamic>?)?['directRequestsEnabled'],
-          );
-          _nfcRequestsEnabled =
-              _readMaybeBool(
-                data['panel_nfcRequestEnabled'],
-                (data['availability']
-                    as Map<String, dynamic>?)?['nfcRequestEnabled'],
-                (data['profile']
-                    as Map<String, dynamic>?)?['nfcRequestEnabled'],
-              ) ??
-              false;
-          _allClientRequestNotificationsEnabled = _readBool(
-            data['panel_allClientRequestNotificationsEnabled'],
-            (data['notifications']
-                as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-            (data['profile']
-                as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-          );
-        });
-      });
-
-      return;
-    }
-
-    DocumentReference<Map<String, dynamic>>? resolvedRef;
-    DocumentSnapshot<Map<String, dynamic>>? resolvedSnap;
-    int resolvedScore = -1;
-
-    int scoreDoc(Map<String, dynamic> data) {
-      int listLen(dynamic raw) {
-        if (raw is List) return raw.length;
-        return 0;
-      }
-
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final artist = (data['artist'] as Map<String, dynamic>?) ?? const {};
-      final portfolio =
-          (data['portfolio'] as Map<String, dynamic>?) ?? const {};
-      final artistPortfolio =
-          (artist['portfolio'] as Map<String, dynamic>?) ?? const {};
-
-      var score = 0;
-      score += listLen(data['portfolioImages']) * 5;
-      score += listLen(data['panel_portfolioImages']) * 5;
-      score += listLen(data['panel_artist_portfolioImages']) * 5;
-      score += listLen(data['portfolioItems']) * 3;
-      score += listLen(portfolio['images']) * 3;
-      score += listLen(portfolio['items']) * 2;
-      score += listLen(artist['portfolioImages']) * 3;
-      score += listLen(artist['portfolioItems']) * 2;
-      score += listLen(artistPortfolio['images']) * 2;
-      score += listLen(artistPortfolio['items']) * 2;
-      if (_firstNonEmpty([
-        profile['photoUrl'],
-        profile['avatarUrl'],
-        profile['profileImageUrl'],
-        data['photoUrl'],
-        data['avatarUrl'],
-        data['panel_profileImageUrl'],
-        data['profileImageUrl'],
-      ]).isNotEmpty) {
-        score += 4;
-      }
-      if (_firstNonEmpty([
-        profile['displayName'],
-        profile['studioName'],
-        data['panel_displayName'],
-        data['panel_studioName'],
-        data['displayName'],
-        data['name'],
-      ]).isNotEmpty) {
-        score += 2;
-      }
-      return score;
-    }
-
-    Future<void> considerRef(
-      DocumentReference<Map<String, dynamic>> ref,
-    ) async {
-      try {
-        final snap = await ref.get();
-        if (!snap.exists) return;
-        final data = snap.data() ?? const <String, dynamic>{};
-        var score = scoreDoc(data);
-        try {
-          final sub = await ref
-              .collection('portfolio_items')
-              .limit(1)
-              .get(const GetOptions(source: Source.server));
-          if (sub.docs.isNotEmpty) score += 10;
-        } catch (_) {}
-        if (score > resolvedScore) {
-          resolvedScore = score;
-          resolvedRef = ref;
-          resolvedSnap = snap;
-        }
-      } catch (_) {}
-    }
-
-    for (final collection in const <String>['artist', 'client_artist']) {
-      if (identity.uid.isNotEmpty) {
-        await considerRef(_db.collection(collection).doc(identity.uid));
-      }
-    }
-
-    final email = identity.email.trim().toLowerCase();
-    if (email.isNotEmpty) {
-      for (final collection in const <String>['artist', 'client_artist']) {
-        try {
-          final query = await _db
-              .collection(collection)
-              .where('email', isEqualTo: email)
-              .limit(2)
-              .get();
-          for (final doc in query.docs) {
-            await considerRef(doc.reference);
-          }
-        } catch (_) {}
-      }
-    }
-
-    if (resolvedRef == null) {
-      return;
-    }
-
-    final streamRef = resolvedRef!;
-    _artistDocRef = streamRef;
-    if (resolvedSnap != null && mounted) {
-      final data = resolvedSnap!.data() ?? const <String, dynamic>{};
-      final nextDirect = _readBool(
-        data['panel_directRequestsEnabled'],
-        (data['availability']
-            as Map<String, dynamic>?)?['directRequestsEnabled'],
-        (data['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
-      );
-      final nextNfc =
-          _readMaybeBool(
-            data['panel_nfcRequestEnabled'],
-            (data['availability']
-                as Map<String, dynamic>?)?['nfcRequestEnabled'],
-            (data['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
-          ) ??
-          false;
-      final nextAllClientNotifications = _readBool(
-        data['panel_allClientRequestNotificationsEnabled'],
-        (data['notifications']
-            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-        (data['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-      );
+    if (mounted) {
       setState(() {
-        _artistData = data;
+        _artistData = compatData;
         _directRequestsEnabled = nextDirect;
         _nfcRequestsEnabled = nextNfc;
         _allClientRequestNotificationsEnabled = nextAllClientNotifications;
       });
-      unawaited(_ensurePortfolioSubcollectionSeed(streamRef, data));
-    }
-    _artistSub?.cancel();
-    _artistSub = streamRef.snapshots().listen((snap) {
-      if (!mounted) return;
-      final data = snap.data() ?? const <String, dynamic>{};
-      final nextDirect = _readBool(
-        data['panel_directRequestsEnabled'],
-        (data['availability']
-            as Map<String, dynamic>?)?['directRequestsEnabled'],
-        (data['profile'] as Map<String, dynamic>?)?['directRequestsEnabled'],
-      );
-      final nextNfc =
-          _readMaybeBool(
-            data['panel_nfcRequestEnabled'],
-            (data['availability']
-                as Map<String, dynamic>?)?['nfcRequestEnabled'],
-            (data['profile'] as Map<String, dynamic>?)?['nfcRequestEnabled'],
-          ) ??
-          false;
-      final nextAllClientNotifications = _readBool(
-        data['panel_allClientRequestNotificationsEnabled'],
-        (data['notifications']
-            as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-        (data['profile'] as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-      );
-      setState(() {
-        _artistData = data;
-        _directRequestsEnabled = nextDirect;
-        _nfcRequestsEnabled = nextNfc;
-        _allClientRequestNotificationsEnabled = nextAllClientNotifications;
-      });
-      unawaited(_ensurePortfolioSubcollectionSeed(streamRef, data));
-    });
-  }
-
-  Future<void> _ensurePortfolioSubcollectionSeed(
-    DocumentReference<Map<String, dynamic>> ref,
-    Map<String, dynamic> data,
-  ) async {
-    final legacyItems = _portfolioItemsFromData(data);
-    if (legacyItems.isEmpty) return;
-    try {
-      final existing = await ref
-          .collection('portfolio_items')
-          .limit(1)
-          .get(const GetOptions(source: Source.server))
-          .timeout(const Duration(seconds: 6));
-      if (existing.docs.isNotEmpty) return;
-    } catch (_) {
-      return;
-    }
-
-    final seen = <String>{};
-    for (final item in legacyItems.take(24)) {
-      final image = item.image.trim();
-      if (image.isEmpty || !seen.add(image)) continue;
-      try {
-        await ref
-            .collection('portfolio_items')
-            .add({
-              'imageUrl': image,
-              'storagePath': '',
-              'style': item.style.trim().isEmpty ? 'All' : item.style.trim(),
-              'createdAt': FieldValue.serverTimestamp(),
-              'updatedAt': FieldValue.serverTimestamp(),
-            })
-            .timeout(const Duration(seconds: 5));
-      } catch (_) {}
     }
   }
 
@@ -678,18 +402,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       _directRequestsEnabled = value;
       _savingDirectRequestPref = true;
     });
-    final ref = _artistDocRef;
-    if (ref == null) {
-      if (!mounted) return;
-      setState(() => _savingDirectRequestPref = false);
-      return;
-    }
     try {
-      await ref.set({
-        'panel_directRequestsEnabled': value,
-        'availability': {'directRequestsEnabled': value},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
       await _syncSupabaseArtistFields({
         'availability': {'directRequestsEnabled': value},
         'profile': {
@@ -716,19 +429,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       _nfcRequestsEnabled = value;
       _savingNfcRequestPref = true;
     });
-    final ref = _artistDocRef;
-    if (ref == null) {
-      if (!mounted) return;
-      setState(() => _savingNfcRequestPref = false);
-      return;
-    }
     try {
-      await ref.set({
-        'panel_nfcRequestEnabled': value,
-        'availability': {'nfcRequestEnabled': value},
-        'profile': {'nfcRequestEnabled': value},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
       await _syncSupabaseArtistFields({
         'availability': {
           ..._asMap(_artistData['availability']),
@@ -758,21 +459,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       _allClientRequestNotificationsEnabled = value;
       _savingAllClientRequestNotifications = true;
     });
-    final ref = _artistDocRef;
-    if (ref == null) {
-      if (!mounted) return;
-      setState(() => _savingAllClientRequestNotifications = false);
-      return;
-    }
     try {
-      await ref.set({
-        'panel_allClientRequestNotificationsEnabled': value,
-        'notifications': {
-          'allClientRequestsEnabled': value,
-          'directRequestNotificationsEnabled': true,
-        },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
       await _syncSupabaseArtistFields({
         'notifications': {
           ..._asMap(_artistData['notifications']),
@@ -802,7 +489,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     if (_loggingOutFromProfile) return;
     setState(() => _loggingOutFromProfile = true);
     try {
-      await FirebaseAuth.instance.signOut();
       await SupabaseBootstrap.client.auth.signOut();
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
@@ -817,8 +503,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   Future<void> _onEditProfile() async {
-    final ref = _artistDocRef;
-    if (ref == null) return;
+    if (_artistSupabaseId.isEmpty) await _bindArtistProfile();
+    if (_artistSupabaseId.isEmpty) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -828,8 +514,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistEditProfilePage(
-            docRef: ref,
-            initialData: _withSupabaseMeta(_artistData),
+            supabaseTable: _artistSupabaseTable,
+            supabaseId: _artistSupabaseId,
+            initialData: _artistData,
           ),
         ),
       ),
@@ -904,13 +591,53 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     return items;
   }
 
-  Future<void> _openPortfolio() async {
-    var ref = _artistDocRef;
-    if (ref == null) {
-      await _bindArtistProfile();
-      ref = _artistDocRef;
+  Future<void> _appendPortfolioItemsToSupabase(
+    List<ArtistPortfolioItem> newItems,
+  ) async {
+    final table = _artistSupabaseTable.trim();
+    final id = _artistSupabaseId.trim();
+    if (table.isEmpty || id.isEmpty || newItems.isEmpty) return;
+    try {
+      final client = SupabaseBootstrap.client;
+      final rows = await client
+          .from(table)
+          .select('portfolio')
+          .eq('id', id)
+          .limit(1);
+      final existing =
+          (rows is List && rows.isNotEmpty && rows.first['portfolio'] is Map)
+          ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
+          : <String, dynamic>{};
+      final images = List<dynamic>.from(existing['images'] as List? ?? []);
+      final items = List<dynamic>.from(existing['items'] as List? ?? []);
+      for (final item in newItems) {
+        images.insert(0, item.image);
+        items.insert(0, <String, dynamic>{
+          'imageUrl': item.image,
+          'style': item.style,
+          'storagePath': item.storagePath ?? '',
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      }
+      existing['images'] = images;
+      existing['items'] = items;
+      await client
+          .from(table)
+          .update({
+            'portfolio': existing,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id);
+    } catch (e) {
+      debugPrint('Portfolio save failed: $e');
     }
-    if (ref == null) {
+  }
+
+  Future<void> _openPortfolio() async {
+    if (_artistSupabaseId.isEmpty) {
+      await _bindArtistProfile();
+    }
+    if (_artistSupabaseId.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Artist profile not found.')),
@@ -918,7 +645,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       }
       return;
     }
-    final docRef = ref;
+    final supabaseId = _artistSupabaseId;
+    final supabaseTable = _artistSupabaseTable;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -928,7 +656,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistPortfolioModal(
-            docRef: docRef,
+            supabaseTable: supabaseTable,
+            supabaseId: supabaseId,
             initialItems: _portfolioItemsFromData(_artistData),
             onUploadTap:
                 ({
@@ -991,7 +720,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     final rawBytes = await file.readAsBytes();
                     final bytes = await prepareBytes(rawBytes);
                     final path =
-                        'artists/${docRef.id}/portfolio/${now}_${index + 1}.jpg';
+                        'artists/$supabaseId/portfolio/${now}_${index + 1}.jpg';
                     await storage.uploadBinary(
                       path,
                       bytes,
@@ -1004,13 +733,15 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       ArtistPortfolioItem(
                         image: storage.getPublicUrl(path),
                         style: 'All',
-                        docId: docRef.id,
                         storagePath: path,
                       ),
                     );
                     onProgress?.call(index + 1, picked.length);
                   }
 
+                  if (uploaded.isNotEmpty) {
+                    await _appendPortfolioItemsToSupabase(uploaded);
+                  }
                   return uploaded;
                 },
           ),
@@ -1020,13 +751,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   Future<void> _openPayoutSettings() async {
-    var ref = _artistDocRef;
-    if (ref == null) {
-      await _bindArtistProfile();
-      ref = _artistDocRef;
-    }
-    if (ref == null) return;
-    final docRef = ref;
+    if (_artistSupabaseId.isEmpty) await _bindArtistProfile();
+    if (_artistSupabaseId.isEmpty) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1036,8 +762,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistPayoutSettingsPage(
-            docRef: docRef,
-            initialData: _withSupabaseMeta(_artistData),
+            supabaseTable: _artistSupabaseTable,
+            supabaseId: _artistSupabaseId,
+            initialData: _artistData,
           ),
         ),
       ),
@@ -1064,13 +791,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   Future<void> _openAvailability() async {
-    var ref = _artistDocRef;
-    if (ref == null) {
-      await _bindArtistProfile();
-      ref = _artistDocRef;
-    }
-    if (ref == null) return;
-    final docRef = ref;
+    if (_artistSupabaseId.isEmpty) await _bindArtistProfile();
+    if (_artistSupabaseId.isEmpty) return;
     final states = await _availabilityDayStates();
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -1082,7 +804,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistAvailabilityModal(
-            docRef: docRef,
+            supabaseTable: _artistSupabaseTable,
+            supabaseId: _artistSupabaseId,
             initialDirectRequestsEnabled: _directRequestsEnabled,
             initialDayStates: states,
             onDirectRequestChanged: _setDirectRequestsEnabled,
@@ -1903,7 +1626,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   Future<String> _resolveStorageAvatarFallback() async {
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    final uid = (SupabaseAuthService.currentUserId ?? '').trim();
     if (uid.isEmpty) return '';
     final candidates = <String>[
       'artists/$uid/profile/avatar.jpg',
@@ -1956,11 +1679,13 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 class ArtistPayoutSettingsPage extends StatefulWidget {
   const ArtistPayoutSettingsPage({
     super.key,
-    required this.docRef,
+    required this.supabaseTable,
+    required this.supabaseId,
     required this.initialData,
   });
 
-  final DocumentReference<Map<String, dynamic>> docRef;
+  final String supabaseTable;
+  final String supabaseId;
   final Map<String, dynamic> initialData;
 
   @override
@@ -2254,11 +1979,13 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
         },
       };
 
-      await widget.docRef.set({
-        'panel_payout': payout,
-        'payout': payout,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await SupabaseBootstrap.client
+          .from(widget.supabaseTable)
+          .update({
+            'payout': payout,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', widget.supabaseId);
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -2607,12 +2334,14 @@ String _portfolioImageKey(String raw) {
 class ArtistPortfolioModal extends StatefulWidget {
   const ArtistPortfolioModal({
     super.key,
-    required this.docRef,
+    required this.supabaseTable,
+    required this.supabaseId,
     required this.initialItems,
     required this.onUploadTap,
   });
 
-  final DocumentReference<Map<String, dynamic>> docRef;
+  final String supabaseTable;
+  final String supabaseId;
   final List<ArtistPortfolioItem> initialItems;
   final Future<List<ArtistPortfolioItem>> Function({
     List<XFile>? selectedFiles,
@@ -2627,28 +2356,23 @@ class ArtistPortfolioModal extends StatefulWidget {
 class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   static const int _portfolioPageSize = 24;
   bool _uploading = false;
-  bool _hydratingSeed = false;
   bool _initialLoading = true;
   bool _loadingMore = false;
-  bool _hasMore = true;
+  bool _hasMore = false;
   int _uploadTotal = 0;
   int _uploadCompleted = 0;
   String? _loadError;
-  final Set<String> _deletingDocIds = <String>{};
+  final Set<String> _deletingImages = <String>{};
   final ScrollController _scrollController = ScrollController();
-  DocumentSnapshot<Map<String, dynamic>>? _lastDoc;
   List<ArtistPortfolioItem> _seedItems = const <ArtistPortfolioItem>[];
   List<ArtistPortfolioItem> _pagedItems = const <ArtistPortfolioItem>[];
-  Future<List<ArtistPortfolioItem>>? _siblingItemsFuture;
 
   @override
   void initState() {
     super.initState();
     _seedItems = List<ArtistPortfolioItem>.from(widget.initialItems);
-    _siblingItemsFuture = _loadSiblingPortfolioItems();
     _scrollController.addListener(_onScroll);
     unawaited(_loadInitialPage());
-    unawaited(_hydrateSeedItems());
   }
 
   @override
@@ -2679,27 +2403,33 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     _pagedItems = next;
   }
 
+  Future<void> _loadMorePage() async {
+    if (!_hasMore || _loadingMore || _initialLoading) return;
+  }
+
   Future<void> _loadInitialPage() async {
     if (!mounted) return;
     setState(() {
       _initialLoading = true;
       _loadingMore = false;
-      _hasMore = true;
+      _hasMore = false;
       _loadError = null;
-      _lastDoc = null;
       _pagedItems = const <ArtistPortfolioItem>[];
     });
     try {
-      final snap = await widget.docRef
-          .collection('portfolio_items')
-          .orderBy('createdAt', descending: true)
-          .limit(_portfolioPageSize)
-          .get(const GetOptions(source: Source.server))
-          .timeout(const Duration(seconds: 4));
-      final items = _itemsFromQueryDocs(snap.docs);
-      _appendUnique(items);
-      _lastDoc = snap.docs.isNotEmpty ? snap.docs.last : null;
-      _hasMore = snap.docs.length >= _portfolioPageSize;
+      final rows = await SupabaseBootstrap.client
+          .from(widget.supabaseTable)
+          .select('portfolio')
+          .eq('id', widget.supabaseId)
+          .limit(1)
+          .timeout(const Duration(seconds: 6));
+      if (rows is List && rows.isNotEmpty && rows.first['portfolio'] is Map) {
+        final portfolio = Map<String, dynamic>.from(
+          rows.first['portfolio'] as Map,
+        );
+        final items = _portfolioItemsFromJson(portfolio);
+        _appendUnique(items);
+      }
     } catch (e) {
       _loadError = e.toString();
     } finally {
@@ -2707,223 +2437,49 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     }
   }
 
-  Future<void> _loadMorePage() async {
-    if (_loadingMore || !_hasMore || _lastDoc == null) return;
-    if (!mounted) return;
-    setState(() => _loadingMore = true);
-    try {
-      final snap = await widget.docRef
-          .collection('portfolio_items')
-          .orderBy('createdAt', descending: true)
-          .startAfterDocument(_lastDoc!)
-          .limit(_portfolioPageSize)
-          .get(const GetOptions(source: Source.server))
-          .timeout(const Duration(seconds: 4));
-      final items = _itemsFromQueryDocs(snap.docs);
-      _appendUnique(items);
-      _lastDoc = snap.docs.isNotEmpty ? snap.docs.last : _lastDoc;
-      if (snap.docs.length < _portfolioPageSize) _hasMore = false;
-    } catch (_) {
-      _hasMore = false;
-    } finally {
-      if (mounted) setState(() => _loadingMore = false);
-    }
-  }
+  List<ArtistPortfolioItem> _portfolioItemsFromJson(
+    Map<String, dynamic> portfolio,
+  ) {
+    final items = <ArtistPortfolioItem>[];
+    final seen = <String>{};
 
-  Future<List<DocumentReference<Map<String, dynamic>>>>
-  _candidateDocRefs() async {
-    final refs = <DocumentReference<Map<String, dynamic>>>[];
-    final seenPaths = <String>{};
-
-    void addRef(DocumentReference<Map<String, dynamic>> ref) {
-      if (seenPaths.add(ref.path)) {
-        refs.add(ref);
-      }
+    void addItem(String image, String style, String storagePath) {
+      final url = image.trim();
+      if (url.isEmpty || !_isPortfolioImageValue(url)) return;
+      if (!seen.add(_portfolioImageKey(url))) return;
+      items.add(
+        ArtistPortfolioItem(image: url, style: style, storagePath: storagePath),
+      );
     }
 
-    addRef(widget.docRef);
-
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-    final explicitIds = <String>{widget.docRef.id.trim(), uid}
-      ..removeWhere((e) => e.isEmpty);
-
-    for (final col in const <String>['artist', 'client_artist']) {
-      for (final id in explicitIds) {
-        addRef(FirebaseFirestore.instance.collection(col).doc(id));
-      }
-    }
-
-    if (email.isNotEmpty) {
-      for (final col in const <String>['artist', 'client_artist']) {
-        try {
-          final q = await FirebaseFirestore.instance
-              .collection(col)
-              .where('email', isEqualTo: email)
-              .limit(5)
-              .get();
-          for (final doc in q.docs) {
-            addRef(doc.reference);
-          }
-        } catch (_) {}
-      }
-    }
-
-    return refs;
-  }
-
-  Future<void> _hydrateSeedItems() async {
-    if (_hydratingSeed) return;
-    setState(() => _hydratingSeed = true);
-    try {
-      final seen = <String>{
-        for (final item in _seedItems) _portfolioImageKey(item.image),
-      };
-      final merged = List<ArtistPortfolioItem>.from(_seedItems);
-
-      void add(String image, {String style = 'All', String? storagePath}) {
-        final url = image.trim();
-        if (url.isEmpty || !_isPortfolioImageValue(url)) return;
-        final key = _portfolioImageKey(url);
-        if (!seen.add(key)) return;
-        merged.add(
-          ArtistPortfolioItem(
-            image: url,
-            style: style.trim().isEmpty ? 'All' : style.trim(),
-            storagePath: storagePath,
-          ),
-        );
-      }
-
-      void walk(dynamic raw, {String fallbackStyle = 'All'}) {
-        if (raw == null) return;
-        if (raw is String) {
-          add(raw, style: fallbackStyle);
-          return;
-        }
-        if (raw is List) {
-          for (final item in raw) {
-            walk(item, fallbackStyle: fallbackStyle);
-          }
-          return;
-        }
-        if (raw is Map) {
-          final map = Map<String, dynamic>.from(raw);
+    final rawItems = portfolio['items'];
+    if (rawItems is List) {
+      for (final entry in rawItems.reversed) {
+        if (entry is Map) {
+          final m = Map<String, dynamic>.from(entry);
           final image = _firstNonEmpty([
-            map['imageUrl'],
-            map['downloadUrl'],
-            map['url'],
-            map['image'],
-            map['storagePath'],
-            map['path'],
-            map['fullPath'],
+            m['imageUrl'],
+            m['downloadUrl'],
+            m['url'],
+            m['image'],
           ]);
-          final style = _firstNonEmpty([
-            map['style'],
-            map['category'],
-            map['type'],
-            fallbackStyle,
-          ]);
-          if (image.isNotEmpty && _isPortfolioImageValue(image)) {
-            add(
-              image,
-              style: style,
-              storagePath: _firstNonEmpty([
-                map['storagePath'],
-                map['path'],
-                map['fullPath'],
-              ]),
-            );
-          }
-          for (final v in map.values) {
-            if (v is List || v is Map) {
-              walk(v, fallbackStyle: fallbackStyle);
-            }
-          }
+          final style = _firstNonEmpty([m['style'], m['category'], 'All']);
+          final path = _firstNonEmpty([m['storagePath'], m['path'], '']);
+          addItem(image, style, path);
+        } else if (entry is String) {
+          addItem(entry, 'All', '');
         }
       }
-
-      try {
-        final refs = await _candidateDocRefs();
-        for (final ref in refs) {
-          try {
-            final doc = await ref
-                .get(const GetOptions(source: Source.server))
-                .timeout(const Duration(seconds: 8));
-            if (!doc.exists) continue;
-            final data = doc.data() ?? const <String, dynamic>{};
-            final portfolio =
-                (data['portfolio'] as Map<String, dynamic>?) ??
-                const <String, dynamic>{};
-            final artist =
-                (data['artist'] as Map<String, dynamic>?) ??
-                const <String, dynamic>{};
-            final artistPortfolio =
-                (artist['portfolio'] as Map<String, dynamic>?) ??
-                const <String, dynamic>{};
-
-            for (final candidate in <dynamic>[
-              data['portfolioImages'],
-              data['portfolioItems'],
-              data['panel_portfolioImages'],
-              data['panel_artist_portfolioImages'],
-              portfolio['images'],
-              portfolio['items'],
-              artist['portfolioImages'],
-              artist['portfolioItems'],
-              artistPortfolio['images'],
-              artistPortfolio['items'],
-            ]) {
-              walk(candidate);
-            }
-          } catch (_) {}
-        }
-      } catch (_) {}
-
-      if (merged.isEmpty) {
-        final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-        final refs = await _candidateDocRefs();
-        final ownerIds = <String>{
-          uid,
-          widget.docRef.id.trim(),
-          ...refs.map((r) => r.id.trim()),
-        }..removeWhere((e) => e.isEmpty);
-        for (final ownerId in ownerIds) {
-          for (final base in const <String>['artists', 'client_artists']) {
-            try {
-              final listed = await FirebaseStorage.instance
-                  .ref('$base/$ownerId/portfolio')
-                  .listAll()
-                  .timeout(const Duration(seconds: 8));
-              for (final item in listed.items) {
-                final name = item.name.toLowerCase();
-                if (!(name.endsWith('.jpg') ||
-                    name.endsWith('.jpeg') ||
-                    name.endsWith('.png') ||
-                    name.endsWith('.webp'))) {
-                  continue;
-                }
-                try {
-                  final url = await item.getDownloadURL().timeout(
-                    const Duration(seconds: 6),
-                  );
-                  add(url, storagePath: item.fullPath);
-                } catch (_) {
-                  add(item.fullPath, storagePath: item.fullPath);
-                }
-              }
-            } catch (_) {}
-          }
-        }
-      }
-
-      if (!mounted) return;
-      setState(() => _seedItems = merged);
-    } finally {
-      if (mounted) setState(() => _hydratingSeed = false);
     }
+
+    final rawImages = portfolio['images'];
+    if (rawImages is List) {
+      for (final img in rawImages.reversed) {
+        if (img is String) addItem(img, 'All', '');
+      }
+    }
+
+    return items;
   }
 
   @override
@@ -3068,36 +2624,23 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                           );
                         }
 
-                        if (_pagedItems.isNotEmpty) {
-                          return _buildPortfolioGrid(_pagedItems);
-                        }
-
-                        return FutureBuilder<List<ArtistPortfolioItem>>(
-                          future: _siblingItemsFuture,
-                          builder: (context, siblingSnap) {
-                            final siblingItems =
-                                siblingSnap.data ??
-                                const <ArtistPortfolioItem>[];
-                            final displayItems = siblingItems.isNotEmpty
-                                ? siblingItems
-                                : _seedItems;
-                            if (displayItems.isEmpty) {
-                              return Center(
-                                child: Text(
-                                  'No portfolio designs available.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                    fontWeight: FontWeight.w400,
-                                  ),
+                        final displayItems =
+                            _pagedItems.isNotEmpty ? _pagedItems : _seedItems;
+                        if (displayItems.isEmpty) {
+                          return Center(
+                            child: Text(
+                              'No portfolio designs available.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.6,
                                 ),
-                              );
-                            }
-                            return _buildPortfolioGrid(displayItems);
-                          },
-                        );
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          );
+                        }
+                        return _buildPortfolioGrid(displayItems);
                       },
                     ),
             ),
@@ -3115,44 +2658,6 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     return '';
   }
 
-  ArtistPortfolioItem? _portfolioItemFromDocData(
-    Map<String, dynamic> data, [
-    String? docId,
-  ]) {
-    final image = _firstNonEmpty([
-      data['imageUrl'],
-      data['downloadUrl'],
-      data['url'],
-      data['image'],
-      data['storagePath'],
-      data['path'],
-    ]);
-    if (image.isEmpty || !_isPortfolioImageValue(image)) return null;
-    final style = _firstNonEmpty([
-      data['style'],
-      data['category'],
-      data['type'],
-      'All',
-    ]);
-    return ArtistPortfolioItem(
-      image: image,
-      style: style,
-      docId: docId,
-      storagePath: _firstNonEmpty([data['storagePath'], data['path']]),
-    );
-  }
-
-  List<ArtistPortfolioItem> _itemsFromQueryDocs(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    final items = <ArtistPortfolioItem>[];
-    for (final d in docs) {
-      final item = _portfolioItemFromDocData(d.data(), d.id);
-      if (item != null) items.add(item);
-    }
-    return items;
-  }
-
   List<ArtistPortfolioItem> _distinctPortfolioItems(
     Iterable<ArtistPortfolioItem> items,
   ) {
@@ -3166,35 +2671,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     return distinct;
   }
 
-  Future<List<ArtistPortfolioItem>> _loadSiblingPortfolioItems() async {
-    final refs = await _candidateDocRefs();
-    final items = <ArtistPortfolioItem>[];
-    final seen = <String>{};
-    try {
-      for (final ref in refs) {
-        if (ref.path == widget.docRef.path) continue;
-        try {
-          final snap = await ref
-              .collection('portfolio_items')
-              .orderBy('createdAt', descending: true)
-              .limit(200)
-              .get()
-              .timeout(const Duration(seconds: 4));
-          for (final item in _itemsFromQueryDocs(snap.docs)) {
-            final key = _portfolioImageKey(item.image);
-            if (seen.add(key)) items.add(item);
-          }
-        } catch (_) {}
-      }
-      return _distinctPortfolioItems(items);
-    } catch (_) {
-      return const <ArtistPortfolioItem>[];
-    }
-  }
-
   Widget _buildPortfolioGrid(List<ArtistPortfolioItem> displayItems) {
     final items = _distinctPortfolioItems(displayItems);
-    final showTailLoader = _loadingMore || (_hasMore && _lastDoc != null);
+    final showTailLoader = _loadingMore;
     return GridView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
@@ -3223,9 +2702,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           );
         }
         final item = items[i];
-        final deleting =
-            (item.docId ?? '').trim().isNotEmpty &&
-            _deletingDocIds.contains(item.docId!.trim());
+        final deleting = _deletingImages.contains(item.image.trim());
         return ClipRRect(
           borderRadius: BorderRadius.zero,
           child: Stack(
@@ -3274,63 +2751,50 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     final image = item.image.trim();
     if (image.isEmpty) return;
 
-    final docId = (item.docId ?? '').trim();
-    if (docId.isNotEmpty) {
-      setState(() => _deletingDocIds.add(docId));
-    }
+    setState(() => _deletingImages.add(image));
 
     try {
-      if (docId.isNotEmpty) {
-        await widget.docRef.collection('portfolio_items').doc(docId).delete();
-      } else {
-        final q = await widget.docRef
-            .collection('portfolio_items')
-            .where('imageUrl', isEqualTo: image)
-            .limit(3)
-            .get();
-        for (final d in q.docs) {
-          await d.reference.delete();
-        }
+      // Remove from Supabase portfolio JSONB
+      final client = SupabaseBootstrap.client;
+      final rows = await client
+          .from(widget.supabaseTable)
+          .select('portfolio')
+          .eq('id', widget.supabaseId)
+          .limit(1);
+      if (rows is List && rows.isNotEmpty) {
+        final portfolio =
+            (rows.first['portfolio'] is Map)
+            ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
+            : <String, dynamic>{};
+        final images = List<dynamic>.from(portfolio['images'] as List? ?? []);
+        final items = List<dynamic>.from(portfolio['items'] as List? ?? []);
+        images.removeWhere((e) => e.toString().trim() == image);
+        items.removeWhere((e) {
+          if (e is Map) return (e['imageUrl'] ?? '').toString().trim() == image;
+          return e.toString().trim() == image;
+        });
+        portfolio['images'] = images;
+        portfolio['items'] = items;
+        await client
+            .from(widget.supabaseTable)
+            .update({
+              'portfolio': portfolio,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', widget.supabaseId);
       }
 
-      try {
-        await widget.docRef.set({
-          'portfolioImages': FieldValue.arrayRemove([image]),
-          'panel_portfolioImages': FieldValue.arrayRemove([image]),
-          'panel_artist_portfolioImages': FieldValue.arrayRemove([image]),
-          'portfolio': {
-            'images': FieldValue.arrayRemove([image]),
-            'items': FieldValue.arrayRemove([
-              <String, dynamic>{'imageUrl': image, 'style': item.style},
-            ]),
-          },
-          'portfolioItems': FieldValue.arrayRemove([
-            <String, dynamic>{'imageUrl': image, 'style': item.style},
-          ]),
-          'artist': {
-            'portfolioImages': FieldValue.arrayRemove([image]),
-            'portfolioItems': FieldValue.arrayRemove([
-              <String, dynamic>{'imageUrl': image, 'style': item.style},
-            ]),
-            'portfolio': {
-              'images': FieldValue.arrayRemove([image]),
-              'items': FieldValue.arrayRemove([
-                <String, dynamic>{'imageUrl': image, 'style': item.style},
-              ]),
-            },
-          },
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
+      // Delete from storage
       final path = (item.storagePath ?? '').trim();
-      if (path.isNotEmpty) {
+      if (image.contains('supabase.co') && path.isNotEmpty) {
+        try {
+          await SupabaseBootstrap.client.storage
+              .from('portfolio-images')
+              .remove([path]);
+        } catch (_) {}
+      } else if (path.isNotEmpty) {
         try {
           await FirebaseStorage.instance.ref(path).delete();
-        } catch (_) {}
-      } else if (image.startsWith('http://') || image.startsWith('https://')) {
-        try {
-          await FirebaseStorage.instance.refFromURL(image).delete();
         } catch (_) {}
       }
 
@@ -3351,9 +2815,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
         );
       }
     } finally {
-      if (mounted && docId.isNotEmpty) {
-        setState(() => _deletingDocIds.remove(docId));
-      }
+      if (mounted) setState(() => _deletingImages.remove(image));
     }
   }
 
@@ -3473,13 +2935,15 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
 class ArtistAvailabilityModal extends StatefulWidget {
   const ArtistAvailabilityModal({
     super.key,
-    required this.docRef,
+    required this.supabaseTable,
+    required this.supabaseId,
     required this.initialDirectRequestsEnabled,
     required this.initialDayStates,
     required this.onDirectRequestChanged,
   });
 
-  final DocumentReference<Map<String, dynamic>> docRef;
+  final String supabaseTable;
+  final String supabaseId;
   final bool initialDirectRequestsEnabled;
   final Map<String, String> initialDayStates;
   final Future<void> Function(bool value) onDirectRequestChanged;
@@ -3563,11 +3027,24 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
   Future<void> _saveDayStates() async {
     setState(() => _savingDays = true);
     try {
-      await widget.docRef.set({
-        'panel_availability': {'dayStates': _dayStates},
-        'availability': {'dayStates': _dayStates},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      final client = SupabaseBootstrap.client;
+      final rows = await client
+          .from(widget.supabaseTable)
+          .select('availability')
+          .eq('id', widget.supabaseId)
+          .limit(1);
+      final avail =
+          (rows is List && rows.isNotEmpty && rows.first['availability'] is Map)
+          ? Map<String, dynamic>.from(rows.first['availability'] as Map)
+          : <String, dynamic>{};
+      avail['dayStates'] = _dayStates;
+      await client
+          .from(widget.supabaseTable)
+          .update({
+            'availability': avail,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', widget.supabaseId);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4028,11 +3505,13 @@ class _AvailabilityLegend extends StatelessWidget {
 class ArtistEditProfilePage extends StatefulWidget {
   const ArtistEditProfilePage({
     super.key,
-    required this.docRef,
+    required this.supabaseTable,
+    required this.supabaseId,
     required this.initialData,
   });
 
-  final DocumentReference<Map<String, dynamic>> docRef;
+  final String supabaseTable;
+  final String supabaseId;
   final Map<String, dynamic> initialData;
 
   @override
@@ -4388,7 +3867,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
       final stateToSave = _selectedCountry == _usCountry
           ? (_selectedUsState ?? _stateCtrl.text.trim())
           : _stateCtrl.text.trim();
-      final uid = (FirebaseAuth.instance.currentUser?.uid ?? widget.docRef.id)
+      final uid = (SupabaseAuthService.currentUserId ?? widget.supabaseId)
           .trim();
       var profilePhotoUrlToSave = _profilePhotoUrl.trim();
       if (_profilePhotoBytes != null && _profilePhotoBytes!.isNotEmpty) {
@@ -4397,88 +3876,39 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
           _profilePhotoBytes!,
         );
       }
-      await widget.docRef.set({
-        'panel_displayName': displayName,
-        'panel_studioName': studioName,
-        'panel_bio': bio,
-        'panel_city': city,
-        'panel_state': stateToSave,
-        'panel_country': _selectedCountry,
-        'panel_instagram': instagram,
-        'panel_tiktok': tiktok,
-        'panel_profileImageUrl': profilePhotoUrlToSave,
-        'displayName': displayName,
-        'name': displayName,
-        'studioName': studioName,
-        'bio': bio,
-        'city': city,
-        'state': stateToSave,
-        'country': _selectedCountry,
-        'instagram': instagram,
-        'tiktok': tiktok,
-        'profileImageUrl': profilePhotoUrlToSave,
-        'photoUrl': profilePhotoUrlToSave,
-        'avatarUrl': profilePhotoUrlToSave,
-        'profile': {
-          'displayName': displayName,
-          'studioName': studioName,
-          'bio': bio,
-          'city': city,
-          'state': stateToSave,
-          'country': _selectedCountry,
-          'instagram': instagram,
-          'tiktok': tiktok,
-          'photoUrl': profilePhotoUrlToSave,
-          'avatarUrl': profilePhotoUrlToSave,
-          'profileImageUrl': profilePhotoUrlToSave,
-        },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      final supabaseTable = (widget.initialData['__supabaseTable'] ?? '')
-          .toString()
-          .trim();
-      final supabaseId = (widget.initialData['__supabaseId'] ?? '')
-          .toString()
-          .trim();
-      if (supabaseTable.isNotEmpty && supabaseId.isNotEmpty) {
-        try {
-          await SupabaseBootstrap.client
-              .from(supabaseTable)
-              .update({
-                'displayName': displayName,
-                'name': displayName,
-                'studioName': studioName,
-                'bio': bio,
-                'city': city,
-                'state': stateToSave,
-                'country': _selectedCountry,
-                'instagram': instagram,
-                'tiktok': tiktok,
-                'profileImageUrl': profilePhotoUrlToSave,
-                'photoUrl': profilePhotoUrlToSave,
-                'avatarUrl': profilePhotoUrlToSave,
-                'profile': {
-                  ...((widget.initialData['profile'] as Map?) ??
-                      const <String, dynamic>{}),
-                  'displayName': displayName,
-                  'studioName': studioName,
-                  'bio': bio,
-                  'city': city,
-                  'state': stateToSave,
-                  'country': _selectedCountry,
-                  'instagram': instagram,
-                  'tiktok': tiktok,
-                  'photoUrl': profilePhotoUrlToSave,
-                  'avatarUrl': profilePhotoUrlToSave,
-                  'profileImageUrl': profilePhotoUrlToSave,
-                },
-              })
-              .eq('id', supabaseId);
-        } catch (e) {
-          debugPrint('Supabase edit profile save failed: $e');
-        }
-      }
+      await SupabaseBootstrap.client
+          .from(widget.supabaseTable)
+          .update({
+            'displayName': displayName,
+            'name': displayName,
+            'studioName': studioName,
+            'bio': bio,
+            'city': city,
+            'state': stateToSave,
+            'country': _selectedCountry,
+            'instagram': instagram,
+            'tiktok': tiktok,
+            'profileImageUrl': profilePhotoUrlToSave,
+            'photoUrl': profilePhotoUrlToSave,
+            'avatarUrl': profilePhotoUrlToSave,
+            'profile': {
+              ...((widget.initialData['profile'] as Map?) ??
+                  const <String, dynamic>{}),
+              'displayName': displayName,
+              'studioName': studioName,
+              'bio': bio,
+              'city': city,
+              'state': stateToSave,
+              'country': _selectedCountry,
+              'instagram': instagram,
+              'tiktok': tiktok,
+              'photoUrl': profilePhotoUrlToSave,
+              'avatarUrl': profilePhotoUrlToSave,
+              'profileImageUrl': profilePhotoUrlToSave,
+            },
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', widget.supabaseId);
 
       if (!mounted) return;
       Navigator.pop(context);
