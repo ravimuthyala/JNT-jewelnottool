@@ -21,6 +21,7 @@ import 'edit_shipping_address_page.dart';
 import 'edit_measurements_page.dart';
 import 'client_artist_home_page.dart';
 import 'artist_profile_page.dart';
+import '../services/supabase_bootstrap.dart';
 import 'jnt_ascension_page.dart';
 import 'client_artist_communication_preferences_page.dart';
 
@@ -922,7 +923,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistPortfolioModal(
-            docRef: ref,
+            supabaseTable: ref.parent.id,
+            supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
             initialItems: initialItems,
             onUploadTap:
                 ({
@@ -1451,7 +1453,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistPayoutSettingsPage(
-            docRef: ref,
+            supabaseTable: ref.parent.id,
+            supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
             initialData: initialData,
           ),
         ),
@@ -1536,7 +1539,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistAvailabilityModal(
-            docRef: ref,
+            supabaseTable: ref.parent.id,
+            supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
             initialDirectRequestsEnabled: initialDirect,
             initialDayStates: states,
             onDirectRequestChanged: (value) async {

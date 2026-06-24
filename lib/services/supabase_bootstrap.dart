@@ -10,7 +10,12 @@ class SupabaseBootstrap {
     try {
       await Supabase.initialize(
         url: 'https://mjvypuwrwcjylhizuhfw.supabase.co',
-        publishableKey : 'sb_publishable_VPMJRDPaTI7xdm5ti7HEjg_S_aJIPXD',
+        publishableKey: 'sb_publishable_VPMJRDPaTI7xdm5ti7HEjg_S_aJIPXD',
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+          autoRefreshToken: true,
+        ),
+        debug: false,
       );
 
       _lastError = null;

@@ -185,6 +185,9 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
       return _fallback();
     }
 
+    final size = widget.size ?? 36.0;
+    final cacheSize = (size * (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2.0)).round();
+
     if (src.startsWith('data:image/')) {
       final comma = src.indexOf(',');
       if (comma > 0 && comma < src.length - 1) {
@@ -194,6 +197,8 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
             Image.memory(
               bytes,
               fit: BoxFit.cover,
+              cacheWidth: cacheSize,
+              cacheHeight: cacheSize,
               errorBuilder: (_, _, _) => _fallback(),
             ),
           );
@@ -209,6 +214,8 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
         Image.network(
           src,
           fit: BoxFit.cover,
+          cacheWidth: cacheSize,
+          cacheHeight: cacheSize,
           errorBuilder: (_, _, _) => _fallback(),
         ),
       );

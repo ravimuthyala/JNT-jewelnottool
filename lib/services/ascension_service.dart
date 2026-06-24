@@ -1,4 +1,4 @@
-import 'supabase_firebase_compat.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AscensionSnapshot {
   const AscensionSnapshot({
@@ -92,12 +92,7 @@ class AscensionService {
   static const double weightedPointsRepeatClientOrder = 6.0;
   static const double weightedPointsPortfolioUpload = 0.3;
 
-  static const String currentCollection = 'ascension_current';
-  static const String auditCollection = 'ascension_audit_logs';
-  static const String overridesCollection = 'ascension_overrides';
-
   static Future<AscensionSnapshot> calculateForArtist({
-    required FirebaseFirestore db,
     required String artistEmail,
     required int portfolioUploads,
   }) async {
@@ -133,18 +128,26 @@ class AscensionService {
       );
     }
 
-    final collections = <String>[
-      'Client_Custom_Requests',
-      'Company_Custom_Requests',
+    final supabase = Supabase.instance.client;
+
+    // client_custom_requests: client_rating and need_by are in summary JSONB
+    final clientRows = await supabase
+        .from('client_custom_requests')
+        .select('status, delivered_at, shipped_at, updated_at, created_at, summary, details, client_email')
+        .eq('accepted_by_artist_email', email)
+        .inFilter('status', ['completed', 'shipped', 'delivered']);
+
+    // company_custom_requests: all fields are real columns
+    final companyRows = await supabase
+        .from('company_custom_requests')
+        .select('status, client_rating, need_by, delivered_at, shipped_at, updated_at, created_at, client_email, payload')
+        .eq('accepted_by_artist_email', email)
+        .inFilter('status', ['completed', 'shipped', 'delivered']);
+
+    final allRows = <Map<String, dynamic>>[
+      for (final r in clientRows) _normalizeClientRequestRow(r),
+      for (final r in companyRows) _normalizeCompanyRequestRow(r),
     ];
-    final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs = [];
-    for (final c in collections) {
-      final snap = await db
-          .collection(c)
-          .where('acceptedByArtistEmail', isEqualTo: email)
-          .get();
-      docs.addAll(snap.docs);
-    }
 
     var completedOrders = 0;
     var annualCompletedOrders = 0;
@@ -152,57 +155,39 @@ class AscensionService {
     var fiveStarReviews = 0;
     var repeatClientOrders = 0;
     final clientOrderCounts = <String, int>{};
-    final annualWindowStart = DateTime.now().subtract(
-      const Duration(days: 365),
-    );
+    final annualWindowStart = DateTime.now().subtract(const Duration(days: 365));
 
-    for (final doc in docs) {
-      final data = doc.data();
-      final status = (data['status'] ?? '').toString().trim().toLowerCase();
-      final isCompleted =
-          status == 'completed' || status == 'shipped' || status == 'delivered';
-      if (!isCompleted) continue;
-
+    for (final data in allRows) {
       completedOrders += 1;
       final completionDate = _resolveCompletionDate(data);
       if (completionDate != null && !completionDate.isBefore(annualWindowStart)) {
         annualCompletedOrders += 1;
       }
 
-      final clientKey = await _resolveClientIdentityKey(
-        db: db,
-        requestDoc: doc.reference,
-        rootData: data,
-      );
+      final clientKey = _resolveClientIdentityKey(data);
       if (clientKey.isNotEmpty) {
         final existing = clientOrderCounts[clientKey] ?? 0;
         clientOrderCounts[clientKey] = existing + 1;
-        if (existing >= 1) {
-          repeatClientOrders += 1;
-        }
+        if (existing >= 1) repeatClientOrders += 1;
       }
 
-      final ratingRaw = data['clientRating'];
+      final ratingRaw = data['clientRating'] ?? data['client_rating'];
       final rating = ratingRaw is num
           ? ratingRaw.toDouble()
           : double.tryParse(ratingRaw?.toString() ?? '');
-      if (rating != null && rating >= 5) {
-        fiveStarReviews += 1;
-      }
+      if (rating != null && rating >= 5) fiveStarReviews += 1;
 
+      final needByRaw = data['needBy'] ?? data['need_by'];
       DateTime? needBy;
-      final needByRaw = data['needBy'];
-      if (needByRaw is Timestamp) needBy = needByRaw.toDate();
+      if (needByRaw is String) needBy = DateTime.tryParse(needByRaw);
 
+      final deliveredRaw = data['deliveredAt'] ?? data['delivered_at'] ?? data['completedAt'];
       DateTime? deliveredAt;
-      final deliveredRaw = data['deliveredAt'] ?? data['completedAt'];
-      if (deliveredRaw is Timestamp) deliveredAt = deliveredRaw.toDate();
+      if (deliveredRaw is String) deliveredAt = DateTime.tryParse(deliveredRaw);
 
       if (needBy != null && deliveredAt != null) {
         final due = DateTime(needBy.year, needBy.month, needBy.day, 23, 59, 59);
-        if (!deliveredAt.isAfter(due)) {
-          onTimeDeliveries += 1;
-        }
+        if (!deliveredAt.isAfter(due)) onTimeDeliveries += 1;
       }
     }
 
@@ -226,8 +211,7 @@ class AscensionService {
     );
     final ordersToRevenueCrowned = (jntRevenueToCrowned / jntRevPerOrder).ceil();
 
-    final ordersToGoldsmith = (goldsmithMin / blendedAveragePointsPerOrder)
-        .ceil();
+    final ordersToGoldsmith = (goldsmithMin / blendedAveragePointsPerOrder).ceil();
     final ordersToCrowned = (crownedMin / blendedAveragePointsPerOrder).ceil();
     final annualOrders = annualCompletedOrders;
     final annualArtistGmv = annualOrders * aov;
@@ -321,19 +305,27 @@ class AscensionService {
         'insuranceReimbursementEligible':
             snapshot.insuranceReimbursementEligible,
       },
-      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': DateTime.now().toIso8601String(),
     };
   }
 
   static Future<Map<String, dynamic>?> readActiveOverride({
-    required FirebaseFirestore db,
     required String artistDocPath,
     required String artistEmail,
   }) async {
+    final supabase = Supabase.instance.client;
+
+    Map<String, dynamic> normRow(Map<String, dynamic> row) => <String, dynamic>{
+      ...row,
+      'levelName': row['level_name'] ?? row['levelName'],
+      'tierName': row['tier_name'] ?? row['tierName'],
+      'sponsorshipTier': row['sponsorship_tier'] ?? row['sponsorshipTier'],
+      'sponsorshipEligible': row['sponsorship_eligible'] ?? row['sponsorshipEligible'],
+      'updatedAt': row['updated_at'] ?? row['updatedAt'],
+    };
+
     bool looksLikeUsableOverride(Map<String, dynamic> data) {
-      final active = data['active'];
-      if (active == true) return true;
-      // Some admin tools may not write `active`; accept if a tier override is present.
+      if (data['active'] == true) return true;
       final tierLike = _firstNonEmptyString(<Object?>[
         data['levelName'],
         data['tier'],
@@ -342,57 +334,59 @@ class AscensionService {
         data['sponsorshipTier'],
       ]);
       if (_normalizeTier(tierLike).isNotEmpty) return true;
-      // Also accept explicit points override records.
       return data['points'] is num;
     }
 
     final keyFromPath = _overrideDocIdFromPath(artistDocPath);
-    final docsToTry = <String>{keyFromPath, artistEmail.trim().toLowerCase()};
+    final email = artistEmail.trim().toLowerCase();
+    final docsToTry = <String>{keyFromPath, email};
+
     for (final docId in docsToTry) {
       if (docId.isEmpty) continue;
-      final snap = await db.collection(overridesCollection).doc(docId).get();
-      if (!snap.exists) continue;
-      final data = snap.data() ?? const <String, dynamic>{};
-      if (!looksLikeUsableOverride(data)) continue;
-      return data;
+      final row = await supabase
+          .from('ascension_overrides')
+          .select()
+          .eq('id', docId)
+          .maybeSingle();
+      if (row == null) continue;
+      final data = normRow(row);
+      if (looksLikeUsableOverride(data)) return data;
     }
 
-    // Fallback: support admin overrides saved with random doc IDs.
-    final normalizedEmail = artistEmail.trim().toLowerCase();
-    final normalizedPath = artistDocPath.trim().toLowerCase();
-
-    if (normalizedEmail.isNotEmpty) {
-      final byEmail = await db
-          .collection(overridesCollection)
-          .where('artistEmail', isEqualTo: normalizedEmail)
-          .limit(20)
-          .get();
-      for (final doc in byEmail.docs) {
-        final data = doc.data();
+    if (email.isNotEmpty) {
+      final rows = await supabase
+          .from('ascension_overrides')
+          .select()
+          .eq('artist_email', email)
+          .limit(20);
+      for (final row in rows) {
+        final data = normRow(row);
         if (looksLikeUsableOverride(data)) return data;
       }
     }
 
-    if (normalizedPath.isNotEmpty) {
-      final byPath = await db
-          .collection(overridesCollection)
-          .where('artistDocPath', isEqualTo: artistDocPath.trim())
-          .limit(20)
-          .get();
-      for (final doc in byPath.docs) {
-        final data = doc.data();
+    if (artistDocPath.trim().isNotEmpty) {
+      final normalizedPath = artistDocPath.trim().toLowerCase();
+      final byPath = await supabase
+          .from('ascension_overrides')
+          .select()
+          .eq('artist_doc_path', artistDocPath.trim())
+          .limit(20);
+      for (final row in byPath) {
+        final data = normRow(row);
         if (looksLikeUsableOverride(data)) return data;
       }
-      final byPathLower = await db
-          .collection(overridesCollection)
-          .where('artistDocPathLower', isEqualTo: normalizedPath)
-          .limit(20)
-          .get();
-      for (final doc in byPathLower.docs) {
-        final data = doc.data();
+      final byPathLower = await supabase
+          .from('ascension_overrides')
+          .select()
+          .eq('artist_doc_path_lower', normalizedPath)
+          .limit(20);
+      for (final row in byPathLower) {
+        final data = normRow(row);
         if (looksLikeUsableOverride(data)) return data;
       }
     }
+
     return null;
   }
 
@@ -550,60 +544,63 @@ class AscensionService {
   }
 
   static Future<void> persistAdminCollections({
-    required FirebaseFirestore db,
-    required DocumentReference<Map<String, dynamic>> artistRef,
     required String artistEmail,
+    required String artistCollection,
     required String artistName,
     required Map<String, dynamic> ascensionPayload,
     required int previousPoints,
   }) async {
-    final docId = _overrideDocIdFromPath(artistRef.path);
-    await db.collection(currentCollection).doc(docId).set({
-      'artistDocPath': artistRef.path,
-      'artistId': artistRef.id,
-      'artistEmail': artistEmail.trim().toLowerCase(),
-      'artistName': artistName.trim(),
-      'ascension': ascensionPayload,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final supabase = Supabase.instance.client;
+    final email = artistEmail.trim().toLowerCase();
+    final docId = _overrideDocIdFromPath('$artistCollection/$email');
+    final now = DateTime.now().toIso8601String();
 
-    final nextPoints = (ascensionPayload['points'] is num)
-        ? (ascensionPayload['points'] as num).toInt()
-        : 0;
+    await supabase.from('ascension_current').upsert(<String, dynamic>{
+      'id': docId,
+      'artist_doc_path': '$artistCollection/$email',
+      'artist_id': email,
+      'artist_email': email,
+      'artist_name': artistName.trim(),
+      'ascension': ascensionPayload,
+      'updated_at': now,
+    });
+
+    final nextPoints = (ascensionPayload['points'] as num?)?.toInt() ?? 0;
     if (nextPoints != previousPoints) {
-      await db.collection(auditCollection).add({
-        'artistDocPath': artistRef.path,
-        'artistId': artistRef.id,
-        'artistEmail': artistEmail.trim().toLowerCase(),
-        'artistName': artistName.trim(),
-        'previousPoints': previousPoints,
-        'newPoints': nextPoints,
-        'newTier': (ascensionPayload['tier'] ?? '').toString(),
-        'sponsorshipEligible': ascensionPayload['sponsorshipEligible'] == true,
+      await supabase.from('ascension_audit_logs').insert(<String, dynamic>{
+        'artist_doc_path': '$artistCollection/$email',
+        'artist_id': email,
+        'artist_email': email,
+        'artist_name': artistName.trim(),
+        'previous_points': previousPoints,
+        'new_points': nextPoints,
+        'new_tier': (ascensionPayload['tier'] ?? '').toString(),
+        'sponsorship_eligible': ascensionPayload['sponsorshipEligible'] == true,
         'source': 'auto_sync',
-        'createdAt': FieldValue.serverTimestamp(),
+        'created_at': now,
       });
     }
 
     final tier = (ascensionPayload['tier'] ?? '').toString().trim();
     final eligible = ascensionPayload['sponsorshipEligible'] == true;
-    await artistRef.set({
-      'ascension': ascensionPayload,
-      'panel_ascensionPoints': nextPoints,
-      'panel_ascensionLevel': tier,
-      'sponsorshipTier': tier,
-      'sponsorshipStatus': eligible ? 'requested' : 'ineligible',
-      'sponsorshipRequest': <String, dynamic>{
-        'tier': tier,
-        'status': eligible ? 'requested' : 'ineligible',
-        'updatedAt': FieldValue.serverTimestamp(),
+    final row = await supabase
+        .from(artistCollection)
+        .select('profile')
+        .eq('email', email)
+        .maybeSingle();
+    final currentProfile = Map<String, dynamic>.from(
+      (row?['profile'] as Map?) ?? const <String, dynamic>{},
+    );
+    await supabase.from(artistCollection).update(<String, dynamic>{
+      'profile': <String, dynamic>{
+        ...currentProfile,
+        'ascension': ascensionPayload,
+        'ascensionTier': tier,
+        'ascensionPoints': nextPoints,
+        'sponsorshipEligible': eligible,
       },
-      // Write nested profile flags via dot-path to avoid replacing
-      // the existing profile map (name/avatar/bio/etc.).
-      'profile.ascensionTier': tier,
-      'profile.sponsorshipEligible': eligible,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'updated_at': now,
+    }).eq('email', email);
   }
 
   static String _overrideDocIdFromPath(String path) {
@@ -632,96 +629,92 @@ class AscensionService {
     return value;
   }
 
-  static Future<String> _resolveClientIdentityKey({
-    required FirebaseFirestore db,
-    required DocumentReference<Map<String, dynamic>> requestDoc,
-    required Map<String, dynamic> rootData,
-  }) async {
-    final orderMap =
-        (rootData['order'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
-    final acceptanceMap =
-        (rootData['acceptance'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
-    final clientProfileSnapshot =
-        (rootData['clientProfileSnapshot'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
-    final basicSnapshot =
-        (clientProfileSnapshot['basic'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
+  static Map<String, dynamic> _normalizeClientRequestRow(Map<String, dynamic> row) {
+    final summary = Map<String, dynamic>.from((row['summary'] as Map?) ?? const <String, dynamic>{});
+    final details = Map<String, dynamic>.from((row['details'] as Map?) ?? const <String, dynamic>{});
+    return <String, dynamic>{
+      ...row,
+      ...summary,
+      '_details': details,
+      if (row['client_email'] != null && !summary.containsKey('clientEmail'))
+        'clientEmail': row['client_email'],
+    };
+  }
 
-    // Prefer stable IDs/emails first.
-    final rootIdentity = _normalizeIdentity(
-      _firstNonEmptyString(<Object?>[
-        rootData['clientUid'],
-        rootData['acceptedByClientUid'],
-        rootData['clientId'],
-        rootData['clientEmail'],
-        rootData['acceptedByClientEmail'],
-        rootData['selectedClientEmail'],
-        orderMap['selectedClientEmail'],
-        acceptanceMap['acceptedByClientEmail'],
-        basicSnapshot['email'],
-      ]),
-    );
+  static Map<String, dynamic> _normalizeCompanyRequestRow(Map<String, dynamic> row) {
+    final payload = Map<String, dynamic>.from((row['payload'] as Map?) ?? const <String, dynamic>{});
+    return <String, dynamic>{
+      ...row,
+      ...payload,
+      if (row['client_email'] != null) 'clientEmail': row['client_email'],
+      if (row['client_rating'] != null) 'clientRating': row['client_rating'],
+      if (row['need_by'] != null) 'needBy': row['need_by'],
+      if (row['delivered_at'] != null) 'deliveredAt': row['delivered_at'],
+      if (row['shipped_at'] != null) 'shippedAt': row['shipped_at'],
+      if (row['updated_at'] != null) 'updatedAt': row['updated_at'],
+      if (row['created_at'] != null) 'createdAt': row['created_at'],
+      '_details': const <String, dynamic>{},
+    };
+  }
+
+  static String _resolveClientIdentityKey(Map<String, dynamic> data) {
+    final orderMap = (data['order'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final acceptanceMap = (data['acceptance'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final clientProfileSnapshot = (data['clientProfileSnapshot'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final basicSnapshot = (clientProfileSnapshot['basic'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+
+    final rootIdentity = _normalizeIdentity(_firstNonEmptyString(<Object?>[
+      data['clientUid'],
+      data['acceptedByClientUid'],
+      data['clientId'],
+      data['clientEmail'],
+      data['client_email'],
+      data['acceptedByClientEmail'],
+      data['selectedClientEmail'],
+      orderMap['selectedClientEmail'],
+      acceptanceMap['acceptedByClientEmail'],
+      basicSnapshot['email'],
+    ]));
     if (rootIdentity.isNotEmpty) return rootIdentity;
 
-    // Fallback for older/mixed docs where identity may only exist in details.
-    try {
-      final detailSnap = await requestDoc.collection('details').doc('payload').get();
-      final detailData = detailSnap.data() ?? const <String, dynamic>{};
-      final detailOrder =
-          (detailData['order'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final detailAcceptance =
-          (detailData['acceptance'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final detailClientSnapshot =
-          (detailData['clientProfileSnapshot'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final detailBasic =
-          (detailClientSnapshot['basic'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
+    final detailData = (data['_details'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final detailOrder = (detailData['order'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final detailAcceptance = (detailData['acceptance'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final detailClientSnapshot = (detailData['clientProfileSnapshot'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final detailBasic = (detailClientSnapshot['basic'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
 
-      final detailIdentity = _normalizeIdentity(
-        _firstNonEmptyString(<Object?>[
-          detailData['clientUid'],
-          detailData['acceptedByClientUid'],
-          detailData['clientId'],
-          detailData['clientEmail'],
-          detailData['acceptedByClientEmail'],
-          detailData['selectedClientEmail'],
-          detailOrder['selectedClientEmail'],
-          detailAcceptance['acceptedByClientEmail'],
-          detailBasic['email'],
-        ]),
-      );
-      if (detailIdentity.isNotEmpty) return detailIdentity;
-    } catch (_) {}
+    final detailIdentity = _normalizeIdentity(_firstNonEmptyString(<Object?>[
+      detailData['clientUid'],
+      detailData['acceptedByClientUid'],
+      detailData['clientId'],
+      detailData['clientEmail'],
+      detailData['acceptedByClientEmail'],
+      detailData['selectedClientEmail'],
+      detailOrder['selectedClientEmail'],
+      detailAcceptance['acceptedByClientEmail'],
+      detailBasic['email'],
+    ]));
+    if (detailIdentity.isNotEmpty) return detailIdentity;
 
-    // Last fallback: deterministic name key so repeated legacy records
-    // without email/uid can still be grouped.
-    final fallbackName = _normalizeIdentity(
-      _firstNonEmptyString(<Object?>[
-        rootData['clientName'],
-        rootData['acceptedByClientName'],
-        basicSnapshot['name'],
-      ]),
-    );
+    final fallbackName = _normalizeIdentity(_firstNonEmptyString(<Object?>[
+      data['clientName'],
+      data['acceptedByClientName'],
+      basicSnapshot['name'],
+    ]));
     if (fallbackName.isNotEmpty) return 'name:$fallbackName';
     return '';
   }
 
   static DateTime? _resolveCompletionDate(Map<String, dynamic> data) {
     DateTime? asDate(Object? raw) {
-      if (raw is Timestamp) return raw.toDate();
+      if (raw is String) return DateTime.tryParse(raw);
       return null;
     }
 
-    return asDate(data['deliveredAt']) ??
-        asDate(data['completedAt']) ??
-        asDate(data['shippedAt']) ??
-        asDate(data['updatedAt']) ??
-        asDate(data['createdAt']);
+    return asDate(data['deliveredAt'] ?? data['delivered_at']) ??
+        asDate(data['completedAt'] ?? data['completed_at']) ??
+        asDate(data['shippedAt'] ?? data['shipped_at']) ??
+        asDate(data['updatedAt'] ?? data['updated_at']) ??
+        asDate(data['createdAt'] ?? data['created_at']);
   }
 }

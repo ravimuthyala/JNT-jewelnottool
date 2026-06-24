@@ -1,18 +1,15 @@
 // lib/pages/client_registration_page.dart
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, UserAttributes, FileOptions;
 import 'package:country_code_picker/country_code_picker.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import '../services/supabase_auth_service.dart';
 import '../services/supabase_bootstrap.dart';
 import '../theme/app_colors.dart';
 import '../config/auth_flags.dart';
 import '../models/client_profile_models.dart';
-import '../services/nail_measurement_service.dart';
 import '../services/notifications_service.dart';
 import '../utils/registration_input_utils.dart';
 
@@ -38,7 +35,8 @@ class ClientRegistrationPage extends StatefulWidget {
   State<ClientRegistrationPage> createState() => _ClientRegistrationPageState();
 }
 
-class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
+class _ClientRegistrationPageState extends State<ClientRegistrationPage>
+    with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
 
   // TEMP: allow registration even if checkout flow isn't complete.
@@ -46,8 +44,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
   static const bool kAllowRegistrationWithoutCheckout = true;
 
   bool _submitting = false;
+  bool _pickingImage = false;
   final ImagePicker _picker = ImagePicker();
   Uint8List? _profilePhotoBytes;
+  final Map<String, Uint8List> _guidedMeasurementPhotos = {};
 
   // Basic info
   final _nameCtrl = TextEditingController();
@@ -106,6 +106,22 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
   String get _resolvedState => _isUnitedStates
       ? (_selectedState ?? '').trim()
       : _manualStateCtrl.text.trim();
+
+  void _authLog(String message) {
+    debugPrint('[CLIENT-REG] $message');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_pickingImage) return;
+    // No lifecycle side effects while the picker is active.
+  }
 
   static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
     _NailCaptureStep(
@@ -422,13 +438,24 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
 
             Future<void> saveCurrentAndMoveNext(double mm) async {
               if (!mm.isFinite || mm <= 0) {
-                throw const FormatException('Invalid measurement value');
+                _authLog(
+                  'invalid measurement for ${step.key}: $mm',
+                );
+                ScaffoldMessenger.of(pageContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Invalid measurement value. Please try again.'),
+                  ),
+                );
+                return;
               }
+              _authLog('saving measurement ${step.key} => $mm');
               measured[step.key] = (mm * 10).roundToDouble() / 10.0;
               _persistMeasuredMap(measured);
               if (stepIndex < _nailCaptureSteps.length - 1) {
+                _authLog('moving to next step index=${stepIndex + 1}');
                 setModalState(() => stepIndex += 1);
               } else {
+                _authLog('final step complete; closing measurement sheet');
                 sheetClosed = true;
                 Navigator.of(sheetContext).pop();
                 ScaffoldMessenger.of(pageContext).showSnackBar(
@@ -443,24 +470,29 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
               if (measuring) return;
               setModalState(() => measuring = true);
               try {
+                _authLog('opening camera for ${step.key}');
                 final image = await _picker.pickImage(
                   source: ImageSource.camera,
-                  imageQuality: 90,
-                  maxWidth: 1800,
+                  imageQuality: 80,
+                  maxWidth: 1080,
+                  maxHeight: 1080,
                 );
-                if (image == null) return;
+                if (image == null) {
+                  _authLog('camera canceled for ${step.key}');
+                  return;
+                }
 
                 final bytes = await image.readAsBytes();
-                double? mm = await NailMeasurementService.measureNailWidthMm(
-                  imageBytes: bytes,
-                  hand: step.hand,
-                  finger: step.finger,
-                  coinReference: _measurementCoinReference,
+                _guidedMeasurementPhotos[step.key] = bytes;
+                _authLog(
+                  'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
                 );
-                mm ??= await _askManualMeasurement(step.title);
+
+                final mm = await _askManualMeasurement(step.title);
                 if (mm == null) return;
                 await saveCurrentAndMoveNext(mm);
               } catch (_) {
+                _authLog('capture failed for ${step.key}');
                 if (mounted) {
                   ScaffoldMessenger.of(pageContext).showSnackBar(
                     const SnackBar(
@@ -612,32 +644,40 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    if (!NailMeasurementService.isConfigured)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: AppColors.snow,
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        child: const Text(
-                          'Measurement API is not configured. Captured photos will fallback to manual mm entry.',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        color: AppColors.snow,
+                        borderRadius: BorderRadius.zero,
                       ),
+                      child: const Text(
+                        'Captured photos will upload with your client account when you sign up.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: measuring
+                      onPressed: measuring
                                 ? null
                                 : () async {
-                                    final manual = await _askManualMeasurement(
-                                      step.title,
-                                    );
-                                    if (manual == null) return;
-                                    await saveCurrentAndMoveNext(manual);
+                                    try {
+                                      _authLog(
+                                        'manual entry opened for ${step.key}',
+                                      );
+                                      final manual = await _askManualMeasurement(
+                                        step.title,
+                                      );
+                                      if (manual == null) return;
+                                      await saveCurrentAndMoveNext(manual);
+                                    } catch (e) {
+                                      _authLog(
+                                        'manual save failed for ${step.key}: $e',
+                                      );
+                                    }
                                   },
                             style: OutlinedButton.styleFrom(
                               shape: RoundedRectangleBorder(
@@ -700,15 +740,32 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
   }
 
   Future<void> _pickProfilePhoto() async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1200,
-    );
-    if (picked == null || !mounted) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-    setState(() => _profilePhotoBytes = bytes);
+    _pickingImage = true;
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 62,
+        maxWidth: 700,
+        maxHeight: 700,
+      );
+      if (picked == null || !mounted) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() => _profilePhotoBytes = bytes);
+    } catch (e) {
+      debugPrint('Profile photo pick failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not access photo library. Please check app permissions.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      _pickingImage = false;
+    }
   }
 
   double? _firestoreSafeDimension(double? value) {
@@ -820,25 +877,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
     };
   }
 
-  Uint8List? _optimizedProfileBytes(Uint8List source) {
-    final decoded = img.decodeImage(source);
-    if (decoded == null) return null;
-    img.Image processed = decoded;
-    final maxSide = processed.width > processed.height
-        ? processed.width
-        : processed.height;
-    if (maxSide > 700) {
-      final scale = 700 / maxSide;
-      processed = img.copyResize(
-        processed,
-        width: (processed.width * scale).round(),
-        height: (processed.height * scale).round(),
-        interpolation: img.Interpolation.average,
-      );
-    }
-    return Uint8List.fromList(img.encodeJpg(processed, quality: 62));
-  }
-
   Future<String> _uploadProfileImage(String uid) async {
   final bytes = _profilePhotoBytes;
 
@@ -847,7 +885,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
 
   if (bytes == null || bytes.isEmpty) return '';
 
-  final optimizedBytes = _optimizedProfileBytes(bytes) ?? bytes;
   final path = 'clients/$uid/profile/avatar.jpg';
 
   try {
@@ -855,7 +892,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
 
     await storage.uploadBinary(
       path,
-      optimizedBytes,
+      bytes,
       fileOptions: const FileOptions(
         contentType: 'image/jpeg',
         upsert: true,
@@ -872,6 +909,36 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
     return '';
   }
 }
+
+  Future<Map<String, String>> _uploadGuidedMeasurementPhotos(String uid) async {
+    if (_guidedMeasurementPhotos.isEmpty) {
+      return const <String, String>{};
+    }
+
+    final storage = SupabaseBootstrap.client.storage.from('profile-pictures');
+    final uploaded = <String, String>{};
+
+    for (final entry in _guidedMeasurementPhotos.entries) {
+      final path = 'clients/$uid/guided_measurements/${entry.key}.jpg';
+      try {
+        await storage.uploadBinary(
+          path,
+          entry.value,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        );
+        uploaded[entry.key] = storage.getPublicUrl(path).trim();
+      } catch (e) {
+        debugPrint(
+          'CLIENT GUIDED MEASUREMENT UPLOAD FAILED (${entry.key}): $e',
+        );
+      }
+    }
+
+    return uploaded;
+  }
 
   static const List<String> usStates = [
     'Alabama',
@@ -1056,6 +1123,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
@@ -1271,13 +1339,16 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                           itemCount: optionCount,
                           itemBuilder: (context, index) {
                             final option = optionsList.elementAt(index);
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                option,
-                                style: const TextStyle(fontSize: _inputFs),
+                            return Material(
+                              color: Colors.transparent,
+                              child: ListTile(
+                                dense: true,
+                                title: Text(
+                                  option,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                ),
+                                onTap: () => onSelected(option),
                               ),
-                              onTap: () => onSelected(option),
                             );
                           },
                         ),
@@ -1484,7 +1555,11 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
   // Create Account
   // -----------------------
   Future<void> _onCreateAccount() async {
+    final sw = Stopwatch()..start();
+    _authLog('submit tapped');
+
     if (_formKey.currentState?.validate() != true) return;
+    _authLog('form validation passed');
 
     if (!kAllowRegistrationWithoutCheckout) {
       // Scenario 2: must purchase kit if they don't already have one
@@ -1540,20 +1615,22 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
     setState(() => _submitting = true);
 
     try {
-      await SupabaseAuthService.logout();
-
+      _authLog('calling SupabaseAuthService.signup');
       final user = await SupabaseAuthService.signup(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
+      _authLog('signup returned userId=${user?.id ?? 'null'}');
 
       final uid = user?.id;
       if (uid == null) {
+        _authLog('signup returned null uid');
         throw Exception('Unable to create user.');
       }
 
       final displayName = _nameCtrl.text.trim();
       if (displayName.isNotEmpty) {
+        _authLog('updating display name');
         try {
           await SupabaseBootstrap.client.auth.updateUser(
             UserAttributes(
@@ -1566,18 +1643,32 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
         } catch (_) {}
       }
 
+      _authLog('uploading profile photo');
       final uploadedProfilePhotoUrl = await _uploadProfileImage(uid);
-      debugPrint('CLIENT REG PROFILE URL = $uploadedProfilePhotoUrl');
+      _authLog(
+        'profile photo upload complete hasUrl=${uploadedProfilePhotoUrl.isNotEmpty}',
+      );
 
       final profilePhotoUrl = uploadedProfilePhotoUrl.trim();
-      debugPrint('FINAL PROFILE PHOTO URL = $profilePhotoUrl');
+
+      _authLog('uploading guided measurement photos');
+      final guidedMeasurementPhotoUrls =
+          await _uploadGuidedMeasurementPhotos(uid);
+      _authLog(
+        'guided measurement photo upload count=${guidedMeasurementPhotoUrls.length}',
+      );
 
       draft = draft.copyWith(
         basic: draft.basic.copyWith(profileImageUrl: profilePhotoUrl),
       );
       final payload = _buildClientFirestorePayload(uid: uid, draft: draft);
+      final registration = Map<String, dynamic>.from(
+        (payload['registration'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{},
+      )..['guidedMeasurementPhotos'] = guidedMeasurementPhotoUrls;
       final supabase = SupabaseBootstrap.client;
 
+      _authLog('upserting client row');
       await supabase.from('client').upsert({
         'id': uid,
         'email': draft.basic.email,
@@ -1588,7 +1679,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
         'address': payload['address'],
         'payment': payload['payment'],
         'nail_preferences': payload['nailPreferences'],
-        'registration': payload['registration'],
+        'registration': registration,
 
         'updated_at': DateTime.now().toIso8601String(),
       });
@@ -1596,6 +1687,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
       final registeredName = draft.basic.name.trim().isNotEmpty
           ? draft.basic.name.trim()
           : draft.basic.email.trim();
+      _authLog('notifying admins');
       await NotificationsService.notifyAdmins(
         title: 'New User Registered',
         body: 'New Client: $registeredName registered',
@@ -1609,6 +1701,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
         },
       );
 
+      _authLog('navigation after signup');
       if (!mounted) return;
       if (kRequireEmailVerification) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -1640,11 +1733,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                   : e.message;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
+      _authLog('unexpected error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
     } finally {
+      _authLog('finished in ${sw.elapsedMilliseconds}ms');
       if (mounted) setState(() => _submitting = false);
     }
   }
@@ -2072,7 +2167,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Nail Measurement API',
+                            'Nail Photos',
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
@@ -2080,7 +2175,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Use camera + coin reference to measure all 10 fingers (left and right hands).',
+                            'Capture each finger photo here. The photos will upload with your client account when you sign up.',
                             style: TextStyle(
                               color: AppColors.blackCat.withValues(alpha: 0.72),
                               fontSize: 14,
@@ -2099,7 +2194,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage> {
                                 ),
                               ),
                               icon: const Icon(Icons.camera_alt_outlined),
-                              label: const Text('Measure with Camera'),
+                              label: const Text('Capture Photo'),
                             ),
                           ),
                         ],

@@ -43,6 +43,10 @@ class _LoginDialogState extends State<LoginDialog> {
 
   String? _error;
 
+  void _authLog(String message) {
+    debugPrint('[LOGIN] $message');
+  }
+
   void _closeDialogAndPushReplacement(Widget page) {
     final rootNavigator = Navigator.of(context, rootNavigator: true);
     final rootContext = rootNavigator.context;
@@ -93,12 +97,6 @@ class _LoginDialogState extends State<LoginDialog> {
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-      _emailFocusNode.requestFocus();
-    });
   }
 
   @override
@@ -153,39 +151,51 @@ class _LoginDialogState extends State<LoginDialog> {
 
     final email = _emailCtrl.text.trim().toLowerCase();
     final pass = _passCtrl.text.trim();
+    final sw = Stopwatch()..start();
 
+    _authLog('submit tapped');
     setState(() {
       _error = null;
       _isSubmitting = true;
     });
 
+    _authLog(
+      'input captured emailLen=${email.length} passwordLen=${pass.length}',
+    );
+
     if (email.isEmpty && pass.isEmpty) {
+      _authLog('validation failed: email and password empty');
       _setError('Please enter your email and password.');
       _emailFocusNode.requestFocus();
       return;
     }
 
     if (email.isEmpty) {
+      _authLog('validation failed: email empty');
       _setError('Please enter your email.');
       _emailFocusNode.requestFocus();
       return;
     }
 
     if (pass.isEmpty) {
+      _authLog('validation failed: password empty');
       _setError('Please enter your password.');
       _passwordFocusNode.requestFocus();
       return;
     }
 
     try {
+      _authLog('calling SupabaseAuthService.login');
       final user = await SupabaseAuthService.login(
         email: email,
         password: pass,
       );
+      _authLog('auth returned userId=${user?.id ?? 'null'}');
 
       final uid = user?.id ?? SupabaseAuthService.currentUserId;
 
       if (uid == null || uid.trim().isEmpty) {
+        _authLog('login succeeded but uid is empty; forcing sign out');
         await SupabaseAuthService.logout();
         if (!mounted) return;
         _setError('Unable to sign in. Please try again.');
@@ -195,13 +205,20 @@ class _LoginDialogState extends State<LoginDialog> {
       if (!mounted) return;
 
       if (_bypassPostLoginFirestoreLookup) {
+        _authLog('bypassing post-login lookup; navigating to bypass page');
         _closeDialogAndPushReplacement(const _PostLoginBypassPage());
         return;
       }
 
+      _authLog('loading account doc for uid=$uid');
       final accountDoc = await _loadAccountDocWithRetry(uid);
       final data = accountDoc?.data;
       final pendingRole = _normalizePendingRole(LoginDialog.pendingVerifiedRole);
+
+      _authLog(
+        'account doc loaded collection=${accountDoc?.collection ?? 'none'} '
+        'hasData=${data != null} pendingRole=${pendingRole ?? 'none'}',
+      );
 
       LoginDialog.pendingVerifiedRole = null;
 
@@ -241,6 +258,7 @@ class _LoginDialogState extends State<LoginDialog> {
                 accountType == 'company';
 
         if ((isArtist && isClient) || pendingRole == 'client+artist') {
+          _authLog('routing to ClientArtistHomePage');
           final draft = _draftFromSupabase(data);
 
           _closeDialogAndPushReplacement(
@@ -254,11 +272,13 @@ class _LoginDialogState extends State<LoginDialog> {
         }
 
         if (isArtist || pendingRole == 'artist') {
+          _authLog('routing to ArtistShellPage');
           _closeDialogAndPushReplacement(const ArtistShellPage());
           return;
         }
 
         if (isClient || pendingRole == 'client') {
+          _authLog('routing to ClientShellPage');
           final draft = _draftFromSupabase(data);
           _closeDialogAndPushReplacement(
             ClientShellPage(profile: draft, forceEnableAllTabs: true),
@@ -267,6 +287,7 @@ class _LoginDialogState extends State<LoginDialog> {
         }
 
         if (isCompany || pendingRole == 'company') {
+          _authLog('routing to BrandingCompanyShellPage');
           final companyMap = (data['company'] as Map<String, dynamic>?) ?? {};
           final panelName = (data['panel_companyName'] ?? '')
               .toString()
@@ -285,23 +306,28 @@ class _LoginDialogState extends State<LoginDialog> {
         }
       }
 
+      _authLog('no role mapped; signing out and showing error');
       await SupabaseAuthService.logout();
 
       if (!mounted) return;
       _setError('No role mapped for this account');
     } on AuthException catch (e) {
+      _authLog('AuthException: ${e.message}');
       if (!mounted) return;
       _setError(_friendlyAuthError(e));
     } on PostgrestException catch (e) {
+      _authLog('PostgrestException: ${e.message}');
       if (!mounted) return;
       debugPrint('LOGIN SUPABASE PROFILE ERROR: ${e.message}');
       _setError('Login succeeded, but profile lookup failed.');
     } catch (e, st) {
+      _authLog('Unexpected error: $e');
       if (!mounted) return;
       debugPrint('LOGIN ERROR: $e');
       debugPrint(st.toString());
       _setError('Login failed. Please try again.');
     } finally {
+      _authLog('finished in ${sw.elapsedMilliseconds}ms');
       if (mounted) {
         setState(() => _isSubmitting = false);
       }
@@ -342,18 +368,28 @@ class _LoginDialogState extends State<LoginDialog> {
       _collectionCompany,
     ];
 
-    for (final collection in collections) {
-      final data = await supabase
+    final requests = collections.map((collection) {
+      return supabase
           .from(collection)
           .select()
           .eq('id', uid)
-          .maybeSingle();
+          .maybeSingle()
+          .then((data) {
+            if (data != null) {
+              return _AccountDoc(
+                collection: collection,
+                data: Map<String, dynamic>.from(data),
+              );
+            }
+            return null;
+          })
+          .catchError((_) => null);
+    });
 
-      if (data != null) {
-        return _AccountDoc(
-          collection: collection,
-          data: Map<String, dynamic>.from(data),
-        );
+    final results = await Future.wait(requests);
+    for (final doc in results) {
+      if (doc != null) {
+        return doc;
       }
     }
 
@@ -625,65 +661,59 @@ class _LoginDialogState extends State<LoginDialog> {
 
                         const SizedBox(height: 6),
 
-                        AutofillGroup(
-                          child: Column(
-                            children: [
-                              TextField(
-                                controller: _emailCtrl,
-                                focusNode: _emailFocusNode,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                                autofillHints: const [
-                                  AutofillHints.email,
-                                  AutofillHints.username,
-                                ],
-                                style: const TextStyle(
-                                  color: AppColors.blackCat,
-                                  fontSize: 12,
-                                  fontFamily: 'Arial',
-                                ),
-                                cursorColor: AppColors.blackCat,
-                                onSubmitted: (_) =>
-                                    _passwordFocusNode.requestFocus(),
-                                decoration: _fieldDecoration('Email'),
+                        Column(
+                          children: [
+                            TextField(
+                              controller: _emailCtrl,
+                              focusNode: _emailFocusNode,
+                              autofocus: true,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontSize: 12,
+                                fontFamily: 'Arial',
                               ),
+                              cursorColor: AppColors.blackCat,
+                              onSubmitted: (_) =>
+                                  _passwordFocusNode.requestFocus(),
+                              decoration: _fieldDecoration('Email'),
+                            ),
 
-                              const SizedBox(height: 6),
+                            const SizedBox(height: 6),
 
-                              TextField(
-                                controller: _passCtrl,
-                                focusNode: _passwordFocusNode,
-                                obscureText: obscure,
-                                textInputAction: TextInputAction.done,
-                                autofillHints: const [AutofillHints.password],
-                                style: const TextStyle(
-                                  color: AppColors.blackCat,
-                                  fontSize: 12,
-                                  fontFamily: 'Arial',
-                                ),
-                                cursorColor: AppColors.blackCat,
-                                onSubmitted: (_) => _login(),
-                                decoration: _fieldDecoration(
-                                  'Password',
-                                  suffixIcon: IconButton(
-                                    tooltip: obscure
-                                        ? 'Show password'
-                                        : 'Hide password',
-                                    icon: Icon(
-                                      obscure
-                                          ? Icons.visibility_off
-                                          : Icons.visibility,
-                                      color: AppColors.blackCat,
-                                    ),
+                            TextField(
+                              controller: _passCtrl,
+                              focusNode: _passwordFocusNode,
+                              obscureText: obscure,
+                              textInputAction: TextInputAction.done,
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontSize: 12,
+                                fontFamily: 'Arial',
+                              ),
+                              cursorColor: AppColors.blackCat,
+                              onSubmitted: (_) => _login(),
+                              decoration: _fieldDecoration(
+                                'Password',
+                                suffixIcon: IconButton(
+                                  tooltip: obscure
+                                      ? 'Show password'
+                                      : 'Hide password',
+                                  icon: Icon(
+                                    obscure
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
                                     color: AppColors.blackCat,
-                                    onPressed: () {
-                                      setState(() => obscure = !obscure);
-                                    },
                                   ),
+                                  color: AppColors.blackCat,
+                                  onPressed: () {
+                                    setState(() => obscure = !obscure);
+                                  },
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
 
                         if (_error != null) ...[

@@ -2,8 +2,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -62,8 +61,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   bool _isLoadingDb = true;
 
   final List<ClientRequestV2> _all = <ClientRequestV2>[];
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientRequestsSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _companyRequestsSub;
+  RealtimeChannel? _requestsChannel;
 
   @override
   void initState() {
@@ -74,53 +72,32 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
   @override
   void dispose() {
-    _clientRequestsSub?.cancel();
-    _companyRequestsSub?.cancel();
+    _requestsChannel?.unsubscribe();
     super.dispose();
   }
 
   void _listenRealtime() {
-    _clientRequestsSub?.cancel();
-    _companyRequestsSub?.cancel();
-
-    _clientRequestsSub = FirebaseFirestore.instance
-        .collection('Client_Custom_Requests')
-        .snapshots()
-        .listen(
-          (_) => _loadHistoryFromDb(),
-          onError: (Object e, StackTrace st) {
-            debugPrint('Client requests listener error: $e');
-
-            if (!mounted) return;
-
-            setState(() {
-              _isLoadingDb = false;
-            });
-          },
-        );
-
-    _companyRequestsSub = FirebaseFirestore.instance
-        .collection('Company_Custom_Requests')
-        .snapshots()
-        .listen(
-          (_) => _loadHistoryFromDb(),
-          onError: (Object e, StackTrace st) {
-            debugPrint('Company requests listener error: $e');
-
-            if (!mounted) return;
-
-            setState(() {
-              _isLoadingDb = false;
-            });
-          },
-        );
+    _requestsChannel?.unsubscribe();
+    _requestsChannel = Supabase.instance.client
+        .channel('artist_history_requests')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'client_custom_requests',
+          callback: (_) => _loadHistoryFromDb(),
+        )
+        .subscribe((status, [error]) {
+          if (error != null) {
+            debugPrint('Artist history realtime error: $error');
+          }
+        });
   }
 
   Future<void> _loadHistoryFromDb() async {
     try {
       final allRequests = await ArtistRequestsRepository.fetchAllRequests();
       final currentArtistEmail =
-          (FirebaseAuth.instance.currentUser?.email ?? '').trim().toLowerCase();
+          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
       unawaited(
         _syncArtistRatingFromReviews(
           allRequests,
@@ -175,63 +152,71 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         .clamp(0, 5);
     final reviewCount = reviewedDelivered.length;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final supabase = Supabase.instance.client;
+    final uid = (supabase.auth.currentUser?.id ?? '').trim();
+    final email =
+        (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+    if (uid.isEmpty && email.isEmpty) return;
 
-    DocumentReference<Map<String, dynamic>>? artistRef;
-    for (final collection in const <String>['artist', 'client_artist']) {
-      if (uid.isNotEmpty) {
-        final ref = FirebaseFirestore.instance.collection(collection).doc(uid);
-        final snap = await ref.get();
-        if (snap.exists) {
-          artistRef = ref;
+    Map<String, dynamic>? artistRow;
+    String? artistTable;
+    for (final table in const <String>['artist', 'client_artist']) {
+      try {
+        Map<String, dynamic>? row;
+        if (uid.isNotEmpty) {
+          row = await supabase
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .maybeSingle();
+        }
+        if (row == null && email.isNotEmpty) {
+          row = await supabase
+              .from(table)
+              .select()
+              .eq('email', email)
+              .maybeSingle();
+        }
+        if (row != null) {
+          artistRow = row;
+          artistTable = table;
           break;
         }
-      }
+      } catch (_) {}
     }
 
-    if (artistRef == null && email.isNotEmpty) {
-      for (final collection in const <String>['artist', 'client_artist']) {
-        final q = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (q.docs.isNotEmpty) {
-          artistRef = q.docs.first.reference;
-          break;
-        }
-      }
-    }
+    if (artistRow == null || artistTable == null) return;
 
-    if (artistRef == null) return;
+    final rowId = (artistRow['id'] ?? '').toString().trim();
+    if (rowId.isEmpty) return;
 
-    final artistSnap = await artistRef.get();
-    final artistData = artistSnap.data() ?? const <String, dynamic>{};
-    final stats =
-        (artistData['stats'] as Map<String, dynamic>?) ??
+    final existingProfile =
+        (artistRow['profile'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final existingStats =
+        (existingProfile['stats'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
     final existingRating =
-        ((stats['rating'] ?? artistData['rating'] ?? artistData['panel_rating'])
+        ((existingStats['rating'] ??
+                    existingProfile['rating'] ??
+                    artistRow['rating'])
                 as num?)
             ?.toDouble() ??
         0;
     final existingCount =
-        ((stats['reviewCount'] ??
-                    stats['reviews'] ??
-                    artistData['reviewCount'] ??
-                    artistData['reviews'] ??
-                    artistData['panel_reviews'])
+        ((existingStats['reviewCount'] ??
+                    existingStats['reviews'] ??
+                    existingProfile['reviewCount'])
                 as num?)
             ?.toInt() ??
         0;
     final ratingUnchanged = (existingRating - highestRating).abs() < 0.0001;
     if (ratingUnchanged && existingCount == reviewCount) return;
 
-    await artistRef.set({
-      'stats': {
+    final updatedProfile = <String, dynamic>{
+      ...existingProfile,
+      'stats': <String, dynamic>{
+        ...existingStats,
         'rating': highestRating,
         'averageRating': highestRating,
         'reviewCount': reviewCount,
@@ -241,10 +226,19 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
       'averageRating': highestRating,
       'reviewCount': reviewCount,
       'reviews': reviewCount,
-      'panel_rating': highestRating,
-      'panel_reviews': reviewCount,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    try {
+      await supabase
+          .from(artistTable)
+          .update({
+            'profile': updatedProfile,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', rowId);
+    } catch (e) {
+      debugPrint('_syncArtistRatingFromReviews Supabase update failed: $e');
+    }
   }
 
   bool _isArtistDeclinedForHistory(
@@ -296,7 +290,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
   String _statusTextForHistory(ClientRequestV2 r) {
     final d = _historyDateForStatus(r);
-    final currentArtistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (_isArtistDeclinedForHistory(r, currentArtistEmail)) {
@@ -331,7 +325,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   ArtistOrderLiteStatus _historyLiteStatus(ClientRequestV2 r) {
-    final currentArtistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (_isArtistDeclinedForHistory(r, currentArtistEmail)) {
@@ -351,7 +345,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   String _historyReasonForStatus(ClientRequestV2 r) {
-    final currentArtistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (_isArtistDeclinedForHistory(r, currentArtistEmail)) {
@@ -424,7 +418,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         return _all
             .where((r) {
               final currentArtistEmail =
-                  (FirebaseAuth.instance.currentUser?.email ?? '')
+                  (Supabase.instance.client.auth.currentUser?.email ?? '')
                       .trim()
                       .toLowerCase();
               return r.status == RequestStatusV2.declined ||
@@ -443,7 +437,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   int _countForFilter(ArtistHistoryFilter filter) {
-    final currentArtistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     switch (filter) {
@@ -470,7 +464,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     BuildContext context,
     ClientRequestV2 request,
   ) async {
-    final currentArtistEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (_isArtistDeclinedForHistory(request, currentArtistEmail)) {

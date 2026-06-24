@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
@@ -371,21 +372,20 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     for (final collection in const <String>['artist', 'client_artist']) {
       try {
-        final snap = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (snap.docs.isNotEmpty) {
-          final doc = snap.docs.first;
-          final artistData = doc.data();
+        final row = await Supabase.instance.client
+            .from(collection)
+            .select()
+            .eq('email', email)
+            .maybeSingle();
+        if (row != null) {
+          final artistData = Map<String, dynamic>.from(row);
           _currentArtistNameLower = readName(artistData);
           _currentArtistIsLicensed = readIsLicensed(artistData);
           _currentArtistBrandEligible = readBrandEligibility(artistData);
           unawaited(
             _syncAscensionForArtistDoc(
-              doc.reference,
               artistEmail: email,
+              artistCollection: collection,
               currentData: artistData,
             ),
           );
@@ -398,9 +398,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
   }
 
-  Future<void> _syncAscensionForArtistDoc(
-    DocumentReference<Map<String, dynamic>> ref, {
+  Future<void> _syncAscensionForArtistDoc({
     required String artistEmail,
+    required String artistCollection,
     required Map<String, dynamic> currentData,
   }) async {
     try {
@@ -414,7 +414,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           (currentData['portfolioImages'] as List<dynamic>?)?.length ??
           0;
       final snapshot = await AscensionService.calculateForArtist(
-        db: FirebaseFirestore.instance,
         artistEmail: artistEmail,
         portfolioUploads: portfolioUploads,
       );
@@ -424,8 +423,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       });
       final computedPayload = AscensionService.buildAscensionPayload(snapshot);
       final override = await AscensionService.readActiveOverride(
-        db: FirebaseFirestore.instance,
-        artistDocPath: ref.path,
+        artistDocPath: artistEmail,
         artistEmail: artistEmail,
       );
       final finalPayload = AscensionService.applyOverrideToPayload(
@@ -436,27 +434,15 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         payload: finalPayload,
         artistData: currentData,
       );
-      final finalPoints = (stabilizedPayload['points'] is num)
-          ? (stabilizedPayload['points'] as num).toInt()
-          : snapshot.points;
-      final finalLevel = (stabilizedPayload['levelName'] ?? snapshot.level)
-          .toString();
       final finalEligibility = stabilizedPayload['sponsorshipEligible'] == true;
       if (mounted) {
         setState(() {
           _currentArtistBrandEligible = finalEligibility;
         });
       }
-      await ref.set({
-        'ascension': stabilizedPayload,
-        'panel_ascensionPoints': finalPoints,
-        'panel_ascensionLevel': finalLevel,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
       await AscensionService.persistAdminCollections(
-        db: FirebaseFirestore.instance,
-        artistRef: ref,
         artistEmail: artistEmail,
+        artistCollection: artistCollection,
         artistName: _currentArtistNameLower,
         ascensionPayload: stabilizedPayload,
         previousPoints: previousPoints,
@@ -465,24 +451,23 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   Future<void> _syncAscensionForCurrentArtist() async {
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final email = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (email.isEmpty) return;
 
     for (final collection in const <String>['artist', 'client_artist']) {
       try {
-        final snap = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (snap.docs.isEmpty) continue;
-        final doc = snap.docs.first;
+        final row = await Supabase.instance.client
+            .from(collection)
+            .select()
+            .eq('email', email)
+            .maybeSingle();
+        if (row == null) continue;
         await _syncAscensionForArtistDoc(
-          doc.reference,
           artistEmail: email,
-          currentData: doc.data(),
+          artistCollection: collection,
+          currentData: Map<String, dynamic>.from(row),
         );
         return;
       } catch (_) {}

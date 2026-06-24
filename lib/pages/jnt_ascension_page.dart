@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/ascension_service.dart';
-import '../services/supabase_firebase_compat.dart';
 import '../theme/app_colors.dart';
 
 class JntAscensionPage extends StatefulWidget {
@@ -16,7 +16,8 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   static const int goldsmithMin = 1000;
   static const int crownedMin = 9750;
 
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _artistSub;
+  RealtimeChannel? _artistChannel;
+  String _artistCollection = '';
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   _AscTab _activeTab = _AscTab.activity;
   bool _syncingAscension = false;
@@ -32,95 +33,101 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
   @override
   void dispose() {
-    _artistSub?.cancel();
+    _artistChannel?.unsubscribe();
     super.dispose();
   }
 
   Future<void> _bindArtist() async {
-    final db = FirebaseFirestore.instance;
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final supabase = Supabase.instance.client;
+    final email = (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
 
-    DocumentReference<Map<String, dynamic>>? ref;
-    if (uid.isNotEmpty) {
-      for (final c in const <String>['artist', 'client_artist']) {
-        final candidate = db.collection(c).doc(uid);
-        final snap = await candidate.get();
-        if (snap.exists) {
-          ref = candidate;
+    for (final collection in const <String>['artist', 'client_artist']) {
+      try {
+        final row = await supabase
+            .from(collection)
+            .select()
+            .eq('email', email)
+            .maybeSingle();
+        if (row != null) {
+          _artistCollection = collection;
+          if (mounted) {
+            setState(() {
+              _artistData = _flattenArtistRow(row);
+              _artistLoaded = true;
+              _hasServerSnapshot = true;
+            });
+          }
+          unawaited(_syncAscension(email, collection));
+          _subscribeArtistRealtime(email, collection);
           break;
         }
-      }
+      } catch (_) {}
     }
-
-    if (ref == null && email.isNotEmpty) {
-      for (final c in const <String>['artist', 'client_artist']) {
-        final q = await db
-            .collection(c)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (q.docs.isNotEmpty) {
-          ref = q.docs.first.reference;
-          break;
-        }
-      }
-    }
-
-    if (ref == null) return;
-    final artistRef = ref;
-
-    _artistSub?.cancel();
-    _artistSub = artistRef.snapshots().listen((snap) {
-      if (!mounted) return;
-      setState(() {
-        _artistData = snap.data() ?? const <String, dynamic>{};
-        _artistLoaded = true;
-        _hasServerSnapshot = true;
-      });
-      unawaited(_syncAscension(artistRef));
-    });
-    final firstSnap = await artistRef.get();
-    if (mounted) {
-      setState(() {
-        _artistData = firstSnap.data() ?? const <String, dynamic>{};
-        _artistLoaded = true;
-        _hasServerSnapshot = true;
-      });
-    }
-    unawaited(_syncAscension(artistRef));
   }
 
-  Future<void> _syncAscension(
-    DocumentReference<Map<String, dynamic>> ref,
-  ) async {
+  void _subscribeArtistRealtime(String email, String collection) {
+    _artistChannel?.unsubscribe();
+    _artistChannel = Supabase.instance.client
+        .channel('jnt_ascension_artist_$collection')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: collection,
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'email',
+            value: email,
+          ),
+          callback: (payload) {
+            if (!mounted) return;
+            setState(() {
+              _artistData = _flattenArtistRow(
+                Map<String, dynamic>.from(payload.newRecord),
+              );
+              _hasServerSnapshot = true;
+            });
+          },
+        )
+        .subscribe();
+  }
+
+  static Map<String, dynamic> _flattenArtistRow(Map<String, dynamic> row) {
+    final profile = (row['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final profileAscension = (profile['ascension'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    return <String, dynamic>{
+      ...row,
+      if (profileAscension.isNotEmpty && !row.containsKey('ascension'))
+        'ascension': profileAscension,
+      if (profile['ascensionTier'] != null && !row.containsKey('panel_ascensionLevel'))
+        'panel_ascensionLevel': profile['ascensionTier'],
+      if (profile['ascensionPoints'] != null && !row.containsKey('panel_ascensionPoints'))
+        'panel_ascensionPoints': profile['ascensionPoints'],
+    };
+  }
+
+  Future<void> _syncAscension(String email, String collection) async {
     if (_syncingAscension) return;
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-    if (email.isEmpty) return;
     _syncingAscension = true;
     try {
       final portfolioItems =
           (_artistData['portfolioItems'] as List<dynamic>?)?.length ??
           (_artistData['portfolioImages'] as List<dynamic>?)?.length ??
           0;
-      final previousPointsRaw =
-          (_artistData['ascension'] as Map<String, dynamic>?)?['points'];
+      final ascension =
+          (_artistData['ascension'] as Map<String, dynamic>?) ??
+          const <String, dynamic>{};
+      final previousPointsRaw = ascension['points'];
       final previousPoints = previousPointsRaw is num
           ? previousPointsRaw.toInt()
           : int.tryParse((previousPointsRaw ?? '').toString()) ?? 0;
       final snapshot = await AscensionService.calculateForArtist(
-        db: FirebaseFirestore.instance,
         artistEmail: email,
         portfolioUploads: portfolioItems,
       );
       final computedPayload = AscensionService.buildAscensionPayload(snapshot);
       final override = await AscensionService.readActiveOverride(
-        db: FirebaseFirestore.instance,
-        artistDocPath: ref.path,
+        artistDocPath: email,
         artistEmail: email,
       );
       final finalPayload = AscensionService.applyOverrideToPayload(
@@ -131,21 +138,9 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         payload: finalPayload,
         artistData: _artistData,
       );
-      final finalPoints = (stabilizedPayload['points'] is num)
-          ? (stabilizedPayload['points'] as num).toInt()
-          : snapshot.points;
-      final finalLevel = (stabilizedPayload['levelName'] ?? snapshot.level)
-          .toString();
-      await ref.set({
-        'ascension': stabilizedPayload,
-        'panel_ascensionPoints': finalPoints,
-        'panel_ascensionLevel': finalLevel,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
       await AscensionService.persistAdminCollections(
-        db: FirebaseFirestore.instance,
-        artistRef: ref,
         artistEmail: email,
+        artistCollection: collection,
         artistName: _artistName,
         ascensionPayload: stabilizedPayload,
         previousPoints: previousPoints,
@@ -177,7 +172,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     final profile =
         (_artistData['profile'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final email = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     final emailName = email.contains('@') ? email.split('@').first : email;
@@ -188,7 +183,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       _artistData['panel_studioName'],
       _artistData['displayName'],
       _artistData['name'],
-      FirebaseAuth.instance.currentUser?.displayName,
+      Supabase.instance.client.auth.currentUser?.userMetadata?['display_name'] as String?,
       emailName,
       'Artist',
     ]);
