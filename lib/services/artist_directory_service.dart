@@ -1,5 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ArtistDirectoryEntry {
   const ArtistDirectoryEntry({
@@ -82,45 +81,7 @@ class ArtistDirectoryService {
   static const int _defaultPageSize = 200;
   static const int _defaultMaxDocsPerCollection = 1200;
 
-  static Future<QuerySnapshot<Map<String, dynamic>>> _safeCollectionPage(
-    CollectionReference<Map<String, dynamic>> ref, {
-    required int limit,
-    DocumentSnapshot<Map<String, dynamic>>? startAfter,
-  }) {
-    var query = ref.limit(limit);
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
-    return query.get();
-  }
-
-  static Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-  _fetchCollectionPaged({
-    required FirebaseFirestore db,
-    required String collection,
-    int pageSize = _defaultPageSize,
-    int maxDocs = _defaultMaxDocsPerCollection,
-  }) async {
-    final docs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-    DocumentSnapshot<Map<String, dynamic>>? cursor;
-    final safePageSize = pageSize.clamp(50, 400);
-    final safeMaxDocs = maxDocs.clamp(100, 5000);
-
-    while (docs.length < safeMaxDocs) {
-      final remaining = safeMaxDocs - docs.length;
-      final page = await _safeCollectionPage(
-        db.collection(collection),
-        limit: remaining < safePageSize ? remaining : safePageSize,
-        startAfter: cursor,
-      );
-      if (page.docs.isEmpty) break;
-      docs.addAll(page.docs);
-      cursor = page.docs.last;
-      if (page.docs.length < safePageSize) break;
-    }
-
-    return docs;
-  }
+  static SupabaseClient get _supabase => Supabase.instance.client;
 
   static bool _isSupportedImageRef(String value) {
     final v = value.trim();
@@ -172,64 +133,65 @@ class ArtistDirectoryService {
     DateTime? now,
     bool hydrateMediaFallbacks = false,
   }) async {
-    final db = FirebaseFirestore.instance;
     final today = now ?? DateTime.now();
     final seed = _dailySeed(today);
-    final start = (seed % 10000) / 10000.0;
 
     final merged = <ArtistDirectoryEntry>[];
     final byKey = <String, int>{};
 
-    void addAllFromDocs(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    ) {
-      for (final doc in docs) {
-        final entry = _fromDoc(doc.id, doc.data());
-        if (entry == null) continue;
-        final dedupeKey = entry.email.isNotEmpty
-            ? entry.email.toLowerCase()
-            : entry.id;
-        final existingIndex = byKey[dedupeKey];
-        if (existingIndex == null) {
-          byKey[dedupeKey] = merged.length;
-          merged.add(entry);
-        } else {
-          merged[existingIndex] = _preferRicherEntry(
-            merged[existingIndex],
-            entry,
-          );
+    Future<void> addFromTable(String table, int fetchLimit) async {
+      try {
+        final rows = await _supabase
+            .from(table)
+            .select()
+            .order('created_at', ascending: false)
+            .limit(fetchLimit * 4);
+
+        if (rows is! List) return;
+
+        final allEntries = <ArtistDirectoryEntry>[];
+        for (final rawRow in rows) {
+          if (rawRow is! Map) continue;
+          final row = Map<String, dynamic>.from(rawRow);
+          final id = (row['id'] ?? '').toString().trim();
+          if (id.isEmpty) continue;
+          final entry = _fromDoc(id, row);
+          if (entry != null) allEntries.add(entry);
         }
-        if (merged.length >= limit) return;
-      }
+
+        allEntries.sort(
+          (a, b) => _stableHash('${a.id}|$seed').compareTo(
+            _stableHash('${b.id}|$seed'),
+          ),
+        );
+
+        for (final entry in allEntries) {
+          final dedupeKey = entry.email.isNotEmpty
+              ? entry.email.toLowerCase()
+              : entry.id;
+          final existingIndex = byKey[dedupeKey];
+          if (existingIndex == null) {
+            byKey[dedupeKey] = merged.length;
+            merged.add(entry);
+          } else {
+            merged[existingIndex] = _preferRicherEntry(
+              merged[existingIndex],
+              entry,
+            );
+          }
+          if (merged.length >= limit) return;
+        }
+      } catch (_) {}
     }
 
-    try {
-      final perCollectionLimit = (limit * 2).clamp(8, 40);
-      final artistDocs = await _queryRandomWindow(
-        db: db,
-        collection: 'artist',
-        start: start,
-        limit: perCollectionLimit,
-      );
-      final clientArtistDocs = await _queryRandomWindow(
-        db: db,
-        collection: 'client_artist',
-        start: start,
-        limit: perCollectionLimit,
-      );
-
-      addAllFromDocs(artistDocs);
-      if (merged.length < limit) {
-        addAllFromDocs(clientArtistDocs);
-      }
-    } catch (_) {
-      // Fallback below
+    final perCollectionLimit = (limit * 2).clamp(8, 40);
+    await addFromTable('artist', perCollectionLimit);
+    if (merged.length < limit) {
+      await addFromTable('client_artist', perCollectionLimit);
     }
 
     if (merged.length < limit) {
-      final all = await fetchAllArtists(
-        hydrateMediaFallbacks: hydrateMediaFallbacks,
-      );
+      final all = await fetchAllArtists(hydrateMediaFallbacks: false);
       all.sort(
         (a, b) => _stableHash(
           '${a.id}|$seed',
@@ -253,41 +215,64 @@ class ArtistDirectoryService {
       }
     }
 
-    final limited = merged.take(limit).toList(growable: false);
-    if (!hydrateMediaFallbacks) {
-      return limited;
-    }
-    return _hydrateMissingPortfolios(limited);
+    return merged.take(limit).toList(growable: false);
   }
 
-  static Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-  _queryRandomWindow({
-    required FirebaseFirestore db,
-    required String collection,
-    required double start,
-    required int limit,
+  static Future<List<ArtistDirectoryEntry>> fetchAllArtists({
+    bool hydrateMediaFallbacks = true,
+    int maxDocsPerCollection = _defaultMaxDocsPerCollection,
   }) async {
-    final first = await db
-        .collection(collection)
-        .where('randKey', isGreaterThanOrEqualTo: start)
-        .orderBy('randKey')
-        .limit(limit)
-        .get();
+    final merged = <ArtistDirectoryEntry>[];
+    final byKey = <String, int>{};
 
-    if (first.docs.length >= limit) return first.docs;
+    Future<void> addFromTable(String table) async {
+      var offset = 0;
+      while (offset < maxDocsPerCollection) {
+        final remaining = maxDocsPerCollection - offset;
+        final pageSize = remaining < _defaultPageSize ? remaining : _defaultPageSize;
+        try {
+          final rows = await _supabase
+              .from(table)
+              .select()
+              .range(offset, offset + pageSize - 1);
 
-    final remaining = limit - first.docs.length;
-    final second = await db
-        .collection(collection)
-        .where('randKey', isLessThan: start)
-        .orderBy('randKey')
-        .limit(remaining)
-        .get();
+          if (rows is! List || rows.isEmpty) break;
 
-    return <QueryDocumentSnapshot<Map<String, dynamic>>>[
-      ...first.docs,
-      ...second.docs,
-    ];
+          for (final rawRow in rows) {
+            if (rawRow is! Map) continue;
+            final row = Map<String, dynamic>.from(rawRow);
+            final id = (row['id'] ?? '').toString().trim();
+            if (id.isEmpty) continue;
+            final entry = _fromDoc(id, row);
+            if (entry == null) continue;
+            final dedupeKey = entry.email.isNotEmpty
+                ? entry.email.toLowerCase()
+                : entry.id;
+            final existingIndex = byKey[dedupeKey];
+            if (existingIndex == null) {
+              byKey[dedupeKey] = merged.length;
+              merged.add(entry);
+            } else {
+              merged[existingIndex] = _preferRicherEntry(
+                merged[existingIndex],
+                entry,
+              );
+            }
+          }
+
+          if ((rows as List).length < pageSize) break;
+          offset += pageSize;
+        } catch (_) {
+          break;
+        }
+      }
+    }
+
+    await addFromTable('artist');
+    await addFromTable('client_artist');
+
+    merged.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return merged;
   }
 
   static int _dailySeed(DateTime d) =>
@@ -299,239 +284,6 @@ class ArtistDirectoryService {
       h = ((h << 5) + h) ^ c;
     }
     return h & 0x7fffffff;
-  }
-
-  static Future<List<ArtistDirectoryEntry>> fetchAllArtists({
-    bool hydrateMediaFallbacks = true,
-    int maxDocsPerCollection = _defaultMaxDocsPerCollection,
-  }) async {
-    final db = FirebaseFirestore.instance;
-    final artistDocs = await _fetchCollectionPaged(
-      db: db,
-      collection: 'artist',
-      maxDocs: maxDocsPerCollection,
-    );
-    final clientArtistDocs = await _fetchCollectionPaged(
-      db: db,
-      collection: 'client_artist',
-      maxDocs: maxDocsPerCollection,
-    );
-
-    final merged = <ArtistDirectoryEntry>[];
-    final byKey = <String, int>{};
-
-    void addAll(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-      for (final doc in docs) {
-        final data = doc.data();
-        final entry = _fromDoc(doc.id, data);
-        if (entry == null) continue;
-        final dedupeKey = entry.email.isNotEmpty
-            ? entry.email.toLowerCase()
-            : entry.id;
-        final existingIndex = byKey[dedupeKey];
-        if (existingIndex == null) {
-          byKey[dedupeKey] = merged.length;
-          merged.add(entry);
-        } else {
-          merged[existingIndex] = _preferRicherEntry(
-            merged[existingIndex],
-            entry,
-          );
-        }
-      }
-    }
-
-    addAll(artistDocs);
-    addAll(clientArtistDocs);
-
-    merged.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    if (!hydrateMediaFallbacks) {
-      return merged;
-    }
-    return _hydrateMissingPortfolios(merged);
-  }
-
-  static Future<List<ArtistDirectoryEntry>> _hydrateMissingPortfolios(
-    List<ArtistDirectoryEntry> entries,
-  ) async {
-    if (entries.isEmpty) return entries;
-    final hydrated = await Future.wait(
-      entries.map((entry) async {
-        var next = entry;
-        if (next.portfolioImages.isEmpty) {
-          final fallback =
-              await _loadPortfolioItemsFromSubcollection(
-                next.id,
-                email: next.email,
-              ).timeout(
-                const Duration(seconds: 6),
-                onTimeout: () => const <String>[],
-              );
-          if (fallback.isNotEmpty) {
-            next = next.copyWith(portfolioImages: fallback);
-          }
-        }
-        if (next.avatarUrl.trim().isEmpty) {
-          final avatar = await _loadAvatarFromStorage(
-            next.id,
-          ).timeout(const Duration(seconds: 6), onTimeout: () => '');
-          if (avatar.trim().isNotEmpty) {
-            next = next.copyWith(avatarUrl: avatar.trim());
-          }
-        }
-        return next;
-      }),
-    );
-    return hydrated;
-  }
-
-  static Future<String> _loadAvatarFromStorage(String uid) async {
-    final db = FirebaseFirestore.instance;
-    final ids = <String>{uid.trim()}..removeWhere((e) => e.isEmpty);
-
-    // Try to discover canonical uid/doc ids by email/uid matches too.
-    Future<void> addDocIds(String collection) async {
-      for (final id in ids.toList(growable: false)) {
-        try {
-          final doc = await db.collection(collection).doc(id).get();
-          if (doc.exists) ids.add(doc.id);
-        } catch (_) {}
-      }
-    }
-
-    await addDocIds('artist');
-    await addDocIds('client_artist');
-
-    final exactFiles = <String>[];
-    for (final id in ids) {
-      exactFiles.addAll(<String>[
-        'artists/$id/profile/avatar.jpg',
-        'artists/$id/profile/avatar.jpeg',
-        'artists/$id/profile/avatar.png',
-        'artists/$id/profile/avatar.webp',
-        'client_artists/$id/profile/avatar.jpg',
-        'client_artists/$id/profile/avatar.jpeg',
-        'client_artists/$id/profile/avatar.png',
-        'client_artists/$id/profile/avatar.webp',
-      ]);
-    }
-
-    for (final path in exactFiles) {
-      try {
-        final url = await FirebaseStorage.instance.ref(path).getDownloadURL();
-        if (url.trim().isNotEmpty) return url.trim();
-      } catch (_) {}
-    }
-
-    // Avoid broad listAll fallback on missing folders; it can trigger repeated
-    // Storage 404s on mobile and destabilize request flows.
-    return '';
-  }
-
-  static Future<List<String>> _loadPortfolioItemsFromSubcollection(
-    String uid, {
-    String? email,
-  }) async {
-    final db = FirebaseFirestore.instance;
-    final urls = <String>[];
-    final docIds = <String>{uid.trim()}..removeWhere((e) => e.isEmpty);
-    final normalizedEmail = (email ?? '').trim().toLowerCase();
-
-    bool accepts(String v) => _isSupportedImageRef(v);
-
-    void collect(dynamic raw) {
-      if (raw == null) return;
-      if (raw is String) {
-        final v = raw.trim();
-        if (v.isNotEmpty && accepts(v)) urls.add(v);
-        return;
-      }
-      if (raw is List) {
-        for (final item in raw) {
-          collect(item);
-        }
-        return;
-      }
-      if (raw is Map) {
-        collect(raw['imageUrl']);
-        collect(raw['downloadUrl']);
-        collect(raw['url']);
-        collect(raw['image']);
-        collect(raw['storagePath']);
-        collect(raw['path']);
-        collect(raw['filePath']);
-        collect(raw['fullPath']);
-      }
-    }
-
-    Future<void> addIdsFromEmail(String collection) async {
-      if (normalizedEmail.isEmpty) return;
-      try {
-        final q = await db
-            .collection(collection)
-            .where('email', isEqualTo: normalizedEmail)
-            .limit(6)
-            .get()
-            .timeout(const Duration(seconds: 4));
-        for (final doc in q.docs) {
-          final id = doc.id.trim();
-          if (id.isNotEmpty) docIds.add(id);
-        }
-      } catch (_) {}
-    }
-
-    for (final collection in const <String>['artist', 'client_artist']) {
-      await addIdsFromEmail(collection);
-    }
-
-    for (final collection in const <String>['artist', 'client_artist']) {
-      for (final id in docIds) {
-        try {
-          final doc = await db
-              .collection(collection)
-              .doc(id)
-              .get()
-              .timeout(const Duration(seconds: 4));
-          if (!doc.exists) continue;
-          final data = doc.data() ?? const <String, dynamic>{};
-          collect(data['portfolioImages']);
-          collect(data['panel_portfolioImages']);
-          collect(data['panel_artist_portfolioImages']);
-          collect(data['portfolioItems']);
-          collect(data['portfolio']);
-          collect(data['artist']);
-        } catch (_) {}
-      }
-    }
-
-    for (final collection in const <String>['artist', 'client_artist']) {
-      for (final id in docIds) {
-        try {
-          final snap = await db
-              .collection(collection)
-              .doc(id)
-              .collection('portfolio_items')
-              .limit(24)
-              .get()
-              .timeout(const Duration(seconds: 4));
-          for (final doc in snap.docs) {
-            collect(doc.data());
-          }
-          if (urls.length >= 24) break;
-        } catch (_) {}
-      }
-      if (urls.length >= 24) break;
-    }
-
-    // Do not fallback to Storage listAll when Firestore data is absent.
-    // Missing folders can cause repeated 404 spam and degrade app stability.
-
-    final dedup = <String>[];
-    final seen = <String>{};
-    for (final v in urls) {
-      if (seen.add(v)) dedup.add(v);
-    }
-    return dedup;
   }
 
   static ArtistDirectoryEntry? _fromDoc(String id, Map<String, dynamic> data) {
@@ -708,9 +460,14 @@ class ArtistDirectoryService {
       artist['projectNotes'],
     ]);
     final stats = (data['stats'] as Map<String, dynamic>?) ?? const {};
+    final profileStats =
+        (profile['stats'] as Map<String, dynamic>?) ?? const {};
     final rating = asRating(
       stats['rating'] ??
           stats['averageRating'] ??
+          profileStats['rating'] ??
+          profileStats['averageRating'] ??
+          profile['rating'] ??
           data['rating'] ??
           data['averageRating'] ??
           data['panel_rating'],
