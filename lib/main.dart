@@ -17,8 +17,7 @@ import 'utlis/responsive_text.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/supabase_bootstrap.dart';
 import 'services/startup_frame_gate.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/phone_verification_page.dart';
 import 'models/client_profile_models.dart';
@@ -417,7 +416,7 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
       final navigator = JntApp.navigatorKey.currentState;
       if (navigator == null) return;
 
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
 
       if (user == null) {
         navigator.pushNamedAndRemoveUntil(
@@ -427,7 +426,7 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
         return;
       }
 
-      final uid = user.uid;
+      final uid = user.id;
 
       String collectionName = 'client';
       String accountType = role ?? 'client';
@@ -446,12 +445,13 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
           collectionName = 'client';
       }
 
-      final doc = await FirebaseFirestore.instance
-          .collection(collectionName)
-          .doc(uid)
-          .get();
+      final row = await Supabase.instance.client
+          .from(collectionName)
+          .select()
+          .eq('id', uid)
+          .maybeSingle();
 
-      final data = doc.data();
+      final data = row;
 
       if (data == null) {
         navigator.pushNamedAndRemoveUntil(

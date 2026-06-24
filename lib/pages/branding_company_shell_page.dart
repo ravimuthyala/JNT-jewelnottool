@@ -1,6 +1,3 @@
-import 'dart:async';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -42,72 +39,39 @@ class BrandingCompanyShellPage extends StatefulWidget {
 class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
   late int _index;
   bool _loadingEnrolledArtists = true;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _artistFeedSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientArtistFeedSub;
-  Timer? _feedRefreshDebounce;
   List<CompanyTrendingArtist> _enrolledArtists =
       const <CompanyTrendingArtist>[];
+  String _loadedUid = '';
+  Future<Map<String, dynamic>>? _companyFuture;
+  Future<List<Map<String, dynamic>>>? _requestsFuture;
 
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex;
     _loadEnrolledArtists();
-    _startLiveArtistFeedSync();
   }
 
   @override
   void dispose() {
-    _artistFeedSub?.cancel();
-    _clientArtistFeedSub?.cancel();
-    _feedRefreshDebounce?.cancel();
     super.dispose();
-  }
-
-  void _startLiveArtistFeedSync() {
-    _artistFeedSub = FirebaseFirestore.instance
-        .collection('artist')
-        .snapshots()
-        .listen((_) => _scheduleEnrolledArtistRefresh());
-    _clientArtistFeedSub = FirebaseFirestore.instance
-        .collection('client_artist')
-        .snapshots()
-        .listen((_) => _scheduleEnrolledArtistRefresh());
-  }
-
-  void _scheduleEnrolledArtistRefresh() {
-    if (!mounted) return;
-    _feedRefreshDebounce?.cancel();
-    _feedRefreshDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      unawaited(_loadEnrolledArtists());
-    });
   }
 
   Future<void> _loadEnrolledArtists() async {
     try {
-      final entries = await ArtistDirectoryService.fetchAllArtists();
+      final entries = await ArtistDirectoryService.fetchHomeArtistsRandomized(
+        limit: 12,
+        hydrateMediaFallbacks: true,
+      );
       if (!mounted) return;
       final mapped = entries
-          .map((e) {
-            final displayName = e.name.trim();
-            final cleanedPortfolio = <String>[];
-            final seen = <String>{};
-            for (final raw in e.portfolioImages) {
-              final value = raw.trim();
-              if (value.isEmpty) continue;
-              if (seen.add(value)) cleanedPortfolio.add(value);
-              if (cleanedPortfolio.length >= 16) break;
-            }
-            final portfolioImage = cleanedPortfolio.isNotEmpty
-                ? cleanedPortfolio.first
-                : '';
-            return CompanyTrendingArtist(
-              name: displayName.contains('@') ? '' : displayName,
-              tierLabel: e.tierLabel.trim().isEmpty
-                  ? 'Maker'
-                  : e.tierLabel.trim(),
-              imageUrl: portfolioImage,
+          .map(
+            (e) => CompanyTrendingArtist(
+              name: e.name.trim().contains('@') ? '' : e.name.trim(),
+              tierLabel: e.tierLabel.trim().isEmpty ? 'Maker' : e.tierLabel.trim(),
+              imageUrl: e.portfolioImages.isNotEmpty
+                  ? e.portfolioImages.first.trim()
+                  : '',
               avatarUrl: e.avatarUrl.trim(),
               acceptsDirectRequests: e.acceptsDirectRequests,
               rating: e.rating,
@@ -118,9 +82,9 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
               credential: e.credential.trim(),
               bio: e.bio.trim(),
               projectNotes: e.projectNotes.trim(),
-              previousProjects: cleanedPortfolio,
-            );
-          })
+              previousProjects: _dedupeUrls(e.portfolioImages),
+            ),
+          )
           .where((e) => e.name.isNotEmpty)
           .toList(growable: false);
       setState(() {
@@ -134,6 +98,20 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
         _loadingEnrolledArtists = false;
       });
     }
+  }
+
+  List<String> _dedupeUrls(List<String> urls) {
+    final seen = <String>{};
+    final out = <String>[];
+
+    for (final raw in urls) {
+      final value = raw.trim();
+      if (value.isEmpty) continue;
+      final key = value.split('?').first;
+      if (seen.add(key)) out.add(value);
+    }
+
+    return out;
   }
 
   Future<void> _logoutToHomePage() async {
@@ -286,8 +264,14 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       );
     }
 
+    if (_loadedUid != uid || _companyFuture == null) {
+      _loadedUid = uid;
+      _companyFuture = _loadCompanyDataFromSupabase(uid);
+      _requestsFuture = null;
+    }
+
     return FutureBuilder<Map<String, dynamic>>(
-      future: _loadCompanyDataFromSupabase(uid),
+      future: _companyFuture,
       builder: (context, companySnap) {
         final data = _CompanyUiData.fromFirestore(
           uid: uid,
@@ -298,17 +282,13 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           fallbackAddresses: widget.initialAddressesInfo,
         );
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('Company_Custom_Requests')
-              .snapshots(),
-          builder: (context, requestsSnap) {
-            final docs = requestsSnap.data?.docs ?? const [];
-            final requests = docs
-                .map((d) => d.data())
-                .where((r) => _matchesCompanyRequest(r, data))
-                .toList(growable: false);
+        _requestsFuture ??= _loadCompanyRequestsFromSupabase(data);
 
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _requestsFuture,
+          builder: (context, requestsSnap) {
+            final requests =
+                requestsSnap.data ?? const <Map<String, dynamic>>[];
             return _buildShell(data: data, requests: requests);
           },
         );
@@ -334,6 +314,36 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     }
 
     return const <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> _loadCompanyRequestsFromSupabase(
+    _CompanyUiData data,
+  ) async {
+    final companyUid = data.uid.trim();
+    final companyEmail = data.email.trim().toLowerCase();
+    final companyName = data.companyName.trim().toLowerCase();
+
+    if (companyUid.isEmpty && companyEmail.isEmpty && companyName.isEmpty) {
+      return const <Map<String, dynamic>>[];
+    }
+
+    try {
+      final rows = await Supabase.instance.client
+          .from('client_custom_requests')
+          .select()
+          .order('updated_at', ascending: false);
+
+      return rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .map(_flattenCompanyRequestRow)
+          .where(_isCompanyRequestRow)
+          .where((row) => _matchesCompanyRequest(row, data))
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('COMPANY SHELL REQUEST LOAD FAILED: $e');
+      return const <Map<String, dynamic>>[];
+    }
   }
 
   Widget _buildShell({
@@ -501,6 +511,57 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     return false;
   }
 
+  bool _isCompanyRequestRow(Map<String, dynamic> request) {
+    final sourceCollection = _firstNonEmptyString(
+      request['sourceCollection'],
+      request['source_collection'],
+    ).trim();
+    if (sourceCollection == 'Company_Custom_Requests') return true;
+    if (sourceCollection.isNotEmpty &&
+        sourceCollection != 'Company_Custom_Requests') {
+      return false;
+    }
+
+    final requestType = _firstNonEmptyString(
+      request['requestType'],
+      request['request_type'],
+    ).trim().toLowerCase();
+    if (requestType.isEmpty) return true;
+
+    return <String>{
+      'companycustomrequest',
+      'company_custom_request',
+      'brandcustomrequest',
+      'brandrequest',
+      'direct',
+      'direct to client',
+      'direct to artist',
+      'standard',
+      'customrequest',
+    }.contains(requestType);
+  }
+
+  Map<String, dynamic> _flattenCompanyRequestRow(Map<String, dynamic> row) {
+    final out = <String, dynamic>{...row};
+
+    void mergeMap(String key) {
+      final value = row[key];
+      if (value is! Map) return;
+      final map = value.map((k, v) => MapEntry(k.toString(), v));
+      for (final entry in map.entries) {
+        out.putIfAbsent(entry.key, () => entry.value);
+      }
+    }
+
+    mergeMap('summary');
+    mergeMap('details');
+    mergeMap('requestDetails');
+    mergeMap('request_details');
+    mergeMap('order');
+    mergeMap('groupOrder');
+    return out;
+  }
+
   String _firstNonEmptyString(Object? a, [Object? b, Object? c, Object? d]) {
     for (final candidate in <Object?>[a, b, c, d]) {
       final value = (candidate ?? '').toString().trim();
@@ -619,22 +680,36 @@ class _CompanyUiData {
       return '';
     }
 
+    String firstOf(Iterable<Object?> candidates) {
+      for (final candidate in candidates) {
+        final value = (candidate ?? '').toString().trim();
+        if (value.isNotEmpty) return value;
+      }
+      return '';
+    }
+
     final companyName = first(
       source['panel_companyName'],
+      source['panel_company_name'],
       company['name'],
       source['companyName'],
+      source['company_name'],
       fallbackCompanyName,
     );
     final contactName = first(
       source['panel_contactName'],
+      source['panel_contact_name'],
       company['contactName'],
       source['contactName'],
+      source['contact_name'],
       source['displayName'],
     );
     final email = first(
       source['panel_contactEmail'],
+      source['panel_contact_email'],
       company['contactEmail'],
       source['email'],
+      source['contact_email'],
     );
 
     final companyAddress = asMap(company['address']);
@@ -643,12 +718,14 @@ class _CompanyUiData {
 
     final city = first(
       source['panel_billingCity'],
+      source['panel_billing_city'],
       addresses['billingCity'],
       source['panel_city'],
       companyAddress['city'],
     );
     final state = first(
       source['panel_billingState'],
+      source['panel_billing_state'],
       addresses['billingState'],
       source['panel_state'],
       companyAddress['state'],
@@ -657,27 +734,46 @@ class _CompanyUiData {
     final location = city.isEmpty && state.isEmpty
         ? ''
         : (city.isEmpty ? state : (state.isEmpty ? city : '$city, $state'));
-    final avatarUrlRaw = first(
+    final avatarUrlRaw = firstOf([
       source['panel_logoUrl'],
+      source['panel_logo_url'],
       source['companyLogoUrl'],
       source['brandLogoUrl'],
+      source['company_logo_url'],
+      source['brand_logo_url'],
       source['logoUrl'],
+      source['logo_url'],
       source['panel_profileImageUrl'],
+      source['panel_profile_image_url'],
       source['profileImageUrl'],
+      source['profile_image_url'],
       source['photoUrl'],
+      source['photo_url'],
       source['avatarUrl'],
+      source['avatar_url'],
       profile['logoUrl'],
+      profile['logo_url'],
       profile['profileImageUrl'],
+      profile['profile_image_url'],
       profile['photoUrl'],
+      profile['photo_url'],
       profile['avatarUrl'],
+      profile['avatar_url'],
       basic['profileImageUrl'],
+      basic['profile_image_url'],
       basic['photoUrl'],
+      basic['photo_url'],
       basic['avatarUrl'],
+      basic['avatar_url'],
       company['logoUrl'],
+      company['logo_url'],
       company['profileImageUrl'],
+      company['profile_image_url'],
       company['photoUrl'],
+      company['photo_url'],
       company['avatarUrl'],
-    );
+      company['avatar_url'],
+    ]);
     final avatarUrl = avatarUrlRaw.isNotEmpty
         ? avatarUrlRaw
         : 'company/$uid/profile/avatar.jpg';
@@ -688,9 +784,14 @@ class _CompanyUiData {
       contactEmail: first(email, fallbackBusiness?.contactEmail),
       contactPhone: first(
         source['panel_contactPhone'],
+        source['panel_contact_phone'],
         source['panel_contactPhoneAreaCode'] != null &&
                 source['panel_contactPhoneLocal'] != null
             ? '${source['panel_contactPhoneAreaCode']}${source['panel_contactPhoneLocal']}'
+            : null,
+        source['panel_contact_phone_area_code'] != null &&
+                source['panel_contact_phone_local'] != null
+            ? '${source['panel_contact_phone_area_code']}${source['panel_contact_phone_local']}'
             : null,
         company['contactPhone'],
         source['panel_phone'],
@@ -700,14 +801,20 @@ class _CompanyUiData {
       companyEmail: first(
         source['email'],
         source['panel_contactEmail'],
+        source['panel_contact_email'],
         company['contactEmail'],
         fallbackBusiness?.companyEmail,
       ),
       companyPhone: first(
         source['panel_companyPhone'],
+        source['panel_company_phone'],
         source['panel_companyPhoneAreaCode'] != null &&
                 source['panel_companyPhoneLocal'] != null
             ? '${source['panel_companyPhoneAreaCode']}${source['panel_companyPhoneLocal']}'
+            : null,
+        source['panel_company_phone_area_code'] != null &&
+                source['panel_company_phone_local'] != null
+            ? '${source['panel_company_phone_area_code']}${source['panel_company_phone_local']}'
             : null,
         company['phone'],
         source['panel_phone'],
@@ -715,12 +822,14 @@ class _CompanyUiData {
       ),
       companyUrl: first(
         source['panel_companyWebsite'],
+        source['panel_company_website'],
         source['panel_website'],
         company['website'],
         fallbackBusiness?.companyUrl,
       ),
       businessType: first(
         source['panel_businessType'],
+        source['panel_business_type'],
         company['businessType'],
         source['panel_industry'],
         company['industry'],
@@ -732,22 +841,26 @@ class _CompanyUiData {
       method: first(
         billing['method'],
         source['panel_billingMethod'],
+        source['panel_billing_method'],
         fallbackBilling?.method,
         'Credit/Debit Card',
       ),
       saveForFutureUse:
           billing['saveForFutureUse'] == true ||
           source['panel_billingSaveForFutureUse'] == true ||
+          source['panel_billing_save_for_future_use'] == true ||
           (fallbackBilling?.saveForFutureUse ?? false),
       nameOnCard: first(
         billing['nameOnCard'],
         source['panel_billingNameOnCard'],
+        source['panel_billing_name_on_card'],
         fallbackBilling?.nameOnCard,
       ),
       cardNumber: first(billing['cardNumber'], fallbackBilling?.cardNumber),
       expiry: first(
         billing['expiry'],
         source['panel_billingExpiry'],
+        source['panel_billing_expiry'],
         fallbackBilling?.expiry,
       ),
       cvv: first(billing['cvv'], fallbackBilling?.cvv),
@@ -766,11 +879,13 @@ class _CompanyUiData {
       applePayEmail: first(
         billing['applePayEmail'],
         source['panel_billingApplePayEmail'],
+        source['panel_billing_apple_pay_email'],
         fallbackBilling?.applePayEmail,
       ),
       googlePayEmail: first(
         billing['googlePayEmail'],
         source['panel_billingGooglePayEmail'],
+        source['panel_billing_google_pay_email'],
         fallbackBilling?.googlePayEmail,
       ),
     );
@@ -779,60 +894,71 @@ class _CompanyUiData {
       billingStreet: first(
         addresses['billingStreet'],
         source['panel_billingStreet'],
+        source['panel_billing_street'],
         source['panel_street'],
         fallbackAddresses?.billingStreet,
       ),
       billingCity: first(
         addresses['billingCity'],
         source['panel_billingCity'],
+        source['panel_billing_city'],
         source['panel_city'],
         fallbackAddresses?.billingCity,
       ),
       billingState: first(
         addresses['billingState'],
         source['panel_billingState'],
+        source['panel_billing_state'],
         source['panel_state'],
         fallbackAddresses?.billingState,
       ),
       billingZip: first(
         addresses['billingZip'],
         source['panel_billingZip'],
+        source['panel_billing_zip'],
         source['panel_zip'],
         fallbackAddresses?.billingZip,
       ),
       billingCountry: first(
         addresses['billingCountry'],
         source['panel_billingCountry'],
+        source['panel_billing_country'],
         source['panel_country'],
         fallbackAddresses?.billingCountry,
       ),
       shippingSameAsBilling:
           addresses['shippingSameAsBilling'] == true ||
           source['panel_shippingSameAsBilling'] == true ||
+          source['panel_shipping_same_as_billing'] == true ||
           (fallbackAddresses?.shippingSameAsBilling ?? false),
       shippingStreet: first(
         addresses['shippingStreet'],
         source['panel_shippingStreet'],
+        source['panel_shipping_street'],
         fallbackAddresses?.shippingStreet,
       ),
       shippingCity: first(
         addresses['shippingCity'],
         source['panel_shippingCity'],
+        source['panel_shipping_city'],
         fallbackAddresses?.shippingCity,
       ),
       shippingState: first(
         addresses['shippingState'],
         source['panel_shippingState'],
+        source['panel_shipping_state'],
         fallbackAddresses?.shippingState,
       ),
       shippingZip: first(
         addresses['shippingZip'],
         source['panel_shippingZip'],
+        source['panel_shipping_zip'],
         fallbackAddresses?.shippingZip,
       ),
       shippingCountry: first(
         addresses['shippingCountry'],
         source['panel_shippingCountry'],
+        source['panel_shipping_country'],
         fallbackAddresses?.shippingCountry,
       ),
     );

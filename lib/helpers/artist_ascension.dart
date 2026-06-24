@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum ArtistAscensionTier { maker, goldsmith, crowned }
 
@@ -29,7 +28,7 @@ class ArtistAscensionState {
   final bool prioritySearch;
   final bool sponsorshipEligible;
   final bool insuranceEligible;
-  final Timestamp? lastTierUpdatedAt;
+  final DateTime? lastTierUpdatedAt;
 
   static const ArtistAscensionState defaults = ArtistAscensionState(
     tier: ArtistAscensionTier.maker,
@@ -105,6 +104,13 @@ ArtistAscensionState artistAscensionFromDoc(Map<String, dynamic>? artistDoc) {
     return fallback;
   }
 
+  DateTime? readDateTime(Object? value) {
+    if (value is DateTime) return value;
+    final text = (value ?? '').toString().trim();
+    if (text.isEmpty) return null;
+    return DateTime.tryParse(text);
+  }
+
   ArtistAscensionTier parseTier(Object? raw) {
     final value = (raw ?? '').toString().trim().toLowerCase();
     switch (value) {
@@ -158,8 +164,6 @@ ArtistAscensionState artistAscensionFromDoc(Map<String, dynamic>? artistDoc) {
     insuranceEligible: ascension.containsKey('insuranceEligible')
         ? readBool(ascension['insuranceEligible'])
         : derived.insuranceEligible,
-    lastTierUpdatedAt: ascension['lastTierUpdatedAt'] is Timestamp
-        ? ascension['lastTierUpdatedAt'] as Timestamp
-        : null,
+    lastTierUpdatedAt: readDateTime(ascension['lastTierUpdatedAt']),
   );
 }

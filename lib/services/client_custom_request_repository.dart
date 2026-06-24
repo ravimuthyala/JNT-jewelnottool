@@ -1196,6 +1196,655 @@ class SubmittedClientRequestSummary {
       deliveredAt: deliveredAt,
     );
   }
+
+  static Future<SubmittedClientRequestSummary> fromSupabaseRow(
+    Map<String, dynamic> row,
+  ) async {
+    final data = Map<String, dynamic>.from(row);
+    final payloadData = _asMap(
+      data['payload'] ?? data['summary'] ?? data['data'],
+    );
+    final detailData = _asMap(
+      data['details'] ?? data['detail'] ?? data['meta'],
+    );
+    final sourceCollection =
+        _firstNonEmptyString([
+          data['source_collection'],
+          data['sourceCollection'],
+          payloadData['source_collection'],
+          payloadData['sourceCollection'],
+          detailData['source_collection'],
+          detailData['sourceCollection'],
+        ]).isNotEmpty
+        ? _firstNonEmptyString([
+            data['source_collection'],
+            data['sourceCollection'],
+            payloadData['source_collection'],
+            payloadData['sourceCollection'],
+            detailData['source_collection'],
+            detailData['sourceCollection'],
+          ])
+        : 'Company_Custom_Requests';
+
+    final requestDetails = <String, dynamic>{
+      ..._asMap(payloadData['requestDetails']),
+      ..._asMap(detailData['requestDetails']),
+    };
+    final orderDetails = <String, dynamic>{
+      ..._asMap(payloadData['order']),
+      ..._asMap(detailData['order']),
+    };
+
+    String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+      for (final value in values) {
+        final trimmed = (value ?? '').toString().trim();
+        if (trimmed.isNotEmpty) return trimmed;
+      }
+      return fallback;
+    }
+
+    String canonicalOrderNumber(
+      List<Object?> values, {
+      required String sourceCollection,
+    }) {
+      final normalized = values
+          .map((v) => (v ?? '').toString().trim())
+          .where((v) => v.isNotEmpty)
+          .toList(growable: false);
+      if (normalized.isEmpty) return '';
+      final preferredPrefixes = sourceCollection == 'Company_Custom_Requests'
+          ? const <String>['BE-', 'BR-']
+          : const <String>['CR-'];
+      for (final prefix in preferredPrefixes) {
+        for (final value in normalized) {
+          if (value.toUpperCase().startsWith(prefix)) return value;
+        }
+      }
+      return normalized.first;
+    }
+
+    final submittedRaw =
+        data['client_submitted_at_local'] ?? data['clientSubmittedAtLocal'];
+    DateTime? submittedAt;
+    if (submittedRaw is String && submittedRaw.isNotEmpty) {
+      submittedAt = DateTime.tryParse(submittedRaw);
+    } else {
+      submittedAt =
+          toDateTime(data['created_at']) ??
+          toDateTime(data['createdAt']) ??
+          toDateTime(payloadData['createdAt']) ??
+          toDateTime(detailData['createdAt']);
+    }
+
+    final descriptionPreview = firstNonEmpty([
+      data['description_preview'],
+      data['descriptionPreview'],
+    ]);
+    final fullDescription = firstNonEmpty([
+      requestDetails['description'],
+      data['description'],
+      descriptionPreview,
+    ]);
+    final campaignName = firstNonEmpty([
+      data['campaign_name'],
+      data['campaignName'],
+      requestDetails['campaignName'],
+      requestDetails['campaign'],
+      requestDetails['requestTitle'],
+      requestDetails['title'],
+      detailData['campaignName'],
+      detailData['campaign'],
+      detailData['requestTitle'],
+      detailData['title'],
+      payloadData['campaignName'],
+      payloadData['campaign'],
+      payloadData['requestTitle'],
+      payloadData['title'],
+      data['title'],
+      data['projectName'],
+      data['collectionName'],
+      descriptionPreview,
+    ]);
+    final contactName = firstNonEmpty([
+      data['contact_name'],
+      data['contactName'],
+      requestDetails['contactName'],
+      requestDetails['contactPerson'],
+      requestDetails['requesterName'],
+      detailData['contactName'],
+      detailData['contactPerson'],
+      detailData['requesterName'],
+      data['client_name'],
+      data['clientName'],
+      data['company_name'],
+      data['companyName'],
+      payloadData['contactName'],
+      payloadData['contactPerson'],
+      payloadData['requesterName'],
+      payloadData['clientName'],
+      payloadData['companyName'],
+    ]);
+    final selectedArtist = firstNonEmpty([
+      data['selected_artist'],
+      data['selectedArtist'],
+      data['artist_name'],
+      data['artistName'],
+      data['artist_display_name'],
+      data['artistDisplayName'],
+      orderDetails['selectedArtist'],
+    ], fallback: 'Artist');
+    final orderType = firstNonEmpty([
+      data['order_type'],
+      data['orderType'],
+      orderDetails['type'],
+      detailData['orderType'],
+    ], fallback: 'single').toLowerCase();
+    final cancellation = _asMap(detailData['cancellation'])
+      ..addAll(_asMap(requestDetails['cancellation']));
+    final cancelReason = firstNonEmpty([
+      data['cancel_reason'],
+      data['cancelReason'],
+      requestDetails['cancelReason'],
+      cancellation['reason'],
+    ]);
+    final inspirationPhotosRawList = _collectPhotoRefs(<Object?>[
+      payloadData['brand_inspiration_photos'],
+      payloadData['brandInspirationPhotos'],
+      payloadData['inspiration_photos'],
+      payloadData['inspirationPhotos'],
+      payloadData['clientImages'],
+      payloadData['photos'],
+      payloadData['previewImage'],
+      payloadData['previewImageAsset'],
+      detailData['brand_inspiration_photos'],
+      detailData['brandInspirationPhotos'],
+      (detailData['requestDetails']
+          as Map<String, dynamic>?)?['brandInspirationPhotos'],
+      detailData['inspiration_photos'],
+      detailData['inspirationPhotos'],
+      (detailData['requestDetails']
+          as Map<String, dynamic>?)?['inspirationPhotos'],
+      detailData['clientImages'],
+      detailData['previewImage'],
+      detailData['previewImageAsset'],
+      requestDetails['brandInspirationPhotos'],
+      requestDetails['inspirationPhotos'],
+      requestDetails['clientImages'],
+      requestDetails['previewImage'],
+      requestDetails['previewImageAsset'],
+      orderDetails['inspirationPhotos'],
+      orderDetails['previewImage'],
+      orderDetails['previewImageAsset'],
+      data['brand_inspiration_photos'],
+      data['brandInspirationPhotos'],
+      data['inspiration_photos'],
+      data['inspirationPhotos'],
+      data['previewImage'],
+      data['previewImageAsset'],
+    ]);
+    final inspirationPhotos =
+        await ClientCustomRequestRepository.resolvePhotoRefs(
+          inspirationPhotosRawList,
+        );
+    final profileSnapshot = _asMap(detailData['clientProfileSnapshot']);
+    final basicSnapshot = _asMap(profileSnapshot['basic']);
+    final clientProfileImageRaw = firstNonEmpty([
+      data['client_profile_image'],
+      data['clientProfileImage'],
+      data['client_profile_pic'],
+      data['clientProfilePic'],
+      data['company_profile_image'],
+      data['companyProfileImage'],
+      data['brand_profile_image'],
+      data['brandProfileImage'],
+      data['company_logo_url'],
+      data['companyLogoUrl'],
+      data['brand_logo_url'],
+      data['brandLogoUrl'],
+      data['logo_url'],
+      data['logoUrl'],
+      basicSnapshot['profileImageUrl'],
+      basicSnapshot['avatarUrl'],
+      basicSnapshot['profileImagePath'],
+      basicSnapshot['profilePhotoUrl'],
+      basicSnapshot['profilePhoto'],
+    ]);
+    final clientProfileImage =
+        await ClientCustomRequestRepository.resolvePhotoRef(
+          clientProfileImageRaw,
+        );
+    int? asInt(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.round();
+      return null;
+    }
+
+    double? asDouble(dynamic v) {
+      if (v is num) return v.toDouble();
+      return double.tryParse((v ?? '').toString());
+    }
+
+    final budgetObj = _asMap(detailData['budget'])
+      ..addAll(_asMap(payloadData['budget']));
+    final groupOrder = _asMap(detailData['groupOrder'])
+      ..addAll(_asMap(payloadData['groupOrder']));
+    final groupClientsRaw =
+        (orderDetails['clients'] as List<dynamic>?) ??
+        (groupOrder['clients'] as List<dynamic>?) ??
+        (data['group_clients'] as List<dynamic>?) ??
+        (data['groupClients'] as List<dynamic>?) ??
+        const <dynamic>[];
+    final groupClients = await _parseGroupClients(groupClientsRaw);
+    final budgetMin =
+        asInt(budgetObj['min']) ??
+        asInt(data['budget_min']) ??
+        asInt(data['budgetMin']);
+    final budgetMax =
+        asInt(budgetObj['max']) ??
+        asInt(data['budget_max']) ??
+        asInt(data['budgetMax']);
+    final artistQuote = _asMap(detailData['artistQuote'])
+      ..addAll(_asMap(payloadData['artistQuote']));
+    final payment = _asMap(detailData['payment'])
+      ..addAll(_asMap(payloadData['payment']));
+    final artistCompletion = _asMap(detailData['artistCompletion'])
+      ..addAll(_asMap(payloadData['artistCompletion']));
+    final designApproval = _asMap(detailData['designApproval'])
+      ..addAll(_asMap(payloadData['designApproval']));
+    final shipment = _asMap(detailData['shipment'])
+      ..addAll(_asMap(payloadData['shipment']));
+    final artistFinalAmount =
+        asDouble(artistQuote['total']) ??
+        asDouble(data['artist_final_amount']) ??
+        asDouble(data['artistFinalAmount']);
+    final paymentStatus = firstNonEmpty([
+      payment['status'],
+      data['payment_status'],
+      data['paymentStatus'],
+    ]).toLowerCase();
+    final paymentLink = firstNonEmpty([
+      payment['paymentLink'],
+      data['payment_link'],
+      data['paymentLink'],
+    ]);
+    final paidAt =
+        toDateTime(payment['paidAt']) ??
+        toDateTime(data['paid_at']) ??
+        toDateTime(data['paidAt']);
+
+    final needByAt =
+        toDateTime(data['need_by']) ??
+        toDateTime(data['needBy']) ??
+        toDateTime(requestDetails['needBy']) ??
+        toDateTime(detailData['needBy']) ??
+        toDateTime(payloadData['needBy']);
+    final requestAcceptByAt =
+        toDateTime(data['request_accept_by']) ??
+        toDateTime(data['requestAcceptBy']) ??
+        toDateTime(requestDetails['requestAcceptBy']) ??
+        toDateTime(detailData['requestAcceptBy']) ??
+        toDateTime(payloadData['requestAcceptBy']) ??
+        (needByAt == null
+            ? null
+            : DateTime(
+                needByAt.year,
+                needByAt.month,
+                needByAt.day,
+              ).subtract(const Duration(days: 5)));
+    String formatDateMmDdYyyy(DateTime date) {
+      final mm = date.month.toString().padLeft(2, '0');
+      final dd = date.day.toString().padLeft(2, '0');
+      return '$mm/$dd/${date.year}';
+    }
+
+    final resolvedNeedByDisplay = firstNonEmpty([
+      data['need_by_display'],
+      data['needByDisplay'],
+      requestDetails['needByDisplay'],
+      detailData['needByDisplay'],
+    ]);
+    final resolvedRequestAcceptByDisplay = firstNonEmpty([
+      data['request_accept_by_display'],
+      data['requestAcceptByDisplay'],
+      requestDetails['requestAcceptByDisplay'],
+      detailData['requestAcceptByDisplay'],
+    ]);
+    final cancelledAt =
+        toDateTime(data['cancelled_at']) ??
+        toDateTime(data['cancelledAt']) ??
+        toDateTime(requestDetails['cancelledAt']) ??
+        toDateTime(cancellation['cancelledAt']);
+
+    final artistCompletedPhotosRaw =
+        (artistCompletion['artistPhotos'] as List<dynamic>?) ??
+        (detailData['artistCompletedPhotos'] as List<dynamic>?) ??
+        (data['artist_completed_photos'] as List<dynamic>?) ??
+        (data['artistCompletedPhotos'] as List<dynamic>?) ??
+        const [];
+    final artistCompletedPhotos =
+        await ClientCustomRequestRepository.resolvePhotoRefs(
+          artistCompletedPhotosRaw
+              .whereType<String>()
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(growable: false),
+        );
+    final completionReviewStatus = firstNonEmpty([
+      data['completion_review_status'],
+      data['completionReviewStatus'],
+      artistCompletion['reviewStatus'],
+    ]).toLowerCase();
+    final completionDeclineReason = firstNonEmpty([
+      data['completion_decline_reason'],
+      data['completionDeclineReason'],
+      artistCompletion['declineReason'],
+    ]);
+    final completionDeclineDescription = firstNonEmpty([
+      data['completion_decline_description'],
+      data['completionDeclineDescription'],
+      artistCompletion['declineDescription'],
+    ]);
+    final completionDeclinedAt =
+        toDateTime(data['completion_declined_at']) ??
+        toDateTime(data['completionDeclinedAt']) ??
+        toDateTime(artistCompletion['reviewedAt']) ??
+        toDateTime(data['completionReviewedAt']);
+    final designApprovalStatus = firstNonEmpty([
+      data['design_approval_status'],
+      data['designApprovalStatus'],
+      data['clientDesignApprovalStatus'],
+      designApproval['status'],
+    ]).toLowerCase();
+    final designApprovedAt =
+        toDateTime(data['design_approved_at']) ??
+        toDateTime(data['designApprovedAt']) ??
+        toDateTime(data['clientDesignApprovedAt']) ??
+        toDateTime(designApproval['approvedAt']);
+    final designSubmittedAt =
+        toDateTime(data['design_submitted_at']) ??
+        toDateTime(data['designSubmittedAt']) ??
+        toDateTime(designApproval['submittedAt']) ??
+        toDateTime(designApproval['createdAt']);
+    final designApprovalDueAt =
+        toDateTime(data['design_approval_due_at']) ??
+        toDateTime(data['designApprovalDueAt']) ??
+        toDateTime(designApproval['dueAt']);
+    final designReminderSentAt =
+        toDateTime(data['design_reminder_sent_at']) ??
+        toDateTime(data['designReminderSentAt']) ??
+        toDateTime(designApproval['reminderSentAt']);
+    final designPreviewPhotosRaw =
+        (data['design_preview_photos'] as List<dynamic>?) ??
+        (data['designPreviewPhotos'] as List<dynamic>?) ??
+        (designApproval['previewPhotos'] as List<dynamic>?) ??
+        const [];
+    final designPreviewPhotos =
+        await ClientCustomRequestRepository.resolvePhotoRefs(
+          designPreviewPhotosRaw
+              .whereType<String>()
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(growable: false),
+        );
+    final acceptedByArtistEmail = firstNonEmpty([
+      data['accepted_by_artist_email'],
+      data['acceptedByArtistEmail'],
+      (detailData['acceptance']
+          as Map<String, dynamic>?)?['acceptedByArtistEmail'],
+    ]).toLowerCase();
+    final acceptedByClientEmail = firstNonEmpty([
+      data['accepted_by_client_email'],
+      data['acceptedByClientEmail'],
+      (detailData['acceptance']
+          as Map<String, dynamic>?)?['acceptedByClientEmail'],
+    ]).toLowerCase();
+    final declinedByClientEmails = <String>{
+      ...((data['declined_by_client_emails'] as List<dynamic>?) ??
+              (data['declinedByClientEmails'] as List<dynamic>?) ??
+              const <dynamic>[])
+          .whereType<String>()
+          .map((e) => e.trim().toLowerCase())
+          .where((e) => e.isNotEmpty),
+      ...((detailData['declinedByClientEmails'] as List<dynamic>?) ??
+              const <dynamic>[])
+          .whereType<String>()
+          .map((e) => e.trim().toLowerCase())
+          .where((e) => e.isNotEmpty),
+    }.toList(growable: false);
+    final declinedByArtistEmails = <String>{
+      ...((data['declined_by_artist_emails'] as List<dynamic>?) ??
+              (data['declinedByArtistEmails'] as List<dynamic>?) ??
+              const <dynamic>[])
+          .whereType<String>()
+          .map((e) => e.trim().toLowerCase())
+          .where((e) => e.isNotEmpty),
+      ...((detailData['declinedByArtistEmails'] as List<dynamic>?) ??
+              const <dynamic>[])
+          .whereType<String>()
+          .map((e) => e.trim().toLowerCase())
+          .where((e) => e.isNotEmpty),
+    }.toList(growable: false);
+    final selectedArtistEmail = firstNonEmpty([
+      data['selected_artist_email'],
+      data['selectedArtistEmail'],
+      orderDetails['selectedArtistEmail'],
+      (detailData['acceptance']
+          as Map<String, dynamic>?)?['selectedArtistEmail'],
+    ]).toLowerCase();
+    final artistIdentity = await _resolveArtistIdentity(
+      detailData: detailData,
+      data: data,
+      selectedArtistName: selectedArtist,
+      acceptedByArtistEmail: acceptedByArtistEmail,
+      selectedArtistEmail: selectedArtistEmail,
+    );
+    final acceptedByArtistName = artistIdentity.name;
+    final artistProfileImageRaw = artistIdentity.profileImageRef;
+    final artistProfileImage =
+        await ClientCustomRequestRepository.resolvePhotoRef(
+          artistProfileImageRaw,
+        );
+    final clientReview = _asMap(detailData['clientReview'])
+      ..addAll(_asMap(data['clientReview']));
+    final clientRating =
+        asDouble(data['client_rating']) ??
+        asDouble(data['clientRating']) ??
+        asDouble(clientReview['rating']);
+    final clientReviewText = firstNonEmpty([
+      data['client_review_text'],
+      data['clientReviewText'],
+      clientReview['comment'],
+    ]);
+    final clientReviewSubmittedAt =
+        toDateTime(data['client_review_submitted_at']) ??
+        toDateTime(data['clientReviewSubmittedAt']) ??
+        toDateTime(clientReview['submittedAt']);
+    final shippedByCourier = firstNonEmpty([
+      data['shipped_by_courier'],
+      data['shippedByCourier'],
+      shipment['courier'],
+      data['shippingCarrier'],
+    ]);
+    final trackingNumber = firstNonEmpty([
+      data['tracking_number'],
+      data['trackingNumber'],
+      shipment['trackingNumber'],
+      data['shippingLabelTrackingNumber'],
+    ]);
+    final shippedAt =
+        toDateTime(data['shipped_at']) ??
+        toDateTime(data['shippedAt']) ??
+        toDateTime(shipment['shippedAt']);
+    final deliveredAt =
+        toDateTime(data['delivered_at']) ??
+        toDateTime(data['deliveredAt']) ??
+        toDateTime(shipment['deliveredAt']);
+
+    final nailPrefs = _asMap(detailData['nailPreferences'])
+      ..addAll(_asMap(data['nailPreferences']));
+    final nailShape = firstNonEmpty([
+      nailPrefs['shape'],
+      data['nail_shape'],
+      data['nailShape'],
+    ]);
+    final nailLength = firstNonEmpty([
+      nailPrefs['length'],
+      data['nail_length'],
+      data['nailLength'],
+    ]);
+    final dims = _asMap(nailPrefs['dimensions'])
+      ..addAll(
+        _asMap(
+          data['nailPreferences'] is Map
+              ? (data['nailPreferences'] as Map)['dimensions']
+              : null,
+        ),
+      );
+
+    String dim(dynamic v) {
+      if (v is num) {
+        return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+      }
+      final s = (v ?? '').toString().trim();
+      return s.isEmpty ? '-' : s;
+    }
+
+    final left = <String, String>{
+      'thumb': dim(dims['lThumb']),
+      'index': dim(dims['lIndex']),
+      'middle': dim(dims['lMiddle']),
+      'ring': dim(dims['lRing']),
+      'pinky': dim(dims['lPinky']),
+    };
+    final right = <String, String>{
+      'thumb': dim(dims['rThumb']),
+      'index': dim(dims['rIndex']),
+      'middle': dim(dims['rMiddle']),
+      'ring': dim(dims['rRing']),
+      'pinky': dim(dims['rPinky']),
+    };
+
+    final isGroupOrder = orderType == 'group';
+    final isBrandRequest = sourceCollection == 'Company_Custom_Requests';
+    final rootStatus = firstNonEmpty([
+      if (isGroupOrder) data['status'],
+      if (isGroupOrder) detailData['status'],
+      if (!isGroupOrder) data['client_response_status'],
+      if (!isGroupOrder) data['clientResponseStatus'],
+      if (!isGroupOrder)
+        (detailData['acceptance']
+            as Map<String, dynamic>?)?['clientResponseStatus'],
+      data['client_status'],
+      data['clientStatus'],
+      (detailData['roleStatuses'] is Map
+          ? (detailData['roleStatuses'] as Map)['client']
+          : null),
+      data['brand_status'],
+      data['brandStatus'],
+      detailData['brandStatus'],
+    ], fallback: 'submitted').toLowerCase();
+    final resolvedStatus =
+        isBrandRequest &&
+            (cancelledAt != null || rootStatus == 'cancelled') &&
+            rootStatus != 'cancelled'
+        ? 'cancelled'
+        : rootStatus;
+
+    return SubmittedClientRequestSummary(
+      id: data['id']?.toString() ?? '',
+      sourceCollection: sourceCollection,
+      orderNumber: canonicalOrderNumber([
+        (data['admin'] is Map ? (data['admin'] as Map)['orderNumber'] : null),
+        (detailData['admin'] is Map
+            ? (detailData['admin'] as Map)['orderNumber']
+            : null),
+        data['order_number'],
+        data['orderNumber'],
+        detailData['orderNumber'],
+        data['order_no'],
+        data['orderNo'],
+        data['order_id'],
+        data['orderId'],
+      ], sourceCollection: sourceCollection),
+      status: resolvedStatus,
+      clientSubmittedAt: submittedAt,
+      needByDisplay: resolvedNeedByDisplay.isNotEmpty
+          ? resolvedNeedByDisplay
+          : (needByAt == null ? '' : formatDateMmDdYyyy(needByAt)),
+      needBy: needByAt,
+      requestAcceptByDisplay: resolvedRequestAcceptByDisplay.isNotEmpty
+          ? resolvedRequestAcceptByDisplay
+          : (requestAcceptByAt == null
+                ? ''
+                : formatDateMmDdYyyy(requestAcceptByAt)),
+      requestAcceptBy: requestAcceptByAt,
+      descriptionPreview: descriptionPreview,
+      description: fullDescription,
+      campaignName: campaignName,
+      contactName: contactName,
+      selectedArtist: selectedArtist,
+      orderType: orderType,
+      groupClients: groupClients,
+      cancelReason: cancelReason,
+      cancelledAt: cancelledAt,
+      inspirationPhotos: inspirationPhotos,
+      budgetMin: budgetMin,
+      budgetMax: budgetMax,
+      nailShape: nailShape,
+      nailLength: nailLength,
+      leftHandDimensions: left,
+      rightHandDimensions: right,
+      artistFinalAmount: artistFinalAmount,
+      paymentStatus: paymentStatus,
+      paymentLink: paymentLink,
+      paidAt: paidAt,
+      clientProfileImage: clientProfileImage,
+      artistCompletedPhotos: artistCompletedPhotos,
+      completionReviewStatus: completionReviewStatus,
+      completionDeclineReason: completionDeclineReason,
+      completionDeclineDescription: completionDeclineDescription,
+      completionDeclinedAt: completionDeclinedAt,
+      designApprovalStatus: designApprovalStatus,
+      designApprovedAt: designApprovedAt,
+      designSubmittedAt: designSubmittedAt,
+      designApprovalDueAt: designApprovalDueAt,
+      designReminderSentAt: designReminderSentAt,
+      designPreviewPhotos: designPreviewPhotos,
+      clientEmail: firstNonEmpty([
+        data['client_email'],
+        data['clientEmail'],
+        payloadData['clientEmail'],
+        detailData['clientEmail'],
+      ]).toLowerCase(),
+      acceptedByArtistEmail: acceptedByArtistEmail,
+      acceptedByClientEmail: acceptedByClientEmail,
+      clientResponseStatus: firstNonEmpty([
+        data['client_response_status'],
+        data['clientResponseStatus'],
+        detailData['clientResponseStatus'],
+        (detailData['acceptance']
+            as Map<String, dynamic>?)?['clientResponseStatus'],
+      ]).toLowerCase(),
+      declinedByClientEmails: declinedByClientEmails,
+      declinedByArtistEmails: declinedByArtistEmails,
+      directClientStatus: firstNonEmpty([
+        data['direct_client_status'],
+        data['directClientStatus'],
+        (detailData['routing'] is Map
+            ? (detailData['routing'] as Map)['directClientStatus']
+            : null),
+      ]).toLowerCase(),
+      acceptedByArtistName: acceptedByArtistName,
+      artistProfileImage: artistProfileImage,
+      clientRating: clientRating,
+      clientReviewText: clientReviewText,
+      clientReviewSubmittedAt: clientReviewSubmittedAt,
+      shippedByCourier: shippedByCourier,
+      trackingNumber: trackingNumber,
+      shippedAt: shippedAt,
+      deliveredAt: deliveredAt,
+    );
+  }
 }
 
 List<String> _collectPhotoRefs(List<Object?> sources) {
@@ -1248,6 +1897,14 @@ String _firstNonEmptyString(List<Object?> values) {
     if (trimmed.isNotEmpty) return trimmed;
   }
   return '';
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, innerValue) => MapEntry(key.toString(), innerValue));
+  }
+  return <String, dynamic>{};
 }
 
 class _ResolvedArtistIdentity {
@@ -1569,5 +2226,8 @@ Future<List<SubmittedGroupClientSummary>> _parseGroupClients(
 DateTime? toDateTime(dynamic raw) {
   if (raw is Timestamp) return raw.toDate();
   if (raw is DateTime) return raw;
+  if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
+  if (raw is int) return DateTime.fromMillisecondsSinceEpoch(raw);
+  if (raw is num) return DateTime.fromMillisecondsSinceEpoch(raw.round());
   return null;
 }

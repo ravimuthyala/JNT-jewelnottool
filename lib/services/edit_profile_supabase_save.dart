@@ -145,29 +145,97 @@ class EditProfileSupabaseSave {
     required String companyUrl,
     required String businessType,
   }) async {
-    final values = <String, dynamic>{
-      'companyName': companyName.trim(),
-      'displayName': companyName.trim(),
-      'contactName': contactName.trim(),
-      'contactEmail': contactEmail.trim().toLowerCase(),
-      'contactPhone': contactPhone.trim(),
-      'companyEmail': companyEmail.trim().toLowerCase(),
-      'companyPhone': companyPhone.trim(),
-      'companyUrl': companyUrl.trim(),
-      'businessType': businessType.trim(),
+    final companyNameValue = companyName.trim();
+    final contactNameValue = contactName.trim();
+    final contactEmailValue = contactEmail.trim().toLowerCase();
+    final contactPhoneValue = contactPhone.trim();
+    final companyEmailValue = companyEmail.trim().toLowerCase();
+    final companyPhoneValue = companyPhone.trim();
+    final companyUrlValue = companyUrl.trim();
+    final businessTypeValue = businessType.trim();
+
+    final row = <String, dynamic>{
+      'companyName': companyNameValue,
+      'company_name': companyNameValue,
+      'displayName': companyNameValue,
+      'contactName': contactNameValue,
+      'contact_name': contactNameValue,
+      'contactEmail': contactEmailValue,
+      'contact_email': contactEmailValue,
+      'contactPhone': contactPhoneValue,
+      'contact_phone': contactPhoneValue,
+      'companyEmail': companyEmailValue,
+      'company_email': companyEmailValue,
+      'companyPhone': companyPhoneValue,
+      'company_phone': companyPhoneValue,
+      'companyUrl': companyUrlValue,
+      'company_website': companyUrlValue,
+      'companyWebsite': companyUrlValue,
+      'businessType': businessTypeValue,
+      'business_type': businessTypeValue,
+      'panel_companyName': companyNameValue,
+      'panel_company_name': companyNameValue,
+      'panel_contactName': contactNameValue,
+      'panel_contact_name': contactNameValue,
+      'panel_contactEmail': contactEmailValue,
+      'panel_contact_email': contactEmailValue,
+      'panel_contactPhone': contactPhoneValue,
+      'panel_contact_phone': contactPhoneValue,
+      'panel_companyPhone': companyPhoneValue,
+      'panel_company_phone': companyPhoneValue,
+      'panel_companyWebsite': companyUrlValue,
+      'panel_company_website': companyUrlValue,
+      'panel_businessType': businessTypeValue,
+      'panel_business_type': businessTypeValue,
       'updatedAt': DateTime.now().toIso8601String(),
     };
 
-    await _updateProfileJson(
-      tables: const <String>['company'],
-      values: values,
-    );
-
-    await _updateProfileSection(
-      tables: const <String>['company'],
-      section: 'profile',
-      values: values,
-    );
+    await _client.from('company').upsert(<String, dynamic>{
+      'id': _uid,
+      'email': companyEmailValue,
+      'account_type': 'company',
+      'profile': row,
+      'basic': <String, dynamic>{
+        'companyName': companyNameValue,
+        'company_name': companyNameValue,
+        'displayName': companyNameValue,
+        'contactName': contactNameValue,
+        'contact_name': contactNameValue,
+        'contactEmail': contactEmailValue,
+        'contact_email': contactEmailValue,
+        'contactPhone': contactPhoneValue,
+        'contact_phone': contactPhoneValue,
+        'companyEmail': companyEmailValue,
+        'company_email': companyEmailValue,
+        'companyPhone': companyPhoneValue,
+        'company_phone': companyPhoneValue,
+        'companyUrl': companyUrlValue,
+        'company_website': companyUrlValue,
+        'businessType': businessTypeValue,
+        'business_type': businessTypeValue,
+      },
+      'company': <String, dynamic>{
+        'name': companyNameValue,
+        'contactName': contactNameValue,
+        'contactEmail': contactEmailValue,
+        'contactPhone': contactPhoneValue,
+        'phone': companyPhoneValue,
+        'companyPhone': companyPhoneValue,
+        'website': companyUrlValue,
+        'companyUrl': companyUrlValue,
+        'businessType': businessTypeValue,
+        'company_name': companyNameValue,
+        'contact_name': contactNameValue,
+        'contact_email': contactEmailValue,
+        'contact_phone': contactPhoneValue,
+        'company_phone': companyPhoneValue,
+        'company_website': companyUrlValue,
+        'business_type': businessTypeValue,
+      },
+      'addresses': <String, dynamic>{},
+      'billing': <String, dynamic>{},
+      ...row,
+    });
   }
 
   static Future<String> uploadProfilePhoto(Uint8List bytes) async {

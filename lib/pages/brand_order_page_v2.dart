@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/client_custom_request_repository.dart';
 import '../services/notifications_service.dart';
-import '../services/supabase_firebase_compat.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/notification_bell_button.dart';
@@ -52,9 +52,89 @@ class BrandOrderPageV2 extends StatefulWidget {
 
 class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   OrdersFilter _filter = OrdersFilter.all;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-  _submittedRequestsSub;
+  RealtimeChannel? _submittedRequestsChannel;
   List<ClientOrder> _submittedOrders = const [];
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  User? get _currentUser => _client.auth.currentUser;
+
+  String get _currentUid => (_currentUser?.id ?? '').trim();
+
+  String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
+  Map<String, dynamic> _asMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return <String, dynamic>{};
+  }
+
+  String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    for (final value in values) {
+      final text = (value ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return fallback;
+  }
+
+  String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    return _firstNonEmpty(values, fallback: fallback);
+  }
+
+  String _snakeLookup(Map<String, dynamic> row, String key) {
+    final lower = key.toLowerCase();
+    return row.keys.firstWhere(
+      (candidate) => candidate.toLowerCase() == lower,
+      orElse: () => key,
+    );
+  }
+
+  dynamic _rowValue(
+    Map<String, dynamic> row,
+    List<String> keys, {
+    Map<String, dynamic>? payload,
+    Map<String, dynamic>? details,
+  }) {
+    for (final key in keys) {
+      final rowKey = _snakeLookup(row, key);
+      if (row.containsKey(rowKey) && row[rowKey] != null) {
+        final value = row[rowKey];
+        if (value is String && value.trim().isEmpty) continue;
+        return value;
+      }
+      if (payload != null && payload.containsKey(key) && payload[key] != null) {
+        final value = payload[key];
+        if (value is String && value.trim().isEmpty) continue;
+        return value;
+      }
+      if (details != null && details.containsKey(key) && details[key] != null) {
+        final value = details[key];
+        if (value is String && value.trim().isEmpty) continue;
+        return value;
+      }
+    }
+    return null;
+  }
+
+  String _rowString(
+    Map<String, dynamic> row,
+    List<String> keys, {
+    Map<String, dynamic>? payload,
+    Map<String, dynamic>? details,
+    String fallback = '',
+  }) {
+    return _firstNonEmpty(
+      keys
+          .map(
+            (key) => _rowValue(row, [key], payload: payload, details: details),
+          )
+          .toList(growable: false),
+      fallback: fallback,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,126 +151,180 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   @override
   void dispose() {
-    _submittedRequestsSub?.cancel();
+    if (_submittedRequestsChannel != null) {
+      unawaited(_client.removeChannel(_submittedRequestsChannel!));
+    }
     super.dispose();
   }
 
-  void _subscribeSubmittedOrders() {
-    _submittedRequestsSub?.cancel();
-    final authEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+  Future<void> _subscribeSubmittedOrders() async {
+    if (_submittedRequestsChannel != null) {
+      unawaited(_client.removeChannel(_submittedRequestsChannel!));
+      _submittedRequestsChannel = null;
+    }
+    final authEmail = _currentEmail;
     final profileEmail = widget.profile.basic.email.trim().toLowerCase();
     final effectiveEmail = profileEmail.isNotEmpty ? profileEmail : authEmail;
     final profileName = widget.profile.basic.name.trim();
     final effectiveName = profileName.isNotEmpty
         ? profileName
         : widget.companyName.trim();
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    _submittedRequestsSub = FirebaseFirestore.instance
-        .collection('Company_Custom_Requests')
-        .snapshots()
-        .listen((snap) {
-          unawaited(
-            _handleCompanyRequestsSnapshot(
-              snap: snap,
-              authEmail: authEmail,
-              effectiveEmail: effectiveEmail,
-              effectiveName: effectiveName,
-              uid: uid,
-            ),
+    final uid = _currentUid;
+    _submittedRequestsChannel =
+        _client.channel('brand-order-company-custom-requests')
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'company_custom_requests',
+            callback: (_) {
+              unawaited(
+                _loadSubmittedOrders(
+                  authEmail: authEmail,
+                  effectiveEmail: effectiveEmail,
+                  effectiveName: effectiveName,
+                  uid: uid,
+                ),
+              );
+            },
           );
-        });
+    await _submittedRequestsChannel!.subscribe();
+    await _loadSubmittedOrders(
+      authEmail: authEmail,
+      effectiveEmail: effectiveEmail,
+      effectiveName: effectiveName,
+      uid: uid,
+    );
   }
 
-  Future<void> _handleCompanyRequestsSnapshot({
-    required QuerySnapshot<Map<String, dynamic>> snap,
+  Future<void> _loadSubmittedOrders({
     required String authEmail,
     required String effectiveEmail,
     required String effectiveName,
     required String uid,
   }) async {
-    bool matches(Map<String, dynamic> data) {
-      final requestType = (data['requestType'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final allowedTypes = <String>{
-        '',
-        'companycustomrequest',
-        'brandcustomrequest',
-        'brandrequest',
-        'direct',
-        'direct to client',
-        'direct to artist',
-        'standard',
-      };
-      if (!allowedTypes.contains(requestType)) {
-        return false;
+    try {
+      final rows = await _client.from('company_custom_requests').select();
+      final rowMaps = rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+      final matchedRows = rowMaps
+          .where(
+            (row) => _matchesCompanyRequest(
+              row,
+              authEmail: authEmail,
+              effectiveEmail: effectiveEmail,
+              effectiveName: effectiveName,
+              uid: uid,
+            ),
+          )
+          .toList(growable: false);
+      if (kDebugMode) {
+        debugPrint(
+          '[BrandOrderPage] company requests rows total=${rowMaps.length} matched=${matchedRows.length}',
+        );
       }
-      final docUid =
-          (data['companyUid'] ??
-                  data['requesterUid'] ??
-                  data['createdByUid'] ??
-                  data['uid'] ??
-                  '')
-              .toString()
-              .trim();
-      final companyEmail = (data['companyEmail'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final clientEmail = (data['clientEmail'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final companyName = (data['companyName'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final clientName = (data['clientName'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      if (uid.isNotEmpty && docUid == uid) return true;
-      if (effectiveEmail.isNotEmpty &&
-          (companyEmail == effectiveEmail || clientEmail == effectiveEmail)) {
-        return true;
+      final summaries = await Future.wait(
+        matchedRows.map(SubmittedClientRequestSummary.fromSupabaseRow),
+      );
+      final filteredItems = summaries
+          .where(_isVisibleInCompanyOrders)
+          .toList(growable: false);
+      await _syncExpiredRequests(filteredItems);
+      final orders = filteredItems.map(_mapSubmittedRequestToOrder).toList()
+        ..sort(
+          (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
+            a.createdAt ?? DateTime(1970),
+          ),
+        );
+      if (!mounted) return;
+      setState(() => _submittedOrders = orders);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrandOrderPage] failed to load company requests: $e');
       }
-      if (authEmail.isNotEmpty &&
-          (companyEmail == authEmail || clientEmail == authEmail)) {
-        return true;
-      }
-      if (effectiveName.isNotEmpty &&
-          (companyName == effectiveName || clientName == effectiveName)) {
-        return true;
-      }
-      return false;
     }
+  }
 
-    final matchedDocs = snap.docs
-        .where((doc) => matches(doc.data()))
-        .toList(growable: false);
-    if (kDebugMode) {
-      debugPrint(
-        '[BrandOrderPage] company requests snapshot total=${snap.docs.length} matched=${matchedDocs.length}',
-      );
+  bool _matchesCompanyRequest(
+    Map<String, dynamic> row, {
+    required String authEmail,
+    required String effectiveEmail,
+    required String effectiveName,
+    required String uid,
+  }) {
+    final payload = _asMap(row['payload']);
+    final details = _asMap(row['details']);
+    final requestType = _firstNonEmpty([
+      row['request_type'],
+      row['requestType'],
+      payload['request_type'],
+      payload['requestType'],
+      details['request_type'],
+      details['requestType'],
+    ]).toLowerCase().trim();
+    final allowedTypes = <String>{
+      '',
+      'companycustomrequest',
+      'brandcustomrequest',
+      'brandrequest',
+      'direct',
+      'direct to client',
+      'direct to artist',
+      'standard',
+    };
+    if (!allowedTypes.contains(requestType)) return false;
+    final docUid = _firstNonEmpty([
+      row['company_uid'],
+      row['companyUid'],
+      row['requester_uid'],
+      row['requesterUid'],
+      row['created_by_uid'],
+      row['createdByUid'],
+      row['uid'],
+      payload['company_uid'],
+      payload['companyUid'],
+      details['company_uid'],
+      details['companyUid'],
+    ]);
+    final companyEmail = _rowString(
+      row,
+      const ['company_email', 'companyEmail'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    final clientEmail = _rowString(
+      row,
+      const ['client_email', 'clientEmail'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    final companyName = _rowString(
+      row,
+      const ['company_name', 'companyName'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    final clientName = _rowString(
+      row,
+      const ['client_name', 'clientName'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    if (uid.isNotEmpty && docUid == uid) return true;
+    if (effectiveEmail.isNotEmpty &&
+        (companyEmail == effectiveEmail || clientEmail == effectiveEmail)) {
+      return true;
     }
-    final summaries = await Future.wait(
-      matchedDocs.map(SubmittedClientRequestSummary.fromDocWithDetails),
-    );
-    final filteredItems = summaries
-        .where(_isVisibleInCompanyOrders)
-        .toList(growable: false);
-    await _syncExpiredRequests(filteredItems);
-    final orders = filteredItems.map(_mapSubmittedRequestToOrder).toList()
-      ..sort(
-        (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
-          a.createdAt ?? DateTime(1970),
-        ),
-      );
-    if (!mounted) return;
-    setState(() => _submittedOrders = orders);
+    if (authEmail.isNotEmpty &&
+        (companyEmail == authEmail || clientEmail == authEmail)) {
+      return true;
+    }
+    if (effectiveName.isNotEmpty &&
+        (companyName == effectiveName || clientName == effectiveName)) {
+      return true;
+    }
+    return false;
   }
 
   bool _isVisibleInCompanyOrders(SubmittedClientRequestSummary req) {
@@ -225,51 +359,81 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       if (!pastDue) continue;
 
       try {
+        final row = await _client
+            .from('company_custom_requests')
+            .select()
+            .eq('id', req.id)
+            .maybeSingle();
+        final current = _asMap(row);
+        if (current.isEmpty) continue;
+        final payload = _asMap(current['payload']);
+        final details = _asMap(current['details']);
         final collection = req.sourceCollection.trim().isNotEmpty
             ? req.sourceCollection.trim()
-            : 'Client_Custom_Requests';
-        final ref = FirebaseFirestore.instance
-            .collection(collection)
-            .doc(req.id);
-        final snap = await ref.get();
-        final current = snap.data() ?? const <String, dynamic>{};
-        String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
-          for (final value in values) {
-            final text = (value ?? '').toString().trim();
-            if (text.isNotEmpty) return text;
-          }
-          return fallback;
-        }
+            : 'Company_Custom_Requests';
 
         final acceptedClientEmail = firstNonEmpty(<Object?>[
+          current['accepted_by_client_email'],
           current['acceptedByClientEmail'],
           req.acceptedByClientEmail,
         ]).toLowerCase();
-        final currentStatus = ((current['status'] ?? '') as Object)
-            .toString()
-            .trim()
-            .toLowerCase();
+        final currentStatus = firstNonEmpty([
+          current['status'],
+          current['client_status'],
+          current['brand_status'],
+          payload['status'],
+          payload['clientStatus'],
+          payload['brandStatus'],
+          details['status'],
+          details['clientStatus'],
+          details['brandStatus'],
+        ]).toLowerCase();
         if (currentStatus == 'expired' &&
-            current['expiredNotifiedClient'] == true &&
+            current['expired_notified_client'] == true &&
             (!isBrandRequest ||
-                (current['expiredNotifiedBrandAdmin'] == true &&
+                (current['expired_notified_brand_admin'] == true &&
                     (acceptedClientEmail.isEmpty ||
-                        current['expiredNotifiedAcceptedClient'] == true)))) {
+                        current['expired_notified_accepted_client'] ==
+                            true)))) {
           continue;
         }
-        await ref.set({
+        final nowIso = now.toIso8601String();
+        final updatedPayload = <String, dynamic>{
+          ...payload,
           'status': 'expired',
-          'expiredAt': FieldValue.serverTimestamp(),
+          'expiredAt': nowIso,
+          if (isBrandRequest) 'expiredReason': expirationReason,
           'expiredNotifiedClient': true,
           if (isBrandRequest) 'expiredNotifiedBrandAdmin': true,
           if (isBrandRequest && acceptedClientEmail.isNotEmpty)
             'expiredNotifiedAcceptedClient': true,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        await ref.collection('details').doc('payload').set({
+          'updatedAt': nowIso,
+        };
+        final updatedDetails = <String, dynamic>{
+          ...details,
           'status': 'expired',
+          'expiredAt': nowIso,
           if (isBrandRequest) 'expiredReason': expirationReason,
-        }, SetOptions(merge: true));
+          'expiredNotifiedClient': true,
+          if (isBrandRequest) 'expiredNotifiedBrandAdmin': true,
+          if (isBrandRequest && acceptedClientEmail.isNotEmpty)
+            'expiredNotifiedAcceptedClient': true,
+          'updatedAt': nowIso,
+        };
+        await _client
+            .from('company_custom_requests')
+            .update({
+              'status': 'expired',
+              'expired_at': nowIso,
+              'expired_notified_client': true,
+              if (isBrandRequest) 'expired_notified_brand_admin': true,
+              if (isBrandRequest && acceptedClientEmail.isNotEmpty)
+                'expired_notified_accepted_client': true,
+              'updated_at': nowIso,
+              'payload': updatedPayload,
+              'details': updatedDetails,
+            })
+            .eq('id', req.id);
 
         if (!isBrandRequest && (req.clientEmail).trim().isNotEmpty) {
           await NotificationsService.createUserNotification(
@@ -691,7 +855,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       await widget.onLogout!.call();
       return;
     }
-    await FirebaseAuth.instance.signOut();
+    await _client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -963,31 +1127,21 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   Future<void> _resubmitCancelledOrder(ClientOrder order) async {
     try {
-      final requestRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(order.id);
-      final rootSnap = await requestRef.get();
-      final detailSnap = await requestRef
-          .collection('details')
-          .doc('payload')
-          .get();
-
-      final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailData = detailSnap.data() ?? const <String, dynamic>{};
-
-      Map<String, dynamic> asMap(dynamic value) {
-        if (value is Map<String, dynamic>) {
-          return Map<String, dynamic>.from(value);
-        }
-        if (value is Map) {
-          return value.map((k, v) => MapEntry(k.toString(), v));
-        }
-        return <String, dynamic>{};
-      }
+      final row = await _client
+          .from('company_custom_requests')
+          .select()
+          .eq('id', order.id)
+          .maybeSingle();
+      final rowData = _asMap(row);
+      final rootData = <String, dynamic>{
+        ...rowData,
+        ..._asMap(rowData['payload']),
+      };
+      final detailData = _asMap(rowData['details']);
 
       final requestDetails = <String, dynamic>{
-        ...asMap(rootData['requestDetails']),
-        ...asMap(detailData['requestDetails']),
+        ..._asMap(rootData['requestDetails']),
+        ..._asMap(detailData['requestDetails']),
       };
       requestDetails['description'] ??=
           detailData['description'] ??
@@ -995,15 +1149,15 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           rootData['descriptionPreview'];
 
       final budget = <String, dynamic>{
-        ...asMap(rootData['budget']),
-        ...asMap(detailData['budget']),
+        ..._asMap(rootData['budget']),
+        ..._asMap(detailData['budget']),
       };
       budget['min'] ??= rootData['budgetMin'];
       budget['max'] ??= rootData['budgetMax'];
 
       final orderMap = <String, dynamic>{
-        ...asMap(rootData['order']),
-        ...asMap(detailData['order']),
+        ..._asMap(rootData['order']),
+        ..._asMap(detailData['order']),
       };
       orderMap['type'] ??= detailData['orderType'] ?? rootData['orderType'];
       orderMap['allowNonLicensed'] ??=
@@ -1018,8 +1172,8 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           detailData['fallbackToPool'] ?? rootData['fallbackToPool'];
 
       final groupOrder = <String, dynamic>{
-        ...asMap(rootData['groupOrder']),
-        ...asMap(detailData['groupOrder']),
+        ..._asMap(rootData['groupOrder']),
+        ..._asMap(detailData['groupOrder']),
       };
       if (groupOrder['clients'] == null) {
         groupOrder['clients'] =
@@ -1033,17 +1187,19 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       final initialRequestData = <String, dynamic>{
         ...rootData,
         ...detailData,
+        'payload': rootData['payload'],
+        'details': detailData,
         'requestDetails': requestDetails,
         'budget': budget,
         'order': orderMap,
         'shipping': <String, dynamic>{
-          ...asMap(rootData['shipping']),
-          ...asMap(detailData['shipping']),
+          ..._asMap(rootData['shipping']),
+          ..._asMap(detailData['shipping']),
         },
         'groupOrder': groupOrder,
         'nailPreferences': <String, dynamic>{
-          ...asMap(rootData['nailPreferences']),
-          ...asMap(detailData['nailPreferences']),
+          ..._asMap(rootData['nailPreferences']),
+          ..._asMap(detailData['nailPreferences']),
         },
         'inspirationPhotos':
             (detailData['inspirationPhotos'] as List<dynamic>?) ??
@@ -1773,5 +1929,3 @@ class OrderClientMeasurement {
     this.rightHandDimensions = const <String, String>{},
   });
 }
-
-
