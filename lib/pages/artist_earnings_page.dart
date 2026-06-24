@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
@@ -44,44 +43,71 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   _EarningsRange _range = _EarningsRange.allTime;
   final List<ClientRequestV2> _allVisible = <ClientRequestV2>[];
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientRequestsSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _companyRequestsSub;
-  Stream<Map<String, dynamic>>? _ascensionStream;
+  RealtimeChannel? _requestsChannel;
+  Map<String, dynamic> _ascensionData = const <String, dynamic>{
+    'tier': 'maker',
+    'points': 0,
+    'pointsToNextTier': 1000,
+    'nextTierLabel': 'Goldsmith',
+  };
 
   @override
   void initState() {
     super.initState();
-    _bindRealtime();
-    _ascensionStream = _artistAscensionStream();
+    _bindRealtimeChannel();
+    _loadAscensionFromSupabase();
     _reload();
   }
 
   @override
   void dispose() {
-    _clientRequestsSub?.cancel();
-    _companyRequestsSub?.cancel();
+    _requestsChannel?.unsubscribe();
     super.dispose();
   }
 
-  void _bindRealtime() {
-    _clientRequestsSub?.cancel();
-    _companyRequestsSub?.cancel();
+  void _bindRealtimeChannel() {
+    _requestsChannel?.unsubscribe();
+    _requestsChannel = Supabase.instance.client
+        .channel('artist_earnings_requests')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'client_custom_requests',
+          callback: (_) => _reload(),
+        )
+        .subscribe((status, [error]) {
+          if (error != null) {
+            debugPrint('Artist earnings realtime error: $error');
+          }
+        });
+  }
 
-    _clientRequestsSub = FirebaseFirestore.instance
-        .collection('Client_Custom_Requests')
-        .snapshots()
-        .listen((_) => _reload());
-
-    _companyRequestsSub = FirebaseFirestore.instance
-        .collection('Company_Custom_Requests')
-        .snapshots()
-        .listen((_) => _reload());
+  Future<void> _loadAscensionFromSupabase() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      Map<String, dynamic>? row;
+      for (final table in const ['artist', 'client_artist']) {
+        row = await Supabase.instance.client
+            .from(table)
+            .select('profile')
+            .eq('id', uid)
+            .maybeSingle();
+        if (row != null) break;
+      }
+      if (row == null || !mounted) return;
+      final profile = (row['profile'] as Map<String, dynamic>?) ?? {};
+      if (!mounted) return;
+      setState(() => _ascensionData = _ascensionSummaryFromProfile(profile));
+    } catch (_) {
+      // keep defaults
+    }
   }
 
   Future<void> _reload() async {
     try {
       final currentArtistEmail =
-          (FirebaseAuth.instance.currentUser?.email ?? '').trim().toLowerCase();
+          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
       final all = await ArtistRequestsRepository.fetchAllRequests();
       if (!mounted) return;
 
@@ -270,58 +296,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
 
   String _money(double v) => '\$${v.toStringAsFixed(2)}';
 
-  Stream<Map<String, dynamic>> _artistAscensionStream() async* {
-    final ref = await _resolveArtistDocRef();
-    if (ref == null) {
-      yield _defaultAscensionData();
-      return;
-    }
-    await for (final snap in ref.snapshots()) {
-      final data = snap.data() ?? const <String, dynamic>{};
-      yield _ascensionSummaryFromArtistDoc(data);
-    }
-  }
-
-  Future<DocumentReference<Map<String, dynamic>>?>
-  _resolveArtistDocRef() async {
-    final db = FirebaseFirestore.instance;
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-
-    if (uid.isNotEmpty) {
-      for (final col in const <String>['artist', 'client_artist']) {
-        final candidate = db.collection(col).doc(uid);
-        final snap = await candidate.get();
-        if (snap.exists) return candidate;
-      }
-    }
-
-    if (email.isNotEmpty) {
-      for (final col in const <String>['artist', 'client_artist']) {
-        final q = await db
-            .collection(col)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (q.docs.isNotEmpty) return q.docs.first.reference;
-      }
-    }
-    return null;
-  }
-
-  Map<String, dynamic> _defaultAscensionData() {
-    return const <String, dynamic>{
-      'tier': 'maker',
-      'points': 0,
-      'pointsToNextTier': 1000,
-      'nextTierLabel': 'Goldsmith',
-    };
-  }
-
-  Map<String, dynamic> _ascensionSummaryFromArtistDoc(
-    Map<String, dynamic> data,
+  Map<String, dynamic> _ascensionSummaryFromProfile(
+    Map<String, dynamic> profile,
   ) {
     int asInt(Object? raw) {
       if (raw is int) return raw;
@@ -338,25 +314,28 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     }
 
     final ascension =
-        (data['ascension'] as Map<String, dynamic>?) ??
+        (profile['ascension'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-    final points = asInt(ascension['points'] ?? data['panel_ascensionPoints']);
-    var tierRaw = firstNonEmpty([
+    final points = asInt(
+      ascension['points'] ??
+          profile['panel_ascensionPoints'] ??
+          profile['ascensionPoints'],
+    );
+    final tierRaw = firstNonEmpty([
       ascension['tier'],
-      data['panel_ascensionLevel'],
+      profile['panel_ascensionLevel'],
+      profile['ascensionTier'],
     ]).toLowerCase();
 
     String tier;
     if (tierRaw == 'maker' || tierRaw == 'goldsmith' || tierRaw == 'crowned') {
       tier = tierRaw;
+    } else if (points >= 9750) {
+      tier = 'crowned';
+    } else if (points >= 1000) {
+      tier = 'goldsmith';
     } else {
-      if (points >= 9750) {
-        tier = 'crowned';
-      } else if (points >= 1000) {
-        tier = 'goldsmith';
-      } else {
-        tier = 'maker';
-      }
+      tier = 'maker';
     }
 
     int pointsToNext;
@@ -494,28 +473,22 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                     deltaLabel: '${_money(summary.monthEarnings)} this month',
                   ),
                   const SizedBox(height: 12),
-                  StreamBuilder<Map<String, dynamic>>(
-                    stream: _ascensionStream,
-                    initialData: _defaultAscensionData(),
-                    builder: (context, snapshot) {
-                      final data = snapshot.data ?? _defaultAscensionData();
-                      return _AscensionSummaryCard(
-                        tier: (data['tier'] ?? 'maker').toString(),
-                        points: _asIntSafe(data['points']),
-                        pointsToNextTier: _asIntSafe(
-                          data['pointsToNextTier'],
-                          fallback: 1000,
-                        ),
-                        nextTierLabel: (data['nextTierLabel'] ?? 'Goldsmith')
+                  _AscensionSummaryCard(
+                    tier: (_ascensionData['tier'] ?? 'maker').toString(),
+                    points: _asIntSafe(_ascensionData['points']),
+                    pointsToNextTier: _asIntSafe(
+                      _ascensionData['pointsToNextTier'],
+                      fallback: 1000,
+                    ),
+                    nextTierLabel:
+                        (_ascensionData['nextTierLabel'] ?? 'Goldsmith')
                             .toString(),
-                        onViewAscension: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const JntAscensionPage(),
-                            ),
-                          );
-                        },
+                    onViewAscension: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const JntAscensionPage(),
+                        ),
                       );
                     },
                   ),
