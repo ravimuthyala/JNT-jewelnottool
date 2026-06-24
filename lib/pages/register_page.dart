@@ -471,7 +471,7 @@ class _RoleTileNoIconState extends State<_RoleTileNoIcon> {
   Widget build(BuildContext context) {
     final borderColor = widget.selected
         ? AppColors.blackCat
-        : AppColors.blackCat.withOpacity(0.35);
+        : AppColors.blackCat.withValues(alpha: 0.35);
 
     return Semantics(
       button: true,

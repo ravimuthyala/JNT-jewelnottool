@@ -1,21 +1,15 @@
 // lib/pages/client_registration_page.dart
 
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, UserAttributes, FileOptions;
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image/image.dart' as img;
 import '../services/supabase_auth_service.dart';
 import '../services/supabase_bootstrap.dart';
 import '../theme/app_colors.dart';
 import '../config/auth_flags.dart';
 import '../models/client_profile_models.dart';
-import '../services/auth_email_alias_service.dart';
-import '../services/nail_measurement_service.dart';
 import '../services/notifications_service.dart';
 import '../utils/registration_input_utils.dart';
 
@@ -48,7 +42,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   // TEMP: allow registration even if checkout flow isn't complete.
   // Flip to false when checkout is enforced.
   static const bool kAllowRegistrationWithoutCheckout = true;
-  static const bool kEnableGuidedMeasurement = true;
 
   bool _submitting = false;
   bool _pickingImage = false;
@@ -882,31 +875,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       'createdAt': DateTime.now().toIso8601String(),
       'updatedAt': DateTime.now().toIso8601String(),
     };
-  }
-
-  String _profileImageDataUriFallback() {
-    final bytes = _profilePhotoBytes;
-    if (bytes == null || bytes.isEmpty) return '';
-    return 'data:image/jpeg;base64,${base64Encode(bytes)}';
-  }
-
-  Uint8List? _optimizedProfileBytes(Uint8List source) {
-    final decoded = img.decodeImage(source);
-    if (decoded == null) return null;
-    img.Image processed = decoded;
-    final maxSide = processed.width > processed.height
-        ? processed.width
-        : processed.height;
-    if (maxSide > 700) {
-      final scale = 700 / maxSide;
-      processed = img.copyResize(
-        processed,
-        width: (processed.width * scale).round(),
-        height: (processed.height * scale).round(),
-        interpolation: img.Interpolation.average,
-      );
-    }
-    return Uint8List.fromList(img.encodeJpg(processed, quality: 62));
   }
 
   Future<String> _uploadProfileImage(String uid) async {
