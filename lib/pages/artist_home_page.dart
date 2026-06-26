@@ -77,6 +77,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
 
   List<ClientRequestV2> _recentRequests = const <ClientRequestV2>[];
   String _artistDisplayName = '';
+  bool _identityLoaded = false;
 
   @override
   void initState() {
@@ -109,6 +110,8 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
   }
 
   Future<void> _loadArtistIdentity() async {
+    if (_identityLoaded && _artistDisplayName.isNotEmpty) return;
+
     final supabase = Supabase.instance.client;
     final uid = (supabase.auth.currentUser?.id ?? '').trim();
     final email =
@@ -121,14 +124,14 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
         if (uid.isNotEmpty) {
           row = await supabase
               .from(table)
-              .select()
+              .select('id, email, display_name, name, profile')
               .eq('id', uid)
               .maybeSingle();
         }
         if (row == null && email.isNotEmpty) {
           row = await supabase
               .from(table)
-              .select()
+              .select('id, email, display_name, name, profile')
               .eq('email', email)
               .maybeSingle();
         }
@@ -160,6 +163,7 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
     if (!mounted) return;
     setState(() {
       _artistDisplayName = nextName;
+      _identityLoaded = true;
     });
   }
 

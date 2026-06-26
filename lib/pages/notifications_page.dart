@@ -68,11 +68,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
   bool _didSetInitialFocus = false;
   bool _closeFocused = false;
   bool _markAllFocused = false;
+  Timer? _emitDebounce;
+
+  late final Stream<List<_NotificationItem>> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _buildNotificationsStream();
+  }
 
   String get _email =>
       (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
 
-  Stream<List<_NotificationItem>> _notificationsStream() {
+  Stream<List<_NotificationItem>> _buildNotificationsStream() {
     final email = _email;
     if (email.isEmpty) return Stream.value(const <_NotificationItem>[]);
 
@@ -119,11 +128,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
             column: 'receiver_email',
             value: email,
           ),
-          callback: (_) => unawaited(emit()),
+          callback: (_) {
+            _emitDebounce?.cancel();
+            _emitDebounce = Timer(
+              const Duration(milliseconds: 300),
+              () => unawaited(emit()),
+            );
+          },
         )
         .subscribe();
 
     controller.onCancel = () async {
+      _emitDebounce?.cancel();
       await Supabase.instance.client.removeChannel(channel);
     };
 
@@ -164,10 +180,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
         .from('user_notifications')
         .update({'read': true})
         .eq('id', item.id);
-    await NotificationsService.trimUserNotifications(
-      receiverEmail: _email,
-      maxKeep: 25,
-    );
 
     if (!mounted) return;
 
@@ -180,11 +192,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   void dispose() {
+    _emitDebounce?.cancel();
     _closeFocusNode.dispose();
     _markAllFocusNode.dispose();
     _firstNotificationFocusNode.dispose();
     super.dispose();
   }
+
+  Stream<List<_NotificationItem>> get _notificationsStream => _stream;
 
   void _scheduleInitialFocus({
     required int unreadCount,
@@ -239,7 +254,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           centerTitle: true,
           actions: [
             StreamBuilder<List<_NotificationItem>>(
-              stream: _notificationsStream(),
+              stream: _notificationsStream,
               builder: (context, snap) {
                 final items = snap.data ?? const <_NotificationItem>[];
                 final unreadCount = items.where((e) => e.unread).length;
@@ -292,7 +307,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ],
         ),
         body: StreamBuilder<List<_NotificationItem>>(
-          stream: _notificationsStream(),
+          stream: _notificationsStream,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {

@@ -62,13 +62,12 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   DateTime _selectedDay = _dateOnly(DateTime.now());
   List<ClientRequest> _supabaseRequests = const <ClientRequest>[];
   StreamSubscription<List<Map<String, dynamic>>>? _calendarSub;
-  bool _loadingSupabaseRequests = false;
+  bool _streamLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
-    unawaited(_loadCalendarRequestsFromSupabase());
     _listenCalendarRequestsFromSupabase();
   }
 
@@ -93,25 +92,6 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return byId.values.toList(growable: false);
   }
 
-  Future<void> _loadCalendarRequestsFromSupabase() async {
-    if (_loadingSupabaseRequests) return;
-    _loadingSupabaseRequests = true;
-    try {
-      final rows = await _fetchCalendarRequestRowsFromSupabase();
-      final mapped = rows
-          .map(_requestFromSupabaseRow)
-          .whereType<ClientRequest>()
-          .toList(growable: false);
-
-      if (!mounted) return;
-      setState(() => _supabaseRequests = mapped);
-    } catch (e) {
-      debugPrint('ARTIST CALENDAR LOAD FAILED: $e');
-    } finally {
-      _loadingSupabaseRequests = false;
-    }
-  }
-
   void _listenCalendarRequestsFromSupabase() {
     final user = Supabase.instance.client.auth.currentUser;
     final email = (user?.email ?? '').trim().toLowerCase();
@@ -121,6 +101,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
       _calendarSub = Supabase.instance.client
           .from('client_custom_requests')
           .stream(primaryKey: ['id'])
+          .eq('accepted_by_artist_email', email)
           .order('updated_at', ascending: false)
           .listen((rows) {
             final mapped = rows
@@ -133,57 +114,13 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                 .toList(growable: false);
 
             if (!mounted) return;
-            setState(() => _supabaseRequests = mapped);
+            setState(() {
+              _supabaseRequests = mapped;
+              _streamLoaded = true;
+            });
           });
     } catch (e) {
       debugPrint('ARTIST CALENDAR STREAM FAILED: $e');
-    }
-  }
-
-  Future<List<Map<String, dynamic>>>
-  _fetchCalendarRequestRowsFromSupabase() async {
-    final supabase = Supabase.instance.client;
-    final now = DateTime.now();
-    final minDate = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(const Duration(days: 30));
-    final maxDate = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).add(const Duration(days: 120));
-
-    try {
-      final rows = await supabase
-          .from('client_custom_requests')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(250);
-
-      return rows
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .where((row) {
-            final data = _flattenCalendarRow(row);
-            final neededBy = _dateFromAny(
-              _firstNonEmptyCalendar([
-                data['needBy'],
-                data['neededBy'],
-                data['dueDate'],
-                data['createdAt'],
-                data['created_at'],
-              ]),
-            );
-            if (neededBy == null) return true;
-            final d = _dateOnly(neededBy);
-            return !d.isBefore(minDate) && !d.isAfter(maxDate);
-          })
-          .toList(growable: false);
-    } catch (e) {
-      debugPrint('ARTIST CALENDAR FETCH FAILED: $e');
-      return const <Map<String, dynamic>>[];
     }
   }
 
@@ -905,19 +842,35 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                 ),
               ),
               const SizedBox(height: 10),
-              ..._agendaForDate(_selectedDay).map(_agendaTile),
-              if (_agendaForDate(_selectedDay).isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(
-                    'No due requests for this day',
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w400,
-                      fontSize: 11.5,
+              if (!_streamLoaded && widget.requests.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.blackCat,
+                      ),
                     ),
                   ),
-                ),
+                )
+              else ...[
+                ..._agendaForDate(_selectedDay).map(_agendaTile),
+                if (_agendaForDate(_selectedDay).isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'No due requests for this day',
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontWeight: FontWeight.w400,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -1045,6 +998,19 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   }
 
   Widget _scheduleView() {
+    if (!_streamLoaded && widget.requests.isEmpty) {
+      return const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.blackCat,
+          ),
+        ),
+      );
+    }
+
     final upcoming = _upcomingRequestsSorted();
 
     return ListView(

@@ -639,6 +639,21 @@ class _CompatDb {
     try {
       dynamic query = _sb.from(table).select();
 
+      // Push equality filters to the server to avoid fetching entire tables.
+      final clientFilters = <_WhereFilter>[];
+      for (final f in filters) {
+        if (f.value == null) {
+          clientFilters.add(f);
+          continue;
+        }
+        final col = _snake(f.field);
+        query = query.eq(col, f.value);
+      }
+
+      if (orderBy != null) {
+        query = query.order(_snake(orderBy), ascending: !descending);
+      }
+
       final rows = await query.limit(limit ?? 1000);
       if (rows is! List) return const <_CompatRow>[];
 
@@ -647,7 +662,7 @@ class _CompatDb {
         final dbRow = Map<String, dynamic>.from(raw);
         final data = _decodeRow(collection, dbRow);
         var ok = true;
-        for (final filter in filters) {
+        for (final filter in clientFilters) {
           final expected = (filter.value ?? '').toString();
           final actual = (data[filter.field] ??
                   data[_snake(filter.field)] ??
