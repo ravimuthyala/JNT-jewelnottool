@@ -339,52 +339,27 @@ class AscensionService {
 
     final keyFromPath = _overrideDocIdFromPath(artistDocPath);
     final email = artistEmail.trim().toLowerCase();
-    final docsToTry = <String>{keyFromPath, email};
+    final normalizedPath = artistDocPath.trim().toLowerCase();
 
-    for (final docId in docsToTry) {
-      if (docId.isEmpty) continue;
-      final row = await supabase
-          .from('ascension_overrides')
-          .select()
-          .eq('id', docId)
-          .maybeSingle();
-      if (row == null) continue;
+    final filterParts = <String>[
+      if (keyFromPath.isNotEmpty) 'id.eq.$keyFromPath',
+      if (email.isNotEmpty && email != keyFromPath) 'id.eq.$email',
+      if (email.isNotEmpty) 'artist_email.eq.$email',
+      if (normalizedPath.isNotEmpty) 'artist_doc_path.eq.${artistDocPath.trim()}',
+      if (normalizedPath.isNotEmpty) 'artist_doc_path_lower.eq.$normalizedPath',
+    ];
+
+    if (filterParts.isEmpty) return null;
+
+    final rows = await supabase
+        .from('ascension_overrides')
+        .select('id, artist_email, artist_doc_path, artist_doc_path_lower, override_level, active')
+        .or(filterParts.join(','))
+        .limit(20);
+
+    for (final row in rows) {
       final data = normRow(row);
       if (looksLikeUsableOverride(data)) return data;
-    }
-
-    if (email.isNotEmpty) {
-      final rows = await supabase
-          .from('ascension_overrides')
-          .select()
-          .eq('artist_email', email)
-          .limit(20);
-      for (final row in rows) {
-        final data = normRow(row);
-        if (looksLikeUsableOverride(data)) return data;
-      }
-    }
-
-    if (artistDocPath.trim().isNotEmpty) {
-      final normalizedPath = artistDocPath.trim().toLowerCase();
-      final byPath = await supabase
-          .from('ascension_overrides')
-          .select()
-          .eq('artist_doc_path', artistDocPath.trim())
-          .limit(20);
-      for (final row in byPath) {
-        final data = normRow(row);
-        if (looksLikeUsableOverride(data)) return data;
-      }
-      final byPathLower = await supabase
-          .from('ascension_overrides')
-          .select()
-          .eq('artist_doc_path_lower', normalizedPath)
-          .limit(20);
-      for (final row in byPathLower) {
-        final data = normRow(row);
-        if (looksLikeUsableOverride(data)) return data;
-      }
     }
 
     return null;

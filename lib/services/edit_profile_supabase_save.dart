@@ -366,13 +366,13 @@ class EditProfileSupabaseSave {
 
   static Future<Map<String, dynamic>?> _selectExisting(String table) async {
     if (_uid.isNotEmpty) {
-      final byId = await _client.from(table).select().eq('id', _uid).maybeSingle();
+      final byId = await _client.from(table).select('id, email, profile, display_name, name').eq('id', _uid).maybeSingle();
       if (byId != null) return Map<String, dynamic>.from(byId);
     }
 
     if (_email.isNotEmpty) {
       final byEmail =
-          await _client.from(table).select().eq('email', _email).maybeSingle();
+          await _client.from(table).select('id, email, profile, display_name, name').eq('email', _email).maybeSingle();
       if (byEmail != null) return Map<String, dynamic>.from(byEmail);
     }
 
