@@ -90,15 +90,15 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
       for (final table in const ['artist', 'client_artist']) {
         row = await Supabase.instance.client
             .from(table)
-            .select('profile')
+            .select('profile->ascension')
             .eq('id', uid)
             .maybeSingle();
         if (row != null) break;
       }
       if (row == null || !mounted) return;
-      final profile = (row['profile'] as Map<String, dynamic>?) ?? {};
+      final ascension = (row['profile'] as Map<String, dynamic>?) ?? {};
       if (!mounted) return;
-      setState(() => _ascensionData = _ascensionSummaryFromProfile(profile));
+      setState(() => _ascensionData = _ascensionSummaryFromProfile({'ascension': ascension}));
     } catch (_) {
       // keep defaults
     }
