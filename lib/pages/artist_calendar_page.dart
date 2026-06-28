@@ -61,7 +61,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   DateTime _focusedMonth = _startOfMonth(DateTime.now());
   DateTime _selectedDay = _dateOnly(DateTime.now());
   List<ClientRequest> _supabaseRequests = const <ClientRequest>[];
-  StreamSubscription<List<Map<String, dynamic>>>? _calendarSub;
+  RealtimeChannel? _calendarChannel;
   bool _streamLoaded = false;
 
   @override
@@ -73,7 +73,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
 
   @override
   void dispose() {
-    _calendarSub?.cancel();
+    _calendarChannel?.unsubscribe();
     _tabCtrl.dispose();
     super.dispose();
   }
@@ -97,30 +97,50 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     final email = (user?.email ?? '').trim().toLowerCase();
     if (email.isEmpty) return;
 
-    try {
-      _calendarSub = Supabase.instance.client
-          .from('client_custom_requests')
-          .stream(primaryKey: ['id'])
-          .eq('accepted_by_artist_email', email)
-          .order('updated_at', ascending: false)
-          .listen((rows) {
-            final mapped = rows
-                .whereType<Map>()
-                .map(
-                  (row) =>
-                      _requestFromSupabaseRow(Map<String, dynamic>.from(row)),
-                )
-                .whereType<ClientRequest>()
-                .toList(growable: false);
+    unawaited(_refetch(email));
 
-            if (!mounted) return;
-            setState(() {
-              _supabaseRequests = mapped;
-              _streamLoaded = true;
-            });
-          });
+    _calendarChannel?.unsubscribe();
+    _calendarChannel = Supabase.instance.client
+        .channel('artist_calendar_$email')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'client_custom_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'accepted_by_artist_email',
+            value: email,
+          ),
+          callback: (_) => unawaited(_refetch(email)),
+        )
+        .subscribe((status, [error]) {
+          if (error != null) {
+            debugPrint('ARTIST CALENDAR REALTIME ERROR: $error');
+          }
+        });
+  }
+
+  Future<void> _refetch(String email) async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('client_custom_requests')
+          .select('id, status, order_number, summary, details, accepted_by_artist_email, client_name, artist_status, inspiration_photos, photo_count, created_at, updated_at')
+          .eq('accepted_by_artist_email', email)
+          .order('updated_at', ascending: false);
+
+      final mapped = (rows as List<dynamic>)
+          .whereType<Map>()
+          .map((row) => _requestFromSupabaseRow(Map<String, dynamic>.from(row)))
+          .whereType<ClientRequest>()
+          .toList(growable: false);
+
+      if (!mounted) return;
+      setState(() {
+        _supabaseRequests = mapped;
+        _streamLoaded = true;
+      });
     } catch (e) {
-      debugPrint('ARTIST CALENDAR STREAM FAILED: $e');
+      debugPrint('ARTIST CALENDAR REFETCH FAILED: $e');
     }
   }
 
