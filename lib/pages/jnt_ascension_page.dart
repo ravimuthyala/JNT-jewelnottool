@@ -17,7 +17,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   static const int crownedMin = 9750;
 
   RealtimeChannel? _artistChannel;
-  String _artistCollection = '';
+
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   _AscTab _activeTab = _AscTab.activity;
   bool _syncingAscension = false;
@@ -50,7 +50,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             .eq('email', email)
             .maybeSingle();
         if (row != null) {
-          _artistCollection = collection;
           if (mounted) {
             setState(() {
               _artistData = _flattenArtistRow(row);

@@ -605,7 +605,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           .eq('id', id)
           .limit(1);
       final existing =
-          (rows is List && rows.isNotEmpty && rows.first['portfolio'] is Map)
+          (rows.isNotEmpty && rows.first['portfolio'] is Map)
           ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
           : <String, dynamic>{};
       final images = List<dynamic>.from(existing['images'] as List? ?? []);
@@ -2354,7 +2354,7 @@ class ArtistPortfolioModal extends StatefulWidget {
 }
 
 class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
-  static const int _portfolioPageSize = 24;
+
   bool _uploading = false;
   bool _initialLoading = true;
   bool _loadingMore = false;
@@ -2423,7 +2423,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           .eq('id', widget.supabaseId)
           .limit(1)
           .timeout(const Duration(seconds: 6));
-      if (rows is List && rows.isNotEmpty && rows.first['portfolio'] is Map) {
+      if (rows.isNotEmpty && rows.first['portfolio'] is Map) {
         final portfolio = Map<String, dynamic>.from(
           rows.first['portfolio'] as Map,
         );
@@ -2761,7 +2761,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           .select('portfolio')
           .eq('id', widget.supabaseId)
           .limit(1);
-      if (rows is List && rows.isNotEmpty) {
+      if (rows.isNotEmpty) {
         final portfolio =
             (rows.first['portfolio'] is Map)
             ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
@@ -3034,7 +3034,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
           .eq('id', widget.supabaseId)
           .limit(1);
       final avail =
-          (rows is List && rows.isNotEmpty && rows.first['availability'] is Map)
+          (rows.isNotEmpty && rows.first['availability'] is Map)
           ? Map<String, dynamic>.from(rows.first['availability'] as Map)
           : <String, dynamic>{};
       avail['dayStates'] = _dayStates;
