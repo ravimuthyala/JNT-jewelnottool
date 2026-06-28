@@ -1,4 +1,4 @@
-# Miscellaneous
+donext# Miscellaneous
 *.class
 *.log
 *.pyc
@@ -48,3 +48,11 @@ device-logcat.txt
 
 # Graphify knowledge graph output
 graphify-out/
+CLAUDE.md
+MIGRATION.md
+PROJECT_TREE.txt
+memory/MEMORY.md
+docs/DB_OPTIMIZATION_PLAN.md
+docs/REPO_INDEX.md
+scripts/migration_append_declined_artist.sql
+docs/ARTIST_PAGES_REFACTOR_PROMPT.md
