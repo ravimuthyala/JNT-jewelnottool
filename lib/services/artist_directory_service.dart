@@ -143,16 +143,15 @@ class ArtistDirectoryService {
       try {
         final rows = await _supabase
             .from(table)
-            .select()
+            .select('id, email, display_name, profile, pricing, city, state, created_at')
             .order('created_at', ascending: false)
             .limit(fetchLimit * 4);
 
-        if (rows is! List) return;
+        if (rows.isEmpty) return;
 
         final allEntries = <ArtistDirectoryEntry>[];
         for (final rawRow in rows) {
-          if (rawRow is! Map) continue;
-          final row = Map<String, dynamic>.from(rawRow);
+          final row = Map<String, dynamic>.from(rawRow as Map);
           final id = (row['id'] ?? '').toString().trim();
           if (id.isEmpty) continue;
           final entry = _fromDoc(id, row);
@@ -233,14 +232,13 @@ class ArtistDirectoryService {
         try {
           final rows = await _supabase
               .from(table)
-              .select()
+              .select('id, email, display_name, profile, pricing, city, state, created_at')
               .range(offset, offset + pageSize - 1);
 
-          if (rows is! List || rows.isEmpty) break;
+          if (rows.isEmpty) break;
 
           for (final rawRow in rows) {
-            if (rawRow is! Map) continue;
-            final row = Map<String, dynamic>.from(rawRow);
+            final row = Map<String, dynamic>.from(rawRow as Map);
             final id = (row['id'] ?? '').toString().trim();
             if (id.isEmpty) continue;
             final entry = _fromDoc(id, row);

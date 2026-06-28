@@ -55,7 +55,7 @@ class ArtistRequestsRepository {
     try {
       final row = await _supabase
           .from('client_custom_requests')
-          .select()
+          .select('id, status, summary, order_number, source_collection, accepted_by_artist_email, declined_by_artist_emails, client_email, updated_at, created_at, details, pricing')
           .eq('id', id)
           .maybeSingle();
 
@@ -76,7 +76,7 @@ class ArtistRequestsRepository {
     bool preferRecentOnly = false,
   }) async {
     try {
-      dynamic query = _supabase.from('client_custom_requests').select();
+      dynamic query = _supabase.from('client_custom_requests').select('id, status, summary, order_number, source_collection, accepted_by_artist_email, declined_by_artist_emails, client_email, updated_at, created_at, details, pricing');
 
       if (preferRecentOnly) {
         query = query.order('created_at', ascending: false);
