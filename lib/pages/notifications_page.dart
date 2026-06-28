@@ -91,7 +91,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       try {
         final rows = await Supabase.instance.client
             .from('user_notifications')
-            .select()
+            .select('id, title, body, read, created_at_millis, receiver_email, type')
             .eq('receiver_email', email)
             .order('created_at_millis', ascending: false)
             .limit(100);

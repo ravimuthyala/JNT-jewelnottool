@@ -121,7 +121,7 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
     final supabase = Supabase.instance.client;
 
     if (uid.isNotEmpty) {
-      final rows = await supabase.from(table).select().eq('id', uid).limit(1);
+      final rows = await supabase.from(table).select('id, email, display_name, profile, basic').eq('id', uid).limit(1);
 
       if (rows.isNotEmpty) {
         final first = rows.first;
@@ -132,7 +132,7 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
     if (email.isNotEmpty) {
       final rows = await supabase
           .from(table)
-          .select()
+          .select('id, email, display_name, profile, basic')
           .eq('email', email)
           .limit(1);
 
