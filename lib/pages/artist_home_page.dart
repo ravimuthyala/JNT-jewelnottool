@@ -319,41 +319,34 @@ class _ArtistHomePageState extends State<ArtistHomePage> {
 
     final supabase = Supabase.instance.client;
 
-    // Supabase: read-modify-write the declined list (primary write)
-    final currentRow = await supabase
-        .from('client_custom_requests')
-        .select('declined_by_artist_emails')
-        .eq('id', request.id)
-        .maybeSingle();
-    final declined = List<String>.from(
-      ((currentRow?['declined_by_artist_emails'] as List?) ?? [])
-          .map((e) => e.toString()),
-    );
-    if (!declined.contains(artistEmail)) declined.add(artistEmail);
+    // Atomic array append via SQL RPC — eliminates read + race condition.
+    await supabase.rpc('append_declined_artist', params: {
+      'request_id': request.id,
+      'artist_email': artistEmail,
+    });
 
-    final updates = <String, dynamic>{
-      'declined_by_artist_emails': declined,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-    if (releaseDirectToPool) {
-      updates['status'] = 'in_review';
-      updates['client_status'] = 'pending';
-      updates['artist_status'] = 'in_review';
-      updates['is_direct_request'] = false;
-      updates['selected_artist'] = '';
-      updates['selected_artist_email'] = '';
+    if (releaseDirectToPool || cancelDirectRequest) {
+      final statusUpdates = <String, dynamic>{};
+      if (releaseDirectToPool) {
+        statusUpdates['status'] = 'in_review';
+        statusUpdates['client_status'] = 'pending';
+        statusUpdates['artist_status'] = 'in_review';
+        statusUpdates['is_direct_request'] = false;
+        statusUpdates['selected_artist'] = '';
+        statusUpdates['selected_artist_email'] = '';
+      }
+      if (cancelDirectRequest) {
+        statusUpdates['status'] = 'cancelled';
+        statusUpdates['client_status'] = 'cancelled';
+        statusUpdates['artist_status'] = 'cancelled';
+        statusUpdates['cancel_reason'] = artistCancelReason;
+        statusUpdates['cancelled_at'] = DateTime.now().toIso8601String();
+      }
+      await supabase
+          .from('client_custom_requests')
+          .update(statusUpdates)
+          .eq('id', request.id);
     }
-    if (cancelDirectRequest) {
-      updates['status'] = 'cancelled';
-      updates['client_status'] = 'cancelled';
-      updates['artist_status'] = 'cancelled';
-      updates['cancel_reason'] = artistCancelReason;
-      updates['cancelled_at'] = DateTime.now().toIso8601String();
-    }
-    await supabase
-        .from('client_custom_requests')
-        .update(updates)
-        .eq('id', request.id);
 
     // Firestore mirror (fire-and-forget for backward compat)
     unawaited(
