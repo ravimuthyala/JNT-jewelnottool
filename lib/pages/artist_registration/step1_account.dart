@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:country_code_picker/country_code_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../constants/currency_options.dart';
 import '../../widgets/registration_profile_upload.dart';
@@ -27,11 +30,15 @@ class Step1AccountState extends State<Step1Account> {
   late final TextEditingController _displayNameCtrl;
   late final TextEditingController _languageCtrl;
   late final TextEditingController _bioCtrl;
+  late final TextEditingController _phoneCtrl;
 
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   bool _emailTouched = false;
   String? _currency;
+  String _phoneAreaCode = '+1';
+  Uint8List? _profileBytes;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -44,6 +51,9 @@ class Step1AccountState extends State<Step1Account> {
     _displayNameCtrl = TextEditingController(text: d.displayName);
     _languageCtrl = TextEditingController(text: d.languageSpoken);
     _bioCtrl = TextEditingController(text: d.bio);
+    _phoneCtrl = TextEditingController(text: d.phone);
+    _phoneAreaCode = d.phoneAreaCode.isEmpty ? '+1' : d.phoneAreaCode;
+    _profileBytes = d.profileBytes;
     _currency = d.currency.isEmpty ? 'US Dollar (USD)' : d.currency;
   }
 
@@ -56,7 +66,16 @@ class Step1AccountState extends State<Step1Account> {
     _displayNameCtrl.dispose();
     _languageCtrl.dispose();
     _bioCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickProfilePic() async {
+    final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    setState(() => _profileBytes = bytes);
   }
 
   bool get _isEmailValid => _emailCtrl.text.contains('@') && _emailCtrl.text.contains('.');
@@ -88,6 +107,8 @@ class Step1AccountState extends State<Step1Account> {
       _languageCtrl.text = 'English';
       _currency = 'US Dollar (USD)';
       _bioCtrl.text = 'Professional nail artist with 5+ years of experience. Specializing in intricate nail art, gel designs, and 3D nail sculptures. Based in LA.';
+      _phoneCtrl.text = '5551234567';
+      _phoneAreaCode = '+1';
       _emailTouched = true;
     });
   }
@@ -102,6 +123,9 @@ class Step1AccountState extends State<Step1Account> {
     draft.languageSpoken = _languageCtrl.text.trim();
     draft.currency = _currency ?? 'US Dollar (USD)';
     draft.bio = _bioCtrl.text.trim();
+    draft.phone = _phoneCtrl.text.trim();
+    draft.phoneAreaCode = _phoneAreaCode;
+    draft.profileBytes = _profileBytes;
     return true;
   }
 
@@ -206,13 +230,61 @@ class Step1AccountState extends State<Step1Account> {
 
           Center(
             child: RegistrationProfileUpload(
-              onTap: () async {
-                // Profile pic is handled in the draft; picking is done here via callback
-              },
-              imageBytes: widget.draft.profileBytes,
+              onTap: _pickProfilePic,
+              imageBytes: _profileBytes,
             ),
           ),
           const SizedBox(height: 16),
+
+          Localizations.override(
+            context: context,
+            locale: const Locale('en'),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                border: Border.all(color: AppColors.blackCatBorderLight),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    child: CountryCodePicker(
+                      onChanged: (code) => setState(() => _phoneAreaCode = code.dialCode ?? '+1'),
+                      initialSelection: _phoneAreaCode,
+                      favorite: const ['+1', '+44', '+91'],
+                      showFlag: false,
+                      showFlagMain: false,
+                      hideMainText: false,
+                      alignLeft: true,
+                      padding: EdgeInsets.zero,
+                      textStyle: const TextStyle(color: AppColors.blackCat, fontSize: 14),
+                    ),
+                  ),
+                  Container(width: 1, color: AppColors.blackCatBorderLight),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
+                      validator: (v) => (v == null || v.trim().length < 7) ? 'Enter a valid phone number' : null,
+                      decoration: const InputDecoration(
+                        hintText: 'Phone number',
+                        border: InputBorder.none,
+                      ),
+                      style: const TextStyle(color: AppColors.blackCat, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
 
           TextFormField(
             controller: _studioNameCtrl,
