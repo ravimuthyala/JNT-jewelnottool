@@ -12,7 +12,7 @@ import '../utlis/responsive_text.dart';
 import 'artist_profile_page.dart';
 import 'notifications_page.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 
 class ArtistCalendarPage extends StatefulWidget {
   const ArtistCalendarPage({
@@ -25,6 +25,8 @@ class ArtistCalendarPage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
+    this.onOpenEarnings,
     this.onSignOut,
     this.showExtendedAvatarMenu = false,
     this.hideHistoryMenuItem = false,
@@ -32,6 +34,7 @@ class ArtistCalendarPage extends StatefulWidget {
     this.showBottomNav = false,
     this.bottomNavIndex = 3,
     this.onNavTap,
+    this.enableSupabaseAutoload = true,
   });
 
   final List<ClientRequest> requests;
@@ -42,6 +45,8 @@ class ArtistCalendarPage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
+  final VoidCallback? onOpenEarnings;
   final VoidCallback? onSignOut;
   final bool showExtendedAvatarMenu;
   final bool hideHistoryMenuItem;
@@ -49,6 +54,7 @@ class ArtistCalendarPage extends StatefulWidget {
   final bool showBottomNav;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
+  final bool enableSupabaseAutoload;
 
   @override
   State<ArtistCalendarPage> createState() => _ArtistCalendarPageState();
@@ -68,8 +74,10 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
-    unawaited(_loadCalendarRequestsFromSupabase());
-    _listenCalendarRequestsFromSupabase();
+    if (widget.enableSupabaseAutoload) {
+      unawaited(_loadCalendarRequestsFromSupabase());
+      _listenCalendarRequestsFromSupabase();
+    }
   }
 
   @override
@@ -466,37 +474,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(85),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  NotificationBellButton(
-                    onTap: _openNotifications,
-                    iconSize: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Center(
-                      child: Image.asset(
-                        'assets/images/jnt_logo_black.png',
-                        height: 50,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _avatarMenu(),
-                ],
-              ),
-            ),
-          ),
-        ),
+      appBar: JntStandardAppBar(
+        onNotifications: _openNotifications,
+        trailing: _avatarMenu(),
       ),
       body: Column(
         children: [
@@ -690,6 +670,10 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     widget.onOpenArtist?.call();
   }
 
+  void _openReviewsFromMenu() {
+    widget.onOpenReviews?.call();
+  }
+
   Widget _avatarMenu() {
     return PopupMenuButton<_HeaderAvatarAction>(
       tooltip: '',
@@ -702,6 +686,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           case _HeaderAvatarAction.profile:
             _openManageProfile();
             break;
+          case _HeaderAvatarAction.earnings:
+            widget.onOpenEarnings?.call();
+            break;
           case _HeaderAvatarAction.history:
             _openHistoryFromMenu();
             break;
@@ -711,17 +698,20 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           case _HeaderAvatarAction.artist:
             _openArtistFromMenu();
             break;
+          case _HeaderAvatarAction.reviews:
+            _openReviewsFromMenu();
+            break;
           case _HeaderAvatarAction.signOut:
             _signOut();
             break;
         }
       },
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: 36),
+          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
         ),
       ),
       itemBuilder: (_) {
@@ -741,6 +731,14 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             value: _HeaderAvatarAction.profile,
             child: _HeaderMenuRow(icon: Icons.person_outline, label: 'Profile'),
           ),
+          if (widget.onOpenEarnings != null)
+            const PopupMenuItem(
+              value: _HeaderAvatarAction.earnings,
+              child: _HeaderMenuRow(
+                icon: Icons.attach_money_outlined,
+                label: 'Earnings',
+              ),
+            ),
           if (!widget.hideHistoryMenuItem)
             const PopupMenuItem(
               value: _HeaderAvatarAction.history,
@@ -758,6 +756,11 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             value: _HeaderAvatarAction.artist,
             child: _HeaderMenuRow(icon: Icons.brush_outlined, label: 'Artist'),
           ),
+          if (widget.onOpenReviews != null)
+            const PopupMenuItem(
+              value: _HeaderAvatarAction.reviews,
+              child: _HeaderMenuRow(icon: Icons.star_border, label: 'Reviews'),
+            ),
           const PopupMenuDivider(),
           const PopupMenuItem(
             value: _HeaderAvatarAction.signOut,
@@ -1354,7 +1357,15 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   }
 }
 
-enum _HeaderAvatarAction { profile, history, calendar, artist, signOut }
+enum _HeaderAvatarAction {
+  profile,
+  earnings,
+  history,
+  calendar,
+  artist,
+  reviews,
+  signOut,
+}
 
 class _HeaderMenuRow extends StatelessWidget {
   const _HeaderMenuRow({required this.icon, required this.label, this.color});

@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -24,7 +26,12 @@ class ArtistRequestsRepository {
     );
 
     final items = await Future.wait(
-      rows.map(_fromSupabaseRowLiteWithDetailsHints),
+      rows.map((row) => _fromSupabaseRowLiteWithDetailsHints(
+        row,
+        sourceCollection: _sourceCollectionFor(
+          (row['__sourceCollection'] ?? '').toString(),
+        ),
+      )),
     );
 
     final merged = items.whereType<ClientRequestV2>().toList(growable: false);
@@ -38,7 +45,12 @@ class ArtistRequestsRepository {
       preferRecentOnly: true,
     );
 
-    final items = await Future.wait(rows.map(_fromSupabaseRowWithDetails));
+    final items = await Future.wait(rows.map((row) => _fromSupabaseRowWithDetails(
+        row,
+        sourceCollection: _sourceCollectionFor(
+          (row['__sourceCollection'] ?? '').toString(),
+        ),
+      )));
 
     final merged = items.whereType<ClientRequestV2>().toList(growable: false);
     merged.sort((a, b) => b.neededBy.compareTo(a.neededBy));
@@ -52,18 +64,26 @@ class ArtistRequestsRepository {
     final id = requestId.trim();
     if (id.isEmpty) return null;
 
+    final normalizedSource = _sourceCollectionFor(sourceCollection);
+    final tableName = normalizedSource == 'Company_Custom_Requests'
+        ? 'company_custom_requests'
+        : 'client_custom_requests';
+
     try {
       final row = await _supabase
-          .from('client_custom_requests')
+          .from(tableName)
           .select()
           .eq('id', id)
           .maybeSingle();
 
       if (row == null) return null;
 
+      final mapped = Map<String, dynamic>.from(row);
+      mapped['__sourceCollection'] = normalizedSource;
+
       return _fromSupabaseRowWithDetails(
-        Map<String, dynamic>.from(row),
-        sourceCollection: _sourceCollectionFor(sourceCollection),
+        mapped,
+        sourceCollection: normalizedSource,
       );
     } catch (e) {
       debugPrint('ARTIST REQUESTS fetchRequestById failed: $e');
@@ -75,32 +95,77 @@ class ArtistRequestsRepository {
     int? limit,
     bool preferRecentOnly = false,
   }) async {
-    try {
-      dynamic query = _supabase.from('client_custom_requests').select();
+    final requestLimit = limit ?? _maxInitialRequestsPerCollection;
 
-      if (preferRecentOnly) {
-        query = query.order('created_at', ascending: false);
+    Future<List<Map<String, dynamic>>> fetchCollection({
+      required String tableName,
+      required String sourceCollection,
+    }) async {
+      try {
+        dynamic query = _supabase.from(tableName).select();
+
+        if (preferRecentOnly) {
+          query = query.order('created_at', ascending: false);
+        }
+
+        final rows = await query.limit(requestLimit);
+
+        if (rows is! List) return const <Map<String, dynamic>>[];
+
+        return rows.whereType<Map>().map((row) {
+          final mapped = Map<String, dynamic>.from(row);
+          mapped['__sourceCollection'] = sourceCollection;
+          return mapped;
+        }).toList(growable: false);
+      } catch (e, st) {
+        debugPrint('ARTIST REQUESTS Supabase fetch $tableName failed: $e');
+        debugPrint(st.toString());
+        return const <Map<String, dynamic>>[];
       }
-
-      final rows = await query.limit(limit ?? _maxInitialRequestsPerCollection);
-
-      if (rows is! List) return const <Map<String, dynamic>>[];
-
-      return rows
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList(growable: false);
-    } catch (e, st) {
-      debugPrint('ARTIST REQUESTS Supabase fetch failed: $e');
-      debugPrint(st.toString());
-      return const <Map<String, dynamic>>[];
     }
+
+    final results = await Future.wait(<Future<List<Map<String, dynamic>>>>[
+      fetchCollection(
+        tableName: 'client_custom_requests',
+        sourceCollection: 'Client_Custom_Requests',
+      ),
+      fetchCollection(
+        tableName: 'company_custom_requests',
+        sourceCollection: 'Company_Custom_Requests',
+      ),
+    ]);
+
+    final merged = <Map<String, dynamic>>[
+      ...results[0],
+      ...results[1],
+    ];
+
+    if (preferRecentOnly) {
+      merged.sort((a, b) {
+        final aDate = _toDate(a['created_at']) ??
+            _toDate(a['createdAt']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = _toDate(b['created_at']) ??
+            _toDate(b['createdAt']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+    }
+
+    return merged.take(requestLimit * 2).toList(growable: false);
   }
 
   static String _sourceCollectionFor(String sourceCollection) {
     final value = sourceCollection.trim();
-    if (value == 'Company_Custom_Requests') return 'Company_Custom_Requests';
-    if (value == 'client_custom_requests') return 'Client_Custom_Requests';
+    final lower = value.toLowerCase();
+    if (value == 'Company_Custom_Requests' ||
+        lower == 'company_custom_requests') {
+      return 'Company_Custom_Requests';
+    }
+    if (value == 'Client_Custom_Requests' ||
+        lower == 'client_custom_requests') {
+      return 'Client_Custom_Requests';
+    }
     if (value.isNotEmpty) return value;
     return 'Client_Custom_Requests';
   }
@@ -478,11 +543,17 @@ class ArtistRequestsRepository {
       data['selected_artist_email'],
       orderData['selectedArtistEmail'],
     ).toLowerCase();
+    final openToArtistPoolFlag =
+        _asNullableBool(data['openToArtistPool']) ??
+        _asNullableBool(orderData['openToArtistPool']) ??
+        _asNullableBool(detailData['openToArtistPool']);
     final directFlag =
         _asNullableBool(data['isDirectRequest']) ??
         _asNullableBool(orderData['isDirectRequest']) ??
         _asNullableBool(detailData['isDirectRequest']) ??
-        false;
+        (selectedArtistEmailRaw.isNotEmpty ||
+            selectedArtistRaw.trim().isNotEmpty ||
+            openToArtistPoolFlag == false);
     final selectedArtist = directFlag ? selectedArtistRaw : '';
     final selectedArtistEmail = directFlag ? selectedArtistEmailRaw : '';
 
@@ -978,14 +1049,7 @@ class ArtistRequestsRepository {
       _asMap(_asMap(detailData['clientProfileSnapshot'])['basic'])['avatarUrl'],
     );
 
-    final normalizedPreview = preview.trim();
-    final normalizedProfile = clientProfileImageRaw.trim();
-    String clientProfileImage =
-        normalizedProfile.isNotEmpty &&
-                normalizedPreview.isNotEmpty &&
-                normalizedProfile == normalizedPreview
-            ? ''
-            : normalizedProfile;
+    String clientProfileImage = clientProfileImageRaw.trim();
     if (clientProfileImage.isNotEmpty) {
       clientProfileImage = (await _resolvePhotoRef(clientProfileImage)).trim();
     }
@@ -1180,8 +1244,16 @@ class ArtistRequestsRepository {
     data.addAll(row);
     addMap(row['summary']);
     addMap(row['details']);
+    addMap(row['payload']);
+    addMap(row['request_details']);
+    addMap(row['requestDetails']);
 
     final details = _asMap(row['details']);
+    final payload = _asMap(row['payload']);
+    final rootRequestDetails = _asMap(row['request_details']).isNotEmpty
+        ? _asMap(row['request_details'])
+        : _asMap(row['requestDetails']);
+    final payloadRequestDetails = _asMap(payload['requestDetails']);
     final requestDetails = _asMap(details['requestDetails']);
     final budget = _asMap(details['budget']);
     final order = _asMap(details['order']);
@@ -1191,9 +1263,14 @@ class ArtistRequestsRepository {
     final designApproval = _asMap(details['designApproval']);
     final artistCompletion = _asMap(details['artistCompletion']);
 
-    data['requestDetails'] ??= requestDetails;
-    data['budget'] ??= budget;
-    data['order'] ??= order;
+    data['requestDetails'] ??=
+        requestDetails.isNotEmpty
+            ? requestDetails
+            : (payloadRequestDetails.isNotEmpty
+                  ? payloadRequestDetails
+                  : rootRequestDetails);
+    data['budget'] ??= budget.isNotEmpty ? budget : _asMap(payload['budget']);
+    data['order'] ??= order.isNotEmpty ? order : _asMap(payload['order']);
     data['nailPreferences'] ??= nailPrefs;
     data['payment'] ??= payment;
     data['artistQuote'] ??= artistQuote;
@@ -1204,6 +1281,11 @@ class ArtistRequestsRepository {
     data['clientName'] ??= row['client_name'];
     data['selectedArtist'] ??= row['selected_artist'];
     data['selectedArtistEmail'] ??= row['selected_artist_email'];
+    data['isDirectRequest'] ??= row['is_direct_request'];
+    data['fallbackToPool'] ??= row['fallback_to_pool'];
+    data['openToArtistPool'] ??= row['open_to_artist_pool'];
+    data['directArtistStatus'] ??= row['direct_artist_status'];
+    data['artistPoolStatus'] ??= row['artist_pool_status'];
     data['artistStatus'] ??= row['artist_status'];
     data['clientStatus'] ??= row['client_status'];
     data['orderNumber'] ??= row['order_number'];
@@ -1237,11 +1319,14 @@ class ArtistRequestsRepository {
       data['budgetMax'] ??= budget['max'];
     }
 
-    if (requestDetails.isNotEmpty) {
-      data['descriptionPreview'] ??= requestDetails['description'];
-      data['description'] ??= requestDetails['description'];
-      data['needBy'] ??= requestDetails['needBy'];
-      data['clientLocation'] ??= requestDetails['clientLocation'];
+    final mergedRequestDetails = data['requestDetails'] is Map
+        ? _asMap(data['requestDetails'])
+        : const <String, dynamic>{};
+    if (mergedRequestDetails.isNotEmpty) {
+      data['descriptionPreview'] ??= mergedRequestDetails['description'];
+      data['description'] ??= mergedRequestDetails['description'];
+      data['needBy'] ??= mergedRequestDetails['needBy'];
+      data['clientLocation'] ??= mergedRequestDetails['clientLocation'];
     }
 
     return data;
@@ -1419,8 +1504,11 @@ class ArtistRequestsRepository {
     Object? g,
     Object? h,
     Object? i,
+    Object? j,
+    Object? k,
+    Object? l,
   ]) {
-    final candidates = <Object?>[a, b, c, d, e, f, g, h, i];
+    final candidates = <Object?>[a, b, c, d, e, f, g, h, i, j, k, l];
     for (final candidate in candidates) {
       final text = (candidate ?? '').toString().trim();
       if (text.isNotEmpty) return text;
@@ -1448,11 +1536,32 @@ class ArtistRequestsRepository {
   static Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return const <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(decoded);
+        }
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
     return const <String, dynamic>{};
   }
 
   static List<dynamic> _asList(Object? value) {
     if (value is List) return value;
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return const <dynamic>[];
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) return decoded;
+      } catch (_) {}
+    }
     return const <dynamic>[];
   }
 

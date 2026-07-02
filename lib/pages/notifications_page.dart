@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -68,6 +69,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   bool _didSetInitialFocus = false;
   bool _closeFocused = false;
   bool _markAllFocused = false;
+  bool _markingAllRead = false;
 
   String get _email =>
       (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
@@ -136,16 +138,26 @@ class _NotificationsPageState extends State<NotificationsPage> {
         .map((e) => e.id)
         .toList(growable: false);
     if (unreadIds.isEmpty) return;
+    if (_markingAllRead) return;
 
-    await Supabase.instance.client
-        .from('user_notifications')
-        .update({'read': true})
-        .inFilter('id', unreadIds);
-
-    await NotificationsService.trimUserNotifications(
-      receiverEmail: _email,
-      maxKeep: 25,
-    );
+    setState(() => _markingAllRead = true);
+    try {
+      final updated = await NotificationsService.markAllNotificationsRead(
+        receiverEmail: _email,
+      );
+      if (!mounted) return;
+      if (updated > 0) {
+        SemanticsService.sendAnnouncement(
+          View.of(context),
+          'All notifications marked as read',
+          Directionality.of(context),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _markingAllRead = false);
+      }
+    }
   }
 
   Future<void> _markRead(_NotificationItem item) async {
@@ -160,13 +172,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
       return;
     }
 
-    await Supabase.instance.client
-        .from('user_notifications')
-        .update({'read': true})
-        .eq('id', item.id);
-    await NotificationsService.trimUserNotifications(
+    await NotificationsService.markNotificationRead(
       receiverEmail: _email,
-      maxKeep: 25,
+      notificationId: item.id,
     );
 
     if (!mounted) return;
@@ -227,27 +235,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
           surfaceTintColor: AppColors.alabaster,
           elevation: 0,
           automaticallyImplyLeading: false,
-          title: ExcludeSemantics(
-            child: Image.asset(
-              'assets/images/jnt_logo_black.png',
-              height: 50,
-              fit: BoxFit.contain,
-              excludeFromSemantics: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          ),
-          centerTitle: true,
-          actions: [
-            StreamBuilder<List<_NotificationItem>>(
-              stream: _notificationsStream(),
-              builder: (context, snap) {
-                final items = snap.data ?? const <_NotificationItem>[];
-                final unreadCount = items.where((e) => e.unread).length;
-                if (unreadCount <= 0) return const SizedBox.shrink();
-                return Focus(
-                  focusNode: _markAllFocusNode,
-                  onFocusChange: (v) => setState(() => _markAllFocused = v),
+          toolbarHeight: JntModalHeaderMetrics.toolbarHeight,
+          leadingWidth: 132,
+          leading: StreamBuilder<List<_NotificationItem>>(
+            stream: _notificationsStream(),
+            builder: (context, snap) {
+              final items = snap.data ?? const <_NotificationItem>[];
+              final unreadCount = items.where((e) => e.unread).length;
+              if (unreadCount <= 0) return const SizedBox.shrink();
+              return Focus(
+                focusNode: _markAllFocusNode,
+                onFocusChange: (v) => setState(() => _markAllFocused = v),
+                child: Align(
+                  alignment: Alignment.centerLeft,
                   child: Container(
+                    margin: const EdgeInsets.only(left: 12),
                     decoration: BoxDecoration(
                       border: (showAdaFocusRing && _markAllFocused)
                           ? Border.all(color: _focusRing, width: 2)
@@ -257,10 +259,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       style: TextButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: AppColors.blackCat,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      onPressed: () => _markAllRead(items),
+                      onPressed: _markingAllRead ? null : () => _markAllRead(items),
                       child: const Text(
-                        'Mark all as read',
+                        'Mark as read',
                         style: TextStyle(
                           fontWeight: FontWeight.w500,
                           color: AppColors.blackCat,
@@ -269,9 +277,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       ),
                     ),
                   ),
-                );
-              },
+                ),
+              );
+            },
+          ),
+          title: ExcludeSemantics(
+            child: Image.asset(
+              'assets/images/jnt_logo_black.png',
+              height: JntModalHeaderMetrics.logoHeight,
+              fit: BoxFit.contain,
+              excludeFromSemantics: true,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
+          ),
+          centerTitle: true,
+          actions: [
             Focus(
               focusNode: _closeFocusNode,
               onFocusChange: (v) => setState(() => _closeFocused = v),

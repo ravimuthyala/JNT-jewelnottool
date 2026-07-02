@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'forgot_password_page.dart';
 import 'register_page.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 import '../services/supabase_auth_service.dart';
 import 'artist_shell_page.dart';
 import 'client_shell_page.dart';
@@ -20,13 +21,11 @@ class LoginDialog extends StatefulWidget {
 }
 
 class _LoginDialogState extends State<LoginDialog> {
-  static const Color _alabaster = AppColors.alabaster;
   static const Color _blackCat = AppColors.blackCat;
   static const Color _snow = AppColors.snow;
   static const Color _linkShade = AppColors.blackCat;
   static const Color _focusRing = Color(0xFF5A5353);
-  // Temporary isolation flag for device crash debugging.
-  // When true, auth succeeds but Firestore/role lookup is skipped.
+
   static const bool _bypassPostLoginFirestoreLookup = false;
 
   static const double _fieldHeight = 46;
@@ -583,57 +582,10 @@ class _LoginDialogState extends State<LoginDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                color: _alabaster,
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
-                child: SizedBox(
-                  height: 52,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          tooltip: 'Close sign in dialog',
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            color: AppColors.blackCat,
-                          ),
-                          style:
-                              IconButton.styleFrom(
-                                foregroundColor: AppColors.blackCat,
-                                minimumSize: const Size(48, 48),
-                                padding: const EdgeInsets.all(12),
-                                shape: const RoundedRectangleBorder(),
-                              ).copyWith(
-                                side: WidgetStateProperty.resolveWith((states) {
-                                  if (states.contains(WidgetState.focused)) {
-                                    return const BorderSide(
-                                      color: _focusRing,
-                                      width: 1,
-                                    );
-                                  }
-                                  return BorderSide.none;
-                                }),
-                              ),
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.center,
-                        child: ExcludeSemantics(
-                          child: Image.asset(
-                            'assets/images/jnt_logo_black.png',
-                            height: 50,
-                            fit: BoxFit.contain,
-                            excludeFromSemantics: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              JntModalHeaderBar(
+                onClose: () => Navigator.pop(context),
+                closeTooltip: 'Close sign in dialog',
+                autofocusClose: MediaQuery.of(context).accessibleNavigation,
               ),
 
               Flexible(

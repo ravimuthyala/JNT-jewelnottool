@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 /// Logs out (your auth later) and takes user to the app landing route.
-/// Works even if you don't use Firebase yet.
+/// Works even if the app is not fully initialized yet.
 ///
 /// IMPORTANT: Make sure your MaterialApp has a route named '/'.
 Future<void> logoutAndGoHome(BuildContext context) async {

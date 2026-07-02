@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
-import '../services/supabase_firebase_compat.dart';
-import 'package:image_picker/image_picker.dart';
+import 'dart:async';
 
-import '../services/request_chat_service.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../theme/app_colors.dart';
 
 Future<void> showRequestChatModal({
@@ -89,37 +90,48 @@ class RequestChatModal extends StatefulWidget {
 
 class _RequestChatModalState extends State<RequestChatModal> {
   static const String _aiAssistantEmail = 'ai.chatbot@jnt.com';
+  static const String _attachmentBucket = 'request-chat-attachments';
+
   final TextEditingController _messageCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   final ImagePicker _picker = ImagePicker();
+
   bool _sending = false;
   _PeerPresence _peerPresence = _PeerPresence.offline;
 
-  String get _conversationId =>
-      RequestChatService.conversationIdForRequest(widget.requestId);
+  SupabaseClient get _supabase => Supabase.instance.client;
 
-  String get _currentEmail => RequestChatService.normalizeEmail(
-    FirebaseAuth.instance.currentUser?.email ?? '',
-  );
+  String get _conversationId => _conversationIdForRequest(widget.requestId);
+
+  String get _currentEmail => _normalizeEmail(
+        _supabase.auth.currentUser?.email ?? '',
+      );
 
   String get _peerEmail {
-    final client = RequestChatService.normalizeEmail(widget.clientEmail);
-    final artist = RequestChatService.normalizeEmail(widget.artistEmail);
+    final client = _normalizeEmail(widget.clientEmail);
+    final artist = _normalizeEmail(widget.artistEmail);
     return _currentEmail == client ? artist : client;
   }
 
   String get _currentName {
-    final user = FirebaseAuth.instance.currentUser;
-    final display = (user?.displayName ?? '').trim();
+    final user = _supabase.auth.currentUser;
+    final metadata = user?.userMetadata ?? const <String, dynamic>{};
+    final display = _firstNonEmpty([
+      metadata['displayName'],
+      metadata['display_name'],
+      metadata['fullName'],
+      metadata['full_name'],
+      metadata['name'],
+    ]);
     if (display.isNotEmpty) return display;
+
     final email = (user?.email ?? '').trim();
     if (email.contains('@')) return email.split('@').first;
     return 'User';
   }
 
   String get _chatTitle {
-    if (_currentEmail ==
-        RequestChatService.normalizeEmail(widget.clientEmail)) {
+    if (_currentEmail == _normalizeEmail(widget.clientEmail)) {
       final artist = widget.artistName.trim();
       return artist.isNotEmpty ? artist : 'Artist';
     }
@@ -142,13 +154,18 @@ class _RequestChatModalState extends State<RequestChatModal> {
   }
 
   Future<void> _ensureRoom() async {
-    await RequestChatService.ensureConversation(
-      conversationId: _conversationId,
-      requestId: widget.requestId,
-      clientEmail: widget.clientEmail,
-      artistEmail: widget.artistEmail,
-      clientName: widget.clientName,
-      artistName: widget.artistName,
+    final nowIso = DateTime.now().toIso8601String();
+    await _supabase.from('request_chats').upsert(
+      {
+        'conversation_id': _conversationId,
+        'request_id': widget.requestId,
+        'client_email': _normalizeEmail(widget.clientEmail),
+        'artist_email': _normalizeEmail(widget.artistEmail),
+        'client_name': widget.clientName.trim(),
+        'artist_name': widget.artistName.trim(),
+        'updated_at': nowIso,
+      },
+      onConflict: 'conversation_id',
     );
   }
 
@@ -159,44 +176,46 @@ class _RequestChatModalState extends State<RequestChatModal> {
   }
 
   Future<_PeerPresence> _resolvePresenceForEmail(String email) async {
-    final normalized = email.trim().toLowerCase();
+    final normalized = _normalizeEmail(email);
     if (normalized.isEmpty) return _PeerPresence.offline;
 
-    final db = FirebaseFirestore.instance;
-    final collections = <String>['client', 'artist', 'client_artist'];
     Map<String, dynamic>? data;
-    for (final c in collections) {
-      final snap = await db
-          .collection(c)
-          .where('email', isEqualTo: normalized)
-          .limit(1)
-          .get();
-      if (snap.docs.isNotEmpty) {
-        data = snap.docs.first.data();
-        break;
-      }
+    for (final table in const <String>['client', 'artist', 'client_artist']) {
+      try {
+        final row = await _supabase
+            .from(table)
+            .select()
+            .ilike('email', normalized)
+            .limit(1)
+            .maybeSingle();
+        if (row != null) {
+          data = Map<String, dynamic>.from(row);
+          break;
+        }
+      } catch (_) {}
     }
 
     if (data == null) return _PeerPresence.offline;
 
-    final dynamic isOnlineRaw =
+    final presence = _asMap(data['presence']);
+    final isOnlineRaw = data['is_online'] ??
         data['isOnline'] ??
         data['online'] ??
-        (data['presence'] as Map<String, dynamic>?)?['isOnline'];
-    if (isOnlineRaw == true) return _PeerPresence.available;
+        presence['is_online'] ??
+        presence['isOnline'];
+    if (_isTruthy(isOnlineRaw)) return _PeerPresence.available;
 
-    DateTime? toDate(dynamic value) {
-      if (value is Timestamp) return value.toDate();
-      if (value is DateTime) return value;
-      return null;
-    }
+    final lastSeen = _dateValue(data['last_seen_at']) ??
+        _dateValue(data['lastSeenAt']) ??
+        _dateValue(data['last_active_at']) ??
+        _dateValue(data['lastActiveAt']) ??
+        _dateValue(data['updated_at']) ??
+        _dateValue(data['updatedAt']) ??
+        _dateValue(presence['last_seen_at']) ??
+        _dateValue(presence['lastSeenAt']) ??
+        _dateValue(presence['last_active_at']) ??
+        _dateValue(presence['lastActiveAt']);
 
-    final lastSeen =
-        toDate(data['lastSeenAt']) ??
-        toDate(data['lastActiveAt']) ??
-        toDate(data['updatedAt']) ??
-        toDate((data['presence'] as Map<String, dynamic>?)?['lastSeenAt']) ??
-        toDate((data['presence'] as Map<String, dynamic>?)?['lastActiveAt']);
     if (lastSeen == null) return _PeerPresence.offline;
 
     final diff = DateTime.now().difference(lastSeen);
@@ -210,17 +229,7 @@ class _RequestChatModalState extends State<RequestChatModal> {
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
-      await RequestChatService.sendMessage(
-        conversationId: _conversationId,
-        requestId: widget.requestId,
-        clientEmail: widget.clientEmail,
-        artistEmail: widget.artistEmail,
-        clientName: widget.clientName,
-        artistName: widget.artistName,
-        senderEmail: _currentEmail,
-        senderName: _currentName,
-        text: text,
-      );
+      await _sendMessage(text: text);
       _messageCtrl.clear();
       _scrollToBottom();
     } finally {
@@ -233,21 +242,65 @@ class _RequestChatModalState extends State<RequestChatModal> {
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
-      await RequestChatService.sendMessage(
-        conversationId: _conversationId,
-        requestId: widget.requestId,
-        clientEmail: widget.clientEmail,
-        artistEmail: widget.artistEmail,
-        clientName: widget.clientName,
-        artistName: widget.artistName,
-        senderEmail: _currentEmail,
-        senderName: _currentName,
-        text: text,
-      );
+      await _sendMessage(text: text);
       _scrollToBottom();
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _sendMessage({
+    required String text,
+    String attachmentUrl = '',
+    String attachmentType = '',
+    String attachmentName = '',
+  }) async {
+    await _ensureRoom();
+
+    final nowIso = DateTime.now().toIso8601String();
+    final row = <String, dynamic>{
+      'conversation_id': _conversationId,
+      'request_id': widget.requestId,
+      'client_email': _normalizeEmail(widget.clientEmail),
+      'artist_email': _normalizeEmail(widget.artistEmail),
+      'client_name': widget.clientName.trim(),
+      'artist_name': widget.artistName.trim(),
+      'sender_email': _currentEmail,
+      'sender_name': _currentName,
+      'text': text.trim(),
+      'attachment_url': attachmentUrl.trim(),
+      'attachment_type': attachmentType.trim(),
+      'attachment_name': attachmentName.trim(),
+      'created_at': nowIso,
+      'updated_at': nowIso,
+    };
+
+    await _supabase.from('request_chat_messages').insert(row);
+
+    await _supabase
+        .from('request_chats')
+        .update({
+          'last_message': text.trim().isNotEmpty
+              ? text.trim()
+              : (attachmentType == 'image' ? 'Photo' : 'Attachment'),
+          'last_message_at': nowIso,
+          'last_sender_email': _currentEmail,
+          'updated_at': nowIso,
+        })
+        .eq('conversation_id', _conversationId);
+  }
+
+  Stream<List<Map<String, dynamic>>> _watchMessages() {
+    return _supabase
+        .from('request_chat_messages')
+        .stream(primaryKey: ['id'])
+        .eq('conversation_id', _conversationId)
+        .order('created_at', ascending: true)
+        .map(
+          (rows) => rows
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false),
+        );
   }
 
   List<String> _assistantChoices(String text) {
@@ -329,22 +382,23 @@ class _RequestChatModalState extends State<RequestChatModal> {
       final bytes = await file.readAsBytes();
       final ext = _inferExt(file.name);
       final storagePath =
-          'chat_attachments/$_conversationId/${DateTime.now().millisecondsSinceEpoch}.$ext';
-      final ref = FirebaseStorage.instance.ref(storagePath);
-      await ref.putData(
-        bytes,
-        SettableMetadata(contentType: _contentTypeForExt(ext)),
-      );
-      final url = await ref.getDownloadURL();
-      await RequestChatService.sendMessageWithAttachment(
-        conversationId: _conversationId,
-        requestId: widget.requestId,
-        clientEmail: widget.clientEmail,
-        artistEmail: widget.artistEmail,
-        clientName: widget.clientName,
-        artistName: widget.artistName,
-        senderEmail: _currentEmail,
-        senderName: _currentName,
+          '$_conversationId/${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      await _supabase.storage.from(_attachmentBucket).uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: _contentTypeForExt(ext),
+              upsert: true,
+            ),
+          );
+
+      final url = _supabase.storage
+          .from(_attachmentBucket)
+          .getPublicUrl(storagePath)
+          .trim();
+
+      await _sendMessage(
         text: _messageCtrl.text.trim(),
         attachmentUrl: url,
         attachmentType: 'image',
@@ -439,14 +493,14 @@ class _RequestChatModalState extends State<RequestChatModal> {
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: RequestChatService.watchMessages(_conversationId),
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _watchMessages(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final docs = snapshot.data!.docs;
-                if (docs.isEmpty) {
+                final rows = snapshot.data ?? const <Map<String, dynamic>>[];
+                if (rows.isEmpty) {
                   return const Center(
                     child: Text(
                       'No messages yet. Start the discussion.',
@@ -462,35 +516,34 @@ class _RequestChatModalState extends State<RequestChatModal> {
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                  itemCount: docs.length,
+                  itemCount: rows.length,
                   itemBuilder: (context, index) {
-                    final data = docs[index].data();
-                    final senderEmail = RequestChatService.normalizeEmail(
-                      (data['senderEmail'] ?? '').toString(),
+                    final data = rows[index];
+                    final senderEmail = _normalizeEmail(
+                      _value(data, 'sender_email', 'senderEmail'),
                     );
                     final isMine = senderEmail == _currentEmail;
-                    final senderName = (data['senderName'] ?? '')
-                        .toString()
-                        .trim();
-                    final text = (data['text'] ?? '').toString().trim();
-                    final attachmentUrl = (data['attachmentUrl'] ?? '')
-                        .toString()
-                        .trim();
-                    final attachmentType = (data['attachmentType'] ?? '')
-                        .toString()
-                        .trim()
-                        .toLowerCase();
+                    final senderName = _value(data, 'sender_name', 'senderName');
+                    final text = _value(data, 'text');
+                    final attachmentUrl = _value(
+                      data,
+                      'attachment_url',
+                      'attachmentUrl',
+                    );
+                    final attachmentType = _value(
+                      data,
+                      'attachment_type',
+                      'attachmentType',
+                    ).toLowerCase();
                     final hasAttachment = attachmentUrl.isNotEmpty;
                     final isAiAssistant = senderEmail == _aiAssistantEmail;
                     final quickChoices = isAiAssistant
                         ? _assistantChoices(text)
                         : const <String>[];
-                    final showQuickChoices =
-                        !isMine && quickChoices.isNotEmpty;
+                    final showQuickChoices = !isMine && quickChoices.isNotEmpty;
                     return Align(
-                      alignment: isMine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
+                      alignment:
+                          isMine ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(
@@ -700,7 +753,8 @@ class _RequestChatModalState extends State<RequestChatModal> {
               right: 8,
               child: IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded, color: AppColors.blackCat),
+                icon:
+                    const Icon(Icons.close_rounded, color: AppColors.blackCat),
               ),
             ),
           ],
@@ -708,6 +762,60 @@ class _RequestChatModalState extends State<RequestChatModal> {
       ),
     );
   }
+}
+
+String _conversationIdForRequest(String requestId) {
+  final clean = requestId.trim();
+  return clean.isEmpty ? 'request_unknown' : 'request_$clean';
+}
+
+String _normalizeEmail(String email) => email.trim().toLowerCase();
+
+String _firstNonEmpty(List<Object?> values) {
+  for (final raw in values) {
+    final value = (raw ?? '').toString().trim();
+    if (value.isNotEmpty) return value;
+  }
+  return '';
+}
+
+String _value(
+  Map<String, dynamic> data,
+  String first, [
+  String? second,
+  String? third,
+]) {
+  final raw = data[first] ?? (second == null ? null : data[second]) ??
+      (third == null ? null : data[third]);
+  return (raw ?? '').toString().trim();
+}
+
+Map<String, dynamic> _asMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return <String, dynamic>{};
+}
+
+bool _isTruthy(Object? value) {
+  if (value == true) return true;
+  if (value is num) return value != 0;
+  final text = (value ?? '').toString().trim().toLowerCase();
+  return text == 'true' || text == 'yes' || text == '1' || text == 'online';
+}
+
+DateTime? _dateValue(Object? value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is double) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+  if (value is Map) {
+    final seconds = value['seconds'];
+    if (seconds is int) {
+      return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    }
+  }
+  return null;
 }
 
 enum _PeerPresence {
@@ -734,4 +842,3 @@ class _PresenceDot extends StatelessWidget {
     );
   }
 }
-

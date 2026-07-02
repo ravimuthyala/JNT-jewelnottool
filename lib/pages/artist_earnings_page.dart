@@ -6,8 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../theme/app_colors.dart';
+import '../utils/jnt_ascension_engine.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import 'jnt_ascension_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -22,7 +23,12 @@ class ArtistEarningsPage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.clientArtistMenuStyle = false,
+    this.showBottomNav = false,
+    this.showCampaignsTab = false,
+    this.bottomNavCurrentIndex = 0,
+    this.onBottomNavTap,
   });
 
   final VoidCallback? onOpenNotifications;
@@ -32,7 +38,12 @@ class ArtistEarningsPage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final bool clientArtistMenuStyle;
+  final bool showBottomNav;
+  final bool showCampaignsTab;
+  final int bottomNavCurrentIndex;
+  final ValueChanged<int>? onBottomNavTap;
 
   @override
   State<ArtistEarningsPage> createState() => _ArtistEarningsPageState();
@@ -44,6 +55,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   final List<ClientRequestV2> _allVisible = <ClientRequestV2>[];
 
   RealtimeChannel? _requestsChannel;
+  int _portfolioUploads = 0;
+  _AscensionStageSummary _stageSummary = const _AscensionStageSummary.empty();
   Map<String, dynamic> _ascensionData = const <String, dynamic>{
     'tier': 'maker',
     'points': 0,
@@ -75,6 +88,12 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
           table: 'client_custom_requests',
           callback: (_) => _reload(),
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'company_custom_requests',
+          callback: (_) => _reload(),
+        )
         .subscribe((status, [error]) {
           if (error != null) {
             debugPrint('Artist earnings realtime error: $error');
@@ -82,23 +101,47 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         });
   }
 
+  Future<Map<String, dynamic>?> _loadCurrentArtistRow() async {
+    final supabase = Supabase.instance.client;
+    final uid = (supabase.auth.currentUser?.id ?? '').trim();
+    final email = (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+
+    for (final table in const ['client_artist', 'artist']) {
+      try {
+        if (uid.isNotEmpty) {
+          final row = await supabase.from(table).select().eq('id', uid).maybeSingle();
+          if (row != null) return Map<String, dynamic>.from(row);
+        }
+      } catch (_) {}
+    }
+    for (final table in const ['client_artist', 'artist']) {
+      try {
+        if (email.isNotEmpty) {
+          final row = await supabase.from(table).select().eq('email', email).maybeSingle();
+          if (row != null) return Map<String, dynamic>.from(row);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
   Future<void> _loadAscensionFromSupabase() async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
-    if (uid == null) return;
     try {
-      Map<String, dynamic>? row;
-      for (final table in const ['artist', 'client_artist']) {
-        row = await Supabase.instance.client
-            .from(table)
-            .select('profile')
-            .eq('id', uid)
-            .maybeSingle();
-        if (row != null) break;
-      }
+      final row = await _loadCurrentArtistRow();
       if (row == null || !mounted) return;
       final profile = (row['profile'] as Map<String, dynamic>?) ?? {};
+      final portfolioUploads = _portfolioUploadCount(row, profile);
       if (!mounted) return;
-      setState(() => _ascensionData = _ascensionSummaryFromProfile(profile));
+      setState(() {
+        _portfolioUploads = portfolioUploads;
+        if (_allVisible.isEmpty) {
+          _ascensionData = _ascensionSummaryFromProfile(profile);
+          _stageSummary = const _AscensionStageSummary.empty();
+        } else {
+          _stageSummary = _buildStageSummary(_allVisible);
+          _ascensionData = _stageSummary.result.toAscensionMap();
+        }
+      });
     } catch (_) {
       // keep defaults
     }
@@ -108,13 +151,18 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     try {
       final currentArtistEmail =
           (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
+      final currentArtistId =
+          (Supabase.instance.client.auth.currentUser?.id ?? '').trim();
       final all = await ArtistRequestsRepository.fetchAllRequests();
       if (!mounted) return;
 
       final visible = all
           .where(
-            (r) =>
-                _isVisibleToArtist(request: r, artistEmail: currentArtistEmail),
+            (r) => _isVisibleToArtist(
+              request: r,
+              artistEmail: currentArtistEmail,
+              artistId: currentArtistId,
+            ),
           )
           .toList(growable: false);
 
@@ -122,6 +170,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         _allVisible
           ..clear()
           ..addAll(visible);
+        _stageSummary = _buildStageSummary(visible);
+        _ascensionData = _stageSummary.result.toAscensionMap();
         _isLoading = false;
       });
     } catch (_) {
@@ -133,6 +183,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   bool _isVisibleToArtist({
     required ClientRequestV2 request,
     required String artistEmail,
+    required String artistId,
   }) {
     final ownedBy = request.acceptedByArtistEmail.trim().toLowerCase();
     final isOwnedByCurrentArtist =
@@ -143,7 +194,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
 
     switch (request.status) {
       case RequestStatusV2.inReview:
-        return !declinedByCurrentArtist;
+        return !declinedByCurrentArtist && isOwnedByCurrentArtist;
       case RequestStatusV2.accepted:
       case RequestStatusV2.designing:
       case RequestStatusV2.completed:
@@ -152,7 +203,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
       case RequestStatusV2.declined:
       case RequestStatusV2.cancelled:
       case RequestStatusV2.expired:
-        return ownedBy.isEmpty || isOwnedByCurrentArtist;
+        return isOwnedByCurrentArtist;
     }
   }
 
@@ -226,8 +277,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         )
         .fold<double>(0, (sum, r) => sum + _amount(r));
 
-    final deliveredPaid = paid
-        .where((r) => r.status == RequestStatusV2.delivered)
+    final deliveredPaid = inRange
+        .where((r) => r.status == RequestStatusV2.delivered || r.deliveredAt != null)
         .length;
     final avg = paid.isEmpty ? 0.0 : totalPaid / paid.length;
 
@@ -296,13 +347,170 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
 
   String _money(double v) => '\$${v.toStringAsFixed(2)}';
 
+  int _portfolioUploadCount(
+    Map<String, dynamic> row,
+    Map<String, dynamic> profile,
+  ) {
+    int countList(Object? raw) => raw is List ? raw.length : 0;
+    bool hasText(Object? raw) => (raw ?? '').toString().trim().isNotEmpty;
+
+    final portfolio = row['portfolio'];
+    final profilePortfolio = profile['portfolio'];
+    final values = <Object?>[
+      row['portfolioItems'],
+      row['portfolioImages'],
+      row['previousProjects'],
+      row['samplePhotos'],
+      profile['portfolioItems'],
+      profile['portfolioImages'],
+      profile['previousProjects'],
+      profile['samplePhotos'],
+      if (portfolio is Map) portfolio['items'],
+      if (portfolio is Map) portfolio['images'],
+      if (profilePortfolio is Map) profilePortfolio['items'],
+      if (profilePortfolio is Map) profilePortfolio['images'],
+    ];
+
+    var best = 0;
+    for (final value in values) {
+      final count = countList(value);
+      if (count > best) best = count;
+    }
+
+    final hasProfilePhoto = <Object?>[
+      row['profileImageUrl'],
+      row['profile_image_url'],
+      row['avatarUrl'],
+      row['avatar_url'],
+      row['photoUrl'],
+      row['photo_url'],
+      row['imageUrl'],
+      row['image_url'],
+      row['artistProfileImage'],
+      row['artist_profile_image'],
+      profile['profileImageUrl'],
+      profile['profileImagePath'],
+      profile['avatarUrl'],
+      profile['photoUrl'],
+      profile['imageUrl'],
+    ].any(hasText);
+
+    return best > 0 ? best : (hasProfilePhoto ? 1 : 0);
+  }
+
+  bool _isAscensionCompletedOrder(ClientRequestV2 r) {
+    return r.status == RequestStatusV2.completed ||
+        r.status == RequestStatusV2.shipped ||
+        r.status == RequestStatusV2.delivered ||
+        r.shippedAt != null ||
+        r.deliveredAt != null ||
+        r.artistImages.isNotEmpty;
+  }
+
+  DateTime _ascensionOrderDate(ClientRequestV2 r) {
+    return r.deliveredAt ?? r.shippedAt ?? r.neededBy;
+  }
+
+  bool _isOnTimeDelivery(ClientRequestV2 r) {
+    final shippedAt = r.shippedAt;
+    if (shippedAt == null) return false;
+    final due = r.neededBy;
+    final dueEndOfDay = DateTime(due.year, due.month, due.day, 23, 59, 59);
+    return !shippedAt.isAfter(dueEndOfDay);
+  }
+
+  bool _isFiveStarReview(ClientRequestV2 r) {
+    final rating = r.clientRating;
+    if (rating == null) return false;
+    return rating >= 5;
+  }
+
+  String _repeatClientKey(ClientRequestV2 r) {
+    final email = r.clientEmail.trim().toLowerCase();
+    if (email.isNotEmpty) return email;
+    return r.clientName.trim().toLowerCase();
+  }
+
+  _AscensionStageSummary _buildStageSummary(List<ClientRequestV2> requests) {
+    final completed = requests
+        .where(_isAscensionCompletedOrder)
+        .toList(growable: false);
+    final completedSorted = List<ClientRequestV2>.from(completed)
+      ..sort((a, b) => _ascensionOrderDate(a).compareTo(_ascensionOrderDate(b)));
+
+    final seenClients = <String>{};
+    final repeatClientRequestIds = <String>{};
+    for (final request in completedSorted) {
+      final key = _repeatClientKey(request);
+      if (key.isEmpty) continue;
+      if (seenClients.contains(key)) {
+        repeatClientRequestIds.add(request.id);
+      } else {
+        seenClients.add(key);
+      }
+    }
+
+    final onTime = completed.where(_isOnTimeDelivery).toList(growable: false);
+    final fiveStar = completed.where(_isFiveStarReview).toList(growable: false);
+    final repeat = completed
+        .where((request) => repeatClientRequestIds.contains(request.id))
+        .toList(growable: false);
+    final delivered = completed
+        .where((request) => request.status == RequestStatusV2.delivered || request.deliveredAt != null)
+        .toList(growable: false);
+    final artistGmv = completed.fold<double>(0, (sum, r) => sum + _amount(r));
+
+    final result = JntAscensionEngine.calculate(
+      completedOrders: completed.length,
+      onTimeDeliveries: onTime.length,
+      fiveStarReviews: fiveStar.length,
+      repeatClientOrders: repeat.length,
+      portfolioUploads: _portfolioUploads,
+      artistGmv: artistGmv,
+    );
+
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+    final thisMonthPoints = <double>[
+      for (final r in completed)
+        if (!_ascensionOrderDate(r).isBefore(monthStart))
+          JntAscensionEngine.pointsCompleteOrder.toDouble(),
+      for (final r in onTime)
+        if (!r.shippedAt!.isBefore(monthStart))
+          JntAscensionEngine.pointsOnTimeDelivery.toDouble(),
+      for (final r in fiveStar)
+        if (!(r.clientReviewSubmittedAt ?? _ascensionOrderDate(r)).isBefore(monthStart))
+          JntAscensionEngine.pointsFiveStarReview.toDouble(),
+      for (final r in repeat)
+        if (!_ascensionOrderDate(r).isBefore(monthStart))
+          JntAscensionEngine.pointsRepeatClientOrder.toDouble(),
+    ].fold<double>(0, (sum, value) => sum + value);
+
+    return _AscensionStageSummary(
+      result: result,
+      completedOrders: completed.length,
+      completedOrderPoints: result.completedOrderPoints,
+      onTimeDeliveries: onTime.length,
+      onTimeDeliveryPoints: result.onTimeDeliveryPoints,
+      fiveStarReviews: fiveStar.length,
+      fiveStarReviewPoints: result.fiveStarReviewPoints,
+      repeatClientOrders: repeat.length,
+      repeatClientOrderPoints: result.repeatClientOrderPoints,
+      portfolioUploads: _portfolioUploads,
+      portfolioUploadPoints: result.portfolioUploadPoints,
+      deliveredOrders: delivered.length,
+      artistGmv: artistGmv,
+      jntRevenue: result.jntRevenue,
+      thisMonthPoints: thisMonthPoints,
+    );
+  }
+
   Map<String, dynamic> _ascensionSummaryFromProfile(
     Map<String, dynamic> profile,
   ) {
-    int asInt(Object? raw) {
-      if (raw is int) return raw;
-      if (raw is num) return raw.toInt();
-      return int.tryParse((raw ?? '').toString().trim()) ?? 0;
+    double asDouble(Object? raw) {
+      if (raw is num) return raw.toDouble();
+      return double.tryParse((raw ?? '').toString().trim()) ?? 0;
     }
 
     String firstNonEmpty(List<Object?> values) {
@@ -316,7 +524,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     final ascension =
         (profile['ascension'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-    final points = asInt(
+    final points = asDouble(
       ascension['points'] ??
           profile['panel_ascensionPoints'] ??
           profile['ascensionPoints'],
@@ -338,7 +546,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
       tier = 'maker';
     }
 
-    int pointsToNext;
+    double pointsToNext;
     String nextTierLabel;
     if (points >= 9750) {
       pointsToNext = 0;
@@ -362,10 +570,9 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     };
   }
 
-  int _asIntSafe(Object? raw, {int fallback = 0}) {
-    if (raw is int) return raw;
-    if (raw is num) return raw.toInt();
-    final parsed = int.tryParse((raw ?? '').toString().trim());
+  double _asDoubleSafe(Object? raw, {double fallback = 0}) {
+    if (raw is num) return raw.toDouble();
+    final parsed = double.tryParse((raw ?? '').toString().trim());
     return parsed ?? fallback;
   }
 
@@ -411,55 +618,72 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     final summary = _summary;
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(85),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  NotificationBellButton(
-                    onTap:
-                        widget.onOpenNotifications ??
-                        () {
-                          NotificationsPage.showAsModal(context);
-                        },
-                    iconSize: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Center(
-                      child: Image.asset(
-                        'assets/images/jnt_logo_black.png',
-                        height: 50,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _AvatarMenu(
-                    onManageProfile: widget.onManageProfile,
-                    onOpenHistory: widget.onOpenHistory,
-                    onOpenCalendar: widget.onOpenCalendar,
-                    onOpenArtist: widget.onOpenArtist,
-                    clientArtistMenuStyle: widget.clientArtistMenuStyle,
-                    onSignOut:
-                        widget.onSignOut ??
-                        () {
-                          Navigator.of(
-                            context,
-                          ).pushNamedAndRemoveUntil('/', (route) => false);
-                        },
-                  ),
-                ],
-              ),
-            ),
-          ),
+      appBar: JntStandardAppBar(
+        onNotifications:
+            widget.onOpenNotifications ??
+            () {
+              NotificationsPage.showAsModal(context);
+            },
+        trailing: _AvatarMenu(
+          onManageProfile: widget.onManageProfile,
+          onOpenHistory: widget.onOpenHistory,
+          onOpenCalendar: widget.onOpenCalendar,
+          onOpenArtist: widget.onOpenArtist,
+          onOpenReviews: widget.onOpenReviews,
+          clientArtistMenuStyle: widget.clientArtistMenuStyle,
+          onSignOut:
+              widget.onSignOut ??
+              () {
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/', (route) => false);
+              },
         ),
       ),
+      bottomNavigationBar: widget.showBottomNav
+          ? BottomNavigationBar(
+              backgroundColor: AppColors.balletSlippers,
+              currentIndex: widget.bottomNavCurrentIndex,
+              onTap: widget.onBottomNavTap,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: AppColors.blackCat,
+              unselectedItemColor: Colors.black.withValues(alpha: 0.55),
+              items: [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: 'Home',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.add_circle_outline),
+                  activeIcon: Icon(Icons.add_circle),
+                  label: 'Design',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.inbox_outlined),
+                  activeIcon: Icon(Icons.inbox),
+                  label: 'Requests',
+                ),
+                if (widget.showCampaignsTab)
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.campaign_outlined),
+                    activeIcon: Icon(Icons.campaign),
+                    label: 'Campaigns',
+                  ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  activeIcon: Icon(Icons.receipt_long),
+                  label: 'Orders',
+                ),
+                if (!widget.showCampaignsTab)
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.attach_money_outlined),
+                    activeIcon: Icon(Icons.attach_money),
+                    label: 'Earnings',
+                  ),
+              ],
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ScrollConfiguration(
@@ -475,8 +699,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                   const SizedBox(height: 12),
                   _AscensionSummaryCard(
                     tier: (_ascensionData['tier'] ?? 'maker').toString(),
-                    points: _asIntSafe(_ascensionData['points']),
-                    pointsToNextTier: _asIntSafe(
+                    points: _asDoubleSafe(_ascensionData['points']),
+                    pointsToNextTier: _asDoubleSafe(
                       _ascensionData['pointsToNextTier'],
                       fallback: 1000,
                     ),
@@ -492,6 +716,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                       );
                     },
                   ),
+                  const SizedBox(height: 12),
+                  _AscensionStagesCard(summary: _stageSummary),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -552,7 +778,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                         child: _StatCard(
                           title: 'Orders delivered',
                           value: '${summary.deliveredPaidOrders}',
-                          subtitle: 'Delivered + paid',
+                          subtitle: 'Delivered successfully',
                           icon: Icons.check_circle_outline_rounded,
                         ),
                       ),
@@ -699,6 +925,7 @@ class _AvatarMenu extends StatelessWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.clientArtistMenuStyle = false,
   });
 
@@ -707,6 +934,7 @@ class _AvatarMenu extends StatelessWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final bool clientArtistMenuStyle;
 
   @override
@@ -732,10 +960,14 @@ class _AvatarMenu extends StatelessWidget {
             onOpenArtist?.call();
             break;
           case _AvatarAction.reviews:
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
-            );
+            if (onOpenReviews != null) {
+              onOpenReviews?.call();
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
+              );
+            }
             break;
           case _AvatarAction.signOut:
             onSignOut();
@@ -743,11 +975,11 @@ class _AvatarMenu extends StatelessWidget {
         }
       },
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: 36),
+          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
         ),
       ),
       itemBuilder: (_) => [
@@ -880,6 +1112,220 @@ class _TotalEarningsCard extends StatelessWidget {
   }
 }
 
+
+class _AscensionStageSummary {
+  const _AscensionStageSummary({
+    required this.result,
+    required this.completedOrders,
+    required this.completedOrderPoints,
+    required this.onTimeDeliveries,
+    required this.onTimeDeliveryPoints,
+    required this.fiveStarReviews,
+    required this.fiveStarReviewPoints,
+    required this.repeatClientOrders,
+    required this.repeatClientOrderPoints,
+    required this.portfolioUploads,
+    required this.portfolioUploadPoints,
+    required this.deliveredOrders,
+    required this.artistGmv,
+    required this.jntRevenue,
+    required this.thisMonthPoints,
+  });
+
+  const _AscensionStageSummary.empty()
+      : result = const JntAscensionResult(
+          tier: 'maker',
+          tierLabel: 'Maker',
+          points: 0,
+          completedOrders: 0,
+          onTimeDeliveries: 0,
+          fiveStarReviews: 0,
+          repeatClientOrders: 0,
+          portfolioUploads: 0,
+          artistGmv: 0,
+          jntRevenue: 0,
+          completedOrderPoints: 0,
+          onTimeDeliveryPoints: 0,
+          fiveStarReviewPoints: 0,
+          repeatClientOrderPoints: 0,
+          portfolioUploadPoints: 0,
+          crownedPointsQualified: false,
+          crownedRevenueQualified: false,
+          jntRevenueToCrowned: 5000,
+          prioritySearch: false,
+          sponsorshipEligible: false,
+          insuranceEligible: false,
+          pointsToNextTier: 1000,
+          nextTier: 'goldsmith',
+          nextTierLabel: 'Goldsmith',
+          generatedTags: <String>['Maker'],
+          unlockedPerks: <String>[
+            'Welcome gift',
+            'Group orders',
+            'Learning & development',
+          ],
+          crownedPointsOnlyMessage: '',
+        ),
+        completedOrders = 0,
+        completedOrderPoints = 0,
+        onTimeDeliveries = 0,
+        onTimeDeliveryPoints = 0,
+        fiveStarReviews = 0,
+        fiveStarReviewPoints = 0,
+        repeatClientOrders = 0,
+        repeatClientOrderPoints = 0,
+        portfolioUploads = 0,
+        portfolioUploadPoints = 0,
+        deliveredOrders = 0,
+        artistGmv = 0,
+        jntRevenue = 0,
+        thisMonthPoints = 0;
+
+  final JntAscensionResult result;
+  final int completedOrders;
+  final double completedOrderPoints;
+  final int onTimeDeliveries;
+  final double onTimeDeliveryPoints;
+  final int fiveStarReviews;
+  final double fiveStarReviewPoints;
+  final int repeatClientOrders;
+  final double repeatClientOrderPoints;
+  final int portfolioUploads;
+  final double portfolioUploadPoints;
+  final int deliveredOrders;
+  final double artistGmv;
+  final double jntRevenue;
+  final double thisMonthPoints;
+}
+
+class _AscensionStagesCard extends StatelessWidget {
+  const _AscensionStagesCard({required this.summary});
+
+  final _AscensionStageSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Ascension stages',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+              Text(
+                'This month: +${summary.thisMonthPoints.toStringAsFixed(2)} pts',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11.5,
+                  color: AppColors.blackCat.withValues(alpha: 0.58),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _stageRow(
+            icon: Icons.check_circle_outline_rounded,
+            title: 'Completed orders',
+            subtitle: '${summary.completedOrders} order(s) × 25 pts',
+            points: summary.completedOrderPoints,
+          ),
+          _stageRow(
+            icon: Icons.local_shipping_outlined,
+            title: 'On-time shipments',
+            subtitle: '${summary.onTimeDeliveries} shipment(s) × 8.5 pts',
+            points: summary.onTimeDeliveryPoints,
+          ),
+          _stageRow(
+            icon: Icons.star_outline_rounded,
+            title: '5-star client reviews',
+            subtitle: '${summary.fiveStarReviews} review(s) × 9 pts',
+            points: summary.fiveStarReviewPoints,
+          ),
+          _stageRow(
+            icon: Icons.repeat_rounded,
+            title: 'Repeat client orders',
+            subtitle: '${summary.repeatClientOrders} repeat order(s) × 6 pts',
+            points: summary.repeatClientOrderPoints,
+          ),
+          _stageRow(
+            icon: Icons.person_pin_outlined,
+            title: 'Profile / portfolio upload',
+            subtitle: '${summary.portfolioUploads} upload(s) × 0.3 pts',
+            points: summary.portfolioUploadPoints,
+            isLast: true,
+          ),
+
+        ],
+      ),
+    );
+  }
+
+  Widget _stageRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required double points,
+    bool isLast = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 9),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.blackCat),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11.5,
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '+${points.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: Color(0xFF14823A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AscensionSummaryCard extends StatelessWidget {
   const _AscensionSummaryCard({
     required this.tier,
@@ -890,8 +1336,8 @@ class _AscensionSummaryCard extends StatelessWidget {
   });
 
   final String tier;
-  final int points;
-  final int pointsToNextTier;
+  final double points;
+  final double pointsToNextTier;
   final String nextTierLabel;
   final VoidCallback onViewAscension;
 
@@ -910,7 +1356,7 @@ class _AscensionSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitle = pointsToNextTier == 0
         ? 'You have reached the highest JNT Ascension tier.'
-        : '$pointsToNextTier pts to $nextTierLabel';
+        : '${pointsToNextTier.toStringAsFixed(2)} pts to $nextTierLabel';
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
@@ -933,7 +1379,7 @@ class _AscensionSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '$_tierLabel · $points pts',
+                  '$_tierLabel · ${points.toStringAsFixed(2)} pts',
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,

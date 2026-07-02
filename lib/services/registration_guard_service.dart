@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RegistrationGuardService {
   static const _collections = <String>[
@@ -12,19 +12,12 @@ class RegistrationGuardService {
     final normalized = email.trim().toLowerCase();
     if (normalized.isEmpty) return false;
 
-    final firestore = FirebaseFirestore.instance;
+    final supabase = Supabase.instance.client;
     try {
       for (final collection in _collections) {
-        final snap = await firestore
-            .collection(collection)
-            .where('email', isEqualTo: normalized)
-            .limit(1)
-            .get();
-        if (snap.docs.isNotEmpty) return true;
+        final rows = await supabase.from(collection).select('id').eq('email', normalized).limit(1);
+        if (rows.isNotEmpty) return true;
       }
-      return false;
-    } on FirebaseException {
-      // Do not block account creation when read rules prevent lookup.
       return false;
     } catch (_) {
       return false;

@@ -2,22 +2,717 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../services/supabase_firebase_compat.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
-import '../services/client_custom_request_repository.dart';
 import '../services/notifications_service.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import 'client_custom_request_page.dart';
 import 'notifications_page.dart';
 import 'simple_status_request_sheet.dart';
 import 'track_order_page.dart';
 import 'order_details_pages.dart';
+import 'artist_reviews_page.dart';
 
 enum OrdersAudience { client, clientArtist, brand }
+
+
+class SubmittedOrderClientSummary {
+  const SubmittedOrderClientSummary({
+    this.clientId = '',
+    this.clientName = '',
+    this.clientEmail = '',
+    this.responseStatus = '',
+    this.nailShape = '',
+    this.nailLength = '',
+    this.leftHandDimensions = const <String, String>{},
+    this.rightHandDimensions = const <String, String>{},
+  });
+
+  final String clientId;
+  final String clientName;
+  final String clientEmail;
+  final String responseStatus;
+  final String nailShape;
+  final String nailLength;
+  final Map<String, String> leftHandDimensions;
+  final Map<String, String> rightHandDimensions;
+}
+
+class SubmittedClientRequestSummary {
+  const SubmittedClientRequestSummary({
+    required this.id,
+    required this.sourceCollection,
+    this.orderNumber = '',
+    this.requestNumber = '',
+    this.clientEmail = '',
+    this.clientName = '',
+    this.contactName = '',
+    this.campaignName = '',
+    this.selectedArtist = '',
+    this.acceptedByArtistName = '',
+    this.acceptedByArtistEmail = '',
+    this.acceptedByClientEmail = '',
+    this.clientResponseStatus = '',
+    this.directClientStatus = '',
+    this.status = 'pending',
+    this.orderType = 'single',
+    this.description = '',
+    this.descriptionPreview = '',
+    this.cancelReason = '',
+    this.needByDisplay = '',
+    this.requestAcceptByDisplay = '',
+    this.nailShape = '',
+    this.nailLength = '',
+    this.paymentStatus = '',
+    this.paymentLink = '',
+    this.shippedByCourier = '',
+    this.trackingNumber = '',
+    this.completionReviewStatus = '',
+    this.completionDeclineReason = '',
+    this.completionDeclineDescription = '',
+    this.designApprovalStatus = '',
+    this.clientReviewText = '',
+    this.clientRating,
+    this.artistFinalAmount,
+    this.budgetMin,
+    this.budgetMax,
+    this.clientSubmittedAt,
+    this.needBy,
+    this.requestAcceptBy,
+    this.paidAt,
+    this.cancelledAt,
+    this.shippedAt,
+    this.deliveredAt,
+    this.designApprovedAt,
+    this.designSubmittedAt,
+    this.designApprovalDueAt,
+    this.designReminderSentAt,
+    this.completionDeclinedAt,
+    this.clientReviewSubmittedAt,
+    this.inspirationPhotos = const <String>[],
+    this.artistCompletedPhotos = const <String>[],
+    this.designPreviewPhotos = const <String>[],
+    this.leftHandDimensions = const <String, String>{},
+    this.rightHandDimensions = const <String, String>{},
+    this.groupClients = const <SubmittedOrderClientSummary>[],
+    this.declinedByClientEmails = const <String>[],
+    this.declinedByArtistEmails = const <String>[],
+    this.clientProfileImage = '',
+    this.artistProfileImage = '',
+  });
+
+  final String id;
+  final String sourceCollection;
+  final String orderNumber;
+  final String requestNumber;
+  final String clientEmail;
+  final String clientName;
+  final String contactName;
+  final String campaignName;
+  final String selectedArtist;
+  final String acceptedByArtistName;
+  final String acceptedByArtistEmail;
+  final String acceptedByClientEmail;
+  final String clientResponseStatus;
+  final String directClientStatus;
+  final String status;
+  final String orderType;
+  final String description;
+  final String descriptionPreview;
+  final String cancelReason;
+  final String needByDisplay;
+  final String requestAcceptByDisplay;
+  final String nailShape;
+  final String nailLength;
+  final String paymentStatus;
+  final String paymentLink;
+  final String shippedByCourier;
+  final String trackingNumber;
+  final String completionReviewStatus;
+  final String completionDeclineReason;
+  final String completionDeclineDescription;
+  final String designApprovalStatus;
+  final String clientReviewText;
+  final int? clientRating;
+  final num? artistFinalAmount;
+  final int? budgetMin;
+  final int? budgetMax;
+  final DateTime? clientSubmittedAt;
+  final DateTime? needBy;
+  final DateTime? requestAcceptBy;
+  final DateTime? paidAt;
+  final DateTime? cancelledAt;
+  final DateTime? shippedAt;
+  final DateTime? deliveredAt;
+  final DateTime? designApprovedAt;
+  final DateTime? designSubmittedAt;
+  final DateTime? designApprovalDueAt;
+  final DateTime? designReminderSentAt;
+  final DateTime? completionDeclinedAt;
+  final DateTime? clientReviewSubmittedAt;
+  final List<String> inspirationPhotos;
+  final List<String> artistCompletedPhotos;
+  final List<String> designPreviewPhotos;
+  final Map<String, String> leftHandDimensions;
+  final Map<String, String> rightHandDimensions;
+  final List<SubmittedOrderClientSummary> groupClients;
+  final List<String> declinedByClientEmails;
+  final List<String> declinedByArtistEmails;
+  final String clientProfileImage;
+  final String artistProfileImage;
+}
+
+class _SupabaseOrderService {
+  static final SupabaseClient _db = Supabase.instance.client;
+
+  static String tableForCollection(String collection) {
+    switch (collection) {
+      case 'Company_Custom_Requests':
+      case 'company_custom_requests':
+        return 'company_custom_requests';
+      case 'Client_Custom_Requests':
+      case 'client_custom_requests':
+      default:
+        return 'client_custom_requests';
+    }
+  }
+
+  static String collectionForTable(String table) {
+    return table == 'company_custom_requests'
+        ? 'Company_Custom_Requests'
+        : 'Client_Custom_Requests';
+  }
+
+  static Map<String, dynamic> asMap(Object? value) {
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+    return <String, dynamic>{};
+  }
+
+  static List<String> asStringList(Object? value) {
+    if (value is List) {
+      return value.map((e) => (e ?? '').toString()).where((e) => e.trim().isNotEmpty).toList(growable: false);
+    }
+    final text = (value ?? '').toString().trim();
+    return text.isEmpty ? const <String>[] : <String>[text];
+  }
+
+  static DateTime? asDate(Object? value) {
+    if (value is DateTime) return value;
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    final text = (value ?? '').toString().trim();
+    if (text.isEmpty) return null;
+    return DateTime.tryParse(text);
+  }
+
+  static String pickText(List<Object?> values) {
+    for (final v in values) {
+      final text = (v ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  static int? asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse((value ?? '').toString());
+  }
+
+  static num? asNum(Object? value) {
+    if (value is num) return value;
+    return num.tryParse((value ?? '').toString());
+  }
+
+  static Future<Map<String, dynamic>> getRequest(String collection, String id) async {
+    final table = tableForCollection(collection);
+    final row = await _db.from(table).select().eq('id', id).maybeSingle();
+    return asMap(row);
+  }
+
+  static Future<List<SubmittedClientRequestSummary>> loadRequestsForClient({
+    required String clientEmail,
+    required String alternateClientEmail,
+    required String clientName,
+    String? userUid,
+  }) async {
+    final emails = <String>{
+      clientEmail.trim().toLowerCase(),
+      alternateClientEmail.trim().toLowerCase(),
+    }..removeWhere((e) => e.isEmpty);
+    final uid = (userUid ?? '').trim();
+    final name = clientName.trim().toLowerCase();
+
+    Future<Map<String, Map<String, dynamic>>> loadDetails(String table) async {
+      final result = <String, Map<String, dynamic>>{};
+      try {
+        final rows = await _db.from(table).select();
+        for (final raw in rows) {
+          final row = asMap(raw);
+          final requestId = (row['request_id'] ?? '').toString().trim();
+          if (requestId.isEmpty) continue;
+          final data = asMap(row['data']);
+          if (data.isEmpty) continue;
+          final detailKey = (row['detail_key'] ?? '').toString().trim();
+          final existing = result[requestId] ?? <String, dynamic>{};
+          final merged = <String, dynamic>{
+            ...existing,
+            ...data,
+          };
+          if (detailKey.isNotEmpty) {
+            merged[detailKey] = <String, dynamic>{
+              ...asMap(existing[detailKey]),
+              ...data,
+            };
+          }
+          result[requestId] = merged;
+        }
+      } catch (_) {}
+      return result;
+    }
+
+    final clientDetails = await loadDetails('client_custom_requests_details');
+    final brandDetails = await loadDetails('company_custom_requests_details');
+
+    Future<List<Map<String, dynamic>>> fetchMergedRows(
+      String table,
+      Map<String, Map<String, dynamic>> detailsById,
+    ) async {
+      final rows = await _db
+          .from(table)
+          .select()
+          .order('created_at', ascending: false);
+      final out = <Map<String, dynamic>>[];
+      for (final raw in rows) {
+        final row = asMap(raw);
+        final id = (row['id'] ?? '').toString().trim();
+        final detail = detailsById[id];
+        if (detail != null && detail.isNotEmpty) {
+          final mergedDetails = <String, dynamic>{
+            ...asMap(row['details']),
+            ...detail,
+          };
+          final mergedPayload = <String, dynamic>{
+            ...asMap(row['payload']),
+            ...asMap(detail['payload']),
+            ...detail,
+          };
+          row['details'] = mergedDetails;
+          row['payload'] = mergedPayload;
+        }
+        out.add(row);
+      }
+      return out;
+    }
+
+    final clientRows = await fetchMergedRows(
+      'client_custom_requests',
+      clientDetails,
+    );
+    final brandRows = await fetchMergedRows(
+      'company_custom_requests',
+      brandDetails,
+    );
+
+    bool belongs(Map<String, dynamic> row) {
+      final summary = asMap(row['summary']);
+      final details = asMap(row['details']);
+      final payload = asMap(row['payload']);
+      
+      final requestDetails = asMap(row['request_details']);
+      final detailsOrder = asMap(details['order']);
+      final payloadOrder = asMap(payload['order']);
+      final acceptance = <String, dynamic>{
+        ...asMap(summary['acceptance']),
+        ...asMap(details['acceptance']),
+        ...asMap(payload['acceptance']),
+      };
+      final allEmailCandidates = <String>{
+        (row['client_email'] ?? '').toString(),
+        (row['selected_client_email'] ?? '').toString(),
+        (summary['clientEmail'] ?? '').toString(),
+        (summary['selectedClientEmail'] ?? '').toString(),
+        (details['clientEmail'] ?? '').toString(),
+        (details['selectedClientEmail'] ?? '').toString(),
+        (payload['clientEmail'] ?? '').toString(),
+        (payload['selectedClientEmail'] ?? '').toString(),
+        (detailsOrder['selectedClientEmail'] ?? '').toString(),
+        (payloadOrder['selectedClientEmail'] ?? '').toString(),
+        (row['accepted_by_client_email'] ?? '').toString(),
+        (summary['acceptedByClientEmail'] ?? '').toString(),
+        (details['acceptedByClientEmail'] ?? '').toString(),
+        (payload['acceptedByClientEmail'] ?? '').toString(),
+        (acceptance['acceptedByClientEmail'] ?? '').toString(),
+        (requestDetails['clientEmail'] ?? '').toString(),
+      }.map((e) => e.trim().toLowerCase())
+      .where((e) => e.isNotEmpty)
+      .toSet();
+
+      if (emails.intersection(allEmailCandidates).isNotEmpty) {
+        return true;
+      }
+      final candidates = <String>{
+        pickText([row['client_email'], summary['clientEmail'], details['clientEmail'], payload['clientEmail'], requestDetails['clientEmail']]).toLowerCase(),
+        pickText([row['selected_client_email'], summary['selectedClientEmail'], details['selectedClientEmail'], payload['selectedClientEmail'], detailsOrder['selectedClientEmail'], payloadOrder['selectedClientEmail']]).toLowerCase(),
+        pickText([row['accepted_by_client_email'], summary['acceptedByClientEmail'], details['acceptedByClientEmail'], payload['acceptedByClientEmail'], acceptance['acceptedByClientEmail']]).toLowerCase(),
+      }..removeWhere((e) => e.isEmpty);
+      if (emails.intersection(candidates).isNotEmpty) return true;
+      if (uid.isNotEmpty) {
+        final ids = <String>{
+          pickText([row['client_id'], row['client_uid'], summary['clientId'], details['clientId'], payload['clientId']]),
+          pickText([summary['clientUid'], details['clientUid'], payload['clientUid']]),
+          pickText([row['accepted_by_client_id'], summary['acceptedByClientId'], details['acceptedByClientId'], payload['acceptedByClientId'], acceptance['acceptedByClientId']]),
+          pickText([row['accepted_by_client_uid'], summary['acceptedByClientUid'], details['acceptedByClientUid'], payload['acceptedByClientUid'], acceptance['acceptedByClientUid']]),
+        }..removeWhere((e) => e.isEmpty);
+        if (ids.contains(uid)) return true;
+      }
+      if (name.isNotEmpty) {
+        final names = <String>{
+          pickText([row['client_name'], summary['clientName'], details['clientName'], payload['clientName']]).toLowerCase(),
+          pickText([row['selected_client'], summary['selectedClient'], details['selectedClient'], payload['selectedClient']]).toLowerCase(),
+        }..removeWhere((e) => e.isEmpty);
+        if (names.contains(name)) return true;
+      }
+      return false;
+    }
+
+    final out = <SubmittedClientRequestSummary>[];
+    for (final raw in clientRows) {
+      final row = asMap(raw);
+      if (belongs(row)) out.add(fromRow(row, 'client_custom_requests'));
+    }
+    for (final raw in brandRows) {
+      final row = asMap(raw);
+      if (belongs(row)) out.add(fromRow(row, 'company_custom_requests'));
+    }
+    return out;
+  }
+
+  static SubmittedClientRequestSummary fromRow(Map<String, dynamic> row, String table) {
+    final summary = asMap(row['summary']);
+    final details = asMap(row['details']);
+    final payload = asMap(row['payload']);
+    final requestDetails = asMap(row['request_details']);
+    final detailsOrder = asMap(details['order']);
+    final payloadOrder = asMap(payload['order']);
+    final order = <String, dynamic>{
+      ...asMap(row['order']),
+      ...detailsOrder,
+      ...payloadOrder,
+    };
+    final acceptance = <String, dynamic>{
+      ...asMap(summary['acceptance']),
+      ...asMap(details['acceptance']),
+      ...asMap(payload['acceptance']),
+    };
+    final payment = asMap(row['payment']);
+    final shipping = asMap(row['shipping']);
+    final review = asMap(row['review']);
+    final clientReview = asMap(row['client_review']);
+    final designApproval = asMap(row['designApproval']).isNotEmpty ? asMap(row['designApproval']) : asMap(row['design_approval']);
+    final completion = asMap(row['completion']);
+
+    String text(List<Object?> values) => pickText(values);
+    DateTime? date(List<Object?> values) {
+      for (final value in values) {
+        final d = asDate(value);
+        if (d != null) return d;
+      }
+      return null;
+    }
+    int? integer(List<Object?> values) {
+      for (final value in values) {
+        final i = asInt(value);
+        if (i != null) return i;
+      }
+      return null;
+    }
+    num? number(List<Object?> values) {
+      for (final value in values) {
+        final n = asNum(value);
+        if (n != null) return n;
+      }
+      return null;
+    }
+    List<String> list(List<Object?> values) {
+      for (final value in values) {
+        final l = asStringList(value);
+        if (l.isNotEmpty) return l;
+      }
+    return const <String>[];
+  }
+
+    Map<String, String> stringMap(List<Object?> values) {
+      for (final value in values) {
+        final m = asMap(value);
+        if (m.isNotEmpty) return m.map((k, v) => MapEntry(k, (v ?? '').toString()));
+      }
+      return const <String, String>{};
+    }
+    String dimText(Object? value) {
+      if (value is num) {
+        return value == value.roundToDouble()
+            ? value.toInt().toString()
+            : value.toString();
+      }
+      final text = (value ?? '').toString().trim();
+      return text;
+    }
+    Map<String, String> handDimensionMap(
+      bool isLeft,
+      List<Object?> directValues,
+      List<Object?> nestedSources,
+    ) {
+      final direct = stringMap(directValues);
+      if (direct.isNotEmpty) return direct;
+
+      for (final source in nestedSources) {
+        final map = asMap(source);
+        if (map.isEmpty) continue;
+        final nailPreferences = asMap(map['nailPreferences']);
+        final dimensions = asMap(nailPreferences['dimensions']).isNotEmpty
+            ? asMap(nailPreferences['dimensions'])
+            : asMap(map['dimensions']);
+        if (dimensions.isEmpty) continue;
+
+        final prefix = isLeft ? 'l' : 'r';
+        final hand = <String, String>{
+          'thumb': dimText(dimensions['${prefix}Thumb']),
+          'index': dimText(dimensions['${prefix}Index']),
+          'middle': dimText(dimensions['${prefix}Middle']),
+          'ring': dimText(dimensions['${prefix}Ring']),
+          'pinky': dimText(dimensions['${prefix}Pinky']),
+        };
+        if (hand.values.any((value) => value.isNotEmpty)) return hand;
+      }
+
+      return const <String, String>{};
+    }
+
+    List<SubmittedOrderClientSummary> groupClients() {
+      final detailsGroupOrder = asMap(details['groupOrder']);
+      final payloadGroupOrder = asMap(payload['groupOrder']);
+      final requestGroupOrder = asMap(requestDetails['groupOrder']);
+      List<dynamic>? firstNonEmptyList(List<Object?> candidates) {
+        for (final candidate in candidates) {
+          if (candidate is List && candidate.isNotEmpty) {
+            return candidate.cast<dynamic>();
+          }
+        }
+        for (final candidate in candidates) {
+          if (candidate is List) {
+            return candidate.cast<dynamic>();
+          }
+        }
+        return null;
+      }
+
+      final raw = firstNonEmptyList([
+        row['group_clients'],
+        summary['groupClients'],
+        details['groupClients'],
+        payload['groupClients'],
+        detailsGroupOrder['clients'],
+        payloadGroupOrder['clients'],
+        requestGroupOrder['clients'],
+        order['clients'],
+      ]);
+      if (raw is! List) return const <SubmittedOrderClientSummary>[];
+      return raw.whereType<Object>().map((item) {
+        final m = asMap(item);
+        final savedNails = asMap(m['savedNails']);
+        final draftNails = asMap(m['draftNails']);
+        final nailPreferences = savedNails.isNotEmpty
+            ? savedNails
+            : draftNails;
+        return SubmittedOrderClientSummary(
+          clientId: text([m['clientId'], m['client_id'], m['id']]),
+          clientName: text([m['clientName'], m['client_name'], m['name']]),
+          clientEmail: text([m['clientEmail'], m['client_email'], m['email']]),
+          responseStatus: text([m['responseStatus'], m['response_status'], m['status']]),
+          nailShape: text([
+            m['nailShape'],
+            m['nail_shape'],
+            nailPreferences['shape'],
+          ]),
+          nailLength: text([
+            m['nailLength'],
+            m['nail_length'],
+            nailPreferences['length'],
+          ]),
+          leftHandDimensions: handDimensionMap(
+            true,
+            [m['leftHandDimensions'], m['left_hand_dimensions'], m['leftHand']],
+            [m, draftNails, savedNails, nailPreferences],
+          ),
+          rightHandDimensions: handDimensionMap(
+            false,
+            [m['rightHandDimensions'], m['right_hand_dimensions'], m['rightHand']],
+            [m, draftNails, savedNails, nailPreferences],
+          ),
+        );
+      }).toList(growable: false);
+    }
+
+    return SubmittedClientRequestSummary(
+      id: text([row['id']]),
+      sourceCollection: collectionForTable(table),
+      orderNumber: text([row['order_number'], summary['orderNumber'], details['orderNumber'], payload['orderNumber'], row['request_number'], row['client_request_number']]),
+      requestNumber: text([row['request_number'], summary['requestNumber'], details['requestNumber'], payload['requestNumber']]),
+      clientEmail: text([row['client_email'], summary['clientEmail'], details['clientEmail'], payload['clientEmail']]),
+      clientName: text([row['client_name'], summary['clientName'], details['clientName'], payload['clientName']]),
+      contactName: text([row['company_name'], row['brand_name'], summary['companyName'], details['companyName'], payload['companyName']]),
+      campaignName: text([row['campaign_name'], summary['campaignName'], details['campaignName'], payload['campaignName'], row['title']]),
+      selectedArtist: text([
+        row['selected_artist'],
+        summary['selectedArtist'],
+        details['selectedArtist'],
+        payload['selectedArtist'],
+      ]),
+      acceptedByArtistName: text([
+        row['accepted_by_artist_name'],
+        row['artist_name'],
+        summary['acceptedByArtistName'],
+        details['acceptedByArtistName'],
+        payload['acceptedByArtistName'],
+      ]),
+      acceptedByArtistEmail: text([
+        row['accepted_by_artist_email'],
+        row['artist_email'],
+        summary['acceptedByArtistEmail'],
+        details['acceptedByArtistEmail'],
+        payload['acceptedByArtistEmail'],
+      ]),
+      acceptedByClientEmail: text([
+        row['accepted_by_client_email'],
+        summary['acceptedByClientEmail'],
+        details['acceptedByClientEmail'],
+        payload['acceptedByClientEmail'],
+        acceptance['acceptedByClientEmail'],
+      ]),
+      clientResponseStatus: text([
+        row['client_response_status'],
+        summary['clientResponseStatus'],
+        details['clientResponseStatus'],
+        payload['clientResponseStatus'],
+        acceptance['clientResponseStatus'],
+      ]),
+      directClientStatus: text([row['direct_client_status'], summary['directClientStatus'], details['directClientStatus'], payload['directClientStatus']]),
+      status: text([row['status'], summary['status'], details['status'], payload['status'], 'pending']),
+      orderType: text([row['order_type'], summary['orderType'], details['orderType'], payload['orderType'], order['type'], 'single']),
+      description: text([row['description'], requestDetails['description'], details['description'], payload['description'], summary['description']]),
+      descriptionPreview: text([row['description_preview'], summary['descriptionPreview'], details['descriptionPreview'], payload['descriptionPreview'], row['description']]),
+      cancelReason: text([row['cancel_reason'], row['cancelReason'], summary['cancelReason'], details['cancelReason'], payload['cancelReason']]),
+      needByDisplay: text([row['need_by_display'], summary['needByDisplay'], details['needByDisplay'], payload['needByDisplay'], requestDetails['needByDisplay'], requestDetails['needBy']]),
+      requestAcceptByDisplay: text([row['request_accept_by_display'], summary['requestAcceptByDisplay'], details['requestAcceptByDisplay'], payload['requestAcceptByDisplay']]),
+      nailShape: text([row['nail_shape'], summary['nailShape'], details['nailShape'], payload['nailShape'], requestDetails['nailShape'], asMap(details['nailPreferences'])['shape'], asMap(payload['nailPreferences'])['shape']]),
+      nailLength: text([row['nail_length'], summary['nailLength'], details['nailLength'], payload['nailLength'], requestDetails['nailLength'], asMap(details['nailPreferences'])['length'], asMap(payload['nailPreferences'])['length']]),
+      paymentStatus: text([row['payment_status'], payment['status'], summary['paymentStatus'], details['paymentStatus'], payload['paymentStatus']]),
+      paymentLink: text([row['payment_link'], payment['link'], payment['paymentLink'], details['paymentLink'], payload['paymentLink']]),
+      shippedByCourier: text([row['shipped_by_courier'], row['courier'], shipping['courier'], details['shippedByCourier'], payload['shippedByCourier']]),
+      trackingNumber: text([row['tracking_number'], shipping['trackingNumber'], details['trackingNumber'], payload['trackingNumber']]),
+      completionReviewStatus: text([row['completion_review_status'], completion['reviewStatus'], details['completionReviewStatus'], payload['completionReviewStatus']]),
+      completionDeclineReason: text([row['completion_decline_reason'], completion['declineReason'], details['completionDeclineReason'], payload['completionDeclineReason']]),
+      completionDeclineDescription: text([row['completion_decline_description'], completion['declineDescription'], details['completionDeclineDescription'], payload['completionDeclineDescription']]),
+      designApprovalStatus: text([row['design_approval_status'], designApproval['status'], details['designApprovalStatus'], payload['designApprovalStatus']]),
+      clientReviewText: text([row['client_review_comment'], row['review_comment'], clientReview['comment'], review['comment'], details['clientReviewText'], payload['clientReviewText']]),
+      clientRating: integer([row['client_review_stars'], row['review_stars'], clientReview['stars'], review['stars'], details['clientRating'], payload['clientRating']]),
+      artistFinalAmount: number([row['artist_final_amount'], row['final_amount_by_artist'], payment['artistFinalAmount'], details['artistFinalAmount'], payload['artistFinalAmount']]),
+      budgetMin: integer([row['budget_min'], summary['budgetMin'], details['budgetMin'], payload['budgetMin']]),
+      budgetMax: integer([row['budget_max'], summary['budgetMax'], details['budgetMax'], payload['budgetMax']]),
+      clientSubmittedAt: date([row['created_at'], summary['createdAt'], details['createdAt'], payload['createdAt']]),
+      needBy: date([row['need_by'], summary['needBy'], details['needBy'], payload['needBy'], requestDetails['needBy']]),
+      requestAcceptBy: date([row['request_accept_by'], summary['requestAcceptBy'], details['requestAcceptBy'], payload['requestAcceptBy']]),
+      paidAt: date([row['paid_at'], payment['paidAt'], details['paidAt'], payload['paidAt']]),
+      cancelledAt: date([row['cancelled_at'], row['cancelledAt'], details['cancelledAt'], payload['cancelledAt']]),
+      shippedAt: date([row['shipped_at'], shipping['shippedAt'], details['shippedAt'], payload['shippedAt']]),
+      deliveredAt: date([row['delivered_at'], shipping['deliveredAt'], details['deliveredAt'], payload['deliveredAt']]),
+      designApprovedAt: date([row['design_approved_at'], designApproval['approvedAt'], details['designApprovedAt'], payload['designApprovedAt']]),
+      designSubmittedAt: date([row['design_submitted_at'], designApproval['submittedAt'], details['designSubmittedAt'], payload['designSubmittedAt']]),
+      designApprovalDueAt: date([row['design_approval_due_at'], designApproval['dueAt'], details['designApprovalDueAt'], payload['designApprovalDueAt']]),
+      designReminderSentAt: date([row['design_reminder_sent_at'], designApproval['reminderSentAt'], details['designReminderSentAt'], payload['designReminderSentAt']]),
+      completionDeclinedAt: date([row['completion_declined_at'], completion['declinedAt'], details['completionDeclinedAt'], payload['completionDeclinedAt']]),
+      clientReviewSubmittedAt: date([row['client_review_submitted_at'], row['review_submitted_at'], clientReview['submittedAt'], review['submittedAt'], details['clientReviewSubmittedAt'], payload['clientReviewSubmittedAt']]),
+      inspirationPhotos: list([row['inspiration_photos'], summary['inspirationPhotos'], details['inspirationPhotos'], payload['inspirationPhotos'], requestDetails['inspirationPhotos'], requestDetails['brandInspirationPhotos'], details['brandInspirationPhotos'], payload['brandInspirationPhotos']]),
+      artistCompletedPhotos: list([row['artist_completed_photos'], details['artistCompletedPhotos'], payload['artistCompletedPhotos']]),
+      designPreviewPhotos: list([row['design_preview_photos'], details['designPreviewPhotos'], payload['designPreviewPhotos']]),
+      leftHandDimensions: handDimensionMap(
+        true,
+        [
+          row['left_hand_dimensions'],
+          summary['leftHandDimensions'],
+          details['leftHandDimensions'],
+          payload['leftHandDimensions'],
+        ],
+        [row, summary, details, payload, requestDetails, order],
+      ),
+      rightHandDimensions: handDimensionMap(
+        false,
+        [
+          row['right_hand_dimensions'],
+          summary['rightHandDimensions'],
+          details['rightHandDimensions'],
+          payload['rightHandDimensions'],
+        ],
+        [row, summary, details, payload, requestDetails, order],
+      ),
+      groupClients: groupClients(),
+      declinedByClientEmails: list([row['declined_by_client_emails'], summary['declinedByClientEmails'], details['declinedByClientEmails'], payload['declinedByClientEmails']]),
+      declinedByArtistEmails: list([row['declined_by_artist_emails'], summary['declinedByArtistEmails'], details['declinedByArtistEmails'], payload['declinedByArtistEmails']]),
+      clientProfileImage: text([row['client_profile_image'], summary['clientProfileImage'], details['clientProfileImage'], payload['clientProfileImage']]),
+      artistProfileImage: text([row['artist_profile_image'], summary['artistProfileImage'], details['artistProfileImage'], payload['artistProfileImage']]),
+    );
+  }
+
+  static Future<String?> resolveStorageUrl(String raw) async {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') || value.startsWith('blob:')) return value;
+    if (value.startsWith('gs://')) return null;
+    final cleaned = value.startsWith('/') ? value.substring(1) : value;
+    final parts = cleaned.split('/');
+    if (parts.length < 2) return value;
+    final bucket = parts.first;
+    final path = parts.sublist(1).join('/');
+    try {
+      return _db.storage.from(bucket).getPublicUrl(path);
+    } catch (_) {
+      try {
+        return await _db.storage.from(bucket).createSignedUrl(path, 3600);
+      } catch (_) {
+        return value;
+      }
+    }
+  }
+}
+
+
+class _CompositeStreamSubscription<T> implements StreamSubscription<T> {
+  _CompositeStreamSubscription(this._inner, {required this.onCancelExtra});
+  final StreamSubscription<T> _inner;
+  final Future<void> Function() onCancelExtra;
+  @override
+  Future<void> cancel() async { await _inner.cancel(); await onCancelExtra(); }
+  @override
+  void onData(void Function(T data)? handleData) => _inner.onData(handleData);
+  @override
+  void onError(Function? handleError) => _inner.onError(handleError);
+  @override
+  void onDone(void Function()? handleDone) => _inner.onDone(handleDone);
+  @override
+  void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
+  @override
+  void resume() => _inner.resume();
+  @override
+  bool get isPaused => _inner.isPaused;
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture<E>(futureValue);
+}
 
 class ClientOrdersPage extends StatefulWidget {
   const ClientOrdersPage({
@@ -27,9 +722,11 @@ class ClientOrdersPage extends StatefulWidget {
     this.showCompanyChrome = false,
     this.companyName,
     this.onOpenProfile,
+    this.onOpenEarnings,
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.onLogout,
     this.showExtendedAvatarMenu = false,
     this.showProfileMenu = false,
@@ -44,9 +741,11 @@ class ClientOrdersPage extends StatefulWidget {
   final bool showCompanyChrome;
   final String? companyName;
   final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenEarnings;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final Future<void> Function()? onLogout;
   final bool showExtendedAvatarMenu;
   final bool showProfileMenu;
@@ -63,10 +762,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   OrdersFilter _filter = OrdersFilter.all;
   StreamSubscription<List<SubmittedClientRequestSummary>>?
   _submittedRequestsSub;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-  _brandPartnerStatusSub;
+  StreamSubscription<dynamic>? _brandPartnerStatusSub;
   List<ClientOrder> _submittedOrders = const [];
-  bool _isBrandPartner = false;
   final FocusNode _notificationsFocusNode = FocusNode(
     debugLabel: 'ordersNotifications',
   );
@@ -89,6 +786,9 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     if (!oldWidget.isActiveTab && widget.isActiveTab) {
       _didSetInitialA11yFocus = false;
       _scheduleInitialA11yFocus();
+
+      // Refresh orders whenever user returns to Orders tab.
+      _subscribeSubmittedOrders();
     }
   }
 
@@ -131,135 +831,119 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     });
   }
 
-  bool _hasBrandPartnerTag(Object? value) {
-    if (value is! List) return false;
-    return value.any(
-      (item) => item.toString().trim().toLowerCase() == 'brand partner',
-    );
-  }
-
-  bool _docIsBrandPartner(Map<String, dynamic> data) {
-    String firstNonEmpty(Map<String, dynamic> source, List<String> keys) {
-      for (final key in keys) {
-        final value = (source[key] ?? '').toString().trim();
-        if (value.isNotEmpty) return value;
-      }
-      return '';
-    }
-
-    final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-    final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-    final company = (data['company'] as Map<String, dynamic>?) ?? const {};
-    final client = (data['client'] as Map<String, dynamic>?) ?? const {};
-    final ascension = (data['ascension'] as Map<String, dynamic>?) ?? const {};
-    final profileAscension =
-        (profile['ascension'] as Map<String, dynamic>?) ?? const {};
-    final basicAscension =
-        (basic['ascension'] as Map<String, dynamic>?) ?? const {};
-    final clientAscension =
-        (client['ascension'] as Map<String, dynamic>?) ?? const {};
-
-    final partnerText = <String>[
-      firstNonEmpty(data, const ['status', 'partnerStatus', 'tier']),
-      firstNonEmpty(profile, const ['status', 'partnerStatus', 'tier']),
-      firstNonEmpty(basic, const ['status', 'partnerStatus', 'tier']),
-      firstNonEmpty(company, const ['status', 'partnerStatus', 'tier']),
-      firstNonEmpty(client, const ['status', 'partnerStatus', 'tier']),
-      firstNonEmpty(ascension, const ['status']),
-      firstNonEmpty(profileAscension, const ['status']),
-      firstNonEmpty(basicAscension, const ['status']),
-      firstNonEmpty(clientAscension, const ['status']),
-    ].join(' ').toLowerCase();
-
-    final hasBrandPartnerLabel =
-        partnerText.contains('brand partner') ||
-        partnerText.contains('brand_partner');
-
-    final hasBrandPartnerTag =
-        _hasBrandPartnerTag(data['accountTags']) ||
-        _hasBrandPartnerTag(profile['accountTags']) ||
-        _hasBrandPartnerTag(basic['accountTags']) ||
-        _hasBrandPartnerTag(client['accountTags']);
-
-    final approvalStatus = firstNonEmpty(data, const [
-      'brandPartnerStatus',
-      'brandPartnerApproval',
-    ]).toLowerCase();
-
-    if (hasBrandPartnerTag) return true;
-    if (approvalStatus == 'approved' &&
-        (hasBrandPartnerLabel || hasBrandPartnerTag)) {
-      return true;
-    }
-    return hasBrandPartnerLabel;
-  }
-
   Future<void> _listenBrandPartnerStatus() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || uid.trim().isEmpty) return;
+    final user = Supabase.instance.client.auth.currentUser;
+    final uid = user?.id;
+    final email = (user?.email ?? widget.profile.basic.email).trim().toLowerCase();
+    if ((uid == null || uid.isEmpty) && email.isEmpty) return;
 
-    final db = FirebaseFirestore.instance;
-    final clientRef = db.collection('client').doc(uid);
-    final clientSnap = await clientRef.get();
-    final targetRef = clientSnap.exists
-        ? clientRef
-        : db.collection('client_artist').doc(uid);
-
-    final initialData = clientSnap.exists
-        ? clientSnap.data()
-        : (await db.collection('client_artist').doc(uid).get()).data();
-    if (mounted && initialData != null) {
-      _isBrandPartner = _docIsBrandPartner(initialData);
-    }
-
-    _brandPartnerStatusSub?.cancel();
-    _brandPartnerStatusSub = targetRef.snapshots().listen((snapshot) {
-      final data = snapshot.data() ?? const <String, dynamic>{};
-      final isPartner = _docIsBrandPartner(data);
-      if (!mounted || _isBrandPartner == isPartner) return;
-      setState(() => _isBrandPartner = isPartner);
-    });
+    try {
+      Map<String, dynamic>? row;
+      if (uid != null && uid.isNotEmpty) {
+        row = await Supabase.instance.client
+            .from('client')
+            .select()
+            .eq('id', uid)
+            .maybeSingle();
+        row ??= await Supabase.instance.client
+            .from('client_artist')
+            .select()
+            .eq('id', uid)
+            .maybeSingle();
+      }
+      if (row == null && email.isNotEmpty) {
+        row = await Supabase.instance.client
+            .from('client')
+            .select()
+            .ilike('email', email)
+            .maybeSingle();
+        row ??= await Supabase.instance.client
+            .from('client_artist')
+            .select()
+            .ilike('email', email)
+            .maybeSingle();
+      }
+    } catch (_) {}
   }
 
   void _subscribeSubmittedOrders() {
     _submittedRequestsSub?.cancel();
-    final authEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final authEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     final profileEmail = widget.profile.basic.email.trim().toLowerCase();
-    // Client request submissions are saved with profile email; use that first
-    // so newly submitted requests are immediately visible in Orders.
     final effectiveEmail = profileEmail.isNotEmpty ? profileEmail : authEmail;
     final profileName = widget.profile.basic.name.trim();
     final effectiveName = profileName.isNotEmpty
         ? profileName
         : ((widget.companyName ?? '').trim());
     final currentUserEmail = authEmail.isNotEmpty ? authEmail : effectiveEmail;
-    _submittedRequestsSub =
-        ClientCustomRequestRepository.watchRequestsForClient(
+    final controller = StreamController<List<SubmittedClientRequestSummary>>();
+    var cancelled = false;
+
+    Future<void> load() async {
+      try {
+        final items = await _SupabaseOrderService.loadRequestsForClient(
           clientEmail: effectiveEmail,
           alternateClientEmail: authEmail,
           clientName: effectiveName,
-          userUid: FirebaseAuth.instance.currentUser?.uid,
-        ).listen((items) {
-          final filteredItems = items
-              .where((req) => _isVisibleForAudience(req, widget.audience))
-              .toList(growable: false);
-          unawaited(_syncExpiredRequests(filteredItems));
-          final orders =
-              filteredItems
-                  .map(
-                    (req) => _mapSubmittedRequestToOrder(req, currentUserEmail),
-                  )
-                  .toList()
-                ..sort(
-                  (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
-                    a.createdAt ?? DateTime(1970),
-                  ),
-                );
-          if (!mounted) return;
-          setState(() => _submittedOrders = orders);
-        });
+          userUid: Supabase.instance.client.auth.currentUser?.id,
+        );
+        if (!cancelled && !controller.isClosed) controller.add(items);
+      } catch (e, st) {
+        if (!cancelled && !controller.isClosed) controller.addError(e, st);
+      }
+    }
+
+    unawaited(load());
+    final realtimeSub = Supabase.instance.client
+        .channel('client-orders-${effectiveEmail.hashCode}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'client_custom_requests',
+          callback: (_) => unawaited(load()),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'company_custom_requests',
+          callback: (_) => unawaited(load()),
+        )
+        .subscribe();
+
+    _submittedRequestsSub = controller.stream.listen((items) {
+      final filteredItems = items
+          .where(
+            (req) =>
+                _isVisibleForAudience(req, widget.audience) &&
+                !_shouldHideFromClientArtistOrders(req, currentUserEmail),
+          )
+          .toList(growable: false);
+      unawaited(_syncExpiredRequests(filteredItems));
+      final orders = filteredItems
+          .map((req) => _mapSubmittedRequestToOrder(req, currentUserEmail))
+          .toList()
+        ..sort(
+          (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
+            a.createdAt ?? DateTime(1970),
+          ),
+        );
+      if (!mounted) return;
+      setState(() => _submittedOrders = orders);
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() => _submittedOrders = const []);
+    });
+
+    _submittedRequestsSub = _CompositeStreamSubscription(
+      _submittedRequestsSub!,
+      onCancelExtra: () async {
+        cancelled = true;
+        await Supabase.instance.client.removeChannel(realtimeSub);
+        await controller.close();
+      },
+    );
   }
 
   bool _isVisibleForAudience(
@@ -275,6 +959,17 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         return req.sourceCollection == 'Client_Custom_Requests' ||
             req.sourceCollection == 'Company_Custom_Requests';
     }
+  }
+
+  bool _shouldHideFromClientArtistOrders(
+    SubmittedClientRequestSummary req,
+    String currentUserEmail,
+  ) {
+    if (widget.audience != OrdersAudience.clientArtist) return false;
+    final normalizedCurrent = currentUserEmail.trim().toLowerCase();
+    if (normalizedCurrent.isEmpty) return false;
+    final acceptedByArtist = req.acceptedByArtistEmail.trim().toLowerCase();
+    return acceptedByArtist.isNotEmpty && acceptedByArtist == normalizedCurrent;
   }
 
   Future<void> _syncExpiredRequests(
@@ -320,11 +1015,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         final collection = req.sourceCollection.trim().isNotEmpty
             ? req.sourceCollection.trim()
             : 'Client_Custom_Requests';
-        final ref = FirebaseFirestore.instance
-            .collection(collection)
-            .doc(req.id);
-        final snap = await ref.get();
-        final current = snap.data() ?? const <String, dynamic>{};
+        final table = _SupabaseOrderService.tableForCollection(collection);
+        final current = await _SupabaseOrderService.getRequest(collection, req.id);
         String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
           for (final value in values) {
             final text = (value ?? '').toString().trim();
@@ -357,25 +1049,32 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                         current['expiredNotifiedAcceptedClient'] == true)))) {
           continue;
         }
-        await ref.set({
+        final nowIso = DateTime.now().toIso8601String();
+        final updatePayload = <String, dynamic>{
           'status': isBrandRequest ? 'cancelled' : 'expired',
-          if (isBrandRequest) 'cancelReason': cancellationReason,
-          if (isBrandRequest) 'cancelledAt': FieldValue.serverTimestamp(),
-          if (!isBrandRequest) 'expiredAt': FieldValue.serverTimestamp(),
-          'expiredNotifiedClient': true,
-          if (isBrandRequest) 'expiredNotifiedBrandAdmin': true,
+          if (isBrandRequest) 'cancel_reason': cancellationReason,
+          if (isBrandRequest) 'cancelled_at': nowIso,
+          if (!isBrandRequest) 'expired_at': nowIso,
+          'expired_notified_client': true,
+          if (isBrandRequest) 'expired_notified_brand_admin': true,
           if (isBrandRequest && acceptedClientEmail.isNotEmpty)
-            'expiredNotifiedAcceptedClient': true,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        await ref.collection('details').doc('payload').set({
+            'expired_notified_accepted_client': true,
+          'updated_at': nowIso,
+        };
+        final details = _SupabaseOrderService.asMap(current['details']);
+        final payload = _SupabaseOrderService.asMap(current['payload']);
+        details.addAll(<String, dynamic>{
           'status': isBrandRequest ? 'cancelled' : 'expired',
           if (isBrandRequest) 'cancelReason': cancellationReason,
-          if (isBrandRequest) 'cancelledAt': FieldValue.serverTimestamp(),
+          if (isBrandRequest) 'cancelledAt': nowIso,
           if (!isBrandRequest)
             'expiredReason':
                 'Request was not accepted by artist, and it is past due.',
-        }, SetOptions(merge: true));
+        });
+        payload.addAll(details);
+        updatePayload['details'] = details;
+        updatePayload['payload'] = payload;
+        await Supabase.instance.client.from(table).update(updatePayload).eq('id', req.id);
 
         if (!isBrandRequest && (req.clientEmail).trim().isNotEmpty) {
           await NotificationsService.createUserNotification(
@@ -452,6 +1151,47 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         }
       } catch (_) {}
     }
+  }
+
+
+  String _profileNailLengthTitle() {
+    switch (widget.profile.nail.length) {
+      case NailLength.short:
+        return 'Short';
+      case NailLength.medium:
+        return 'Medium';
+      case NailLength.long:
+        return 'Long';
+      case NailLength.extraLong:
+        return 'XL Long';
+      case NailLength.xlLong:
+        return 'XXL Long';
+      case NailLength.none:
+        return '';
+    }
+  }
+
+  String _dimensionText(Object? value) {
+    if (value is num) {
+      return value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+    }
+    final text = (value ?? '').toString().trim();
+    return (text == 'null') ? '' : text;
+  }
+
+  bool _hasAnyDimension(Map<String, String> value) {
+    return value.values.any((v) => v.trim().isNotEmpty && v.trim() != '-');
+  }
+
+  Map<String, String> _profileHandDimensions(bool left) {
+    final dims = widget.profile.nail.dimensions;
+    return <String, String>{
+      'thumb': _dimensionText(left ? dims.lThumb : dims.rThumb),
+      'index': _dimensionText(left ? dims.lIndex : dims.rIndex),
+      'middle': _dimensionText(left ? dims.lMiddle : dims.rMiddle),
+      'ring': _dimensionText(left ? dims.lRing : dims.rRing),
+      'pinky': _dimensionText(left ? dims.lPinky : dims.rPinky),
+    };
   }
 
   ClientOrder _mapSubmittedRequestToOrder(
@@ -539,6 +1279,27 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       submittedFallback: submittedText,
     );
     final selectedArtistName = _normalizeSelectedArtistName(req.selectedArtist);
+    final profileShape = widget.profile.nail.shape.trim();
+    final profileLength = _profileNailLengthTitle();
+    final profileLeftHand = _profileHandDimensions(true);
+    final profileRightHand = _profileHandDimensions(false);
+    final leftHandForOrder = _hasAnyDimension(req.leftHandDimensions)
+        ? req.leftHandDimensions
+        : profileLeftHand;
+    final rightHandForOrder = _hasAnyDimension(req.rightHandDimensions)
+        ? req.rightHandDimensions
+        : profileRightHand;
+    final nailShapeForOrder = req.nailShape.trim().isNotEmpty
+        ? req.nailShape.trim()
+        : profileShape;
+    final nailLengthForOrder = req.nailLength.trim().isNotEmpty
+        ? req.nailLength.trim()
+        : profileLength;
+    final needByDisplayForOrder = req.needByDisplay.trim().isNotEmpty
+        ? req.needByDisplay.trim()
+        : (req.needBy == null
+            ? ''
+            : '${_monthShort(req.needBy!.month)} ${req.needBy!.day}, ${req.needBy!.year}');
 
     return ClientOrder(
       id: req.id,
@@ -574,13 +1335,13 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           : req.descriptionPreview,
       cancelReason: req.cancelReason,
       inspirationPhotos: req.inspirationPhotos,
-      needByDisplay: req.needByDisplay,
-      nailShape: req.nailShape,
-      nailLength: req.nailLength,
+      needByDisplay: needByDisplayForOrder,
+      nailShape: nailShapeForOrder,
+      nailLength: nailLengthForOrder,
       budgetMin: req.budgetMin,
       budgetMax: req.budgetMax,
-      leftHandDimensions: req.leftHandDimensions,
-      rightHandDimensions: req.rightHandDimensions,
+      leftHandDimensions: leftHandForOrder,
+      rightHandDimensions: rightHandForOrder,
       status: mappedStatus,
       expectedOrDeliveredText: statusText,
       imageAsset: _safeCardAvatar(profileImage: req.clientProfileImage),
@@ -612,7 +1373,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       declinedByClientEmails: req.declinedByClientEmails,
       declinedByArtistEmails: req.declinedByArtistEmails,
       directClientStatus: req.directClientStatus,
-      rating: req.clientRating,
+      rating: req.clientRating?.toDouble(),
       reviewText: req.clientReviewText,
       reviewSubmittedAt: req.clientReviewSubmittedAt,
       cancelledAt: req.cancelledAt,
@@ -839,6 +1600,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       widget.onOpenProfile?.call();
       return;
     }
+    if (value == 'earnings') {
+      widget.onOpenEarnings?.call();
+      return;
+    }
     if (value == 'history') {
       widget.onOpenHistory?.call();
       return;
@@ -851,6 +1616,16 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       widget.onOpenArtist?.call();
       return;
     }
+    if (value == 'reviews') {
+      if (widget.onOpenReviews != null) {
+        widget.onOpenReviews?.call();
+      } else {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ArtistReviewsPage()));
+      }
+      return;
+    }
     if (value == 'logout') {
       _logout();
     }
@@ -861,7 +1636,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       await widget.onLogout!.call();
       return;
     }
-    await FirebaseAuth.instance.signOut();
+    await Supabase.instance.client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -878,43 +1653,22 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
               onOpenProfile: widget.onOpenProfile,
               onLogout: widget.onLogout,
             )
-          : AppBar(
-              backgroundColor: AppColors.alabaster,
-              surfaceTintColor: AppColors.alabaster,
-              elevation: 0,
-              toolbarHeight: 85,
-              automaticallyImplyLeading: false,
-              leadingWidth: 58,
-              leading: NotificationBellButton(
-                focusNode: _notificationsFocusNode,
-                onTap: () {
-                  NotificationsPage.showAsModal(context);
-                },
-                iconSize: 24,
+          : JntStandardAppBar(
+              onNotifications: () {
+                NotificationsPage.showAsModal(context);
+              },
+              notificationFocusNode: _notificationsFocusNode,
+              trailing: _AvatarMenu(
+                onSelected: _onAvatarMenuSelected,
+                avatarUrl: widget.profile.basic.profileImageUrl,
+                displayName: widget.profile.basic.name,
+                showProfile: widget.showProfileMenu,
+                showEarnings: widget.onOpenEarnings != null,
+                showHistory: widget.showExtendedAvatarMenu,
+                showCalendar: widget.showExtendedAvatarMenu,
+                showArtist: widget.showExtendedAvatarMenu,
+                showReviews: widget.showExtendedAvatarMenu,
               ),
-
-              centerTitle: true,
-              title: Image.asset(
-                'assets/images/jnt_logo_black.png',
-                height: 50,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _AvatarMenu(
-                    onSelected: _onAvatarMenuSelected,
-                    avatarUrl: widget.profile.basic.profileImageUrl,
-                    displayName: widget.profile.basic.name,
-                    showProfile: widget.showProfileMenu,
-                    showHistory: widget.showExtendedAvatarMenu,
-                    showCalendar: widget.showExtendedAvatarMenu,
-                    showArtist: widget.showExtendedAvatarMenu,
-                  ),
-                ),
-              ],
             ),
 
       body: ListView(
@@ -1223,17 +1977,18 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
 
   Future<void> _resubmitCancelledOrder(ClientOrder order) async {
     try {
-      final requestRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(order.id);
-      final rootSnap = await requestRef.get();
-      final detailSnap = await requestRef
-          .collection('details')
-          .doc('payload')
-          .get();
-
-      final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailData = detailSnap.data() ?? const <String, dynamic>{};
+      final rootData = await _SupabaseOrderService.getRequest(
+        order.sourceCollection.trim().isNotEmpty
+            ? order.sourceCollection.trim()
+            : 'Client_Custom_Requests',
+        order.id,
+      );
+      final detailData = <String, dynamic>{
+        ..._SupabaseOrderService.asMap(rootData['details']),
+        ..._SupabaseOrderService.asMap(rootData['payload']),
+        ..._SupabaseOrderService.asMap(rootData['request_details']),
+        ..._SupabaseOrderService.asMap(rootData['summary']),
+      };
 
       Map<String, dynamic> asMap(dynamic value) {
         if (value is Map<String, dynamic>) {
@@ -1352,17 +2107,21 @@ class _AvatarMenu extends StatelessWidget {
     this.avatarUrl = '',
     this.displayName = '',
     this.showProfile = true,
+    this.showEarnings = false,
     this.showHistory = true,
     this.showCalendar = true,
     this.showArtist = true,
+    this.showReviews = true,
   });
   final ValueChanged<String> onSelected;
   final String avatarUrl;
   final String displayName;
   final bool showProfile;
+  final bool showEarnings;
   final bool showHistory;
   final bool showCalendar;
   final bool showArtist;
+  final bool showReviews;
 
   @override
   Widget build(BuildContext context) {
@@ -1383,6 +2142,20 @@ class _AvatarMenu extends StatelessWidget {
                 SizedBox(width: 14),
                 Text(
                   'Profile',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        if (showEarnings)
+          PopupMenuItem<String>(
+            value: 'earnings',
+            child: Row(
+              children: const [
+                Icon(Icons.attach_money_outlined, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Earnings',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -1430,7 +2203,26 @@ class _AvatarMenu extends StatelessWidget {
               ],
             ),
           ),
-        if (showProfile || showHistory || showCalendar || showArtist)
+        if (showReviews)
+          PopupMenuItem<String>(
+            value: 'reviews',
+            child: Row(
+              children: const [
+                Icon(Icons.star_border, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Reviews',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        if (showProfile ||
+            showEarnings ||
+            showHistory ||
+            showCalendar ||
+            showArtist ||
+            showReviews)
           const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'logout',
@@ -1451,14 +2243,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
-            size: 36,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),
@@ -1827,7 +2619,7 @@ class _Thumb extends StatelessWidget {
     Widget image;
     if (p.startsWith('gs://')) {
       image = FutureBuilder<String>(
-        future: StorageUrlResolver.resolve(p).then((v) => v ?? ''),
+        future: _SupabaseOrderService.resolveStorageUrl(p).then((v) => v ?? ''),
         builder: (_, snap) {
           final url = snap.data?.trim() ?? '';
           if (url.isEmpty) return fallback();
@@ -1842,7 +2634,7 @@ class _Thumb extends StatelessWidget {
       );
     } else if (isStoragePath) {
       image = FutureBuilder<String>(
-        future: StorageUrlResolver.resolve(p).then((v) => v ?? ''),
+        future: _SupabaseOrderService.resolveStorageUrl(p).then((v) => v ?? ''),
         builder: (_, snap) {
           final url = snap.data?.trim() ?? '';
           if (url.isEmpty) return fallback();
@@ -1935,14 +2727,12 @@ class _OrderNfcChipLine extends StatelessWidget {
     required String id,
   }) async {
     try {
-      final docRef = FirebaseFirestore.instance.collection(collection).doc(id);
-      final rootSnap = await docRef.get();
-      final root = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef
-          .collection('details')
-          .doc('payload')
-          .get();
-      final details = detailsSnap.data() ?? const <String, dynamic>{};
+      final root = await _SupabaseOrderService.getRequest(collection, id);
+      final details = <String, dynamic>{
+        ..._SupabaseOrderService.asMap(root['details']),
+        ..._SupabaseOrderService.asMap(root['payload']),
+        ..._SupabaseOrderService.asMap(root['summary']),
+      };
       return _hasEligibleRequestedNfc(root, details);
     } catch (_) {
       return false;
@@ -1953,26 +2743,19 @@ class _OrderNfcChipLine extends StatelessWidget {
     Map<String, dynamic> root,
     Map<String, dynamic> details,
   ) {
-    final eligible = _readBoolFromAny(root, details, const [
-      'nfcEligible',
-      'isNfcEligible',
-      'eligibleForNfc',
-      'eligibleForNFC',
-    ]);
     final requested = _readBoolFromAny(root, details, const [
       'nfcRequested',
       'isNfcRequested',
       'hasNfc',
       'hasNFC',
       'nfcSelected',
+      'nfc_requested',
+      'nfc_selected',
+      'has_nfc',
     ]);
-
-    final anyEligibleDimension =
-        _anyDimensionAtLeastEight(root) || _anyDimensionAtLeastEight(details);
-    final anyNfcSelected =
-        requested || _anyNfcFlagSelected(root) || _anyNfcFlagSelected(details);
-
-    return (eligible || anyEligibleDimension) && anyNfcSelected;
+    final requestedInMeta =
+        _readBoolFromNestedNfcMeta(root) || _readBoolFromNestedNfcMeta(details);
+    return requested || requestedInMeta;
   }
 
   static bool _readBoolFromAny(
@@ -2006,78 +2789,33 @@ class _OrderNfcChipLine extends StatelessWidget {
     return false;
   }
 
-  static bool _anyDimensionAtLeastEight(Map<String, dynamic> source) {
-    for (final map in _dimensionMaps(source)) {
-      for (final value in map.values) {
-        final n = _asDouble(value);
-        if (n != null && n >= 8) return true;
-      }
-    }
-    return false;
-  }
-
-  static bool _anyNfcFlagSelected(Map<String, dynamic> source) {
-    for (final map in _dimensionMaps(source)) {
-      for (final entry in map.entries) {
-        final key = entry.key.toString().toLowerCase();
-        if (key.contains('nfc') && _asBool(entry.value)) return true;
-      }
-      final nfcMap = map['nfc'];
-      if (nfcMap is Map) {
-        for (final value in nfcMap.values) {
-          if (_asBool(value)) return true;
+  static bool _readBoolFromNestedNfcMeta(Map<String, dynamic> source) {
+    for (final nestedKey in const <String>[
+      'nfc',
+      'nfcMeta',
+      'nfcData',
+      'summary',
+      'requestDetails',
+      'order',
+    ]) {
+      final nested = source[nestedKey];
+      if (nested is Map) {
+        final map = _stringKeyMap(nested);
+        if (_readBool(map, const [
+          'requested',
+          'selected',
+          'nfcRequested',
+          'nfcSelected',
+          'hasNfc',
+          'has_nfc',
+          'nfc_requested',
+          'nfc_selected',
+        ])) {
+          return true;
         }
       }
     }
-    final nfc = source['nfc'];
-    if (nfc is Map) {
-      for (final value in nfc.values) {
-        if (_asBool(value)) return true;
-      }
-    }
     return false;
-  }
-
-  static List<Map<String, dynamic>> _dimensionMaps(
-    Map<String, dynamic> source,
-  ) {
-    final maps = <Map<String, dynamic>>[];
-    void add(Object? value) {
-      if (value is Map) maps.add(_stringKeyMap(value));
-    }
-
-    add(source['dimensions']);
-    add(source['nailDimensions']);
-    add(source['leftHandDimensions']);
-    add(source['rightHandDimensions']);
-
-    final nailPreferences = source['nailPreferences'];
-    if (nailPreferences is Map) {
-      final nail = _stringKeyMap(nailPreferences);
-      add(nail['dimensions']);
-      add(nail['leftHandDimensions']);
-      add(nail['rightHandDimensions']);
-    }
-
-    final requestDetails = source['requestDetails'];
-    if (requestDetails is Map) {
-      final request = _stringKeyMap(requestDetails);
-      add(request['dimensions']);
-      add(request['nailDimensions']);
-      add(request['leftHandDimensions']);
-      add(request['rightHandDimensions']);
-    }
-
-    final order = source['order'];
-    if (order is Map) {
-      final orderMap = _stringKeyMap(order);
-      add(orderMap['dimensions']);
-      add(orderMap['nailDimensions']);
-      add(orderMap['leftHandDimensions']);
-      add(orderMap['rightHandDimensions']);
-    }
-
-    return maps;
   }
 
   static Map<String, dynamic> _stringKeyMap(Map source) {
@@ -2097,17 +2835,6 @@ class _OrderNfcChipLine extends StatelessWidget {
     return false;
   }
 
-  static double? _asDouble(Object? value) {
-    if (value is num) return value.toDouble();
-    if (value is String) {
-      final cleaned = value.trim().replaceAll(
-        RegExp(r'\s*mm$', caseSensitive: false),
-        '',
-      );
-      return double.tryParse(cleaned);
-    }
-    return null;
-  }
 }
 
 class _NfcChip extends StatelessWidget {

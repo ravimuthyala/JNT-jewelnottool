@@ -2,8 +2,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +15,7 @@ import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
 import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 import 'artist_checkout_page.dart';
 import 'artist_login_page.dart';
 import 'artist_shell_page.dart';
@@ -332,7 +331,42 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     'Brazil',
   ];
 
-  Map<String, dynamic> _buildArtistFirestorePayload({
+  String _toSnakeCase(String input) {
+    return input
+        .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (match) {
+          return '${match.group(1)}_${match.group(2)}';
+        })
+        .replaceAllMapped(RegExp(r'([A-Z]+)([A-Z][a-z])'), (match) {
+          return '${match.group(1)}_${match.group(2)}';
+        })
+        .replaceAll('-', '_')
+        .toLowerCase();
+  }
+
+  Object? _normalizeSupabaseValue(Object? value) {
+    if (value is DateTime) return value.toUtc().toIso8601String();
+    if (value is Map) {
+      return value.map(
+        (key, entryValue) => MapEntry(
+          _toSnakeCase(key.toString()),
+          _normalizeSupabaseValue(entryValue),
+        ),
+      );
+    }
+    if (value is List) {
+      return value.map(_normalizeSupabaseValue).toList(growable: false);
+    }
+    return value;
+  }
+
+  Map<String, dynamic> _normalizeSupabasePayload(Map<String, dynamic> payload) {
+    return payload.map(
+      (key, value) =>
+          MapEntry(_toSnakeCase(key), _normalizeSupabaseValue(value)),
+    );
+  }
+
+  Map<String, dynamic> _buildArtistPayload({
     required String uid,
     String profilePhotoUrl = '',
     List<String> portfolioImageUrls = const <String>[],
@@ -1616,45 +1650,20 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       _submitStatus = 'Creating account...';
     });
 
-    final firebaseAuth = FirebaseAuth.instance;
-    var createdFirebaseUser = false;
-    late UserCredential firebaseUserCred;
+    User? supabaseUser;
 
     try {
       final email = _emailCtrl.text.trim().toLowerCase();
       final password = _passCtrl.text.trim();
 
       await SupabaseAuthService.logout();
-      await firebaseAuth.signOut();
 
-      try {
-        firebaseUserCred = await firebaseAuth
-            .createUserWithEmailAndPassword(email: email, password: password)
-            .timeout(const Duration(seconds: 20));
-        createdFirebaseUser = true;
-      } on FirebaseAuthException catch (e) {
-        if (e.code != 'email-already-in-use' &&
-            e.code != 'email-already-exists') {
-          rethrow;
-        }
-        firebaseUserCred = await firebaseAuth
-            .signInWithEmailAndPassword(email: email, password: password)
-            .timeout(const Duration(seconds: 20));
-      }
-      final firebaseUid = firebaseUserCred.user?.uid;
-      if (firebaseUid == null || firebaseUid.trim().isEmpty) {
-        throw FirebaseAuthException(
-          code: 'unknown',
-          message: 'Unable to create Firebase user.',
-        );
-      }
-
-      dynamic supabaseUser;
       try {
         supabaseUser = await SupabaseAuthService.signup(
           email: email,
           password: password,
-        ).timeout(const Duration(seconds: 20));
+        )
+            .timeout(const Duration(seconds: 20));
       } on AuthException catch (e) {
         final message = e.message.toLowerCase();
         if (!message.contains('already')) {
@@ -1665,7 +1674,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           password: password,
         ).timeout(const Duration(seconds: 20));
       }
-
       final supabaseUid = (supabaseUser?.id ?? '').toString().trim();
       if (supabaseUid.isEmpty) {
         throw const AuthException(
@@ -1676,25 +1684,25 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       await AuthEmailAliasService.saveAliasMapping(
         loginEmail: email,
         authEmail: supabaseUser?.email ?? email,
-        uid: firebaseUid,
+        uid: supabaseUid,
       );
 
-      final profilePhotoUrl = await _uploadProfileImage(firebaseUid);
+      final profilePhotoUrl = await _uploadProfileImage(supabaseUid);
 
       if (mounted) {
         setState(() => _submitStatus = 'Preparing photos...');
       }
 
       final portfolioImageUrls = await _uploadPortfolioImages(
-        firebaseUid,
+        supabaseUid,
       ).timeout(const Duration(seconds: 35), onTimeout: () => <String>[]);
 
       final remotePortfolioImageUrls = portfolioImageUrls
           .where((u) => !u.trim().startsWith('data:image/'))
           .toList(growable: false);
 
-      final payload = _buildArtistFirestorePayload(
-        uid: firebaseUid,
+      final payload = _buildArtistPayload(
+        uid: supabaseUid,
         profilePhotoUrl: profilePhotoUrl,
         portfolioImageUrls: remotePortfolioImageUrls,
       );
@@ -1703,13 +1711,11 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         setState(() => _submitStatus = 'Saving profile...');
       }
 
-      final supabase = Supabase.instance.client;
-
-      await supabase.from('artist').upsert({
+      final directPayload = <String, dynamic>{
+        ...payload,
         'id': supabaseUid,
         'email': email,
-        'account_type': 'artist',
-
+        'accountType': 'artist',
         'profile': {
           ...Map<String, dynamic>.from(payload['profile'] as Map),
           'displayName': _displayNameCtrl.text.trim(),
@@ -1725,28 +1731,20 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           'photoUrl': profilePhotoUrl.trim(),
           'avatarUrl': profilePhotoUrl.trim(),
         },
+      };
 
-        'services': payload['services'],
-        'pricing': payload['pricing'],
-        'availability': payload['availability'],
-        'portfolio': payload['portfolio'],
-        'credentials': payload['credentials'],
-        'bundle': payload['bundle'],
-        'payout': payload['payout'],
-        'agreements': payload['agreements'],
-        'updated_at': DateTime.now().toIso8601String(),
-      });
+      final supabasePayload = _normalizeSupabasePayload(directPayload);
 
-      await FirebaseFirestore.instance
-          .collection('artist')
-          .doc(firebaseUid)
-          .set(payload, SetOptions(merge: true));
-      // Firestore portfolio subcollection writes stay disabled for now.
+      final artistTable = Supabase.instance.client.from('artist');
+      final existingArtist = await artistTable
+          .select('id')
+          .eq('id', supabaseUid)
+          .maybeSingle();
 
-      if (kRequireEmailVerification) {
-        try {
-          await firebaseUserCred.user?.sendEmailVerification();
-        } catch (_) {}
+      if (existingArtist == null) {
+        await artistTable.insert(supabasePayload);
+      } else {
+        await artistTable.update(supabasePayload).eq('id', supabaseUid);
       }
 
       if (!mounted) return;
@@ -1777,21 +1775,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           content: Text(message.isEmpty ? 'Registration failed.' : message),
         ),
       );
-      if (createdFirebaseUser) {
-        try {
-          await firebaseAuth.currentUser?.delete();
-        } catch (_) {}
-      }
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Registration failed.')),
-      );
-      if (createdFirebaseUser) {
-        try {
-          await firebaseAuth.currentUser?.delete();
-        } catch (_) {}
-      }
     } on TimeoutException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1806,11 +1789,6 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Registration failed. ${e.toString()}')),
       );
-      if (createdFirebaseUser) {
-        try {
-          await firebaseAuth.currentUser?.delete();
-        } catch (_) {}
-      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1843,27 +1821,13 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       ),
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: Image.asset(
-            'assets/images/jnt_logo_black.png',
-            height: 50,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(
-                context,
-                rootNavigator: true,
-              ).pushNamedAndRemoveUntil('/register', (route) => false),
-            ),
-          ],
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.of(
+            context,
+            rootNavigator: true,
+          ).pushNamedAndRemoveUntil('/register', (route) => false),
+          closeTooltip: 'Close artist registration',
+          closeIcon: const Icon(Icons.close),
         ),
         body: SafeArea(
           child: Form(

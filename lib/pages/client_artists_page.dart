@@ -6,10 +6,11 @@ import 'dart:convert';
 import '../theme/app_colors.dart';
 import 'client_custom_request_with_artist_page.dart';
 import 'notifications_page.dart';
+import 'artist_reviews_page.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 
 class ClientArtistsPage extends StatefulWidget {
@@ -21,14 +22,17 @@ class ClientArtistsPage extends StatefulWidget {
     this.showCompanyChrome = false,
     this.companyName,
     this.onOpenProfile,
+    this.onOpenEarnings,
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.onLogout,
     this.showProfileMenu = false,
     this.showHistoryMenu = false,
     this.showCalendarMenu = false,
     this.showArtistMenu = false,
+    this.showReviewsMenu = false,
     this.bottomNavIndex = 2,
     this.onNavTap,
     this.isActiveTab = true,
@@ -39,14 +43,17 @@ class ClientArtistsPage extends StatefulWidget {
   final bool showCompanyChrome;
   final String? companyName;
   final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenEarnings;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final Future<void> Function()? onLogout;
   final bool showProfileMenu;
   final bool showHistoryMenu;
   final bool showCalendarMenu;
   final bool showArtistMenu;
+  final bool showReviewsMenu;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
   final bool isActiveTab;
@@ -837,6 +844,10 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       widget.onOpenProfile?.call();
       return;
     }
+    if (value == 'earnings') {
+      widget.onOpenEarnings?.call();
+      return;
+    }
     if (value == 'history') {
       widget.onOpenHistory?.call();
       return;
@@ -847,6 +858,17 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
     }
     if (value == 'artist') {
       widget.onOpenArtist?.call();
+      return;
+    }
+    if (value == 'reviews') {
+      if (widget.onOpenReviews != null) {
+        widget.onOpenReviews?.call();
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
+        );
+      }
       return;
     }
     if (value == 'logout') {
@@ -881,47 +903,22 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                 onOpenProfile: widget.onOpenProfile,
                 onLogout: widget.onLogout,
               )
-            : AppBar(
-                backgroundColor: AppColors.alabaster,
-                surfaceTintColor: AppColors.alabaster,
-                elevation: 0,
-                toolbarHeight: 64,
-                automaticallyImplyLeading: false,
-                centerTitle: true,
-                titleSpacing: 0,
-                leadingWidth: 56,
-                leading: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: NotificationBellButton(
-                    onTap: () {
-                      NotificationsPage.showAsModal(context);
-                    },
-                    focusNode: _notificationsFocusNode,
-                    iconSize: 22,
-                  ),
+            : JntStandardAppBar(
+                onNotifications: () {
+                  NotificationsPage.showAsModal(context);
+                },
+                notificationFocusNode: _notificationsFocusNode,
+                trailing: _AvatarMenu(
+                  onSelected: _onAvatarMenuSelected,
+                  avatarUrl: widget.profile.basic.profileImageUrl,
+                  displayName: widget.profile.basic.name,
+                  showProfile: widget.showProfileMenu,
+                  showEarnings: widget.onOpenEarnings != null,
+                  showHistory: widget.showHistoryMenu,
+                  showCalendar: widget.showCalendarMenu,
+                  showArtist: widget.showArtistMenu,
+                  showReviews: widget.showReviewsMenu,
                 ),
-                title: Image.asset(
-                  'assets/images/jnt_logo_black.png',
-                  height: 36,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
-
-                // Right side: avatar menu only.
-                actions: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: _AvatarMenu(
-                      onSelected: _onAvatarMenuSelected,
-                      avatarUrl: widget.profile.basic.profileImageUrl,
-                      displayName: widget.profile.basic.name,
-                      showProfile: widget.showProfileMenu,
-                      showHistory: widget.showHistoryMenu,
-                      showCalendar: widget.showCalendarMenu,
-                      showArtist: widget.showArtistMenu,
-                    ),
-                  ),
-                ],
               ),
 
         body: ListView(
@@ -1278,17 +1275,21 @@ class _AvatarMenu extends StatelessWidget {
     this.avatarUrl = '',
     this.displayName = '',
     this.showProfile = true,
+    this.showEarnings = false,
     this.showHistory = true,
     this.showCalendar = true,
     this.showArtist = true,
+    this.showReviews = false,
   });
   final ValueChanged<String> onSelected;
   final String avatarUrl;
   final String displayName;
   final bool showProfile;
+  final bool showEarnings;
   final bool showHistory;
   final bool showCalendar;
   final bool showArtist;
+  final bool showReviews;
 
   @override
   Widget build(BuildContext context) {
@@ -1309,6 +1310,20 @@ class _AvatarMenu extends StatelessWidget {
                 SizedBox(width: 14),
                 Text(
                   'Profile',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        if (showEarnings)
+          PopupMenuItem<String>(
+            value: 'earnings',
+            child: Row(
+              children: const [
+                Icon(Icons.attach_money_outlined, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Earnings',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -1356,7 +1371,26 @@ class _AvatarMenu extends StatelessWidget {
               ],
             ),
           ),
-        if (showProfile || showHistory || showCalendar || showArtist)
+        if (showReviews)
+          PopupMenuItem<String>(
+            value: 'reviews',
+            child: Row(
+              children: const [
+                Icon(Icons.star_border, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Reviews',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        if (showProfile ||
+            showEarnings ||
+            showHistory ||
+            showCalendar ||
+            showArtist ||
+            showReviews)
           const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'logout',
@@ -1377,14 +1411,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
-            size: 36,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),

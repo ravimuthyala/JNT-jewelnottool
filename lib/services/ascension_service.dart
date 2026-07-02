@@ -30,7 +30,7 @@ class AscensionSnapshot {
     required this.marginPercent,
   });
 
-  final int points;
+  final double points;
   final String level;
   final bool sponsorshipEligible;
   final int completedOrders;
@@ -70,11 +70,11 @@ class AscensionService {
   static const double jntRevPerOrder = aov * takeRate;
   static const double artistEarningsPerOrder = 100;
 
-  static const int pointsCompleteOrder = 25;
-  static const int pointsOnTimeDelivery = 10;
-  static const int pointsFiveStarReview = 15;
-  static const int pointsRepeatClientOrder = 20;
-  static const int pointsPortfolioUpload = 5;
+  static const double pointsCompleteOrder = 25;
+  static const double pointsOnTimeDelivery = 10;
+  static const double pointsFiveStarReview = 15;
+  static const double pointsRepeatClientOrder = 20;
+  static const double pointsPortfolioUpload = 5;
 
   static const double frequencyCompleteOrder = 1.00;
   static const double frequencyOnTimeDelivery = 0.85;
@@ -197,7 +197,7 @@ class AscensionService {
         (fiveStarReviews * weightedPointsFiveStarReview) +
         (repeatClientOrders * weightedPointsRepeatClientOrder) +
         (portfolioUploads * weightedPointsPortfolioUpload);
-    final points = calculatedPoints.round();
+    final points = calculatedPoints;
 
     final jntRevenue = completedOrders * jntRevPerOrder;
     final crownedPointsQualified = points >= crownedMin;
@@ -397,7 +397,7 @@ class AscensionService {
     if (override == null) return payload;
     final next = Map<String, dynamic>.from(payload);
     if (override['points'] is num) {
-      next['points'] = (override['points'] as num).toInt();
+      next['points'] = (override['points'] as num).toDouble();
     }
     final level = (override['levelName'] ??
             override['tier'] ??
@@ -462,15 +462,15 @@ class AscensionService {
     if (!hasExistingOverride) return _enforceTierDependentConsistency(payload);
 
     final next = Map<String, dynamic>.from(payload);
-    int? existingPoints() {
+    double? existingPoints() {
       final candidates = <Object?>[
         ascension['points'],
         artistData['panel_ascensionPoints'],
         artistData['ascensionPoints'],
       ];
       for (final raw in candidates) {
-        if (raw is num) return raw.toInt();
-        final parsed = int.tryParse((raw ?? '').toString().trim());
+        if (raw is num) return raw.toDouble();
+        final parsed = double.tryParse((raw ?? '').toString().trim());
         if (parsed != null) return parsed;
       }
       return null;
@@ -518,7 +518,7 @@ class AscensionService {
     metrics['crownedPointsQualified'] = true;
     metrics['crownedRevenueQualified'] = true;
     metrics['insuranceReimbursementEligible'] = true;
-    metrics['jntRevenueToCrowned'] = 0;
+    metrics['jntRevenueToCrowned'] = 0.0;
     metrics['ordersToRevenueCrowned'] = 0;
     next['metrics'] = metrics;
 
@@ -548,7 +548,7 @@ class AscensionService {
     required String artistCollection,
     required String artistName,
     required Map<String, dynamic> ascensionPayload,
-    required int previousPoints,
+    required double previousPoints,
   }) async {
     final supabase = Supabase.instance.client;
     final email = artistEmail.trim().toLowerCase();
@@ -565,7 +565,7 @@ class AscensionService {
       'updated_at': now,
     });
 
-    final nextPoints = (ascensionPayload['points'] as num?)?.toInt() ?? 0;
+    final nextPoints = (ascensionPayload['points'] as num?)?.toDouble() ?? 0.0;
     if (nextPoints != previousPoints) {
       await supabase.from('ascension_audit_logs').insert(<String, dynamic>{
         'artist_doc_path': '$artistCollection/$email',

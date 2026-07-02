@@ -1,22 +1,17 @@
-import 'supabase_firebase_compat.dart';
+import 'dart:async';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RequestChatService {
   RequestChatService._();
 
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static final SupabaseClient _supabase = Supabase.instance.client;
   static const String _aiAssistantEmail = 'ai.chatbot@jnt.com';
 
   static String normalizeEmail(String value) => value.trim().toLowerCase();
 
   static String conversationIdForRequest(String requestId) =>
       'request_${requestId.trim()}';
-
-  static CollectionReference<Map<String, dynamic>> get _rooms =>
-      _db.collection('Request_Chats');
-
-  static CollectionReference<Map<String, dynamic>> messagesRef(
-    String conversationId,
-  ) => _rooms.doc(conversationId).collection('messages');
 
   static Future<void> ensureConversation({
     required String conversationId,
@@ -26,24 +21,32 @@ class RequestChatService {
     required String clientName,
     required String artistName,
   }) async {
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final nowMs = now.millisecondsSinceEpoch;
     final normalizedClient = normalizeEmail(clientEmail);
     final normalizedArtist = normalizeEmail(artistEmail);
-    await _rooms.doc(conversationId).set({
-      'requestId': requestId.trim(),
-      'clientEmail': normalizedClient,
-      'artistEmail': normalizedArtist,
-      'clientName': clientName.trim(),
-      'artistName': artistName.trim(),
+
+    final roomPayload = <String, dynamic>{
+      'conversation_id': conversationId,
+      'request_id': requestId.trim(),
+      'client_email': normalizedClient,
+      'artist_email': normalizedArtist,
+      'client_name': clientName.trim(),
+      'artist_name': artistName.trim(),
       'participants': <String>[
         if (normalizedClient.isNotEmpty) normalizedClient,
         if (normalizedArtist.isNotEmpty) normalizedArtist,
       ],
-      'updatedAt': FieldValue.serverTimestamp(),
-      'updatedAtMs': nowMs,
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdAtMs': nowMs,
-    }, SetOptions(merge: true));
+      'updated_at': nowIso,
+      'updated_at_ms': nowMs,
+      'created_at': nowIso,
+      'created_at_ms': nowMs,
+    };
+
+    await _supabase
+        .from('request_chats')
+        .upsert(roomPayload, onConflict: 'conversation_id');
 
     if (normalizedArtist == _aiAssistantEmail) {
       await _ensureAiAssistantWelcomeMessage(
@@ -55,12 +58,48 @@ class RequestChatService {
     }
   }
 
-  static Stream<QuerySnapshot<Map<String, dynamic>>> watchMessages(
+  static Stream<List<Map<String, dynamic>>> watchMessages(
     String conversationId,
   ) {
-    return messagesRef(
-      conversationId,
-    ).orderBy('createdAtMs', descending: false).snapshots();
+    Future<List<Map<String, dynamic>>> load() async {
+      final rows = await _supabase
+          .from('request_chat_messages')
+          .select()
+          .eq('conversation_id', conversationId)
+          .order('created_at_ms', ascending: true)
+          .order('created_at', ascending: true);
+
+      return rows
+          .whereType<Map>()
+          .map((row) => _messageRowToCompat(Map<String, dynamic>.from(row)))
+          .toList(growable: false);
+    }
+
+    late StreamController<List<Map<String, dynamic>>> controller;
+    Timer? timer;
+
+    Future<void> emit() async {
+      if (controller.isClosed) return;
+      try {
+        controller.add(await load());
+      } catch (error, stackTrace) {
+        if (!controller.isClosed) controller.addError(error, stackTrace);
+      }
+    }
+
+    controller = StreamController<List<Map<String, dynamic>>>(
+      onListen: () {
+        unawaited(emit());
+        timer = Timer.periodic(const Duration(seconds: 3), (_) {
+          unawaited(emit());
+        });
+      },
+      onCancel: () {
+        timer?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   static Future<void> sendMessage({
@@ -134,7 +173,11 @@ class RequestChatService {
     final trimmed = text.trim();
     final hasAttachment = attachmentUrl.trim().isNotEmpty;
     if (trimmed.isEmpty && !hasAttachment) return;
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final nowMs = now.millisecondsSinceEpoch;
+
     await ensureConversation(
       conversationId: conversationId,
       requestId: requestId,
@@ -143,24 +186,42 @@ class RequestChatService {
       clientName: clientName,
       artistName: artistName,
     );
-    await messagesRef(conversationId).add({
-      'requestId': requestId.trim(),
+
+    await _supabase.from('request_chat_messages').insert({
+      'conversation_id': conversationId,
+      'request_id': requestId.trim(),
+      'client_email': normalizeEmail(clientEmail),
+      'artist_email': normalizeEmail(artistEmail),
+      'client_name': clientName.trim(),
+      'artist_name': artistName.trim(),
       'text': trimmed,
-      'senderEmail': normalizeEmail(senderEmail),
-      'senderName': senderName.trim(),
-      'attachmentUrl': attachmentUrl.trim(),
-      'attachmentType': attachmentType.trim(),
-      'attachmentName': attachmentName.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdAtMs': nowMs,
+      'sender_email': normalizeEmail(senderEmail),
+      'sender_name': senderName.trim(),
+      'attachment_url': attachmentUrl.trim(),
+      'attachment_type': attachmentType.trim(),
+      'attachment_name': attachmentName.trim(),
+      'created_at': nowIso,
+      'created_at_ms': nowMs,
+      'updated_at': nowIso,
     });
-    await _rooms.doc(conversationId).set({
-      'lastMessage': trimmed.isNotEmpty ? trimmed : attachmentType.trim(),
-      'lastSenderEmail': normalizeEmail(senderEmail),
-      'lastSenderName': senderName.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'updatedAtMs': nowMs,
-    }, SetOptions(merge: true));
+
+    await _supabase.from('request_chats').upsert({
+      'conversation_id': conversationId,
+      'request_id': requestId.trim(),
+      'client_email': normalizeEmail(clientEmail),
+      'artist_email': normalizeEmail(artistEmail),
+      'client_name': clientName.trim(),
+      'artist_name': artistName.trim(),
+      'participants': <String>[
+        if (normalizeEmail(clientEmail).isNotEmpty) normalizeEmail(clientEmail),
+        if (normalizeEmail(artistEmail).isNotEmpty) normalizeEmail(artistEmail),
+      ],
+      'last_message': trimmed.isNotEmpty ? trimmed : attachmentType.trim(),
+      'last_sender_email': normalizeEmail(senderEmail),
+      'last_sender_name': senderName.trim(),
+      'updated_at': nowIso,
+      'updated_at_ms': nowMs,
+    }, onConflict: 'conversation_id');
   }
 
   static Future<void> _ensureAiAssistantWelcomeMessage({
@@ -169,8 +230,13 @@ class RequestChatService {
     required String clientEmail,
     required String clientName,
   }) async {
-    final existing = await messagesRef(conversationId).limit(1).get();
-    if (existing.docs.isNotEmpty) return;
+    final existing = await _supabase
+        .from('request_chat_messages')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .limit(1);
+
+    if (existing.isNotEmpty) return;
 
     final greetingName = clientName.trim().isEmpty ? 'there' : clientName.trim();
     final welcomeText =
@@ -183,25 +249,69 @@ class RequestChatService {
         '4. Leave a review\n'
         '5. Add a tip\n'
         '6. Contact support';
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    await messagesRef(conversationId).add({
-      'requestId': requestId.trim(),
+
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final nowMs = now.millisecondsSinceEpoch;
+
+    await _supabase.from('request_chat_messages').insert({
+      'conversation_id': conversationId,
+      'request_id': requestId.trim(),
+      'client_email': normalizeEmail(clientEmail),
+      'artist_email': _aiAssistantEmail,
+      'client_name': clientName.trim(),
+      'artist_name': 'JNT Assistant',
       'text': welcomeText,
-      'senderEmail': _aiAssistantEmail,
-      'senderName': 'JNT Assistant',
-      'attachmentUrl': '',
-      'attachmentType': '',
-      'attachmentName': '',
-      'isSystem': true,
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdAtMs': nowMs,
+      'sender_email': _aiAssistantEmail,
+      'sender_name': 'JNT Assistant',
+      'attachment_url': '',
+      'attachment_type': '',
+      'attachment_name': '',
+      'is_system': true,
+      'created_at': nowIso,
+      'created_at_ms': nowMs,
+      'updated_at': nowIso,
     });
-    await _rooms.doc(conversationId).set({
-      'lastMessage': welcomeText,
-      'lastSenderEmail': _aiAssistantEmail,
-      'lastSenderName': 'JNT Assistant',
-      'updatedAt': FieldValue.serverTimestamp(),
-      'updatedAtMs': nowMs,
-    }, SetOptions(merge: true));
+
+    await _supabase.from('request_chats').upsert({
+      'conversation_id': conversationId,
+      'request_id': requestId.trim(),
+      'client_email': normalizeEmail(clientEmail),
+      'artist_email': _aiAssistantEmail,
+      'client_name': clientName.trim(),
+      'artist_name': 'JNT Assistant',
+      'participants': <String>[
+        if (normalizeEmail(clientEmail).isNotEmpty) normalizeEmail(clientEmail),
+        _aiAssistantEmail,
+      ],
+      'last_message': welcomeText,
+      'last_sender_email': _aiAssistantEmail,
+      'last_sender_name': 'JNT Assistant',
+      'updated_at': nowIso,
+      'updated_at_ms': nowMs,
+    }, onConflict: 'conversation_id');
+  }
+
+  static Map<String, dynamic> _messageRowToCompat(Map<String, dynamic> row) {
+    final createdAt = row['created_at'];
+    final createdAtMs = row['created_at_ms'] ??
+        (createdAt is String
+            ? DateTime.tryParse(createdAt)?.millisecondsSinceEpoch
+            : null);
+
+    return <String, dynamic>{
+      ...row,
+      'requestId': row['request_id'],
+      'text': row['text'] ?? '',
+      'senderEmail': row['sender_email'] ?? '',
+      'senderName': row['sender_name'] ?? '',
+      'attachmentUrl': row['attachment_url'] ?? '',
+      'attachmentType': row['attachment_type'] ?? '',
+      'attachmentName': row['attachment_name'] ?? '',
+      'isSystem': row['is_system'] == true,
+      'createdAt': row['created_at'],
+      'createdAtMs': createdAtMs ?? 0,
+      'updatedAt': row['updated_at'],
+    };
   }
 }

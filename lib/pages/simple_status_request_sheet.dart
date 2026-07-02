@@ -493,6 +493,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
       if (request.completionDeclineDescription.trim().isNotEmpty) {
         return request.completionDeclineDescription.trim();
       }
+      return 'Declined by Artist';
     }
     return 'Request expired';
   }

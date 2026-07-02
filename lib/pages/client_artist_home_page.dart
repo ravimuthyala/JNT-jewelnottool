@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
-import 'artist_earnings_page.dart';
-import 'artist_requests_page_redesign.dart';
+import 'client_artist_requests_page.dart';
 import 'client_artist_artist_page.dart';
+import 'client_artist_campaigns_page.dart';
 import 'client_artist_calendar_page.dart';
+import 'client_artist_earnings_page.dart';
 import 'client_artist_history_page.dart';
 import 'client_artist_profile_page.dart';
 import 'client_artist_custom_request_with_artist_page.dart';
@@ -40,6 +42,7 @@ class ClientArtistHomePage extends StatefulWidget {
 class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
   int _clientIndex = 0;
   String? _initialArtistName;
+  bool _showCampaignsTab = false;
 
   late ClientProfileDraft _profile;
 
@@ -65,7 +68,105 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
   void initState() {
     super.initState();
     _profile = widget.profile ?? _fallbackProfile();
-    _clientIndex = widget.initialTabIndex.clamp(0, 4);
+    _clientIndex = widget.initialTabIndex.clamp(0, 5);
+    unawaited(_loadAmbassadorStatus());
+  }
+
+  bool _isAmbassadorFromData(Map<String, dynamic> data) {
+    String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
+    final profile = _asMap(data['profile']);
+    final basic = _asMap(data['basic']);
+    final client = _asMap(data['client']);
+    final ascension = _asMap(data['ascension']);
+    final profileAscension = _asMap(profile['ascension']);
+    final basicAscension = _asMap(basic['ascension']);
+    final clientAscension = _asMap(client['ascension']);
+
+    bool hasTag(Object? raw) {
+      if (raw is! List) return false;
+      for (final item in raw) {
+        final value = norm(item).replaceAll('_', ' ');
+        if (value == 'ambassador' || value.contains('ambassador')) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    final statuses = <String>[
+      norm(ascension['status']),
+      norm(profileAscension['status']),
+      norm(basicAscension['status']),
+      norm(clientAscension['status']),
+      norm(data['status']),
+      norm(data['partnerStatus']),
+      norm(data['tier']),
+      norm(profile['status']),
+      norm(profile['partnerStatus']),
+      norm(profile['tier']),
+      norm(basic['status']),
+      norm(basic['partnerStatus']),
+      norm(basic['tier']),
+    ];
+    for (final status in statuses) {
+      final normalized = status.replaceAll('_', ' ');
+      if (normalized == 'ambassador' ||
+          (normalized.contains('ambassador') &&
+              !normalized.contains('not ambassador'))) {
+        return true;
+      }
+    }
+
+    return hasTag(data['accountTags']) ||
+        hasTag(profile['accountTags']) ||
+        hasTag(basic['accountTags']) ||
+        hasTag(client['accountTags']) ||
+        hasTag(ascension['tags']) ||
+        hasTag(profileAscension['tags']) ||
+        hasTag(basicAscension['tags']) ||
+        hasTag(clientAscension['tags']);
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return const <String, dynamic>{};
+  }
+
+  Future<void> _loadAmbassadorStatus() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    final uid = (user?.id ?? '').trim();
+    final email = (user?.email ?? _profile.basic.email).trim().toLowerCase();
+    if (uid.isEmpty && email.isEmpty) return;
+
+    for (final table in const <String>['client_artist', 'client']) {
+      try {
+        List<dynamic> rows = const <dynamic>[];
+        if (uid.isNotEmpty) {
+          rows = await Supabase.instance.client
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .limit(5);
+        }
+        if (rows.isEmpty && email.isNotEmpty) {
+          rows = await Supabase.instance.client
+              .from(table)
+              .select()
+              .eq('email', email)
+              .limit(10);
+        }
+        for (final row in rows) {
+          if (_isAmbassadorFromData(_asMap(row))) {
+            if (!mounted) return;
+            setState(() => _showCampaignsTab = true);
+            return;
+          }
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> _openUnifiedProfile() async {
@@ -126,6 +227,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           profile: _profile,
           showContinueProfileCard: false,
           enableAllTabs: widget.enableAllTabs,
+          showCampaignsTab: _showCampaignsTab,
           onOpenProfile: _openUnifiedProfile,
           onOpenHistory: () {
             unawaited(_openClientArtistHistory());
@@ -169,6 +271,38 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
     );
   }
 
+  Future<void> _openClientArtistEarnings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientArtistEarningsPage(
+          profile: _profile,
+          showContinueProfileCard: false,
+          enableAllTabs: widget.enableAllTabs,
+          showCampaignsTab: _showCampaignsTab,
+          onOpenProfile: _openUnifiedProfile,
+          onLogout: _logout,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openClientArtistReviews() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientArtistReviewsPage(
+          profile: _profile,
+          showContinueProfileCard: false,
+          enableAllTabs: widget.enableAllTabs,
+          showCampaignsTab: _showCampaignsTab,
+          onOpenProfile: _openUnifiedProfile,
+          onLogout: _logout,
+        ),
+      ),
+    );
+  }
+
   Widget _buildClientBody() {
     final pages = <Widget>[
       ClientHomePage(
@@ -177,6 +311,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
             : _profile.basic.name.trim(),
         profileImageUrl: _profile.basic.profileImageUrl,
         profileComplete: true,
+        tapArtistTileOpensImageOnly: true,
         onOpenProfile: _openUnifiedProfile,
         onOpenHistory: () {
           unawaited(_openClientArtistHistory());
@@ -185,6 +320,14 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           unawaited(_openClientArtistCalendar());
         },
         onOpenArtist: _openClientArtistArtistSection,
+        onOpenReviews: () {
+          unawaited(_openClientArtistReviews());
+        },
+        onOpenEarnings: _showCampaignsTab
+            ? () {
+                unawaited(_openClientArtistEarnings());
+              }
+            : null,
         onLogout: _logout,
         showExtendedAvatarMenu: true,
         onRequestArtist: (artistName) {
@@ -194,6 +337,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
       ClientCustomRequestPage(
         profile: _profile,
         showExtendedAvatarMenu: true,
+        showProfileMenu: true,
         initialArtistName: _initialArtistName,
         onNavTap: (i) {
           if (!mounted) return;
@@ -207,28 +351,12 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           unawaited(_openClientArtistCalendar());
         },
         onOpenArtist: _openClientArtistArtistSection,
+        onOpenReviews: () {
+          unawaited(_openClientArtistReviews());
+        },
         onLogout: _logout,
       ),
-      ArtistRequestsPageRedesign(
-        clientArtistMenuStyle: true,
-        onManageProfile: () {
-          unawaited(_openUnifiedProfile());
-        },
-        onOpenHistory: () {
-          unawaited(_openClientArtistHistory());
-        },
-        onOpenCalendar: () {
-          unawaited(_openClientArtistCalendar());
-        },
-        onOpenArtist: _openClientArtistArtistSection,
-        onSignOut: () {
-          unawaited(_logout());
-        },
-      ),
-      ClientArtistOrderPage(
-        profile: _profile,
-        showExtendedAvatarMenu: true,
-        onBackHome: () => setState(() => _clientIndex = 0),
+      ClientArtistRequestsPage(
         onOpenProfile: _openUnifiedProfile,
         onOpenHistory: () {
           unawaited(_openClientArtistHistory());
@@ -237,13 +365,37 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           unawaited(_openClientArtistCalendar());
         },
         onOpenArtist: _openClientArtistArtistSection,
+        onOpenReviews: () {
+          unawaited(_openClientArtistReviews());
+        },
+        onOpenEarnings: _showCampaignsTab
+            ? () {
+                unawaited(_openClientArtistEarnings());
+              }
+            : null,
         onLogout: _logout,
       ),
-      ArtistEarningsPage(
-        clientArtistMenuStyle: true,
-        onManageProfile: () {
-          unawaited(_openUnifiedProfile());
-        },
+      if (_showCampaignsTab)
+        ClientArtistCampaignsPage(
+          onOpenProfile: _openUnifiedProfile,
+          onOpenEarnings: () {
+            unawaited(_openClientArtistEarnings());
+          },
+          onLogout: () {
+            unawaited(_logout());
+          },
+        ),
+      ClientArtistOrderPage(
+        profile: _profile,
+        showExtendedAvatarMenu: true,
+        showProfileMenu: true,
+        onBackHome: () => setState(() => _clientIndex = 0),
+        onOpenProfile: _openUnifiedProfile,
+        onOpenEarnings: _showCampaignsTab
+            ? () {
+                unawaited(_openClientArtistEarnings());
+              }
+            : null,
         onOpenHistory: () {
           unawaited(_openClientArtistHistory());
         },
@@ -251,19 +403,32 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           unawaited(_openClientArtistCalendar());
         },
         onOpenArtist: _openClientArtistArtistSection,
-        onSignOut: () {
-          unawaited(_logout());
+        onOpenReviews: () {
+          unawaited(_openClientArtistReviews());
         },
+        onLogout: _logout,
       ),
+      if (!_showCampaignsTab)
+        ClientArtistEarningsPage(
+          profile: _profile,
+          showContinueProfileCard: false,
+          enableAllTabs: widget.enableAllTabs,
+          showCampaignsTab: _showCampaignsTab,
+          showBottomNav: false,
+          onOpenProfile: _openUnifiedProfile,
+          onLogout: _logout,
+        ),
     ];
 
-    return IndexedStack(index: _clientIndex, children: pages);
+    final safeIndex = _clientIndex.clamp(0, pages.length - 1);
+    return IndexedStack(index: safeIndex, children: pages);
   }
 
   Widget _buildBottomNav() {
+    final safeIndex = _clientIndex.clamp(0, 4);
     return BottomNavigationBar(
       backgroundColor: AppColors.balletSlippers,
-      currentIndex: _clientIndex,
+      currentIndex: safeIndex,
       onTap: (i) => setState(() => _clientIndex = i),
       type: BottomNavigationBarType.fixed,
       selectedItemColor: AppColors.deepPlum,
@@ -287,18 +452,26 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           'Requests',
           true,
         ),
+        if (_showCampaignsTab)
+          _clientItem(
+            Icons.campaign_outlined,
+            Icons.campaign,
+            'Campaigns',
+            true,
+          ),
         _clientItem(
           Icons.receipt_long_outlined,
           Icons.receipt_long,
           'Orders',
           true,
         ),
-        _clientItem(
-          Icons.attach_money_outlined,
-          Icons.attach_money,
-          'Earnings',
-          true,
-        ),
+        if (!_showCampaignsTab)
+          _clientItem(
+            Icons.attach_money_outlined,
+            Icons.attach_money,
+            'Earnings',
+            true,
+          ),
       ],
     );
   }

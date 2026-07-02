@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/client_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 
 enum ArtistReviewType { client, brand }
 
@@ -32,13 +31,41 @@ class ArtistReviewItem {
 }
 
 class ArtistReviewsPage extends StatefulWidget {
-  const ArtistReviewsPage({super.key});
+  const ArtistReviewsPage({
+    super.key,
+    this.clientArtistMenuStyle = false,
+    this.showBottomNav = false,
+    this.showCampaignsTab = false,
+    this.bottomNavCurrentIndex = 0,
+    this.onBottomNavTap,
+    this.onManageProfile,
+    this.onOpenHistory,
+    this.onOpenCalendar,
+    this.onOpenArtist,
+    this.onOpenEarnings,
+    this.onOpenReviews,
+    this.onSignOut,
+  });
+
+  final bool clientArtistMenuStyle;
+  final bool showBottomNav;
+  final bool showCampaignsTab;
+  final int bottomNavCurrentIndex;
+  final ValueChanged<int>? onBottomNavTap;
+  final VoidCallback? onManageProfile;
+  final VoidCallback? onOpenHistory;
+  final VoidCallback? onOpenCalendar;
+  final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenEarnings;
+  final VoidCallback? onOpenReviews;
+  final VoidCallback? onSignOut;
 
   @override
   State<ArtistReviewsPage> createState() => _ArtistReviewsPageState();
 }
 
 class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
+  final SupabaseClient _supabase = Supabase.instance.client;
   int _tab = 0; // 0 all, 1 client, 2 brand
   String _sort = 'Newest First';
   String _typeFilter = 'All';
@@ -51,8 +78,198 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
     _loadReviews();
   }
 
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return <String, dynamic>{};
+  }
+
+  String _s(Object? value) => (value ?? '').toString().trim();
+
+  String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    for (final value in values) {
+      final text = _s(value);
+      if (text.isNotEmpty) return text;
+    }
+    return fallback;
+  }
+
+  String _normalizeImagePath(String raw) {
+    var value = raw.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('assets/')) return value;
+    if (value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('data:') ||
+        value.startsWith('blob:') ||
+        value.startsWith('file://')) {
+      return value;
+    }
+
+    value = Uri.decodeFull(value);
+    value = value.replaceFirst(RegExp(r'^/+'), '');
+    value = value.replaceFirst(RegExp(r'^public/'), '');
+
+    final slash = value.indexOf('/');
+    final knownBuckets = <String>{
+      'avatars',
+      'profile-images',
+      'profile_images',
+      'client-profile-images',
+      'client_profile_images',
+      'client-uploads',
+      'client_uploads',
+      'user-uploads',
+      'user_uploads',
+      'images',
+      'public',
+      'jnt-uploads',
+      'jnt_uploads',
+    };
+
+    if (slash > 0) {
+      final bucket = value.substring(0, slash);
+      final path = value.substring(slash + 1);
+      if (knownBuckets.contains(bucket) && path.isNotEmpty) {
+        return _supabase.storage.from(bucket).getPublicUrl(path);
+      }
+    }
+
+    // Most JNT profile uploads are stored under an avatars/profile bucket.
+    // If the DB only saved the object path, build a public URL for it.
+    return _supabase.storage.from('avatars').getPublicUrl(value);
+  }
+
+  String _avatarFromMaps(List<Map<String, dynamic>> maps) {
+    const keys = <String>[
+      'accepted_client_profile_image',
+      'acceptedClientProfileImage',
+      'accepted_client_avatar_url',
+      'acceptedClientAvatarUrl',
+      'client_profile_image',
+      'clientProfileImage',
+      'client_profile_image_url',
+      'clientProfileImageUrl',
+      'client_avatar_url',
+      'clientAvatarUrl',
+      'selected_client_profile_image',
+      'selectedClientProfileImage',
+      'selected_client_avatar_url',
+      'selectedClientAvatarUrl',
+      'profile_image',
+      'profileImage',
+      'profile_image_url',
+      'profileImageUrl',
+      'photo_url',
+      'photoUrl',
+      'avatar_url',
+      'avatarUrl',
+      'image_url',
+      'imageUrl',
+      'picture',
+    ];
+
+    for (final map in maps) {
+      for (final key in keys) {
+        final value = _s(map[key]);
+        if (value.isNotEmpty) return _normalizeImagePath(value);
+      }
+      for (final nestedKey in const <String>[
+        'profile',
+        'basic',
+        'client',
+        'reviewer',
+        'acceptedClient',
+        'selectedClient',
+      ]) {
+        final nested = _asMap(map[nestedKey]);
+        if (nested.isEmpty) continue;
+        for (final key in keys) {
+          final value = _s(nested[key]);
+          if (value.isNotEmpty) return _normalizeImagePath(value);
+        }
+      }
+    }
+    return '';
+  }
+
+  Future<String> _findReviewerAvatarFromDb({
+    required String email,
+    required String name,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedName = name.trim();
+    final tables = <String>[
+      'client_profiles',
+      'clients',
+      'client',
+      'profiles',
+      'user_profiles',
+      'users',
+    ];
+
+    Future<String> readTable(String table, String column, String value) async {
+      if (value.trim().isEmpty) return '';
+      try {
+        final rows = await _supabase
+            .from(table)
+            .select()
+            .eq(column, value)
+            .limit(1);
+        if (rows.isNotEmpty) {
+          final row = Map<String, dynamic>.from(rows.first as Map);
+          final avatar = _avatarFromMaps(<Map<String, dynamic>>[row]);
+          if (avatar.isNotEmpty) return avatar;
+        }
+      } catch (_) {}
+      return '';
+    }
+
+    for (final table in tables) {
+      for (final column in const <String>[
+        'email',
+        'client_email',
+        'clientEmail',
+      ]) {
+        final avatar = await readTable(table, column, normalizedEmail);
+        if (avatar.isNotEmpty) return avatar;
+      }
+    }
+
+    for (final table in tables) {
+      for (final column in const <String>[
+        'name',
+        'display_name',
+        'displayName',
+        'client_name',
+        'clientName',
+        'full_name',
+        'fullName',
+      ]) {
+        final avatar = await readTable(table, column, normalizedName);
+        if (avatar.isNotEmpty) return avatar;
+      }
+    }
+
+    return '';
+  }
+
+  double? _asDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse((value ?? '').toString().trim());
+  }
+
+  DateTime? _asDateTime(Object? value) {
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+    return null;
+  }
+
   Future<void> _loadReviews() async {
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final email = (_supabase.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (email.isEmpty) {
@@ -60,63 +277,127 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       setState(() => _loading = false);
       return;
     }
-    final db = FirebaseFirestore.instance;
     final out = <ArtistReviewItem>[];
-    for (final collection in const <String>[
-      'Client_Custom_Requests',
-      'Company_Custom_Requests',
+    for (final entry in const <MapEntry<String, ArtistReviewType>>[
+      MapEntry<String, ArtistReviewType>(
+        'client_custom_requests',
+        ArtistReviewType.client,
+      ),
+      MapEntry<String, ArtistReviewType>(
+        'company_custom_requests',
+        ArtistReviewType.brand,
+      ),
     ]) {
-      final snap = await db
-          .collection(collection)
-          .where('acceptedByArtistEmail', isEqualTo: email)
-          .get();
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final ratingRaw =
-            data['clientRating'] ??
-            (data['clientReview'] as Map<String, dynamic>?)?['rating'];
-        final rating = ratingRaw is num
-            ? ratingRaw.toDouble()
-            : double.tryParse((ratingRaw ?? '').toString());
+      final rows = await _supabase
+          .from(entry.key)
+          .select()
+          .ilike('accepted_by_artist_email', email);
+      for (final raw in rows) {
+        final data = Map<String, dynamic>.from(raw);
+        final details = _asMap(data['details']);
+        final payload = _asMap(data['payload']);
+        final review = _asMap(data['client_review'])
+          ..addAll(_asMap(data['clientReview']))
+          ..addAll(_asMap(details['clientReview']))
+          ..addAll(_asMap(payload['clientReview']));
+        final tip = _asMap(data['client_tip'])
+          ..addAll(_asMap(data['clientTip']))
+          ..addAll(_asMap(details['clientTip']))
+          ..addAll(_asMap(payload['clientTip']));
+
+        final rating =
+            _asDouble(data['client_rating']) ??
+            _asDouble(data['clientRating']) ??
+            _asDouble(review['rating']);
         if ((rating ?? 0) <= 0) continue;
-        final review =
-            (data['clientReview'] as Map<String, dynamic>?) ??
-            const <String, dynamic>{};
-        final tip =
-            (data['clientTip'] as Map<String, dynamic>?) ??
-            const <String, dynamic>{};
-        final ts = review['submittedAt'] ?? data['clientReviewSubmittedAt'];
-        final submittedAt = ts is Timestamp ? ts.toDate() : DateTime.now();
-        final tipAmountRaw = tip['amount'] ?? data['clientTipAmount'] ?? 0;
-        final tipAmount = tipAmountRaw is num
-            ? tipAmountRaw.toDouble()
-            : double.tryParse((tipAmountRaw ?? '').toString()) ?? 0;
-        final reviewerName =
-            (data['acceptedClientName'] ??
-                    data['clientName'] ??
-                    data['selectedClient'] ??
-                    'Client')
-                .toString()
-                .trim();
-        final avatarUrl =
-            (data['acceptedClientAvatarUrl'] ??
-                    data['clientAvatarUrl'] ??
-                    data['selectedClientAvatarUrl'] ??
-                    '')
-                .toString()
-                .trim();
+
+        final submittedAt =
+            _asDateTime(data['client_review_submitted_at']) ??
+            _asDateTime(data['clientReviewSubmittedAt']) ??
+            _asDateTime(details['clientReviewSubmittedAt']) ??
+            _asDateTime(payload['clientReviewSubmittedAt']) ??
+            _asDateTime(review['submittedAt']) ??
+            DateTime.now();
+
+        final tipAmount =
+            _asDouble(data['client_tip_amount']) ??
+            _asDouble(data['clientTipAmount']) ??
+            _asDouble(details['clientTipAmount']) ??
+            _asDouble(payload['clientTipAmount']) ??
+            _asDouble(tip['amount']) ??
+            0;
+
+        final reviewerName = _firstNonEmpty(<Object?>[
+          data['accepted_client_name'],
+          data['acceptedClientName'],
+          data['client_name'],
+          data['clientName'],
+          data['selected_client_name'],
+          data['selectedClientName'],
+          data['selectedClient'],
+          details['acceptedClientName'],
+          details['clientName'],
+          payload['acceptedClientName'],
+          payload['clientName'],
+          review['reviewerName'],
+          review['clientName'],
+        ], fallback: 'Client');
+
+        final reviewerEmail = _firstNonEmpty(<Object?>[
+          data['accepted_client_email'],
+          data['acceptedClientEmail'],
+          data['client_email'],
+          data['clientEmail'],
+          data['selected_client_email'],
+          data['selectedClientEmail'],
+          details['acceptedClientEmail'],
+          details['clientEmail'],
+          payload['acceptedClientEmail'],
+          payload['clientEmail'],
+          review['reviewerEmail'],
+          review['clientEmail'],
+        ]).toLowerCase();
+
+        var avatarUrl = _avatarFromMaps(<Map<String, dynamic>>[
+          data,
+          details,
+          payload,
+          review,
+          tip,
+        ]);
+        if (avatarUrl.isEmpty) {
+          avatarUrl = await _findReviewerAvatarFromDb(
+            email: reviewerEmail,
+            name: reviewerName,
+          );
+        }
+
         out.add(
           ArtistReviewItem(
             reviewerName: reviewerName.isEmpty ? 'Client' : reviewerName,
-            type: collection == 'Company_Custom_Requests'
-                ? ArtistReviewType.brand
-                : ArtistReviewType.client,
+            type: entry.value,
             date: submittedAt,
             rating: rating ?? 0,
-            comment: (review['comment'] ?? data['clientReviewText'] ?? '')
+            comment: (data['client_review_text'] ??
+                    data['clientReviewText'] ??
+                    details['clientReviewText'] ??
+                    payload['clientReviewText'] ??
+                    review['comment'] ??
+                    '')
                 .toString()
                 .trim(),
-            requestId: (data['orderNumber'] ?? doc.id).toString().trim(),
+            requestId: (data['order_number'] ??
+                    data['orderNumber'] ??
+                    data['request_number'] ??
+                    data['requestNumber'] ??
+                    data['client_request_number'] ??
+                    data['clientRequestNumber'] ??
+                    data['brand_request_number'] ??
+                    data['brandRequestNumber'] ??
+                    data['id'] ??
+                    '')
+                .toString()
+                .trim(),
             tipAmount: tipAmount,
             thankYouNote: '',
             avatarUrl: avatarUrl,
@@ -160,41 +441,68 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(85),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: NotificationBellButton(onTap: () {}, iconSize: 24),
-                  ),
-                  Center(
-                    child: Image.asset(
-                      'assets/images/jnt_logo_black.png',
-                      height: 48,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: 'Close reviews',
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ),
-                ],
+      appBar: JntStandardAppBar(
+        onNotifications: () {},
+        trailing: widget.clientArtistMenuStyle
+            ? _ReviewsAvatarMenu(
+                onManageProfile: widget.onManageProfile,
+                onOpenHistory: widget.onOpenHistory,
+                onOpenCalendar: widget.onOpenCalendar,
+                onOpenArtist: widget.onOpenArtist,
+                onOpenEarnings: widget.onOpenEarnings,
+                onOpenReviews: widget.onOpenReviews,
+                onSignOut: widget.onSignOut,
+              )
+            : IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Close reviews',
+                icon: const Icon(Icons.close_rounded),
               ),
-            ),
-          ),
-        ),
       ),
+      bottomNavigationBar: widget.showBottomNav
+          ? BottomNavigationBar(
+              backgroundColor: AppColors.balletSlippers,
+              currentIndex: widget.bottomNavCurrentIndex,
+              onTap: widget.onBottomNavTap,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: AppColors.blackCat,
+              unselectedItemColor: Colors.black.withValues(alpha: 0.55),
+              items: [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home),
+                  label: 'Home',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.add_circle_outline),
+                  activeIcon: Icon(Icons.add_circle),
+                  label: 'Design',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.inbox_outlined),
+                  activeIcon: Icon(Icons.inbox),
+                  label: 'Requests',
+                ),
+                if (widget.showCampaignsTab)
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.campaign_outlined),
+                    activeIcon: Icon(Icons.campaign),
+                    label: 'Campaigns',
+                  ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  activeIcon: Icon(Icons.receipt_long),
+                  label: 'Orders',
+                ),
+                if (!widget.showCampaignsTab)
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.attach_money_outlined),
+                    activeIcon: Icon(Icons.attach_money),
+                    label: 'Earnings',
+                  ),
+              ],
+            )
+          : null,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
         children: [
@@ -637,5 +945,104 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       'Dec',
     ];
     return mm[(m - 1).clamp(0, 11)];
+  }
+}
+
+class _ReviewsAvatarMenu extends StatelessWidget {
+  const _ReviewsAvatarMenu({
+    this.onManageProfile,
+    this.onOpenHistory,
+    this.onOpenCalendar,
+    this.onOpenArtist,
+    this.onOpenEarnings,
+    this.onOpenReviews,
+    this.onSignOut,
+  });
+
+  final VoidCallback? onManageProfile;
+  final VoidCallback? onOpenHistory;
+  final VoidCallback? onOpenCalendar;
+  final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenEarnings;
+  final VoidCallback? onOpenReviews;
+  final VoidCallback? onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: '',
+      offset: const Offset(0, 55),
+      elevation: 8,
+      color: AppColors.snow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      onSelected: (value) {
+        if (value == 'profile') onManageProfile?.call();
+        if (value == 'earnings') onOpenEarnings?.call();
+        if (value == 'history') onOpenHistory?.call();
+        if (value == 'calendar') onOpenCalendar?.call();
+        if (value == 'artist') onOpenArtist?.call();
+        if (value == 'reviews') onOpenReviews?.call();
+        if (value == 'logout') onSignOut?.call();
+      },
+      child: const ClientProfileAvatarIcon(size: 36),
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          value: 'profile',
+          child: _AvatarMenuRow(icon: Icons.person_outline, label: 'Profile'),
+        ),
+        const PopupMenuItem<String>(
+          value: 'earnings',
+          child: _AvatarMenuRow(
+            icon: Icons.attach_money_outlined,
+            label: 'Earnings',
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'history',
+          child: _AvatarMenuRow(icon: Icons.history, label: 'History'),
+        ),
+        const PopupMenuItem<String>(
+          value: 'calendar',
+          child: _AvatarMenuRow(
+            icon: Icons.calendar_month_outlined,
+            label: 'Calendar',
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'artist',
+          child: _AvatarMenuRow(icon: Icons.brush_outlined, label: 'Artist'),
+        ),
+        const PopupMenuItem<String>(
+          value: 'reviews',
+          child: _AvatarMenuRow(icon: Icons.star_border, label: 'Reviews'),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'logout',
+          child: _AvatarMenuRow(icon: Icons.logout, label: 'Logout'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AvatarMenuRow extends StatelessWidget {
+  const _AvatarMenuRow({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 22),
+        const SizedBox(width: 14),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
   }
 }

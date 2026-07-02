@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
@@ -879,20 +880,6 @@ class _BaseOrderDetails extends StatelessWidget {
     return double.tryParse((value ?? '').toString().trim());
   }
 
-  static DateTime? _parseDate(dynamic value) {
-    if (value is DateTime) return value;
-    if (value is String && value.trim().isNotEmpty) {
-      return DateTime.tryParse(value.trim());
-    }
-    if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    }
-    if (value is num) {
-      return DateTime.fromMillisecondsSinceEpoch(value.round());
-    }
-    return null;
-  }
-
   static Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) {
@@ -909,141 +896,11 @@ class _BaseOrderDetails extends StatelessWidget {
     return const <dynamic>[];
   }
 
-  static String _normalizeStorageUrl(dynamic raw) {
-    final value = (raw ?? '').toString().trim();
-    if (value.isEmpty) return '';
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    if (value.startsWith('gs://')) return value;
-    if (value.startsWith('data:image/')) return value;
-    return value;
-  }
-
   SupabaseClient get _client => Supabase.instance.client;
 
   User? get _currentUser => _client.auth.currentUser;
 
   String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
-
-  String get _currentName {
-    final metadata = _currentUser?.userMetadata;
-    final name = _firstNonEmpty([
-      metadata?['name'],
-      metadata?['full_name'],
-      metadata?['display_name'],
-      _currentUser?.email,
-    ]);
-    return name;
-  }
-
-  Map<String, dynamic> _rowMap(Map<String, dynamic> row, String key) {
-    if (row.containsKey(key)) return _asMap(row[key]);
-    final lower = key.toLowerCase();
-    for (final entry in row.entries) {
-      if (entry.key.toLowerCase() == lower) return _asMap(entry.value);
-    }
-    return const <String, dynamic>{};
-  }
-
-  Future<Map<String, dynamic>?> _fetchOrderRow() async {
-    final orderId = order.id.trim();
-    if (orderId.isEmpty) return null;
-    try {
-      final rows = await _client
-          .from('company_custom_requests')
-          .select()
-          .eq('id', orderId)
-          .limit(1);
-      if (rows.isNotEmpty) {
-        return Map<String, dynamic>.from(rows.first as Map);
-      }
-    } catch (_) {}
-
-    final orderNumber = order.orderNumber.trim();
-    if (orderNumber.isNotEmpty) {
-      try {
-        final rows = await _client
-            .from('company_custom_requests')
-            .select()
-            .eq('order_number', orderNumber)
-            .limit(1);
-        if (rows.isNotEmpty) {
-          return Map<String, dynamic>.from(rows.first as Map);
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _fetchOrderRowByEmail(String email) async {
-    final normalized = email.trim().toLowerCase();
-    if (normalized.isEmpty) return null;
-    for (final column in const <String>['email', 'panel_email']) {
-      try {
-        final rows = await _client
-            .from('company_custom_requests')
-            .select()
-            .eq(column, normalized)
-            .limit(1);
-        if (rows.isNotEmpty) {
-          return Map<String, dynamic>.from(rows.first as Map);
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _fetchArtistRowByEmail(String email) async {
-    final normalized = email.trim().toLowerCase();
-    if (normalized.isEmpty) return null;
-    for (final table in const <String>['artist', 'client_artist']) {
-      try {
-        final rows = await _client
-            .from(table)
-            .select()
-            .eq('email', normalized)
-            .limit(1);
-        if (rows.isNotEmpty) {
-          return Map<String, dynamic>.from(rows.first as Map);
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _fetchClientRowByEmail(String email) async {
-    final normalized = email.trim().toLowerCase();
-    if (normalized.isEmpty) return null;
-    for (final table in const <String>['client', 'client_artist']) {
-      try {
-        final rows = await _client
-            .from(table)
-            .select()
-            .eq('email', normalized)
-            .limit(1);
-        if (rows.isNotEmpty) {
-          return Map<String, dynamic>.from(rows.first as Map);
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  Future<void> _updateOrderRow({
-    required Map<String, dynamic> payload,
-    Map<String, dynamic>? details,
-  }) async {
-    final update = <String, dynamic>{
-      ...payload,
-      if (details != null) 'details': details,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-    await _client
-        .from('company_custom_requests')
-        .update(update)
-        .eq('id', order.id);
-  }
 
   static Future<_AcceptedArtistMeta> _loadAcceptedArtistMeta(
     _OrderSafe order,
@@ -1251,25 +1108,10 @@ class _BaseOrderDetails extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 26),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-        leading: const SizedBox.shrink(),
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.pop(context),
+        closeTooltip: 'Close brand order details',
+        closeIcon: const Icon(Icons.close_rounded, size: 26),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
@@ -3010,7 +2852,6 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
     'Change in plans',
     'Budget concerns',
     'Unsatisfied with progress',
-    'Other',
   ];
 
   @override
@@ -3314,7 +3155,6 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       orderNumber: fallbackOrderNumber,
     );
     if (root == null) return const <String>[];
-    final details = _asMap(root['details']);
     final payload = _asMap(root['payload']);
     final requestDetails =
         (payload['requestDetails'] as Map<String, dynamic>?) ??

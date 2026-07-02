@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_email_alias_service.dart';
 import 'artist_shell_page.dart';
@@ -32,19 +32,19 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
           email: email,
           password: password,
         );
-      } on FirebaseAuthException catch (e) {
+      } on AuthException catch (e) {
         if (!const <String>{
+          'invalid_credentials',
           'invalid-credential',
           'wrong-password',
           'user-not-found',
         }.contains(e.code)) {
           rethrow;
         }
-        final mappedAuthEmail = await AuthEmailAliasService.resolveAuthEmailForLogin(
-          email,
-        );
+        final mappedAuthEmail =
+            await AuthEmailAliasService.resolveAuthEmailForLogin(email);
         if (mappedAuthEmail == null || mappedAuthEmail == email) rethrow;
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
+        await SupabaseAuthService.login(
           email: mappedAuthEmail,
           password: password,
         );
@@ -54,9 +54,9 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
         context,
         MaterialPageRoute(builder: (_) => const ArtistShellPage()),
       );
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message ?? 'Invalid artist credentials');
+      setState(() => _error = e.message);
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = 'Invalid artist credentials');

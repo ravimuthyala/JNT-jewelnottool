@@ -1,0 +1,1030 @@
+Brand Custom Request Use Case Document
+Use Case 15: Brand Custom Nail Request Scenarios
+Introduction
+This document provides a comprehensive overview of Use Case 15: Brand Custom Request for nail services. It details thirteen distinct scenarios encompassing how a brand company submits custom nail requests, the flows for client and artist selection, request status changes, and interface elements supporting these workflows. The intended audience includes product managers, developers, and QA teams, ensuring clarity and actionable guidance for implementation.
+Purpose and Scope
+The purpose of this document is to define the operational and technical requirements for Brand Custom Request scenarios, focusing on the interactions between brand companies, clients, and artists. The scope includes request submission, selection logic, workflow states, user actions (Accept/Cancel), and order status updates.
+Actors
+Brand Company: Submits custom nail requests and selects client and artist pools or specific entities.
+Client: Receives requests, reviews details, accepts or declines, and interacts via provided interface elements.
+Artist: Reviews accepted requests from clients or brand companies, accepts or declines assignments, and updates order status.
+Use Case table. 
+Use Case 1- Open to Client and Open to Artist 
+Scenario 1.1 - Open to Client and Artist Pool, Client accepts the request and artist accepts. (Single order)
+Scenario 1.2 - Open to Client and Artist Pool, Client declines the request and request expires. (Single order)
+Scenario 1.3 - Open to Client and Artist Pool, a client declines but another client accepts, no artist accepts and gets expired (Single order)
+Scenario 1.4 - Open to Client and Artist Pool, Client accepts the request and before artist accepts, client cancels the request. (Single order)
+Scenario 1.5 - Open to Client and Artist Pool, Client accepts the request and before artist accepts, Brand cancels the request. (Single order)
+Scenario 1.6 - Open to Client and Artist Pool, request expires. (Single order)
+Use Case 2- Open to Client and Specific Artist 
+Scenario 2.1 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and artist accepts. (Single order)
+Scenario 2.2 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and artist declines, goes to artist pool. (Single order)
+Scenario 2.3 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and before artist accepts, Brand cancels the request. (Single order)
+Scenario 2.4 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and request expires. (Single order)
+Use Case 3- Specific Client and Open to Artist Pool 
+Scenario 3.1 - Specific Client and Artist Pool, Direct client accepts the request and artist accepts (Single order)
+Scenario 3.2 - Specific Client and Artist Pool, Direct client declines the request, goes to client pool, client from pool accepts the request and artist accepts (Single order)
+Scenario 3.3 - Specific Client and Artist Pool, Direct client declines the request, goes to client pool and no client accepts and pasts due (Single order)
+Scenario 3.4 - Specific Client and Artist Pool, Direct client accepts the request and brand cancel before artist accepts (Single order)
+Scenario 3.5 - Specific Client and Artist Pool, and request expires (Single order)
+Use Case 4- Designate Specific Client, Request Specific Artist
+Scenario 4.1 - Specific Client and specific Artist, Direct client accepts the request and artist accepts (Single order)
+Scenario 4.2 - Specific Client and specific Artist, Direct client declines the request, goes to client pool, client from pool accepts and direct artist accepts (Single order)
+Scenario 4.3 - Specific Client and specific Artist, Direct client declines the request, goes to client pool, client from pool accepts and direct artist declines, goes to artist pool (Single order)
+Scenario 4.4 - Specific Client and specific Artist, Direct client accepts the request, and artist denies, goes to pool, and expires (Single order)
+Scenario 4.5 - Specific Client and specific Artist, Direct client accepts the request and brand cancel before artist accepts (Single order)
+Scenario 4.6 - Specific Client and specific Artist, Direct client accepts the request and expires before artist accepts (Single order)
+Use Case 5- Group Client, Open to Artist pool
+Scenario 5.1 - Group Client (2+ client) and open to Artist pool, all client accepts the request, goes to artist pool and artist accepts (Group order)
+Scenario 5.2 - Group Client (2+ client) and open to Artist pool, few clients decline and few clients accepts the request, goes to artist pool and artist accepts (Group order) – 10 clients
+Scenario 5.3 - Group Client (2+ client) and open to Artist pool, clients accept the request, go to artist pool and request is in pool even when an artist declines and expires (Group order)
+Scenario 5.4 - Group Client (2+ client) and open to Artist pool, few clients decline and few clients accept the request and other gets expired, accepted clients go to artist pool and artist accepts (Group order) – 15 clients
+Scenario 5.5 - Group Client (2+ client) and open to Artist pool, few clients accept the request, Brand cancel the request (Group order) – 5 clients
+Scenario 5.6 - Group Client (2+ client) and open to Artist pool, few clients decline and few clients accept the request, goes to artists pool, Brand cancel the request (Group order) – 5 clients
+Use Case 6- Group Client, Specific Artist
+Scenario 6.1 - Group Client (2+ client) and Specific Artist pool, all client accepts the request, goes to direct artist and artist accepts (Group order)
+Scenario 6.2 - Group Client (2+ client) and Specific Artist, few clients decline and few clients accepts the request, goes to direct artist and artist accepts (Group order) – 10 clients
+Scenario 6.3 - Group Client (2+ client) and Specific Artist, clients accept the request, goes to direct artist and expires (Group order)
+Scenario 6.4 - Group Client (2+ client) and Specific artist, few clients decline and few clients accept the request and other gets expired, accepted clients go to direct artist and artist accepts (Group order) – 15 clients
+Scenario 6.5 - Group Client (2+ client) and Specific artist, few clients decline and few clients accept the request and other gets expired, accepted clients go to direct artist, artist declines and goes to pool (Group order) – 15 clients
+Scenario 6.6 - Group Client (2+ client) and Specific Artist, few clients accept the request, Brand cancel the request (Group order) – 5 clients
+Scenario 6.7 - Group Client (2+ client) and specific artist, few clients decline and few clients accept the request, goes to direct artist, Brand cancel the request (Group order) – 5 clients
+Use Case 1- Open to Client and Open to Artist 
+Request Type and Order Type:
+Who receives the order?
+Who creates the design?
+Request Type
+Order Type
+Open to pool
+Open to pool
+Standard
+Single
+Open to pool
+Specific Artist 
+Direct to Artist
+Single
+Specific client
+Open to pool
+Direct to Client
+Single
+Specific Client
+Specific Artist 
+Direct 
+Single
+Client Group order
+Open to pool
+Direct to Client 
+Group 
+Client group order
+Specific Artist
+Direct o Artist 
+Group 
+Order Status:
+Brand
+Client
+Artist
+Pending
+Pending
+In Review
+In progress
+In progress
+Designing 
+In progress
+In progress
+Completed 
+Shipped
+Shipped
+Shipped
+Delivered
+Delivered
+Delivered
+Cancelled
+Cancelled
+Cancelled
+Expired
+Expired
+Expired
+Declined
+Declined
+Declined
+Scenario 1.1 - Open to Client and Artist Pool, Client accepts the request and artist accepts. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client status - Pending
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {order #}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client accepts the brand request. 
+Remove from the client pool.
+Brand status – Pending. 
+Client status – Pending.
+Artist status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist Pool gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artists who have Sponsorship Requests’ status now sees these brand requests.
+Artist accepts the brand request and finalizes the amount. 
+Remove from the artist pool.
+Brand status – In Progress
+Client status – In Progress
+Artist status - Designing 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin (Accepted client only) gets the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client (Accepted client only) gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 1.2 - Open to Client and Artist Pool, Client declines the request and request expires. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client declines the brand request. 
+Brand status – Pending. 
+Client (declined client only) status – Declined.
+Admin get a notification ‘{Client Name} declined the {Brand company} {Campaign name} brand request {order #}’
+Verify, request is still in the client pool and other Brand Partner client can still view the request.
+No Client accepts the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request is not accepted and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Remove from the Client pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 1.3 - Open to Client and Artist Pool, a client declines but another client accepts, no artist accepts and gets expired (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client declines the brand request. 
+Brand status – Pending. 
+Client (declined client only) status - Declined.
+Verify, request is still in the client pool and other Brand Partner client can still view the request.
+Another Client from the client pool accepts the request.
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client Name} has accepted your {Campaign name} brand request {order #} ‘
+Admin (Accepted client only) gets the notification ‘{Client name} has accepted {Brand name} {Campaign name} brand request {order #}’
+Verify artists who have ‘Sponsorship Requests’ status now sees these brand requests.
+An artist from the pool declines the request. 
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist status (for declined artist only) – Declined.
+Admin get a notification ‘{Artist Name} declined the {Brand company} {Campaign name} brand request {order #}’
+Verify the request is still in artist pool.
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist status (Pool) – In Review 
+No Artist accepts the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request was not accepted by artist, and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Remove from the artist pool.
+Client (Accepted client) status – Expired 
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 1.4 - Open to Client and Artist Pool, Client accepts the request and before artist accepts, client cancels the request. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client status - Pending
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted Client) status – Pending.
+Artist (Pool) status – In Review
+Verify request is removed from the client pool. 
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist Pool gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Client cancels the request (Before artist accepts the request) with reason.
+Brand status – Cancelled. 
+Client (Accepted Client) status – Cancelled.
+Artist (Pool) status – Cancelled.
+Brand company gets the notification ‘{Client name} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Client name} cancelled the {Brand Company} {Campaign name} brand request {order #} {Reason}’
+Artist (Pool) gets the notification ‘{Client name} cancelled the {Brand Company} {Campaign name} brand request {order #} {Reason}’
+Scenario 1.5 - Open to Client and Artist Pool, Client accepts the request and before artist accepts, Brand cancels the request. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company}, {Campaign name} brand request {order #}’
+Artist Pool gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Brand cancels the request (Before artist accepts the request) with reason ‘Cancelled by Brand.’
+Brand status – Cancelled. 
+Client (Accepted client) status – Cancelled.
+Artist (Pool) status – Cancelled.
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Artist Pool gets the notification ‘{Brand Company} cancelled {Campaign name} brand request {order #} {Reason} for {Client name}’
+Client gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Scenario 1.6 - Open to Client and Artist Pool, request expires. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+No Client accepts the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request is not accepted and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Remove from the Client pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Pool) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 1.7 - Open to Client and Artist Pool, Client accepts the request and artist denies and expires. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {order #}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted Client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist denies the brand request. 
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist (Declined artis only) status - Declined. 
+Admin get the notification ‘{Artist name} has denied {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Verify still the request is in the artist pool.
+No Artist accepts the request (pool), and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request is not accepted and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Accepted Client) status – Expired
+Artist (Pool) status - Expired
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Accepted Client) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Artist (Pool) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Use Case 2- Open to Client and Specific Artist 
+Scenario 2.1 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and artist accepts. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? And selects an artist from dropdown (only artist who has reached ‘sponsorship request’ status should be displayed in the dropdown). submits the request. 
+Brand status – Pending.
+Client (pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Verifying the request is now only to specific artist who was selected in brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist status (Direct artist only) – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct only) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist (Direct) accepts the brand request and finalizes the amount. 
+Brand status – In Progress
+Client (Accepted Client) status – In Progress
+Artist (Accepted artist) status - Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 2.2 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and artist declines, goes to artist pool. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? And selects an artist from dropdown (only artist who has reached ‘sponsorship request’ status should be displayed in the dropdown). submits the request. 
+Brand status – Pending.
+Client (Pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Direct artist only) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artists (Direct) decline the brand request.
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist (direct artist only) status – Declined. 
+Admin get the notification ‘{Artist name} has denied Brand name} {Campaign name} brand request {order #} for {Client name}’
+Brand gets the notification ‘{Artist name} has denied Brand name} {Campaign name} brand request {order #} for {Client name}’
+Verify the request is now moved to Artist pool. 
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist (pool) status – In Review   
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Scenario 2.3 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and before artist accepts, Brand cancels the request. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? And selects an artist from dropdown (only artist who has reached ‘sponsorship request’ status should be displayed in the dropdown). submits the request. 
+Brand status – Pending.
+Client (pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Direct artist only) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Brand cancels the request (Before artist accepts the request) with reason {Cancelled by Brand}
+Brand status – Cancelled. 
+Client (Accepted client) status – Cancelled.
+Artist (Direct artist only) status – Cancelled.
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Artist (Direct) gets the notification ‘{Brand Company} cancelled {Campaign name} brand request {order #} {Reason} for {Client name}’
+Client gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Scenario 2.4 - Open to Client and Specific Artist (Direct to Artist), Client accepts the request and request expires. (Single order)
+Brand company Select ‘Open to Client pool’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? And selects an artist from dropdown (only artist who has reached ‘sponsorship request’ status should be displayed in the dropdown). submits the request. 
+Brand status – Pending.
+Client (pool) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client from the client pool accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist status (Direct artist only) – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name.”
+Direct Artist does not accept the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request is not accepted and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Accepted client) status - Expired
+Remove from the Client pool.
+Remove from the artist pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Accepted client) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Artist (Directly only) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Use Case 3- Specific Client and Open to Artist Pool 
+Scenario 3.1 - Specific Client and Artist Pool, Direct client accepts the request and artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client (Direct client only) receives the notification ‘You have received the Brand request {order #} from {Brand company} {Campaign Nam}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Client (Direct) accepts the brand request. 
+Verify artist in the artist pool sees the request.
+Brand status – Pending. 
+Client (Direct client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (Direct client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client (Direct) gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 3.2 - Specific Client and Artist Pool, Direct client declines the request, goes to client pool, client from pool accepts the request and artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client (Direct) declines the brand request. 
+Brand status – Pending. 
+Client (Direct client only) status – Declined.
+Admin get the notification ‘{Client name} has declined the {Brand Company} {Campaign name} brand request {order #}’
+Verify the request is now moved to Client pool. 
+Brand status – Pending. 
+Client (Pool) status – Pending.
+Client in the client pool accepts the request. 
+Brand status – Pending. 
+Client (Accepted Client) status – Pending.
+Artist (Pool) status – In Review 
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (Accepted Client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 3.3 - Specific Client and Artist Pool, Direct client declines the request, goes to client pool and no client accepts and past due (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client (Direct) declines the brand request. 
+Brand status – Pending. 
+Client (Direct client only) status – Declined.
+Admin get the notification ‘{Client name} has declined the {Brand Company} {Campaign name} brand request {order #}’
+Verify the request is now moved to Client pool. 
+Brand status – Pending. 
+Client (Pool) status – Pending.
+No client (in client pool) accepts the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request is not accepted and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Pool) status - Expired
+Remove from the Client pool.
+Remove from the artist pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Client (pool) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Artist (pool) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 3.4 - Specific Client and Artist Pool, Direct client accepts the request and brand cancel before artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Client (Direct) accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Brand cancels the request (Before artist accepts the request) with reason {Cancelled by Brand}
+Brand status – Cancelled. 
+Client (Accepted client) status – Cancelled.
+Artist (Pool) status – Cancelled.
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Artist (Pool) gets the notification ‘{Brand Company} cancelled {Campaign name} brand request {order #} {Reason} for {Client name}’
+Client (accepted client) gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Scenario 3.5 - Specific Client and Artist Pool, and request expires (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Open to Artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Direct Client does not accept the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request is not accepted and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Direct) status – Expired
+Verify Remove from the Client pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Direct) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Verify the request is not moved to the artist pool.
+Use Case 4- Designate Specific Client, Request Specific Artist
+Scenario 4.1 - Specific Client and specific Artist, Direct client accepts the request and artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Client (Direct) accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist (Direct) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 4.2 - Specific Client and specific Artist, Direct client declines the request, goes to client pool, client from pool accepts and direct artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client (Direct) declines the brand request. 
+Brand status – Pending. 
+Client status (Direct client only) – Declined.
+Admin get the notification ‘{Client name} has declined the {Brand Company} {Campaign name} brand request {order #}’
+Verify the request is now moved to Client pool. 
+Brand status – Pending. 
+Client (Pool) status – Pending.
+Client in the pool accepts the request. 
+Brand status – Pending. 
+Client (Accepted Client) status – Pending.
+Artist (Direct) status – In Review 
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist (Direct) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 4.3 - Specific Client and specific Artist, Direct client declines the request, goes to client pool, client from pool accepts and direct artist declines, goes to artist pool (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand request {order #} from {Brand Name} {Campaign Name} is created.’
+Client (Direct) declines the brand request. 
+Brand status – Pending. 
+Client (Direct client only) status – Declined.
+Admin get the notification ‘{Client name} has declined the {Brand Company} {Campaign name} brand request {order #}’
+Verify the request is now moved to Client pool. 
+Brand status – Pending. 
+Client (Pool) – Pending
+Client in the pool accepts the request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Direct) status – In Review 
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artists (Direct) decline the brand request.
+Brand status – Pending.
+Client (accepted client) status – Pending.
+Artist (direct artist only) status – Declined. 
+Admin get the notification ‘{Artist name} has denied Brand name} {Campaign name} brand request {order #} for {Client name}’
+Brand gets the notification ‘{Artist name} has denied Brand name} {Campaign name} brand request {order #} for {Client name}’
+Verify the request is now moved to Artist pool. 
+Brand status – Pending.
+Client (accepted client) status – Pending.
+Artist (pool) status – In Review   
+Artist (pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (Accepted client) status – In Progress
+Artist (Accepted client) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 4.4 - Specific Client and specific Artist, Direct client accepts, and artist denies, goes to pool, and expires (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Client (Direct) accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Artists (Direct) decline the brand request.
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist (direct only) status – Declined. 
+Admin get the notification ‘{Artist name} has denied Brand name} {Campaign name} brand request {order #} for {Client name}’
+Brand gets the notification ‘{Artist name} has denied Brand name} {Campaign name} brand request {order #} for {Client name}’
+Verify the request is now moved to Artist pool. 
+Brand status – Pending.
+Client (Accepted client) status – Pending.
+Artist (pool) status – In Review   
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+No Artist accepts the request from pool, and it is due to due (Need by Date)
+Brand Status – Expired, Reason – ‘Request was not accepted by artist, and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Accepted client) status – Expired 
+Artist (pool) status - Expired
+Remove from the artist pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Client gets the notification ‘Your {Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Artist (Pool) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 4.5 - Specific Client and specific Artist, Direct client accepts the request and brand cancel before artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Client (Direct) accepts the brand request. 
+Brand status – Pending. 
+Client (Accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Brand cancels the request (Before artist accepts the request) with reason {Cancelled by Brand}
+Brand status – Cancelled. 
+Client (Accepted client) Status - Cancelled
+Artist (Direct) status – Cancelled.
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Artist (Direct only) gets the notification ‘{Brand Company} cancelled {Campaign name} brand request {order #} {Reason} for {Client name}’
+Client (Accepted client) gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Scenario 4.6 - Specific Client and specific Artist, Direct client accepts the request and expires before artist accepts (Single order)
+Brand company Select ‘Designate a specific client’ for Who receives the order? And ‘Request a specific artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (Direct) status - Pending.
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+Client receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification ‘New Brand custom request from {Brand Name} {Campaign Name} is created.’
+Client (Direct) accepts the brand request. 
+Brand status – Pending. 
+Client (accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Direct Artist does not accept the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request was not accepted by artist, and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Accepted client) status – Expired
+Artist (Direct) status – Expired 
+Remove from the artist pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Client gets the notification ‘Your {Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Artist (Direct) gets the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Use Case 5- Group Client, Open to Artist pool.
+Scenario 5.1 - Group Client (2+ client) and open to Artist pool, all client accepts the request, goes to artist pool and artist accepts (Group order)
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Client (All client select) accepts the brand request\
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Artist (Pool) status – In Review (One order #)
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all clients selected with their respective nail measurement.
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (All Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 5.2 - Group Client (2+ client) and open to Artist pool, few clients decline and few clients accepts the request, goes to artist pool and artist accepts (Group order) – 10 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Accepted client status (E.g., eight clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+2 Declined client status (e.g., two clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify artists in pool see only the accepted client request as one order (8 clients)
+Brand status – Pending. 
+Client (only accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (only Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 5.3 - Group Client (2+ client) and open to Artist pool, clients accept the request, go to artist pool and request is in pool even when an artist declines and expires (Group order)
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Client (All client select) accepts the brand request. 
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+An Artist (Pool) declines the brand request. 
+Verify request is still in the Artist pool. 
+No Artist accepts the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request was not accepted by artist, and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Remove from the artist pool.
+Client (Accepted client) status – Expired 
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 5.4 - Group Client (2+ client) and open to Artist pool, few clients decline and few clients accept the request and other gets expired, accepted clients go to artist pool and artist accepts (Group order) – 15 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Accepted client status (8 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Declined client status (5 clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify request is not in Artist pool. 
+Remaining requests get expired (Past date – Need by Date) – (2 clients)
+Verify artists in pool see only the accepted client request as one order (8 clients)
+Brand status – Pending. 
+Client (only accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (All Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 5.5 - Group Client (2+ client) and open to Artist pool, few clients accept the request, Brand cancel the request (Group order) – 5 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Few Accepted client status (2 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Before all request is either accepted or declined by client, Brand cancels the request with reason {Cancelled by Brand}
+Verify artist does not see the request yet.
+Brand status – Cancelled. 
+Client (Accepted client) Status - Cancelled
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Scenario 5.6 - Group Client (2+ client) and open to Artist pool, few clients decline and few clients accept the request, goes to artists pool, Brand cancel the request (Group order) – 5 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Few Accepted client status (2 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Declined client status (3 clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify artists pool will now see the accepted client request as one order (2 clients)
+Before Artist accepts, Brand cancels the request with reason {Cancelled by Brand}
+Verify artist does not see the request yet.
+Brand status – Cancelled. 
+Client (Accepted client) Status – Cancelled
+Artist (Pool) status - Cancelled.
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Artist (pool) gets the notification ‘{Brand Company} cancelled {Campaign name} brand request {order #} {Reason} for {Client name}’
+Use Case 6- Group Client, Specific Artist
+Scenario 6.1 - Group Client (2+ client) and Specific Artist pool, all client accepts the request, goes to direct artist and artist accepts (Group order)
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Request a specific Artist’ for Who creates the design? and submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Client (All client select) accepts the brand request\
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Artist (Direct) status – In Review (One order #)
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all clients selected with their respective nail measurement.
+Artist (Direct) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (All Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 6.2 - Group Client (2+ client) and Specific Artist, few clients decline and few clients accepts the request, goes to direct artist and artist accepts (Group order) – 10 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Accepted client status (E.g., eight clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+2 Declined client status (e.g., two clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify direct artists see only the accepted client request as one order (8 clients)
+Brand status – Pending. 
+Client (only accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+Artist (Direct) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (only Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 6.3 - Group Client (2+ client) and Specific Artist, clients accept the request, goes to direct artist and expires (Group order)
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Client (All client select) accepts the brand request. 
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Artist (Pool) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Pool) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+Direct Artist does not accept the request, and it is past due (Need by Date)
+Brand Status – Expired, Reason – ‘Request was not accepted by artist, and it is past due.’
+Brand gets option to Chat or resubmit the request. 
+Client (Accepted client) status – Expired 
+Artist (Direct) status – Expired
+Verify the request is not show in the artist pool.
+Brand company gets the notification ‘Your {Campaign name} brand request {order #} has been expired {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Admin get the notification ‘{Brand Company} {Campaign name} brand request {order #} has been expired {Reason}’
+Scenario 6.4 - Group Client (2+ client) and Specific artist, few clients decline and few clients accept the request and other gets expired, accepted clients go to direct artist and artist accepts (Group order) – 15 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Accepted client status (8 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Declined client status (5 clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify request is not in Artist pool. 
+Remaining requests get expired (Past date – Need by Date) – (2 clients)
+Verify direct artist see only the accepted client request as one order (8 clients)
+Brand status – Pending. 
+Client (only accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+Artist (Direct) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (All Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 6.5 - Group Client (2+ client) and Specific artist, few clients decline and few clients accept the request and other gets expired, accepted clients go to direct artist, artist declines and goes to pool (Group order) – 15 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Accepted client status (8 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Declined client status (5 clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify request is not in Artist pool. 
+Remaining requests get expired (Past date – Need by Date) – (2 clients)
+Verify direct artist see only the accepted client request as one order (8 clients)
+Brand status – Pending. 
+Client (only accepted client) status – Pending.
+Artist (Direct) status – In Review
+Brand company gets the notification ‘{Client name} has accepted your {Campaign name} brand request {order #}’
+Admin get the notification ‘{Client name} has accepted the {Brand Company} {Campaign name} brand request {order #}’
+Artist (Direct) gets the notification ‘You have received a Brand request {order #} for {client name} from {Brand name} {Campaign Name}’
+Verify artist pool will see the request only when all client accepts/declines the request.
+Verify Artist will see only one order # with all accepted clients selected with their respective nail measurement.
+Artists (Direct) decline the brand request. 
+Verify request is now moved to artist pool (only accepted clients)
+Artist (Pool) accepts the brand request and finalizes the amount. 
+Request is removed from the artist pool.
+Brand status – In Progress
+Client (All Accepted client) status – In Progress
+Artist (Accepted artist) status – Designing. 
+Brand company gets the notification ‘{Artist name} has accepted your {Campaign name} brand request {order #} for {Client name}’
+Admin get the notification ‘{Artist name} has accepted {Brand name} {Campaign name} brand request {order #} for {Client name}’
+All Client gets the notification ‘Your {Campaign Name} Brand request {order #} is accepted by {Artist name}’
+Scenario 6.6 - Group Client (2+ client) and Specific Artist, few clients accept the request, Brand cancel the request (Group order) – 5 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Few Accepted client status (2 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Before all nail request is accepted or declined by client, Brand cancels the request with reason {Cancelled by Brand}
+Verify artist does not see the request yet.
+Brand status – Cancelled. 
+Client (Accepted client) Status - Cancelled
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Scenario 6.7 - Group Client (2+ client) and specific artist, few clients decline and few clients accept the request, goes to direct artist, Brand cancel the request (Group order) – 5 clients.
+Brand company Select ‘Group clients (up to 15)’ for Who receives the order? And ‘Open to artist pool’ for Who creates the design? And submit the request. 
+Brand status – Pending.
+Client (all client selected) status – Pending.
+Verify Brand order details will see only one order # with all clients selected. 
+Client who is designated as Brand Partner receives the request and displays in the Request tab.
+All Client from request receives the notification ‘You have received the Brand request {order #} from {Brand company}. Please review and accept.’
+Admin gets the notification of “New Brand request from {order#} {Brand Name} {Campaign Name} is created.’
+Few Accepted client status (2 clients)
+Brand status – Pending. 
+Client (all accepted client) status – Pending.
+Verify request is not in Artist pool. 
+Declined client status (3 clients)
+Brand status – Pending. 
+Client (declined client) status – Declined.
+Verify direct artist will now see the accepted client request as one order (2 clients)
+Before direct Artist accepts, Brand cancels the request with reason {Cancelled by Brand}
+Verify artist does not see the request yet.
+Brand status – Cancelled. 
+Client (Accepted client) Status – Cancelled
+Artist (Direct) status - Cancelled.
+Brand company gets the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Admin get the notification ‘{Brand Company} cancelled your {Campaign name} brand request {order #} {Reason}’
+Client (Accepted client) gets the notification ‘Your {Brand name} {Campaign name} brand request {order #} has been cancelled {Reason}’
+Artist (Direct only) gets the notification ‘{Brand Company} cancelled {Campaign name} brand request {order #} {Reason} for {Client name}’
+Status and Order Updates
+Pending: Request submitted, awaiting client action.
+In Review: Client accepted, artist review in progress.
+Declined: Client or artist declined the request.
+Expired: No action within defined timeframe; request automatically expires.
+Cancelled: Request canceled by user or brand company.
+Status transitions are triggered by user actions (Accept, Decline, Cancel), system expiry, or cancellation events.
+Interface Elements
+Accept Button: Allows client or artist to accept the request.
+Cancel Button: Enables user to cancel the request.
+Dropdowns: For selecting clients, artists, or groups during request submission.
+Request Detail Page: Displays request information, status, and action buttons for all parties.
+Conclusion
+This document defines the end-to-end workflow logic for Brand Custom Request scenarios, covering six use cases with distinct flows for client and artist selection, status updates, and user actions. The next steps include validating these scenarios with stakeholders, refining interface designs, and preparing for development and QA implementation.

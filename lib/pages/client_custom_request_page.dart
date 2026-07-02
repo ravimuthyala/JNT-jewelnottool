@@ -1,9 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter/foundation.dart';
@@ -17,7 +15,9 @@ import '../services/storage_url_resolver.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
+import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
 import '../models/client_profile_models.dart'
     show
@@ -34,7 +34,7 @@ import '../models/client_profile_models.dart'
 const Color _requestSnow = Color(0xFFFAF9F9);
 const Color _focusRing = Color(0xFFFFBF47);
 final BorderSide _requestBorder = BorderSide(
-  color: AppColors.blackCat.withValues(alpha:0.25),
+  color: AppColors.blackCat.withValues(alpha: 0.25),
 );
 
 class ClientCustomRequestPage extends StatefulWidget {
@@ -50,6 +50,7 @@ class ClientCustomRequestPage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.onLogout,
     this.showExtendedAvatarMenu = false,
     this.showProfileMenu = false,
@@ -66,6 +67,7 @@ class ClientCustomRequestPage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final Future<void> Function()? onLogout;
   final bool showExtendedAvatarMenu;
   final bool showProfileMenu;
@@ -219,7 +221,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
   bool get _isShipCountryUs =>
       _shipCountry.trim().toLowerCase() == 'united states';
-
 
   @override
   void initState() {
@@ -492,21 +493,12 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       );
     }
 
-    final typeName = value.runtimeType.toString();
-
-    if (typeName.contains('Timestamp')) {
-      try {
-        final dynamic dynamicValue = value;
-        final DateTime date = dynamicValue.toDate() as DateTime;
-        return date.toIso8601String();
-      } catch (_) {
-        return value.toString();
+    try {
+      final maybeDate = (value as dynamic).toDate();
+      if (maybeDate is DateTime) {
+        return maybeDate.toIso8601String();
       }
-    }
-
-    if (typeName.contains('FieldValue')) {
-      return DateTime.now().toIso8601String();
-    }
+    } catch (_) {}
 
     return value;
   }
@@ -521,11 +513,25 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   }
 
   Map<String, dynamic> _asStringMap(Object? raw) {
+    if (raw == null) return <String, dynamic>{};
+
     if (raw is Map<String, dynamic>) return raw;
+
     if (raw is Map) {
       return raw.map((key, value) => MapEntry(key.toString(), value));
     }
-    return const <String, dynamic>{};
+
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {}
+    }
+
+    return <String, dynamic>{};
   }
 
   String _safeRequestStorageKey(String raw) {
@@ -545,31 +551,145 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     final cleanSummary = _supabaseJsonMap(summary);
     final cleanDetails = _supabaseJsonMap(details);
     final submissionFingerprint = <String>[
-      _firstNonEmpty([cleanSummary['clientEmail'], widget.profile.basic.email, user?.email]),
+      _firstNonEmpty([
+        cleanSummary['clientEmail'],
+        widget.profile.basic.email,
+        user?.email,
+      ]),
       _firstNonEmpty([cleanSummary['clientName'], widget.profile.basic.name]),
-      _firstNonEmpty([cleanSummary['selectedArtist'], _asStringMap(cleanDetails['order'])['selectedArtist']]),
-      _firstNonEmpty([cleanSummary['needBy'], _asStringMap(cleanDetails['requestDetails'])['needBy']]),
-      _firstNonEmpty([cleanSummary['budgetMin'], _asStringMap(cleanDetails['budget'])['min']]),
-      _firstNonEmpty([cleanSummary['budgetMax'], _asStringMap(cleanDetails['budget'])['max']]),
-      _firstNonEmpty([cleanSummary['nailShape'], _asStringMap(cleanDetails['nailPreferences'])['shape']]),
-      _firstNonEmpty([cleanSummary['nailLength'], _asStringMap(cleanDetails['nailPreferences'])['length']]),
-      _firstNonEmpty([cleanSummary['descriptionPreview'], _asStringMap(cleanDetails['requestDetails'])['description']]),
+      _firstNonEmpty([
+        cleanSummary['selectedArtist'],
+        _asStringMap(cleanDetails['order'])['selectedArtist'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['needBy'],
+        _asStringMap(cleanDetails['requestDetails'])['needBy'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['budgetMin'],
+        _asStringMap(cleanDetails['budget'])['min'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['budgetMax'],
+        _asStringMap(cleanDetails['budget'])['max'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['nailShape'],
+        _asStringMap(cleanDetails['nailPreferences'])['shape'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['nailLength'],
+        _asStringMap(cleanDetails['nailPreferences'])['length'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['descriptionPreview'],
+        _asStringMap(cleanDetails['requestDetails'])['description'],
+      ]),
     ].map((value) => value.trim().toLowerCase()).join('|');
 
     cleanSummary['submissionFingerprint'] = submissionFingerprint;
     cleanDetails['submissionFingerprint'] = submissionFingerprint;
 
-    final existing = await supabase
-        .from('client_custom_requests')
-        .select('id')
-        .contains('summary', {'submissionFingerprint': submissionFingerprint})
-        .maybeSingle();
-    final existingMap = existing is Map ? existing : null;
-    if (existingMap != null && existingMap['id'] != null) {
-      return existingMap['id'].toString().trim();
-    }
+    final orderNumber =
+        _firstNonEmpty([cleanSummary['orderNumber']]).isNotEmpty
+        ? _firstNonEmpty([cleanSummary['orderNumber']])
+        : 'CR-${DateTime.now().microsecondsSinceEpoch.toString().substring(
+            DateTime.now().microsecondsSinceEpoch.toString().length - 5,
+          )}';
+    cleanSummary['orderNumber'] = orderNumber;
+    cleanDetails['orderNumber'] = orderNumber;
+
+    final compactSummary = <String, dynamic>{
+      'orderNumber': orderNumber,
+      'requestType': _firstNonEmpty([
+        cleanSummary['requestType'],
+        'clientCustomRequest',
+      ]),
+      'status': _firstNonEmpty([cleanSummary['status'], 'pending']),
+      'clientStatus': _firstNonEmpty([cleanSummary['clientStatus'], 'pending']),
+      'artistStatus': _firstNonEmpty([
+        cleanSummary['artistStatus'],
+        'in_review',
+      ]),
+      'clientName': _firstNonEmpty([
+        cleanSummary['clientName'],
+        widget.profile.basic.name,
+      ]),
+      'clientEmail': _firstNonEmpty([
+        cleanSummary['clientEmail'],
+        widget.profile.basic.email,
+        user?.email,
+      ]).toLowerCase(),
+      'selectedArtist': _firstNonEmpty([
+        cleanSummary['selectedArtist'],
+        _asStringMap(cleanDetails['order'])['selectedArtist'],
+      ]),
+      'selectedArtistEmail': _firstNonEmpty([
+        cleanSummary['selectedArtistEmail'],
+        _asStringMap(cleanDetails['order'])['selectedArtistEmail'],
+      ]).toLowerCase(),
+      'orderType': _firstNonEmpty([
+        cleanSummary['orderType'],
+        _asStringMap(cleanDetails['order'])['type'],
+        'single',
+      ]),
+      'needBy': _firstNonEmpty([
+        cleanSummary['needBy'],
+        _asStringMap(cleanDetails['requestDetails'])['needBy'],
+      ]),
+      'needByDisplay': _firstNonEmpty([
+        cleanSummary['needByDisplay'],
+        _asStringMap(cleanDetails['requestDetails'])['needByDisplay'],
+      ]),
+      'budgetMin': int.tryParse(
+        _firstNonEmpty([
+          cleanSummary['budgetMin'],
+          _asStringMap(cleanDetails['budget'])['min'],
+        ]),
+      ),
+      'budgetMax': int.tryParse(
+        _firstNonEmpty([
+          cleanSummary['budgetMax'],
+          _asStringMap(cleanDetails['budget'])['max'],
+        ]),
+      ),
+      'nailShape': _firstNonEmpty([
+        cleanSummary['nailShape'],
+        _asStringMap(cleanDetails['nailPreferences'])['shape'],
+      ]),
+      'nailLength': _firstNonEmpty([
+        cleanSummary['nailLength'],
+        _asStringMap(cleanDetails['nailPreferences'])['length'],
+      ]),
+      'descriptionPreview': _firstNonEmpty([
+        cleanSummary['descriptionPreview'],
+      ]),
+      'photoCount': cleanSummary['photoCount'] ?? 0,
+      'hasInspirationPhotos': cleanSummary['hasInspirationPhotos'] ?? false,
+      'inspirationPhotos': cleanSummary['inspirationPhotos'] ?? const <String>[],
+      'submissionFingerprint': submissionFingerprint,
+      'createdAt': cleanSummary['createdAt'] ?? nowIso,
+      'updatedAt': cleanSummary['updatedAt'] ?? nowIso,
+    };
+
+    final compactDetails = <String, dynamic>{
+      'requestDetails': _asStringMap(cleanDetails['requestDetails']),
+      'budget': _asStringMap(cleanDetails['budget']),
+      'nfc': _asStringMap(cleanDetails['nfc']),
+      'nailPreferences': _asStringMap(cleanDetails['nailPreferences']),
+      'shipping': _asStringMap(cleanDetails['shipping']),
+      'order': _asStringMap(cleanDetails['order']),
+      'groupOrder': _asStringMap(cleanDetails['groupOrder']),
+      'inspirationPhotos': cleanDetails['inspirationPhotos'] ?? const <String>[],
+      'submissionFingerprint': submissionFingerprint,
+      'orderNumber': orderNumber,
+    };
 
     final row = <String, dynamic>{
+      'order_number': orderNumber,
+      'request_number': orderNumber,
+      'client_request_number': orderNumber,
+      'source_collection': 'Client_Custom_Requests',
       'client_id': (user?.id ?? '').trim(),
       'client_email': _firstNonEmpty([
         cleanSummary['clientEmail'],
@@ -588,10 +708,71 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         cleanSummary['selectedArtistEmail'],
         _asStringMap(cleanDetails['order'])['selectedArtistEmail'],
       ]).toLowerCase(),
+      'request_type': _firstNonEmpty([
+        cleanSummary['requestType'],
+        'clientCustomRequest',
+      ]),
+      'order_type': _firstNonEmpty([
+        cleanSummary['orderType'],
+        _asStringMap(cleanDetails['order'])['type'],
+        'single',
+      ]),
       'status': _firstNonEmpty([cleanSummary['status'], 'pending']),
-      'summary': cleanSummary,
-      'details': cleanDetails,
-      'inspiration_photos': cleanSummary['inspirationPhotos'] ?? const <String>[],
+      'client_status': _firstNonEmpty([
+        cleanSummary['clientStatus'],
+        'pending',
+      ]),
+      'artist_status': _firstNonEmpty([
+        cleanSummary['artistStatus'],
+        'in_review',
+      ]),
+      'need_by': _firstNonEmpty([
+        cleanSummary['needBy'],
+        _asStringMap(cleanDetails['requestDetails'])['needBy'],
+      ]),
+      'need_by_display': _firstNonEmpty([
+        cleanSummary['needByDisplay'],
+        _asStringMap(cleanDetails['requestDetails'])['needByDisplay'],
+      ]),
+      'description': _firstNonEmpty([
+        _asStringMap(cleanDetails['requestDetails'])['description'],
+        cleanSummary['description'],
+      ]),
+      'description_preview': _firstNonEmpty([
+        cleanSummary['descriptionPreview'],
+      ]),
+      'budget_min': int.tryParse(
+        _firstNonEmpty([
+          cleanSummary['budgetMin'],
+          _asStringMap(cleanDetails['budget'])['min'],
+        ]),
+      ),
+      'budget_max': int.tryParse(
+        _firstNonEmpty([
+          cleanSummary['budgetMax'],
+          _asStringMap(cleanDetails['budget'])['max'],
+        ]),
+      ),
+      'is_direct_request': _asBool(cleanSummary['isDirectRequest']),
+      'fallback_to_pool': _asBool(cleanSummary['fallbackToPool']),
+      'open_to_artist_pool': !_asBool(cleanSummary['isDirectRequest']),
+      'direct_artist_status': _asBool(cleanSummary['isDirectRequest']) ? 'in_review' : '',
+      'artist_pool_status': _asBool(cleanSummary['isDirectRequest']) ? 'locked' : 'in_review',
+      'allow_non_licensed': _asBool(cleanSummary['allowNonLicensed']),
+      'is_group_order': _asBool(cleanSummary['isGroupOrder']),
+      'group_client_count':
+          int.tryParse(_firstNonEmpty([cleanSummary['groupClientCount']])) ?? 0,
+      'nfc_eligible': _asBool(cleanSummary['nfcEligible']),
+      'eligible_for_nfc': _asBool(cleanSummary['eligibleForNfc']),
+      'nfc_requested': _asBool(cleanSummary['nfcRequested']),
+      'nfc_selected': _asBool(cleanSummary['nfcSelected']),
+      'nfc_count':
+          int.tryParse(_firstNonEmpty([cleanSummary['nfcCount']])) ?? 0,
+      'summary': compactSummary,
+      'details': compactDetails,
+      'request_details': _asStringMap(cleanDetails['requestDetails']),
+      'inspiration_photos':
+          cleanSummary['inspirationPhotos'] ?? const <String>[],
       'photo_count': cleanSummary['photoCount'] ?? 0,
       'has_inspiration_photos': cleanSummary['hasInspirationPhotos'] ?? false,
       'photo_upload_status': 'pending',
@@ -599,16 +780,33 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       'updated_at': nowIso,
     };
 
-    final inserted = await supabase
+    final insertedRows = await supabase
         .from('client_custom_requests')
         .insert(row)
         .select('id')
-        .single();
+        .limit(1);
+
+    final inserted = insertedRows.isNotEmpty
+        ? Map<String, dynamic>.from(insertedRows.first)
+        : <String, dynamic>{};
 
     final requestId = (inserted['id'] ?? '').toString().trim();
     if (requestId.isEmpty) {
       throw Exception('Supabase did not return a request id.');
     }
+
+    await supabase.from('client_custom_requests_details').insert({
+      'request_id': requestId,
+      'detail_key': 'payload',
+      'data': {
+        'summary': compactSummary,
+        'details': cleanDetails,
+        'payload': cleanDetails,
+        'requestDetails': _asStringMap(cleanDetails['requestDetails']),
+      },
+      'created_at': nowIso,
+      'updated_at': nowIso,
+    });
 
     return requestId;
   }
@@ -616,14 +814,76 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   Future<Map<String, dynamic>> _readSupabaseClientCustomRequest(
     String requestId,
   ) async {
-    final row = await Supabase.instance.client
+    final rows = await Supabase.instance.client
         .from('client_custom_requests')
         .select()
         .eq('id', requestId)
-        .maybeSingle();
+        .limit(1);
 
-    if (row is Map<String, dynamic>) return row;
+    if (rows.isNotEmpty) {
+      return Map<String, dynamic>.from(rows.first);
+    }
+
     return const <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> _readSupabaseClientCustomRequestPayload(
+    String requestId,
+  ) async {
+    final rows = await Supabase.instance.client
+        .from('client_custom_requests_details')
+        .select('data, updated_at, id')
+        .eq('request_id', requestId)
+        .eq('detail_key', 'payload')
+        .order('updated_at', ascending: false)
+        .limit(1);
+
+    final row = rows.isNotEmpty ? Map<String, dynamic>.from(rows.first) : null;
+
+    if (row is Map<String, dynamic>) {
+      final data = row['data'];
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+    }
+    return const <String, dynamic>{};
+  }
+
+  Future<void> _upsertSupabaseClientCustomRequestPayload(
+    String requestId,
+    Map<String, dynamic> data,
+  ) async {
+    final nowIso = DateTime.now().toIso8601String();
+    final existingRows = await Supabase.instance.client
+        .from('client_custom_requests_details')
+        .select('id, updated_at')
+        .eq('request_id', requestId)
+        .eq('detail_key', 'payload')
+        .order('updated_at', ascending: false)
+        .limit(1);
+
+    final existing = existingRows.isNotEmpty
+        ? Map<String, dynamic>.from(existingRows.first)
+        : null;
+
+    final cleanData = _supabaseJsonMap(data);
+
+    if (existing is Map<String, dynamic> && existing['id'] != null) {
+      await Supabase.instance.client
+          .from('client_custom_requests_details')
+          .update({'data': cleanData, 'updated_at': nowIso})
+          .eq('id', existing['id']);
+      return;
+    }
+
+    await Supabase.instance.client.from('client_custom_requests_details').insert({
+      'request_id': requestId,
+      'detail_key': 'payload',
+      'data': cleanData,
+      'created_at': nowIso,
+      'updated_at': nowIso,
+    });
   }
 
   Future<void> _updateSupabaseClientCustomRequest(
@@ -631,6 +891,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     Map<String, dynamic> values,
   ) async {
     final clean = _supabaseJsonMap(values);
+    clean.remove('photo_upload_worker_started_at');
+    clean.remove('photo_upload_completed_at');
+    clean.remove('photo_upload_failed_at');
     clean['updated_at'] = DateTime.now().toIso8601String();
 
     await Supabase.instance.client
@@ -655,68 +918,174 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     return values.every((v) => v != null && v > 0);
   }
 
-
   Future<void> _loadCompletedClientsFromDb() async {
     setState(() => _loadingCompletedClients = true);
-    try {
-      final db = FirebaseFirestore.instance;
-      final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      final currentEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-          .trim()
-          .toLowerCase();
 
-      final snaps = await Future.wait([
-        db.collection('client').limit(50).get(),
-        db.collection('client_artist').limit(50).get(),
+    try {
+      final supabase = Supabase.instance.client;
+      final currentUser = supabase.auth.currentUser;
+      final currentUid = currentUser?.id ?? '';
+      final currentEmail = (currentUser?.email ?? '').trim().toLowerCase();
+
+      Future<List<dynamic>> loadAllRows(String table) async {
+        const pageSize = 300;
+        final allRows = <dynamic>[];
+        var from = 0;
+
+        while (true) {
+          try {
+            final rows = await supabase
+                .from(table)
+                .select()
+                .range(from, from + pageSize - 1);
+
+            if (rows.isEmpty) break;
+            allRows.addAll(rows);
+            if (rows.length < pageSize) break;
+            from += pageSize;
+          } catch (e) {
+            debugPrint(
+              '[ClientCustomRequestPage] failed loading group clients from $table: $e',
+            );
+            break;
+          }
+        }
+
+        return allRows;
+      }
+
+      // Load every possible client source. Some projects have both singular
+      // and legacy plural tables after migration, so merge all of them.
+      final results = await Future.wait<List<dynamic>>([
+        loadAllRows('client'),
+        loadAllRows('clients'),
+        loadAllRows('client_artist'),
       ]);
 
-      final byId = <String, CompletedClient>{};
+      final byKey = <String, CompletedClient>{};
 
-      for (final snap in snaps) {
-        for (final doc in snap.docs) {
-          final data = doc.data();
-          final profile =
-              (data['profile'] as Map<String, dynamic>?) ??
-              const <String, dynamic>{};
-          final address =
-              (data['address'] as Map<String, dynamic>?) ??
-              const <String, dynamic>{};
-          final nail =
-              (data['nailPreferences'] as Map<String, dynamic>?) ??
-              const <String, dynamic>{};
-          final dims =
-              (nail['dimensions'] as Map<String, dynamic>?) ??
-              const <String, dynamic>{};
+      for (final rows in results) {
+        for (final rawRow in rows) {
+          if (rawRow is! Map) continue;
+
+          final data = rawRow.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+
+          final docId = (data['id'] ?? '').toString().trim();
+          if (docId.isEmpty) continue;
+
+          final profile = _asStringMap(data['profile']);
+          final basic = _asStringMap(data['basic']);
+          final client = _asStringMap(data['client']);
+          final clientProfile = _asStringMap(client['profile']);
+
+          final address = _firstMap([
+            data['address'],
+            data['addresses'],
+            profile['address'],
+            basic['address'],
+            client['address'],
+            clientProfile['address'],
+          ]);
+
+          final nail = _firstMap([
+            data['nail_preferences'],
+            data['nailPreferences'],
+            profile['nailPreferences'],
+            basic['nailPreferences'],
+            client['nailPreferences'],
+            clientProfile['nailPreferences'],
+          ]);
+
+          final dims = _firstMap([
+            nail['dimensions'],
+            data['measurements'],
+            data['dimensions'],
+            profile['dimensions'],
+            basic['dimensions'],
+            client['dimensions'],
+          ]);
 
           final email = _firstNonEmpty([
             data['email'],
+            data['panel_email'],
+            data['client_email'],
+            data['contact_email'],
             profile['email'],
-          ]).toLowerCase();
-          if (doc.id == currentUid) continue;
+            basic['email'],
+            client['email'],
+            clientProfile['email'],
+          ]).trim().toLowerCase();
+
+          // Do not show the submitting client as an extra group participant.
+          if (docId == currentUid) continue;
           if (currentEmail.isNotEmpty && email == currentEmail) continue;
 
           final name = _firstNonEmpty([
+            data['panel_display_name'],
+            data['panel_name'],
+            data['display_name'],
+            data['displayName'],
+            data['full_name'],
+            data['name'],
             profile['name'],
             profile['displayName'],
-            data['displayName'],
-            data['name'],
+            basic['name'],
+            basic['displayName'],
+            client['name'],
+            client['displayName'],
+            clientProfile['name'],
             email.contains('@') ? email.split('@').first : '',
-          ]);
-          if (name.isEmpty) continue;
+          ]).trim();
 
-          final clientProfile = ClientProfileDraft(
+          if (name.isEmpty && email.isEmpty) continue;
+
+          final displayName = name.isNotEmpty ? name : email;
+
+          final draft = ClientProfileDraft(
             basic: BasicInfo(
-              name: name,
+              name: displayName,
               email: email,
-              phone: _firstNonEmpty([profile['phone'], data['phone']]),
+              phone: _firstNonEmpty([
+                data['panel_phone'],
+                data['phone_number'],
+                data['phone'],
+                profile['phone'],
+                basic['phone'],
+                client['phone'],
+              ]),
             ),
             address: AddressInfo(
-              street: _firstNonEmpty([address['street'], data['street']]),
-              city: _firstNonEmpty([address['city'], data['city']]),
-              state: _firstNonEmpty([address['state'], data['state']]),
-              zip: _firstNonEmpty([address['zip'], data['zip']]),
+              street: _firstNonEmpty([
+                address['street'],
+                address['billingStreet'],
+                address['shippingStreet'],
+                data['street'],
+              ]),
+              city: _firstNonEmpty([
+                address['city'],
+                address['billingCity'],
+                address['shippingCity'],
+                data['city'],
+              ]),
+              state: _firstNonEmpty([
+                address['state'],
+                address['billingState'],
+                address['shippingState'],
+                data['state'],
+              ]),
+              zip: _firstNonEmpty([
+                address['zip'],
+                address['postal_code'],
+                address['billingZip'],
+                address['shippingZip'],
+                data['zip'],
+              ]),
               country: _firstNonEmpty([
                 address['country'],
+                address['billingCountry'],
+                address['shippingCountry'],
                 data['country'],
                 'United States',
               ]),
@@ -727,32 +1096,47 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             ),
             nail: NailPreferences(
               dimensions: _parseNailDimensions(dims),
-              shape: _firstNonEmpty([nail['shape']]),
-              length: _parseNailLength(nail['length']),
+              shape: _firstNonEmpty([
+                nail['shape'],
+                nail['nailShape'],
+                data['nail_shape'],
+                data['nailShape'],
+              ]),
+              length: _parseNailLength(
+                _firstNonEmpty([
+                  nail['length'],
+                  nail['nailLength'],
+                  data['nail_length'],
+                  data['nailLength'],
+                ]),
+              ),
             ),
           );
-          if (!clientProfile.isComplete) continue;
-          if (!_hasAllValidMeasurements(clientProfile.nail.dimensions)) {
-            continue;
-          }
 
-          byId[doc.id] = CompletedClient(
-            id: doc.id,
-            name: name,
-            profile: clientProfile,
+          // Deduplicate by email first, then id. This prevents duplicates when
+          // the same person exists in both client and clients.
+          final key = email.isNotEmpty ? email : docId;
+          byKey[key] = CompletedClient(
+            id: docId,
+            name: displayName,
+            profile: draft,
           );
         }
       }
 
-      final loaded = byId.values.toList()
+      final loaded = byKey.values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
       if (!mounted) return;
+
       setState(() {
         _completedClients = loaded;
+
         for (final slot in _groupSelections) {
           if (slot.clientId == null) continue;
+
           final exists = _completedClients.any((c) => c.id == slot.clientId);
+
           if (!exists) {
             slot.clientId = null;
             slot.searchController.text = '';
@@ -766,14 +1150,21 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           }
         }
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ClientCustomRequestPage] load completed clients failed: $e');
       if (!mounted) return;
       setState(() => _completedClients = <CompletedClient>[]);
     } finally {
-      if (mounted) {
-        setState(() => _loadingCompletedClients = false);
-      }
+      if (mounted) setState(() => _loadingCompletedClients = false);
     }
+  }
+
+  Map<String, dynamic> _firstMap(List<Object?> values) {
+    for (final value in values) {
+      final map = _asStringMap(value);
+      if (map.isNotEmpty) return map;
+    }
+    return const <String, dynamic>{};
   }
 
   @override
@@ -810,6 +1201,16 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       widget.onOpenArtist?.call();
       return;
     }
+    if (value == 'reviews') {
+      if (widget.onOpenReviews != null) {
+        widget.onOpenReviews?.call();
+      } else {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ArtistReviewsPage()));
+      }
+      return;
+    }
     if (value == 'logout') {
       _logout();
     }
@@ -820,7 +1221,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       await widget.onLogout!.call();
       return;
     }
-    await FirebaseAuth.instance.signOut();
+    await Supabase.instance.client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -885,9 +1286,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   }
 
   // ? Save budget to DB on slider release (implement your Firestore code here)
-  Future<void> _saveBudgetToDb(RangeValues v) async {
-  
-  }
+  Future<void> _saveBudgetToDb(RangeValues v) async {}
 
   CompletedClient? _findClient(String? id) {
     if (id == null) return null;
@@ -910,10 +1309,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   }
 
   bool _isSubmittingClient(CompletedClient client) {
-    final currentUid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    final currentEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    final currentUid = (currentUser?.id ?? '').trim();
+    final currentEmail = (currentUser?.email ?? '').trim().toLowerCase();
     final profileEmail = widget.profile.basic.email.trim().toLowerCase();
     final profileName = widget.profile.basic.name.trim().toLowerCase();
     final candidateEmail = client.profile.basic.email.trim().toLowerCase();
@@ -1495,9 +1893,11 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       }
     }
 
-    return urls.where((e) => e.trim().isNotEmpty).take(10).toList(growable: false);
+    return urls
+        .where((e) => e.trim().isNotEmpty)
+        .take(10)
+        .toList(growable: false);
   }
-
 
   Map<String, dynamic> _nailPreferencesToMap(NailPreferences p) {
     return {
@@ -1608,10 +2008,17 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     }
 
     final needByTs = requestDetails['needBy'] ?? data['needBy'];
-    if (needByTs is Timestamp) {
-      _needBy = needByTs.toDate();
-    } else if (needByTs is DateTime) {
+    if (needByTs is DateTime) {
       _needBy = needByTs;
+    } else if (needByTs is String) {
+      _needBy = DateTime.tryParse(needByTs);
+    } else {
+      try {
+        final maybeDate = (needByTs as dynamic).toDate();
+        if (maybeDate is DateTime) {
+          _needBy = maybeDate;
+        }
+      } catch (_) {}
     }
 
     final description =
@@ -2001,7 +2408,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     );
     final now = DateTime.now();
 
-    final needBy = Timestamp.fromDate(needByDate);
+    final needBy = needByDate.toIso8601String();
     final description = _descCtrl.text.trim();
     final budgetMin = _budget.start.round();
     final budgetMax = _budget.end.round();
@@ -2023,8 +2430,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       'status': 'pending',
       'clientStatus': 'pending',
       'artistStatus': 'in_review',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': now.toIso8601String(),
+      'updatedAt': now.toIso8601String(),
       'clientSubmittedAtLocal': now.toIso8601String(),
       'needBy': needBy,
       'needByDisplay': _dateCtrl.text.trim(),
@@ -2045,6 +2452,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       'isDirectRequest': isDirectRequest,
       'allowNonLicensed': _allowNonLicensed,
       'fallbackToPool': _fallbackToPool,
+      'openToArtistPool': !isDirectRequest,
+      'directArtistStatus': isDirectRequest ? 'in_review' : '',
+      'artistPoolStatus': isDirectRequest ? 'locked' : 'in_review',
       'nailShape': _shape,
       'nailLength': _length.name,
       'isGroupOrder': isGroupOrder,
@@ -2080,6 +2490,14 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         'selectedArtistEmail': selectedArtistEmail,
         'isDirectRequest': isDirectRequest,
         'fallbackToPool': _fallbackToPool,
+        'openToArtistPool': !isDirectRequest,
+        'directArtistStatus': isDirectRequest ? 'in_review' : '',
+        'artistPoolStatus': isDirectRequest ? 'locked' : 'in_review',
+      },
+      'routing': {
+        'openToArtistPool': !isDirectRequest,
+        'directArtistStatus': isDirectRequest ? 'in_review' : '',
+        'artistPoolStatus': isDirectRequest ? 'locked' : 'in_review',
       },
       'roleStatuses': {'client': 'pending', 'artist': 'in_review'},
       'nailPreferences': _nailPreferencesToMap(selectedNails),
@@ -2118,6 +2536,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           selectedArtistEmail: selectedArtistEmail,
           selectedArtistName: selectedArtist,
           orderId: requestId,
+          orderNumber: _firstNonEmpty([requestSummary['orderNumber']]),
           sourceCollection: 'Client_Custom_Requests',
           allowNonLicensed: _allowNonLicensed,
         );
@@ -2175,7 +2594,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     try {
       await _updateSupabaseClientCustomRequest(requestId, {
         'photo_upload_status': 'uploading',
-        'photo_upload_worker_started_at': DateTime.now().toIso8601String(),
         'photo_upload_updated_at': DateTime.now().toIso8601String(),
       });
 
@@ -2199,7 +2617,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           await _updateSupabaseClientCustomRequest(requestId, {
             'photo_upload_status': 'completed',
             'photo_upload_error': null,
-            'photo_upload_completed_at': DateTime.now().toIso8601String(),
             'photo_upload_updated_at': DateTime.now().toIso8601String(),
           });
           return;
@@ -2216,7 +2633,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         'photo_upload_status': 'failed',
         'photo_upload_error':
             'Photo upload failed after retries: ${lastError ?? 'unknown error'}',
-        'photo_upload_failed_at': DateTime.now().toIso8601String(),
         'photo_upload_updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
@@ -2259,9 +2675,10 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     }
 
     final existing = await _readSupabaseClientCustomRequest(requestId);
+    final payload = await _readSupabaseClientCustomRequestPayload(requestId);
     final summary = _asStringMap(existing['summary']);
-    final details = _asStringMap(existing['details']);
-    final requestDetails = _asStringMap(details['requestDetails']);
+    final details = _asStringMap(payload['details']);
+    final requestDetails = _asStringMap(payload['requestDetails']);
 
     final nextSummary = <String, dynamic>{
       ...summary,
@@ -2288,8 +2705,14 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       'summary': nextSummary,
       'details': nextDetails,
     });
-  }
 
+    await _upsertSupabaseClientCustomRequestPayload(requestId, {
+      'summary': nextSummary,
+      'details': nextDetails,
+      'payload': nextDetails,
+      'requestDetails': nextRequestDetails,
+    });
+  }
 
   Future<void> _showSubmittedDialog() async {
     await showDialog<void>(
@@ -2365,10 +2788,10 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           backgroundColor: AppColors.alabaster,
           surfaceTintColor: AppColors.alabaster,
           elevation: 0,
-          toolbarHeight: 76,
+          toolbarHeight: JntHeaderMetrics.toolbarHeight,
           automaticallyImplyLeading: false,
 
-          leadingWidth: widget.onBackHome != null ? 108 : 58,
+          leadingWidth: widget.onBackHome != null ? 108 : JntHeaderMetrics.leadingWidth,
           leading: Row(
             children: [
               if (widget.onBackHome != null)
@@ -2388,7 +2811,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                   NotificationsPage.showAsModal(context);
                 },
                 focusNode: _notificationsFocusNode,
-                iconSize: 22,
+                iconSize: JntHeaderMetrics.notificationIconSize,
               ),
             ],
           ),
@@ -2397,7 +2820,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           title: ExcludeSemantics(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 50,
+              height: JntHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
@@ -2406,7 +2829,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: JntHeaderMetrics.rightPadding),
               child: _AvatarMenu(
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
@@ -2415,6 +2838,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                 showHistory: widget.showExtendedAvatarMenu,
                 showCalendar: widget.showExtendedAvatarMenu,
                 showArtist: widget.showExtendedAvatarMenu,
+                showReviews: widget.showExtendedAvatarMenu,
               ),
             ),
           ],
@@ -2602,7 +3026,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                 height: 110,
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: AppColors.blackCat.withValues(alpha: 0.25),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.25,
+                                    ),
                                   ),
                                 ),
                                 clipBehavior: Clip.hardEdge,
@@ -2895,19 +3321,25 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.04),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.04,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.04),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.04,
+                                ),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.04),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.04,
+                                ),
                               ),
                             ),
                           ),
@@ -2930,8 +3362,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                     child: Text(
                                       'No matching clients found.',
                                       style: TextStyle(
-                                        color: AppColors.blackCat.withValues(alpha: 
-                                          0.60,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.60,
                                         ),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400,
@@ -3009,16 +3441,18 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: saved
-                                    ? AppColors.blackCat.withValues(alpha: 0.15)
+                                    ? AppColors.balletSlippers
                                     : AppColors.blackCat,
-                                foregroundColor: _requestSnow,
+                                foregroundColor: saved
+                                    ? AppColors.blackCat
+                                    : _requestSnow,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.zero,
                                 ),
                               ),
                               onPressed: () => _saveSlot(i),
                               child: Text(
-                                saved ? 'Saved ?' : 'Save Client Preferences',
+                                saved ? 'Saved' : 'Save',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 12,
@@ -3145,7 +3579,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
               showMeasurementTips: false,
               showDimensionImages: false,
               showNfcOptions: true,
-              nailDimensionBorderColor: AppColors.blackCat.withValues(alpha: 0.25),
+              nailDimensionBorderColor: AppColors.blackCat.withValues(
+                alpha: 0.25,
+              ),
               onChanged: (updated) {
                 setState(() {
                   final oldNfcCount = _nfcSelectedCount(
@@ -3384,7 +3820,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.inbox_outlined),
-                    label: 'Requests',
+                    label: 'Campaigns',
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.calendar_month_outlined),
@@ -3481,6 +3917,7 @@ class _AvatarMenu extends StatelessWidget {
     this.showHistory = true,
     this.showCalendar = true,
     this.showArtist = true,
+    this.showReviews = true,
   });
   final ValueChanged<String> onSelected;
   final String avatarUrl;
@@ -3489,6 +3926,7 @@ class _AvatarMenu extends StatelessWidget {
   final bool showHistory;
   final bool showCalendar;
   final bool showArtist;
+  final bool showReviews;
 
   @override
   Widget build(BuildContext context) {
@@ -3556,7 +3994,25 @@ class _AvatarMenu extends StatelessWidget {
               ],
             ),
           ),
-        if (showProfile || showHistory || showCalendar || showArtist)
+        if (showReviews)
+          PopupMenuItem<String>(
+            value: 'reviews',
+            child: Row(
+              children: const [
+                Icon(Icons.star_border, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Reviews',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        if (showProfile ||
+            showHistory ||
+            showCalendar ||
+            showArtist ||
+            showReviews)
           const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'logout',
@@ -3577,14 +4033,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 40,
-        width: 40,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
-            size: 40,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),
@@ -4201,7 +4657,6 @@ class _RadioPill extends StatelessWidget {
     );
   }
 }
-
 
 const List<String> usStates = [
   'Alabama',

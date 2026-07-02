@@ -6,16 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
-import '../services/supabase_firebase_compat.dart';
 
 class ArtistDetailsModal extends StatefulWidget {
   const ArtistDetailsModal({
     super.key,
-    required this.docRef,
+    required this.supabaseTable,
+    this.supabaseId = '',
+    this.artistEmail = '',
     this.onProjectTap,
   });
 
-  final DocumentReference<Map<String, dynamic>> docRef;
+  final String supabaseTable;
+  final String supabaseId;
+  final String artistEmail;
   final ValueChanged<String>? onProjectTap;
 
   @override
@@ -25,6 +28,7 @@ class ArtistDetailsModal extends StatefulWidget {
 class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
   static const double _inputFs = 11.5;
   final int _portfolioPage = 0;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
   String _first(List<dynamic> values) {
     for (final raw in values) {
@@ -63,6 +67,44 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
     return const <String>[];
   }
 
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, item) => MapEntry(key.toString(), item));
+    }
+    return const <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>?> _loadArtistRow() async {
+    final table = widget.supabaseTable.trim();
+    final id = widget.supabaseId.trim();
+    final email = widget.artistEmail.trim().toLowerCase();
+    if (table.isEmpty) return null;
+
+    try {
+      if (id.isNotEmpty) {
+        final byId = await _supabase.from(table).select().eq('id', id).limit(1);
+        if (byId.isNotEmpty) return Map<String, dynamic>.from(byId.first as Map);
+
+        final byUid = await _supabase.from(table).select().eq('uid', id).limit(1);
+        if (byUid.isNotEmpty) return Map<String, dynamic>.from(byUid.first as Map);
+      }
+
+      if (email.isNotEmpty) {
+        final byEmail = await _supabase
+            .from(table)
+            .select()
+            .eq('email', email)
+            .limit(1);
+        if (byEmail.isNotEmpty) {
+          return Map<String, dynamic>.from(byEmail.first as Map);
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   String _titleCaseTechType(String raw) {
     final value = raw.trim().toLowerCase();
     if (value == 'student') return 'Student / Unlicensed Technician';
@@ -97,16 +139,21 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
   }
 
   List<String> _buildPortfolioImages(Map<String, dynamic> data) {
-    final artist = (data['artist'] as Map<String, dynamic>?) ?? const {};
-    final portfolio = (data['portfolio'] as Map<String, dynamic>?) ?? const {};
-    final artistPortfolio =
-        (artist['portfolio'] as Map<String, dynamic>?) ?? const {};
+    final artist = _asMap(data['artist']);
+    final portfolio = _asMap(data['portfolio']);
+    final artistPortfolio = _asMap(artist['portfolio']);
 
     final directImages = <String>[
       ..._asStringList(data['panel_portfolioImages']),
       ..._asStringList(data['portfolioImages']),
+      ..._asStringList(data['portfolio_images']),
+      ..._asStringList(data['panel_artist_portfolioImages']),
       ..._asStringList(portfolio['images']),
+      ..._asStringList(portfolio['portfolioImages']),
+      ..._asStringList(portfolio['portfolio_images']),
       ..._asStringList(artistPortfolio['images']),
+      ..._asStringList(artist['portfolioImages']),
+      ..._asStringList(artist['portfolio_images']),
     ];
 
     if (directImages.isNotEmpty) {
@@ -115,8 +162,15 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
 
     final items = <dynamic>[
       ...(data['portfolioItems'] as List<dynamic>? ?? const []),
+      ...(data['portfolio_items'] as List<dynamic>? ?? const []),
       ...(portfolio['items'] as List<dynamic>? ?? const []),
+      ...(portfolio['portfolioItems'] as List<dynamic>? ?? const []),
+      ...(portfolio['portfolio_items'] as List<dynamic>? ?? const []),
       ...(artistPortfolio['items'] as List<dynamic>? ?? const []),
+      ...(artistPortfolio['portfolioItems'] as List<dynamic>? ?? const []),
+      ...(artistPortfolio['portfolio_items'] as List<dynamic>? ?? const []),
+      ...(artist['portfolioItems'] as List<dynamic>? ?? const []),
+      ...(artist['portfolio_items'] as List<dynamic>? ?? const []),
     ];
 
     final urls = items
@@ -134,34 +188,6 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
         .toList(growable: false);
 
     return urls;
-  }
-
-  List<String> _mergePortfolioImages(
-    Map<String, dynamic> data,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    final merged = <String>[..._buildPortfolioImages(data)];
-    for (final doc in docs) {
-      final item = doc.data();
-      final imageUrl = _first([
-        item['imageUrl'],
-        item['url'],
-        item['photoUrl'],
-        item['downloadUrl'],
-      ]);
-      if (imageUrl.isNotEmpty) {
-        merged.add(imageUrl);
-      }
-    }
-
-    final seen = <String>{};
-    final deduped = <String>[];
-    for (final raw in merged) {
-      final url = raw.trim();
-      if (url.isEmpty) continue;
-      if (seen.add(url)) deduped.add(url);
-    }
-    return deduped;
   }
 
   void _openPhotoPreview(String imageSrc) {
@@ -263,15 +289,15 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
           ),
           child: SafeArea(
             top: false,
-            child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: widget.docRef.snapshots(),
+            child: FutureBuilder<Map<String, dynamic>?>(
+              future: _loadArtistRow(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     !snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final data = snapshot.data?.data();
+                final data = snapshot.data;
                 if (data == null) {
                   return _ErrorState(
                     onClose: () => Navigator.of(context).pop(),
@@ -392,59 +418,50 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                   artistPricing['maxPrice'],
                 ]);
 
-                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: widget.docRef
-                      .collection('portfolio_items')
-                      .snapshots(),
-                  builder: (context, portfolioSnapshot) {
-                    final portfolioImages = _mergePortfolioImages(
-                      data,
-                      portfolioSnapshot.data?.docs ??
-                          <QueryDocumentSnapshot<Map<String, dynamic>>>[],
-                    );
+                final portfolioImages = _buildPortfolioImages(data);
 
-                    return Column(
-                      children: [
-                        Container(
-                          color: AppColors.alabaster,
-                          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Center(
-                                child: ExcludeSemantics(
-                                  child: Image.asset(
-                                    'assets/images/jnt_logo_black.png',
-                                    height: 50,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, _, _) =>
-                                        const SizedBox.shrink(),
-                                  ),
-                                ),
+                return Column(
+                  children: [
+                    Container(
+                      color: AppColors.alabaster,
+                      padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Center(
+                            child: ExcludeSemantics(
+                              child: Image.asset(
+                                'assets/images/jnt_logo_black.png',
+                                height: 50,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, _, _) =>
+                                    const SizedBox.shrink(),
                               ),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Semantics(
-                                  button: true,
-                                  label: 'Close artist details',
-                                  child: IconButton(
-                                    tooltip: 'Close artist details',
-                                    autofocus: MediaQuery.of(
-                                      context,
-                                    ).accessibleNavigation,
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(),
-                                    icon: const Icon(Icons.close_rounded),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-                            children: [
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Semantics(
+                              button: true,
+                              label: 'Close artist details',
+                              child: IconButton(
+                                tooltip: 'Close artist details',
+                                autofocus: MediaQuery.of(
+                                  context,
+                                ).accessibleNavigation,
+                                onPressed: () =>
+                                    Navigator.of(context).pop(),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+                        children: [
                               const SizedBox(height: 2),
                               Stack(
                                 children: [
@@ -619,8 +636,6 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                         ),
                       ],
                     );
-                  },
-                );
               },
             ),
           ),

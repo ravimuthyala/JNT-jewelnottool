@@ -52,7 +52,7 @@ class _HomePageState extends State<HomePage> {
     final safeLogoWidth = (350 * (dpr <= 0 ? 1.0 : dpr)).round();
 
     final bgProvider = ResizeImage(
-      const AssetImage('assets/images/jnt_nails.png'),
+      const AssetImage('assets/images/jntlogo1.png'),
       width: safeBgWidth,
       height: safeBgHeight,
     );
@@ -169,20 +169,20 @@ class _HomePageState extends State<HomePage> {
         body: Stack(
           children: [
             ExcludeSemantics(
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              color: _blackCat,
-              child: FittedBox(
-                fit: BoxFit.contain,
-                alignment: Alignment.center,
-                child: Image.asset(
-                  'assets/images/jnt_nails.png',
-                  filterQuality: FilterQuality.high,
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: const Color(0xFFE6E2DE),
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  alignment: Alignment.center,
+                  child: Image.asset(
+                    'assets/images/jntlogo1.png',
+                    filterQuality: FilterQuality.high,
+                  ),
                 ),
               ),
             ),
-          ),
 
             Positioned.fill(
               child: DecoratedBox(

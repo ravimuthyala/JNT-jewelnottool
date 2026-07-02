@@ -21,25 +21,41 @@ class SupabaseAuthService {
   }
 
   static Future<User?> signup({
-  required String email,
-  required String password,
-}) async {
-  try {
-    final response = await _client.auth.signUp(
-      email: email.trim(),
-      password: password.trim(),
-    );
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _client.auth.signUp(
+        email: email.trim(),
+        password: password.trim(),
+      );
 
-    print('SIGNUP SUCCESS');
-    print(response.user?.id);
+      print('SIGNUP SUCCESS');
+      print(response.user?.id);
 
-    return response.user;
-  } catch (e) {
-    print('SIGNUP ERROR');
-    print(e);
-    rethrow;
+      return response.user;
+    } catch (e) {
+      print('SIGNUP ERROR');
+      print(e);
+      rethrow;
+    }
   }
-}
+
+  static Future<void> sendPasswordResetEmail({
+    required String email,
+    String? redirectTo,
+  }) async {
+    await _client.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo: redirectTo,
+    );
+  }
+
+  static Future<void> updatePassword(String password) async {
+    await _client.auth.updateUser(
+      UserAttributes(password: password.trim()),
+    );
+  }
   static Future<void> logout() async {
     await _client.auth.signOut();
   }

@@ -10,9 +10,9 @@ import 'client_artists_page.dart';
 import 'client_custom_request_page.dart';
 import 'client_custom_request_with_artist_page.dart';
 import 'client_home_artist_portfolio_page.dart';
-import 'client_order_page.dart';
+import 'client_orders_page.dart';
 import 'client_profile_page.dart';
-import 'client_requests_page.dart';
+import 'client_campaigns_page.dart';
 import 'track_order_page.dart';
 
 class ClientShellPage extends StatefulWidget {
@@ -61,14 +61,11 @@ class _ClientShellPageState extends State<ClientShellPage> {
     super.dispose();
   }
 
-  bool _hasBrandPartnerTag(Object? value) {
+  bool _hasAmbassadorTag(Object? value) {
     if (value is! List) return false;
     return value.any((item) {
       final tag = item.toString().trim().toLowerCase();
-      return tag == 'brand partner' ||
-          tag == 'ambassador' ||
-          tag == '1m followers' ||
-          tag == '1m+ followers';
+      return tag == 'ambassador' || tag.contains('ambassador');
     });
   }
 
@@ -105,68 +102,21 @@ class _ClientShellPageState extends State<ClientShellPage> {
       firstNonEmpty(clientAscension, const ['status']),
     ].join(' ').toLowerCase();
 
-    final hasBrandPartnerLabel =
-        partnerText.contains('brand partner') ||
-        partnerText.contains('brand_partner') ||
-        partnerText.contains('ambassador');
+    final hasAmbassadorLabel =
+        partnerText.contains('ambassador') &&
+        !partnerText.contains('not ambassador');
 
-    final hasBrandPartnerTag =
-        _hasBrandPartnerTag(data['accountTags']) ||
-        _hasBrandPartnerTag(profile['accountTags']) ||
-        _hasBrandPartnerTag(basic['accountTags']) ||
-        _hasBrandPartnerTag(client['accountTags']);
+    final hasAmbassadorTag =
+        _hasAmbassadorTag(data['accountTags']) ||
+        _hasAmbassadorTag(profile['accountTags']) ||
+        _hasAmbassadorTag(basic['accountTags']) ||
+        _hasAmbassadorTag(client['accountTags']) ||
+        _hasAmbassadorTag(ascension['tags']) ||
+        _hasAmbassadorTag(profileAscension['tags']) ||
+        _hasAmbassadorTag(basicAscension['tags']) ||
+        _hasAmbassadorTag(clientAscension['tags']);
 
-    final approvalStatus = firstNonEmpty(data, const [
-      'brandPartnerStatus',
-      'brandPartnerApproval',
-    ]).toLowerCase();
-    final adminOverrideStatus = firstNonEmpty(data, const [
-      'adminOverride',
-      'override',
-    ]).toLowerCase();
-    final hasAdminOverride =
-        approvalStatus == 'approved' ||
-        adminOverrideStatus == 'true' ||
-        adminOverrideStatus == '1' ||
-        adminOverrideStatus == 'yes';
-
-    bool followersAtLeast1M(Map<String, dynamic> map) {
-      final possibleCounts = <Object?>[
-        map['followers'],
-        map['followerCount'],
-        map['followersCount'],
-        map['socialFollowers'],
-        map['socialFollowerCount'],
-      ];
-      for (final value in possibleCounts) {
-        if (value is num && value >= 1000000) return true;
-        final parsed = num.tryParse(value?.toString() ?? '');
-        if (parsed != null && parsed >= 1000000) return true;
-      }
-      final label = firstNonEmpty(map, const [
-        'followersLabel',
-        'followerMilestone',
-        'followersTier',
-      ]).toLowerCase();
-      return label.contains('1m');
-    }
-
-    final hasFollowers1M =
-        followersAtLeast1M(data) ||
-        followersAtLeast1M(profile) ||
-        followersAtLeast1M(basic) ||
-        followersAtLeast1M(client) ||
-        followersAtLeast1M(ascension) ||
-        followersAtLeast1M(profileAscension) ||
-        followersAtLeast1M(basicAscension) ||
-        followersAtLeast1M(clientAscension);
-
-    // Admin-approved flow may only update profile with Brand Partner tag.
-    if (hasBrandPartnerTag) return true;
-    if (hasAdminOverride || hasFollowers1M) {
-      return true;
-    }
-    return hasBrandPartnerLabel;
+    return hasAmbassadorTag || hasAmbassadorLabel;
   }
 
   Map<String, dynamic> _asMap(Object? raw) {
@@ -571,9 +521,12 @@ class _ClientShellPageState extends State<ClientShellPage> {
         showProfileMenu: showProfileInAvatar,
       ),
       if (showRequestsTab)
-        ClientRequestsPage(
+        ClientCampaignsPage(
           onOpenProfile: _openProfileFromAvatar,
           showProfileMenuItem: showProfileInAvatar,
+          showBrandRequests: true,
+          showClientRequests: false,
+          useCampaignNaming: true,
           onLogout: () {
             unawaited(_logoutToHomePage());
           },
@@ -596,7 +549,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
           unawaited(_openRequestWithArtist(artistName));
         },
       ),
-      ClientOrderPage(
+      ClientOrdersPage(
         onBackHome: () => _onNavTap(0),
         profile: _profile,
         isActiveTab: _index == (showRequestsTab ? 4 : 3),
@@ -681,7 +634,7 @@ class _ClientBottomNav extends StatelessWidget {
       _item(Icons.home_outlined, Icons.home, 'Home', _enabled(0)),
       _item(Icons.add_circle_outline, Icons.add_circle, 'Design', _enabled(1)),
       if (showRequestsTab)
-        _item(Icons.inbox_outlined, Icons.inbox, 'Requests', _enabled(2)),
+        _item(Icons.inbox_outlined, Icons.inbox, 'Campaigns', _enabled(2)),
       _item(
         Icons.brush_outlined,
         Icons.brush,

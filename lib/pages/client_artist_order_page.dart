@@ -9,9 +9,11 @@ class ClientArtistOrderPage extends StatelessWidget {
     required this.profile,
     this.onBackHome,
     this.onOpenProfile,
+    this.onOpenEarnings,
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.onLogout,
     this.showExtendedAvatarMenu = false,
     this.showProfileMenu = false,
@@ -22,9 +24,11 @@ class ClientArtistOrderPage extends StatelessWidget {
   final ClientProfileDraft profile;
   final VoidCallback? onBackHome;
   final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenEarnings;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final Future<void> Function()? onLogout;
   final bool showExtendedAvatarMenu;
   final bool showProfileMenu;
@@ -37,12 +41,14 @@ class ClientArtistOrderPage extends StatelessWidget {
       profile: profile,
       onBackHome: onBackHome,
       onOpenProfile: onOpenProfile,
+      onOpenEarnings: onOpenEarnings,
       onOpenHistory: onOpenHistory,
       onOpenCalendar: onOpenCalendar,
       onOpenArtist: onOpenArtist,
+      onOpenReviews: onOpenReviews,
       onLogout: onLogout,
       showExtendedAvatarMenu: showExtendedAvatarMenu,
-      showProfileMenu: showProfileMenu,
+      showProfileMenu: showProfileMenu || showExtendedAvatarMenu,
       bottomNavIndex: bottomNavIndex,
       onNavTap: onNavTap,
       audience: OrdersAudience.clientArtist,

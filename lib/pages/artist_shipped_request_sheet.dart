@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
@@ -44,8 +45,138 @@ class _ShippedRequestSheet extends StatefulWidget {
   State<_ShippedRequestSheet> createState() => _ShippedRequestSheetState();
 }
 
+
+class _ShipmentInfo {
+  const _ShipmentInfo({
+    required this.courier,
+    required this.tracking,
+    required this.shippedAt,
+  });
+
+  final String courier;
+  final String tracking;
+  final DateTime? shippedAt;
+}
+
 class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
+  final SupabaseClient _supabase = Supabase.instance.client;
   bool _isMarkingDelivered = false;
+  int _selectedMeasurementTab = 0;
+  String get _requestTable =>
+      widget.request.sourceCollection == 'Company_Custom_Requests'
+          ? 'company_custom_requests'
+          : 'client_custom_requests';
+
+  String get _requestDetailsTable =>
+      widget.request.sourceCollection == 'Company_Custom_Requests'
+          ? 'company_custom_requests_details'
+          : 'client_custom_requests_details';
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return <String, dynamic>{};
+  }
+
+  List<Object?> _asList(Object? value) {
+    if (value is Iterable) return value.toList(growable: false);
+    return const <Object?>[];
+  }
+
+  String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    for (final raw in values) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+    }
+    return fallback;
+  }
+
+  DateTime? _asDateTime(Object? raw) {
+    if (raw is DateTime) return raw;
+    final text = (raw ?? '').toString().trim();
+    if (text.isEmpty) return null;
+    return DateTime.tryParse(text);
+  }
+
+  _ShipmentInfo _fallbackShipmentInfo() {
+    return _ShipmentInfo(
+      courier: (widget.request.shippedByCourier ?? '').trim(),
+      tracking: (widget.request.trackingNumber ?? '').trim(),
+      shippedAt: widget.request.shippedAt,
+    );
+  }
+
+  Future<_ShipmentInfo> _loadShipmentInfo() async {
+    final fallback = _fallbackShipmentInfo();
+    try {
+      final row = await _supabase
+          .from(_requestTable)
+          .select()
+          .eq('id', widget.request.id)
+          .maybeSingle();
+      if (row == null) return fallback;
+      final root = Map<String, dynamic>.from(row);
+      final payload = _asMap(root['payload']);
+      final details = _asMap(root['details']);
+      final data = _asMap(root['data']);
+      final shipping = _asMap(root['shipping']);
+      final nested = <Map<String, dynamic>>[root, payload, details, data, shipping];
+
+      String pick(List<String> keys) {
+        final values = <Object?>[];
+        for (final map in nested) {
+          for (final key in keys) {
+            values.add(map[key]);
+          }
+        }
+        return _firstNonEmpty(values);
+      }
+
+      final courier = _firstNonEmpty(<Object?>[
+        pick(const <String>[
+          'shipped_by_courier',
+          'shippedByCourier',
+          'shipping_label_carrier',
+          'shippingLabelCarrier',
+          'carrier',
+          'courier',
+        ]),
+        fallback.courier,
+      ]);
+      final tracking = _firstNonEmpty(<Object?>[
+        pick(const <String>[
+          'tracking_number',
+          'trackingNumber',
+          'shipping_label_tracking_number',
+          'shippingLabelTrackingNumber',
+          'tracking',
+        ]),
+        fallback.tracking,
+      ]);
+      DateTime? shippedAt;
+      for (final raw in <Object?>[
+        root['shipped_at'],
+        root['artist_shipped_at'],
+        root['order_shipped_at'],
+        payload['shippedAt'],
+        details['shippedAt'],
+        data['shippedAt'],
+        shipping['shippedAt'],
+        shipping['shipped_at'],
+      ]) {
+        shippedAt = _asDateTime(raw);
+        if (shippedAt != null) break;
+      }
+      return _ShipmentInfo(
+        courier: courier,
+        tracking: tracking,
+        shippedAt: shippedAt ?? fallback.shippedAt,
+      );
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   List<String> _modalClientPhotos() {
     final out = <String>[];
     for (final raw in widget.request.clientImages) {
@@ -58,8 +189,144 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   }
 
   String _heroPhotoSource() {
-    final profile = widget.request.clientProfileImage.trim();
-    if (profile.isNotEmpty) return profile;
+    final acceptedProfile = _normalizeImagePath(
+      widget.request.acceptedClientProfileImage.trim(),
+    );
+    if (acceptedProfile.isNotEmpty) return acceptedProfile;
+
+    final clientProfile = _normalizeImagePath(
+      widget.request.clientProfileImage.trim(),
+    );
+    if (clientProfile.isNotEmpty) return clientProfile;
+
+    return '';
+  }
+
+  Future<String> _resolveShippedClientProfileImage() async {
+    final accepted = _normalizeImagePath(
+      widget.request.acceptedClientProfileImage.trim(),
+    );
+    if (accepted.isNotEmpty) return accepted;
+
+    final existing = _normalizeImagePath(widget.request.clientProfileImage.trim());
+    if (existing.isNotEmpty) return existing;
+
+    return _lookupShippedClientProfileImage(
+      email: widget.request.clientEmail.trim(),
+      name: widget.request.clientName.trim(),
+    );
+  }
+
+  Future<String> _lookupShippedClientProfileImage({
+    required String email,
+    required String name,
+  }) async {
+    String firstNonEmpty(List<Object?> values) {
+      for (final raw in values) {
+        final text = (raw ?? '').toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return '';
+    }
+
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+      return const <String, dynamic>{};
+    }
+
+    String imageFromRow(Map<String, dynamic> row) {
+      final profile = asMap(row['profile']);
+      final basic = asMap(row['basic']);
+      final client = asMap(row['client']);
+      final clientProfile = asMap(client['profile']);
+      final data = asMap(row['data']);
+      return firstNonEmpty(<Object?>[
+        row['client_profile_image'],
+        row['clientProfileImage'],
+        row['profileImageUrl'],
+        row['profile_image_url'],
+        row['profile_picture_url'],
+        row['profilePhotoUrl'],
+        row['profile_photo_url'],
+        row['avatarUrl'],
+        row['avatar_url'],
+        row['photoUrl'],
+        row['photo_url'],
+        profile['profileImageUrl'],
+        profile['profile_image_url'],
+        profile['profile_picture_url'],
+        profile['avatarUrl'],
+        profile['avatar_url'],
+        profile['photoUrl'],
+        profile['photo_url'],
+        basic['profileImageUrl'],
+        basic['profile_image_url'],
+        basic['profile_picture_url'],
+        basic['avatarUrl'],
+        basic['avatar_url'],
+        basic['photoUrl'],
+        basic['photo_url'],
+        client['profileImageUrl'],
+        client['profile_image_url'],
+        client['profile_picture_url'],
+        client['avatarUrl'],
+        client['avatar_url'],
+        client['photoUrl'],
+        client['photo_url'],
+        clientProfile['profileImageUrl'],
+        clientProfile['profile_image_url'],
+        clientProfile['profile_picture_url'],
+        clientProfile['avatarUrl'],
+        clientProfile['avatar_url'],
+        clientProfile['photoUrl'],
+        clientProfile['photo_url'],
+        data['clientProfileImage'],
+        data['client_profile_image'],
+        data['profileImageUrl'],
+        data['profile_image_url'],
+        data['avatarUrl'],
+        data['avatar_url'],
+        data['photoUrl'],
+        data['photo_url'],
+      ]);
+    }
+
+    Future<String> lookupBy(String table, String column, String value) async {
+      final needle = value.trim();
+      if (needle.isEmpty) return '';
+      try {
+        final row = await Supabase.instance.client
+            .from(table)
+            .select()
+            .eq(column, needle)
+            .limit(1)
+            .maybeSingle();
+        if (row == null) return '';
+        return imageFromRow((row as Map).cast<String, dynamic>());
+      } catch (_) {
+        return '';
+      }
+    }
+
+    if (email.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const ['email', 'client_email']) {
+          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    if (name.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const ['name', 'full_name', 'display_name', 'client_name']) {
+          final found = await lookupBy(table, column, name.trim());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
     return '';
   }
 
@@ -80,8 +347,6 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     ).copyWith(textScaler: const TextScaler.linear(1.0));
 
     final modalClientPhotos = _modalClientPhotos();
-    final tracking = (widget.request.trackingNumber ?? '').trim();
-    final shippedAt = widget.request.shippedAt;
 
     return MediaQuery(
       data: sheetMediaQuery,
@@ -116,181 +381,24 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                     ),
                     const SizedBox(height: 12),
 
-                    _softBox(
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            height: 32,
-                            width: 32,
-                            decoration: const BoxDecoration(
-                              color: AppColors.alabaster,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.check,
-                              size: 18,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (shippedAt != null)
-                                  Text(
-                                    'Shipped on ${_fmtDate(shippedAt)}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
-                                  )
-                                else
-                                  const Text(
-                                    'Shipped',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                const SizedBox(height: 10),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Tracking Number: ',
-                                      style: TextStyle(
-                                        color: AppColors.blackCat.withValues(alpha: 0.60),
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13.5,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        tracking.isEmpty ? '-' : tracking,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  height: 44,
-                                  child: ElevatedButton.icon(
-                                    onPressed: _openTrackingPreview,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.blackCat,
-                                      foregroundColor: AppColors.snow,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.zero,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                    ),
-                                    icon: const Icon(
-                                      Icons.travel_explore_rounded,
-                                      size: 16,
-                                    ),
-                                    label: const Text(
-                                      'Track Shipment',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    FutureBuilder<_ShipmentInfo>(
+                      future: _loadShipmentInfo(),
+                      builder: (context, snapshot) {
+                        final info = snapshot.data ?? _fallbackShipmentInfo();
+                        return _shipmentStatusCard(info);
+                      },
                     ),
 
-                    const SizedBox(height: 12),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
                     const SizedBox(height: 12),
                     if (_isBrandRequest(widget.request)) ...[
                       _acceptedClientDetailsSection(widget.request),
                       const SizedBox(height: 12),
-                      const Divider(
-                        height: 1,
-                        color: AppColors.blackCatBorderLight,
-                      ),
-                      const SizedBox(height: 12),
                     ],
                     _measurementSection(),
-                    const SizedBox(height: 14),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
                     const SizedBox(height: 12),
-
-                    _sectionTitle('Uploaded Photos (Client)'),
-                    const SizedBox(height: 10),
-                    if (modalClientPhotos.isEmpty)
-                      _softBox(
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.image_outlined,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'No images uploaded',
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(alpha: 0.65),
-                                fontWeight: FontWeight.w400,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      _photosGrid(modalClientPhotos),
-
-                    const SizedBox(height: 16),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
+                    _clientPhotosSection(modalClientPhotos),
                     const SizedBox(height: 12),
-
-                    _sectionTitle('Uploaded Photos (Artist)'),
-                    const SizedBox(height: 10),
-                    if (widget.request.artistImages.isEmpty)
-                      _softBox(
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.image_outlined,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'No artist photos uploaded',
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(alpha: 0.65),
-                                fontWeight: FontWeight.w400,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      _photosGrid(widget.request.artistImages),
+                    _artistPhotosSection(widget.request.artistImages),
                   ],
                 ),
               ),
@@ -380,6 +488,150 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
+
+  Widget _shipmentStatusCard(_ShipmentInfo info) {
+    final courier = info.courier.trim();
+    final tracking = info.tracking.trim();
+    final shippedAt = info.shippedAt;
+    return _softBox(
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.local_shipping_outlined,
+            size: 22,
+            color: AppColors.blackCat,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  shippedAt == null ? 'Shipped' : 'Shipped on ${_fmtDate(shippedAt)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+                const SizedBox(height: 10),
+                _shippingInfoRow('Shipped by', courier.isEmpty ? '-' : courier),
+                const SizedBox(height: 8),
+                _shippingInfoRow('Tracking #', tracking.isEmpty ? '-' : tracking),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openTrackingPreview(info),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    icon: const Icon(Icons.travel_explore_rounded, size: 16),
+                    label: const Text(
+                      'Track Shipment',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shippingInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 94,
+          child: Text(
+            '$label:',
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.60),
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value.trim().isEmpty ? '-' : value.trim(),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionCard({
+    required String title,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle(title),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyPhotoBox(String message) {
+    return _softBox(
+      Row(
+        children: [
+          Icon(
+            Icons.image_outlined,
+            color: AppColors.blackCat.withValues(alpha: 0.45),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            message,
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.65),
+              fontWeight: FontWeight.w400,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientPhotosSection(List<String> photos) {
+    return _sectionCard(
+      title: 'Uploaded Photos (Client)',
+      child: photos.isEmpty
+          ? _emptyPhotoBox('No images uploaded')
+          : _photosGrid(photos),
+    );
+  }
+
+  Widget _artistPhotosSection(List<String> photos) {
+    return _sectionCard(
+      title: 'Uploaded Photos (Artist)',
+      child: photos.isEmpty
+          ? _emptyPhotoBox('No artist photos uploaded')
+          : _photosGrid(photos),
+    );
+  }
+
   Future<void> _markDeliveredForTesting() async {
     setState(() => _isMarkingDelivered = true);
     try {
@@ -408,7 +660,6 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
         ? request.brandName.trim()
         : request.clientName;
     final headerSubtitle = isBrandRequest ? request.title.trim() : '';
-    final avatarPath = _heroPhotoSource();
     final avatarLetter = headerName.isEmpty ? '' : headerName[0].toUpperCase();
 
     return Stack(
@@ -420,31 +671,38 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             children: [
               const SizedBox(height: 8),
               Center(
-                child: avatarPath.isNotEmpty
-                    ? SizedBox(
-                        height: 78,
-                        width: 78,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.zero,
-                          child: _imageForPath(avatarPath),
-                        ),
-                      )
-                    : Container(
-                        height: 78,
-                        width: 78,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.zero,
-                          color: AppColors.balletSlippers,
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          avatarLetter,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                child: SizedBox(
+                  height: 78,
+                  width: 78,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: FutureBuilder<String>(
+                      future: _resolveShippedClientProfileImage(),
+                      builder: (context, snapshot) {
+                        final avatarPath = _normalizeImagePath(
+                          (snapshot.data ?? '').trim(),
+                        );
+                        if (avatarPath.isNotEmpty) {
+                          return _imageForPath(avatarPath);
+                        }
+                        return Container(
+                          decoration: const BoxDecoration(
+                            borderRadius: BorderRadius.zero,
+                            color: AppColors.balletSlippers,
                           ),
-                        ),
-                      ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            avatarLetter,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -482,26 +740,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               const SizedBox(height: 10),
               _requestTypeOrderRow(request),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _chipInfo(
-                      icon: Icons.calendar_today_outlined,
-                      text: 'Need by: ${_needByLabel(request.neededBy)}',
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: _chipInfo(
-                      icon: Icons.attach_money_rounded,
-                      text:
-                          'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: AppColors.blackCatBorderLight),
+              _needBudgetRow(),
             ],
           ),
         ),
@@ -620,51 +859,107 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group Order'
         : 'Single Order';
+    return _summaryPairRow(
+      left: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            r.isDirectRequest
+                ? Icons.arrow_outward_rounded
+                : Icons.arrow_forward_rounded,
+            size: 15,
+            color: AppColors.blackCat,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            requestType,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+          ),
+        ],
+      ),
+      right: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            r.orderType == RequestOrderTypeV2.group
+                ? Icons.groups_2_outlined
+                : Icons.person_outline_rounded,
+            size: 15,
+            color: AppColors.blackCat,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            orderType,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _summaryPairRow({
+    required Widget left,
+    required Widget right,
+  }) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(
-          r.isDirectRequest
-              ? Icons.arrow_outward_rounded
-              : Icons.arrow_forward_rounded,
-          size: 16,
-          color: AppColors.blackCat,
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: left,
+              ),
+            ),
+          ),
         ),
-        const SizedBox(width: 6),
-        Text(
-          requestType,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
-        ),
-        const SizedBox(width: 14),
-        Container(width: 1, height: 16, color: AppColors.blackCatBorderLight),
-        const SizedBox(width: 14),
-        Icon(
-          r.orderType == RequestOrderTypeV2.group
-              ? Icons.groups_2_outlined
-              : Icons.person_outline_rounded,
-          size: 16,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          orderType,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: right,
+              ),
+            ),
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _needBudgetRow() {
+    return _summaryPairRow(
+      left: _chipInfo(
+        icon: Icons.calendar_today_outlined,
+        text: 'Need by: ${_needByLabel(widget.request.neededBy)}',
+      ),
+      right: _chipInfo(
+        icon: Icons.attach_money_rounded,
+        text:
+            'Budget: \$${widget.request.budgetMin} to \$${widget.request.budgetMax}',
+      ),
     );
   }
 
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: AppColors.blackCat),
-        const SizedBox(width: 6),
+        Icon(icon, size: 15, color: AppColors.blackCat),
+        const SizedBox(width: 5),
         Expanded(
           child: Text(
             text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
           ),
         ),
       ],
@@ -703,129 +998,474 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
   Widget _measurementSection() {
     final isGroup = widget.request.orderType == RequestOrderTypeV2.group;
-    if (isGroup) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('Client Measurements'),
-          const SizedBox(height: 10),
-          GroupClientMeasurementsTabs(
-            clients: _buildGroupMeasurementClients(),
-            compactRequestDetailsLayout: true,
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('Nail Dimensions (mm)'),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(child: _dimsCard('Left Hand', widget.request.leftHand)),
-            const SizedBox(width: 8),
-            Expanded(child: _dimsCard('Right Hand', widget.request.rightHand)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _measureField('Nail Shape', widget.request.nailShape),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _measureField(
-                'Nail Length',
-                _prettyLength(widget.request.nailLength),
-              ),
-            ),
-          ],
-        ),
-      ],
+    final fallbackClients = _buildGroupMeasurementClients();
+    final fallbackClient = fallbackClients.isNotEmpty
+        ? fallbackClients.first
+        : GroupClientMeasurementData(
+            name: widget.request.clientName.trim().isEmpty
+                ? 'Client'
+                : widget.request.clientName.trim(),
+            nailShape: widget.request.nailShape,
+            nailLength: widget.request.nailLength,
+            leftHand: _dimsMap(widget.request.leftHand),
+            rightHand: _dimsMap(widget.request.rightHand),
+          );
+    return _sectionCard(
+      title: 'Nail Dimensions',
+      child: isGroup
+          ? FutureBuilder<List<GroupClientMeasurementData>>(
+              future: _loadGroupMeasurementClients(),
+              builder: (context, snapshot) {
+                final clients = snapshot.data ?? fallbackClients;
+                return _compactMeasurementTabs(clients);
+              },
+            )
+          : _measurementBody(fallbackClient),
     );
   }
 
-  Widget _dimsCard(String title, NailDimensionsV2 dims) {
-    Widget row(String label, String value) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
-                ),
-              ),
-            ),
-            Text(
-              value.trim().isEmpty ? '-' : value.trim(),
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13.5,
-              ),
-            ),
-          ],
+  Widget _compactMeasurementTabs(List<GroupClientMeasurementData> clients) {
+    if (clients.isEmpty) {
+      return _softBox(
+        Text(
+          'No client measurements found for this order.',
+          style: TextStyle(
+            color: AppColors.blackCat.withValues(alpha: 0.65),
+            fontWeight: FontWeight.w500,
+            fontSize: 13.5,
+          ),
         ),
       );
     }
 
-    return _softBox(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final safeIndex = _selectedMeasurementTab.clamp(0, clients.length - 1);
+    final selected = clients[safeIndex];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          SizedBox(
+            height: 52,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              itemCount: clients.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final active = index == safeIndex;
+                final name = clients[index].name.trim().isEmpty
+                    ? 'Client ${index + 1}'
+                    : clients[index].name.trim();
+                return InkWell(
+                  borderRadius: BorderRadius.zero,
+                  onTap: () => setState(() => _selectedMeasurementTab = index),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: active
+                              ? AppColors.balletSlippers
+                              : Colors.transparent,
+                          width: 4,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(
+                          alpha: active ? 1 : 0.62,
+                        ),
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-          const SizedBox(height: 8),
-          row('Thumb', dims.thumb),
-          row('Index', dims.index),
-          row('Middle', dims.middle),
-          row('Ring', dims.ring),
-          row('Pinky', dims.pinky),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: _measurementBody(selected),
+          ),
         ],
       ),
     );
   }
 
-  List<GroupClientMeasurementData> _buildGroupMeasurementClients() {
-    final clients = <GroupClientMeasurementData>[
+  Widget _measurementBody(GroupClientMeasurementData client) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _handCardFromMap('Left Hand', client.leftHand)),
+              const SizedBox(width: 10),
+              Expanded(child: _handCardFromMap('Right Hand', client.rightHand)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _measureField(
+                  'Shape',
+                  client.nailShape.trim().isEmpty ? '-' : client.nailShape,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _measureField(
+                  'Length',
+                  _prettyLength(client.nailLength).trim().isEmpty
+                      ? '-'
+                      : _prettyLength(client.nailLength),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _handCardFromMap(String title, Map<String, String> dims) {
+    String pick(String key) => (dims[key] ?? '').trim();
+    return _softBox(
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _dimRow('Thumb', pick('thumb')),
+          _dimRow('Index', pick('index')),
+          _dimRow('Middle', pick('middle')),
+          _dimRow('Ring', pick('ring')),
+          _dimRow('Pinky', pick('pinky')),
+        ],
+      ),
+    );
+  }
+
+  Widget _dimRow(String label, String raw) {
+    String formatMm(String value) {
+      final v = value.trim();
+      if (v.isEmpty || v == '-') return '-';
+      final cleaned = v.replaceAll(RegExp(r'[^0-9.]'), '');
+      final parsed = double.tryParse(cleaned);
+      if (parsed == null) return v;
+      return '${parsed.toStringAsFixed(2)} mm';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.60),
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+              ),
+            ),
+          ),
+          Text(
+            formatMm(raw),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+    Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
+    final merged = <GroupClientMeasurementData>[];
+    final seen = <String>{};
+
+    void addClient(
+      GroupClientMeasurementData client, {
+      String email = '',
+      String id = '',
+    }) {
+      final name = client.name.trim();
+      final keys = <String>{
+        if (email.trim().isNotEmpty) 'email:${email.trim().toLowerCase()}',
+        if (id.trim().isNotEmpty) 'id:${id.trim().toLowerCase()}',
+        if (name.isNotEmpty) 'name:${name.toLowerCase()}',
+      }..removeWhere((e) => e.isEmpty);
+      if (keys.isEmpty) return;
+      if (keys.any(seen.contains)) return;
+      seen.addAll(keys);
+      merged.add(client);
+    }
+
+    // Submitted/accepted client must always be first.
+    addClient(
       GroupClientMeasurementData(
-        name: widget.request.clientName,
+        name: widget.request.clientName.trim().isEmpty
+            ? 'Client'
+            : widget.request.clientName.trim(),
         nailShape: widget.request.nailShape,
         nailLength: widget.request.nailLength,
         leftHand: _dimsMap(widget.request.leftHand),
         rightHand: _dimsMap(widget.request.rightHand),
       ),
-    ];
-    final seen = <String>{widget.request.clientName.trim().toLowerCase()};
-    for (final client in widget.request.groupClients) {
-      final name = client.clientName.trim().isEmpty
-          ? 'Client ${client.slotIndex}'
-          : client.clientName.trim();
-      final key = client.clientId.trim().isNotEmpty
-          ? client.clientId.trim().toLowerCase()
-          : name.toLowerCase();
-      if (seen.contains(key)) continue;
-      seen.add(key);
-      clients.add(
+      email: widget.request.clientEmail,
+    );
+
+    Map<String, String> dimsFrom(Object? source, {required bool left}) {
+      final map = _asMap(source);
+      if (map.isEmpty) return const <String, String>{};
+      final nested = _asMap(map['dimensions']);
+      final data = nested.isNotEmpty ? nested : map;
+
+      String pick(String finger) {
+        final upper = finger[0].toUpperCase() + finger.substring(1);
+        final candidates = left
+            ? <String>[finger, 'l$upper', 'left$upper', 'left_$finger']
+            : <String>[finger, 'r$upper', 'right$upper', 'right_$finger'];
+        for (final key in candidates) {
+          final text = (data[key] ?? '').toString().trim();
+          if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+        }
+        return '';
+      }
+
+      return <String, String>{
+        'thumb': pick('thumb'),
+        'index': pick('index'),
+        'middle': pick('middle'),
+        'ring': pick('ring'),
+        'pinky': pick('pinky'),
+      };
+    }
+
+    Map<String, String> firstDims(List<Object?> sources, {required bool left}) {
+      for (final source in sources) {
+        final dims = dimsFrom(source, left: left);
+        if (dims.values.any((v) => v.trim().isNotEmpty)) return dims;
+      }
+      return const <String, String>{};
+    }
+
+    void addGroupClientFromMap(Map<String, dynamic> client, int index) {
+      if (client.isEmpty) return;
+      final email = _firstNonEmpty(<Object?>[
+        client['clientEmail'],
+        client['client_email'],
+        client['email'],
+      ]).toLowerCase();
+      final id = _firstNonEmpty(<Object?>[
+        client['clientId'],
+        client['client_id'],
+        client['id'],
+        client['uid'],
+      ]);
+      final name = _firstNonEmpty(<Object?>[
+        client['clientName'],
+        client['client_name'],
+        client['name'],
+        client['displayName'],
+        client['display_name'],
+      ], fallback: 'Client $index');
+      final savedNails = _asMap(client['savedNails'] ?? client['saved_nails']);
+      final draftNails = _asMap(client['draftNails'] ?? client['draft_nails']);
+      final nailPreferences = _asMap(client['nailPreferences'] ?? client['nail_preferences']);
+      final nailSource = savedNails.isNotEmpty
+          ? savedNails
+          : (draftNails.isNotEmpty ? draftNails : nailPreferences);
+      final left = firstDims(<Object?>[
+        client['leftHandDimensions'],
+        client['left_hand_dimensions'],
+        nailSource['leftHandDimensions'],
+        nailSource['left_hand_dimensions'],
+        nailSource['dimensions'],
+        client['dimensions'],
+      ], left: true);
+      final right = firstDims(<Object?>[
+        client['rightHandDimensions'],
+        client['right_hand_dimensions'],
+        nailSource['rightHandDimensions'],
+        nailSource['right_hand_dimensions'],
+        nailSource['dimensions'],
+        client['dimensions'],
+      ], left: false);
+      addClient(
         GroupClientMeasurementData(
           name: name,
-          nailShape: client.nailShape,
-          nailLength: client.nailLength,
-          leftHand: _dimsMap(client.leftHand),
-          rightHand: _dimsMap(client.rightHand),
+          nailShape: _firstNonEmpty(<Object?>[
+            client['nailShape'],
+            client['nail_shape'],
+            nailSource['shape'],
+            nailSource['nailShape'],
+            nailSource['nail_shape'],
+          ], fallback: widget.request.nailShape),
+          nailLength: _firstNonEmpty(<Object?>[
+            client['nailLength'],
+            client['nail_length'],
+            nailSource['length'],
+            nailSource['nailLength'],
+            nailSource['nail_length'],
+          ], fallback: widget.request.nailLength),
+          leftHand: left,
+          rightHand: right,
         ),
+        email: email,
+        id: id,
+      );
+    }
+
+    void addGroupClientsFromSource(Map<String, dynamic> source) {
+      final payload = _asMap(source['payload']);
+      final details = _asMap(source['details']);
+      final data = _asMap(source['data']);
+      final requestDetails = _asMap(source['requestDetails'] ?? source['request_details']);
+      final orderData = _asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
+      final nestedSources = <Map<String, dynamic>>[
+        source,
+        payload,
+        details,
+        data,
+        requestDetails,
+        orderData,
+      ];
+      var index = 1;
+      for (final nested in nestedSources) {
+        final groupSources = <Object?>[
+          _asMap(nested['groupOrder'] ?? nested['group_order'])['clients'],
+          nested['groupClients'],
+          nested['group_clients'],
+          nested['selectedGroupClients'],
+          nested['selected_group_clients'],
+          nested['groupClientMeasurements'],
+          nested['group_client_measurements'],
+        ];
+        for (final groupSource in groupSources) {
+          for (final rawClient in _asList(groupSource)) {
+            addGroupClientFromMap(_asMap(rawClient), index++);
+          }
+        }
+      }
+    }
+
+    try {
+      final root = await _supabase
+          .from(_requestTable)
+          .select()
+          .eq('id', widget.request.id)
+          .maybeSingle();
+      if (root != null) addGroupClientsFromSource(Map<String, dynamic>.from(root));
+      final detailRows = await _supabase
+          .from(_requestDetailsTable)
+          .select()
+          .eq('request_id', widget.request.id);
+      for (final row in detailRows) {
+        final map = _asMap(row);
+        addGroupClientsFromSource(map);
+        addGroupClientsFromSource(_asMap(map['data']));
+      }
+    } catch (_) {
+      // Keep modal usable if RLS blocks lookup.
+    }
+
+    for (final client in _buildGroupMeasurementClients()) {
+      addClient(client);
+    }
+
+    return merged.isEmpty ? _buildGroupMeasurementClients() : merged;
+  }
+
+  List<GroupClientMeasurementData> _buildGroupMeasurementClients() {
+    final clients = <GroupClientMeasurementData>[];
+    final seen = <String>{};
+
+    String clean(String value) => value.trim();
+    String keyFor({String id = '', String email = '', String name = ''}) {
+      final normalizedId = id.trim().toLowerCase();
+      if (normalizedId.isNotEmpty) return 'id:$normalizedId';
+      final normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail.isNotEmpty) return 'email:$normalizedEmail';
+      final normalizedName = name.trim().toLowerCase();
+      return normalizedName.isEmpty ? '' : 'name:$normalizedName';
+    }
+
+    void addClient({
+      required String name,
+      String id = '',
+      String email = '',
+      required String nailShape,
+      required String nailLength,
+      required NailDimensionsV2 leftHand,
+      required NailDimensionsV2 rightHand,
+      int? slotIndex,
+    }) {
+      final resolvedName = clean(name).isNotEmpty
+          ? clean(name)
+          : 'Client ${slotIndex ?? clients.length + 1}';
+      final keys = <String>{
+        keyFor(id: id, email: email, name: resolvedName),
+        if (email.trim().isNotEmpty) 'email:${email.trim().toLowerCase()}',
+        if (resolvedName.trim().isNotEmpty)
+          'name:${resolvedName.trim().toLowerCase()}',
+      }..removeWhere((e) => e.isEmpty);
+      if (keys.any(seen.contains)) return;
+      seen.addAll(keys);
+      clients.add(
+        GroupClientMeasurementData(
+          name: resolvedName,
+          nailShape: nailShape,
+          nailLength: nailLength,
+          leftHand: _dimsMap(leftHand),
+          rightHand: _dimsMap(rightHand),
+        ),
+      );
+    }
+
+    // Submitted/accepted client must always be first.
+    addClient(
+      name: widget.request.clientName,
+      email: widget.request.clientEmail,
+      nailShape: widget.request.nailShape,
+      nailLength: widget.request.nailLength,
+      leftHand: widget.request.leftHand,
+      rightHand: widget.request.rightHand,
+    );
+
+    for (final client in widget.request.groupClients) {
+      addClient(
+        name: client.clientName,
+        id: client.clientId,
+        email: client.clientEmail,
+        nailShape: client.nailShape,
+        nailLength: client.nailLength,
+        leftHand: client.leftHand,
+        rightHand: client.rightHand,
+        slotIndex: client.slotIndex,
       );
       if (clients.length >= 16) break;
     }
+
     return clients;
   }
 
@@ -1054,10 +1694,11 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-  Future<void> _openTrackingPreview() async {
-    final courier = (widget.request.shippedByCourier ?? '').trim();
-    final tracking = (widget.request.trackingNumber ?? '').trim();
-    final shippedAt = widget.request.shippedAt;
+  Future<void> _openTrackingPreview([_ShipmentInfo? info]) async {
+    final current = info ?? await _loadShipmentInfo();
+    final courier = current.courier.trim();
+    final tracking = current.tracking.trim();
+    final shippedAt = current.shippedAt;
     final lineCourier = courier.isEmpty ? '-' : courier;
     final lineTracking = tracking.isEmpty ? '-' : tracking;
     final lineDate = shippedAt == null ? '-' : _fmtDate(shippedAt);

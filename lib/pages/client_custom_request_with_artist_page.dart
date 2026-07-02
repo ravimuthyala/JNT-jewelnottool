@@ -18,8 +18,13 @@ import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import '../widgets/nail_preferences_inline_editor.dart';
+import 'artist_reviews_page.dart';
+import 'client_artist_history_page.dart';
+import 'client_artist_profile_page.dart';
+import 'client_artists_page.dart';
 
 const Color _requestSnow = Color(0xFFFAF9F9);
 const Color _focusRing = Color(0xFFFFBF47);
@@ -194,7 +199,6 @@ class _ClientCustomRequestWithArtistPageState
 
   bool get _isShipCountryUs =>
       _shipCountry.trim().toLowerCase() == 'united states';
-
 
   @override
   void initState() {
@@ -459,21 +463,12 @@ class _ClientCustomRequestWithArtistPageState
       );
     }
 
-    final typeName = value.runtimeType.toString();
-
-    if (typeName.contains('Timestamp')) {
-      try {
-        final dynamic dynamicValue = value;
-        final DateTime date = dynamicValue.toDate() as DateTime;
-        return date.toIso8601String();
-      } catch (_) {
-        return value.toString();
+    try {
+      final maybeDate = (value as dynamic).toDate();
+      if (maybeDate is DateTime) {
+        return maybeDate.toIso8601String();
       }
-    }
-
-    if (typeName.contains('FieldValue')) {
-      return DateTime.now().toIso8601String();
-    }
+    } catch (_) {}
 
     return value;
   }
@@ -504,15 +499,40 @@ class _ClientCustomRequestWithArtistPageState
     final cleanSummary = _supabaseJsonMap(summary);
     final cleanDetails = _supabaseJsonMap(details);
     final submissionFingerprint = <String>[
-      _firstNonEmpty([cleanSummary['clientEmail'], widget.profile.basic.email, user?.email]),
+      _firstNonEmpty([
+        cleanSummary['clientEmail'],
+        widget.profile.basic.email,
+        user?.email,
+      ]),
       _firstNonEmpty([cleanSummary['clientName'], widget.profile.basic.name]),
-      _firstNonEmpty([cleanSummary['selectedArtist'], cleanDetails['selectedArtist']]),
-      _firstNonEmpty([cleanSummary['needBy'], _asMap(cleanDetails['requestDetails'])['needBy']]),
-      _firstNonEmpty([cleanSummary['budgetMin'], _asMap(cleanDetails['budget'])['min']]),
-      _firstNonEmpty([cleanSummary['budgetMax'], _asMap(cleanDetails['budget'])['max']]),
-      _firstNonEmpty([cleanSummary['nailShape'], _asMap(cleanDetails['nailPreferences'])['shape']]),
-      _firstNonEmpty([cleanSummary['nailLength'], _asMap(cleanDetails['nailPreferences'])['length']]),
-      _firstNonEmpty([cleanSummary['descriptionPreview'], _asMap(cleanDetails['requestDetails'])['description']]),
+      _firstNonEmpty([
+        cleanSummary['selectedArtist'],
+        cleanDetails['selectedArtist'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['needBy'],
+        _asMap(cleanDetails['requestDetails'])['needBy'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['budgetMin'],
+        _asMap(cleanDetails['budget'])['min'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['budgetMax'],
+        _asMap(cleanDetails['budget'])['max'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['nailShape'],
+        _asMap(cleanDetails['nailPreferences'])['shape'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['nailLength'],
+        _asMap(cleanDetails['nailPreferences'])['length'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['descriptionPreview'],
+        _asMap(cleanDetails['requestDetails'])['description'],
+      ]),
     ].map((value) => value.trim().toLowerCase()).join('|');
 
     cleanSummary['submissionFingerprint'] = submissionFingerprint;
@@ -546,10 +566,16 @@ class _ClientCustomRequestWithArtistPageState
       'selected_artist_email': _firstNonEmpty([
         cleanSummary['selectedArtistEmail'],
       ]).toLowerCase(),
+      'is_direct_request': _asBool(cleanSummary['isDirectRequest']),
+      'fallback_to_pool': _asBool(cleanSummary['fallbackToPool']),
+      'open_to_artist_pool': !_asBool(cleanSummary['isDirectRequest']),
+      'direct_artist_status': _asBool(cleanSummary['isDirectRequest']) ? 'in_review' : '',
+      'artist_pool_status': _asBool(cleanSummary['isDirectRequest']) ? 'locked' : 'in_review',
       'status': _firstNonEmpty([cleanSummary['status'], 'pending']),
       'summary': cleanSummary,
       'details': cleanDetails,
-      'inspiration_photos': cleanSummary['inspirationPhotos'] ?? const <String>[],
+      'inspiration_photos':
+          cleanSummary['inspirationPhotos'] ?? const <String>[],
       'photo_count': cleanSummary['photoCount'] ?? 0,
       'has_inspiration_photos': cleanSummary['hasInspirationPhotos'] ?? false,
       'created_at': nowIso,
@@ -575,6 +601,9 @@ class _ClientCustomRequestWithArtistPageState
     Map<String, dynamic> values,
   ) async {
     final clean = _supabaseJsonMap(values);
+    clean.remove('photo_upload_worker_started_at');
+    clean.remove('photo_upload_completed_at');
+    clean.remove('photo_upload_failed_at');
     clean['updated_at'] = DateTime.now().toIso8601String();
 
     await Supabase.instance.client
@@ -598,7 +627,6 @@ class _ClientCustomRequestWithArtistPageState
     ];
     return values.every((v) => v != null && v > 0);
   }
-
 
   String _normalizeShapeValue(Object? raw) {
     final text = (raw ?? '').toString().trim();
@@ -657,7 +685,9 @@ class _ClientCustomRequestWithArtistPageState
                 .toList(growable: false),
           );
         } catch (e) {
-          debugPrint('CLIENT CUSTOM REQUEST WITH ARTIST client load failed [$table]: $e');
+          debugPrint(
+            'CLIENT CUSTOM REQUEST WITH ARTIST client load failed [$table]: $e',
+          );
         }
       }
 
@@ -787,7 +817,9 @@ class _ClientCustomRequestWithArtistPageState
         }
       });
     } catch (e) {
-      debugPrint('CLIENT CUSTOM REQUEST WITH ARTIST completed clients load failed: $e');
+      debugPrint(
+        'CLIENT CUSTOM REQUEST WITH ARTIST completed clients load failed: $e',
+      );
       if (!mounted) return;
       setState(() => _completedClients = <CompletedClient>[]);
     } finally {
@@ -815,6 +847,44 @@ class _ClientCustomRequestWithArtistPageState
   }
 
   void _onAvatarMenuSelected(String value) {
+    if (value == 'profile') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ClientArtistProfilePage(initialProfile: widget.profile),
+        ),
+      );
+      return;
+    }
+    if (value == 'history') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ClientArtistHistoryPage(
+            profile: widget.profile,
+            showContinueProfileCard: !widget.profile.isComplete,
+            enableAllTabs: widget.profile.isComplete,
+          ),
+        ),
+      );
+      return;
+    }
+    if (value == 'calendar') {
+      widget.onClientNavTap?.call(context, 1);
+      return;
+    }
+    if (value == 'artist') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ClientArtistsPage(profile: widget.profile),
+        ),
+      );
+      return;
+    }
+    if (value == 'reviews') {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ArtistReviewsPage()));
+      return;
+    }
     if (value == 'logout') {
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
@@ -900,10 +970,12 @@ class _ClientCustomRequestWithArtistPageState
   }
 
   bool _isSubmittingClient(CompletedClient client) {
-    final currentUid = (Supabase.instance.client.auth.currentUser?.id ?? '').trim();
-    final currentEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentUid = (Supabase.instance.client.auth.currentUser?.id ?? '')
+        .trim();
+    final currentEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     final profileEmail = widget.profile.basic.email.trim().toLowerCase();
     final profileName = widget.profile.basic.name.trim().toLowerCase();
     final candidateEmail = client.profile.basic.email.trim().toLowerCase();
@@ -1429,7 +1501,10 @@ class _ClientCustomRequestWithArtistPageState
       }
     }
 
-    return urls.where((e) => e.trim().isNotEmpty).take(10).toList(growable: false);
+    return urls
+        .where((e) => e.trim().isNotEmpty)
+        .take(10)
+        .toList(growable: false);
   }
 
   String _fileNameFromPath(String path) {
@@ -1740,6 +1815,9 @@ class _ClientCustomRequestWithArtistPageState
       'isDirectRequest': isDirectRequest,
       'allowNonLicensed': _allowNonLicensed,
       'fallbackToPool': _fallbackToPool,
+      'openToArtistPool': !isDirectRequest,
+      'directArtistStatus': isDirectRequest ? 'in_review' : '',
+      'artistPoolStatus': isDirectRequest ? 'locked' : 'in_review',
       'nailShape': _shape,
       'nailLength': _length.name,
       'isGroupOrder': isGroupOrder,
@@ -1777,6 +1855,14 @@ class _ClientCustomRequestWithArtistPageState
         'selectedArtistEmail': selectedArtistEmail,
         'isDirectRequest': isDirectRequest,
         'fallbackToPool': _fallbackToPool,
+        'openToArtistPool': !isDirectRequest,
+        'directArtistStatus': isDirectRequest ? 'in_review' : '',
+        'artistPoolStatus': isDirectRequest ? 'locked' : 'in_review',
+      },
+      'routing': {
+        'openToArtistPool': !isDirectRequest,
+        'directArtistStatus': isDirectRequest ? 'in_review' : '',
+        'artistPoolStatus': isDirectRequest ? 'locked' : 'in_review',
       },
       'roleStatuses': {'client': 'pending', 'artist': 'in_review'},
       'nailPreferences': _nailPreferencesToMap(selectedNails),
@@ -1815,6 +1901,7 @@ class _ClientCustomRequestWithArtistPageState
           selectedArtistEmail: selectedArtistEmail,
           selectedArtistName: selectedArtist,
           orderId: requestId,
+          orderNumber: _firstNonEmpty([requestSummary['orderNumber']]),
           sourceCollection: 'Client_Custom_Requests',
           allowNonLicensed: _allowNonLicensed,
         );
@@ -1885,7 +1972,6 @@ class _ClientCustomRequestWithArtistPageState
     try {
       await _updateSupabaseClientCustomRequest(requestId, {
         'photo_upload_status': 'uploading',
-        'photo_upload_worker_started_at': DateTime.now().toIso8601String(),
         'photo_upload_updated_at': DateTime.now().toIso8601String(),
       });
 
@@ -1909,7 +1995,6 @@ class _ClientCustomRequestWithArtistPageState
           await _updateSupabaseClientCustomRequest(requestId, {
             'photo_upload_status': 'completed',
             'photo_upload_error': null,
-            'photo_upload_completed_at': DateTime.now().toIso8601String(),
             'photo_upload_updated_at': DateTime.now().toIso8601String(),
           });
           return;
@@ -1926,7 +2011,6 @@ class _ClientCustomRequestWithArtistPageState
         'photo_upload_status': 'failed',
         'photo_upload_error':
             'Photo upload failed after retries: ${lastError ?? 'unknown error'}',
-        'photo_upload_failed_at': DateTime.now().toIso8601String(),
         'photo_upload_updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
@@ -2069,31 +2153,15 @@ class _ClientCustomRequestWithArtistPageState
           backgroundColor: AppColors.alabaster,
           surfaceTintColor: AppColors.alabaster,
           elevation: 0,
-          toolbarHeight: 76,
+          toolbarHeight: JntHeaderMetrics.toolbarHeight,
           automaticallyImplyLeading: false,
-
-          leadingWidth: 108,
-          leading: Row(
-            children: [
-              SizedBox(
-                width: 50,
-                child: IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(
-                    Icons.arrow_back_rounded,
-                    size: 22,
-                    color: AppColors.blackCat.withValues(alpha: 0.75),
-                  ),
-                ),
-              ),
-              NotificationBellButton(
-                onTap: () {
-                  NotificationsPage.showAsModal(context);
-                },
-                focusNode: _notificationsFocusNode,
-                iconSize: 22,
-              ),
-            ],
+          leadingWidth: JntHeaderMetrics.leadingWidth,
+          leading: NotificationBellButton(
+            onTap: () {
+              NotificationsPage.showAsModal(context);
+            },
+            focusNode: _notificationsFocusNode,
+            iconSize: JntHeaderMetrics.notificationIconSize,
           ),
 
           // ✅ Center logo
@@ -2101,7 +2169,7 @@ class _ClientCustomRequestWithArtistPageState
           title: ExcludeSemantics(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 50,
+              height: JntHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
@@ -2111,7 +2179,7 @@ class _ClientCustomRequestWithArtistPageState
           // ✅ Avatar
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: JntHeaderMetrics.rightPadding),
               child: _AvatarMenu(
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
@@ -2120,6 +2188,7 @@ class _ClientCustomRequestWithArtistPageState
                 showHistory: true,
                 showCalendar: true,
                 showArtist: true,
+                showReviews: true,
               ),
             ),
           ],
@@ -2310,7 +2379,9 @@ class _ClientCustomRequestWithArtistPageState
                                 height: 110,
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: AppColors.blackCat.withValues(alpha: 0.25),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.25,
+                                    ),
                                   ),
                                 ),
                                 clipBehavior: Clip.hardEdge,
@@ -2624,19 +2695,25 @@ class _ClientCustomRequestWithArtistPageState
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.04),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.04,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.04),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.04,
+                                ),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.04),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.04,
+                                ),
                               ),
                             ),
                           ),
@@ -2659,8 +2736,8 @@ class _ClientCustomRequestWithArtistPageState
                                     child: Text(
                                       'No matching clients found.',
                                       style: TextStyle(
-                                        color: AppColors.blackCat.withValues(alpha: 
-                                          0.60,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.60,
                                         ),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400,
@@ -2869,7 +2946,9 @@ class _ClientCustomRequestWithArtistPageState
               showMeasurementTips: false,
               showDimensionImages: false,
               showNfcOptions: true,
-              nailDimensionBorderColor: AppColors.blackCat.withValues(alpha: 0.25),
+              nailDimensionBorderColor: AppColors.blackCat.withValues(
+                alpha: 0.25,
+              ),
               onChanged: (updated) {
                 setState(() {
                   final oldNfcCount = _nfcSelectedCount(
@@ -3122,9 +3201,7 @@ class _ClientCustomRequestWithArtistPageState
 }
 
 // ✅ Save budget to DB on slider release (implement your Firestore code here)
-Future<void> _saveBudgetToDb(RangeValues v) async {
-  
-}
+Future<void> _saveBudgetToDb(RangeValues v) async {}
 
 enum OrderType { single, group }
 
@@ -3417,6 +3494,7 @@ class _AvatarMenu extends StatelessWidget {
     this.showHistory = true,
     this.showCalendar = true,
     this.showArtist = true,
+    this.showReviews = true,
   });
   final ValueChanged<String> onSelected;
   final String avatarUrl;
@@ -3425,6 +3503,7 @@ class _AvatarMenu extends StatelessWidget {
   final bool showHistory;
   final bool showCalendar;
   final bool showArtist;
+  final bool showReviews;
 
   @override
   Widget build(BuildContext context) {
@@ -3492,7 +3571,25 @@ class _AvatarMenu extends StatelessWidget {
               ],
             ),
           ),
-        if (showProfile || showHistory || showCalendar || showArtist)
+        if (showReviews)
+          PopupMenuItem<String>(
+            value: 'reviews',
+            child: Row(
+              children: const [
+                Icon(Icons.star_border, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Reviews',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        if (showProfile ||
+            showHistory ||
+            showCalendar ||
+            showArtist ||
+            showReviews)
           const PopupMenuDivider(),
         PopupMenuItem<String>(
           value: 'logout',
@@ -3513,14 +3610,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 40,
-        width: 40,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
-            size: 40,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),
@@ -4149,57 +4246,40 @@ class ClientBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const bg = _requestSnow;
-    final active = AppColors.blackCat;
-    final inactive = AppColors.blackCat.withValues(alpha: 0.55);
-
-    Widget item(int index, IconData icon, String label) {
-      final selected = index == currentIndex;
-
-      return Expanded(
-        child: InkWell(
-          onTap: () => onTap(index),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 26, color: selected ? active : inactive),
-                const SizedBox(height: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: selected ? active : inactive,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return BottomNavigationBar(
+      backgroundColor: AppColors.balletSlippers,
+      currentIndex: currentIndex,
+      onTap: onTap,
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: AppColors.deepPlum,
+      unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Home',
         ),
-      );
-    }
-
-    return SafeArea(
-      top: false,
-      child: Container(
-        height: 72,
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.zero,
-          border: const Border(top: BorderSide(color: AppColors.blackCat)),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.add_circle_outline),
+          activeIcon: Icon(Icons.add_circle),
+          label: 'Design',
         ),
-        child: Row(
-          children: [
-            item(0, Icons.home_outlined, 'Home'),
-            item(1, Icons.add_circle_outline, 'Design'),
-            item(2, Icons.brush_outlined, 'Artists'),
-            item(3, Icons.receipt_long_outlined, 'Orders'),
-            item(4, Icons.person_outline, 'Profile'),
-          ],
+        BottomNavigationBarItem(
+          icon: Icon(Icons.brush_outlined),
+          activeIcon: Icon(Icons.brush),
+          label: 'Artists',
         ),
-      ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.receipt_long_outlined),
+          activeIcon: Icon(Icons.receipt_long),
+          label: 'Orders',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline),
+          activeIcon: Icon(Icons.person),
+          label: 'Profile',
+        ),
+      ],
     );
   }
 }

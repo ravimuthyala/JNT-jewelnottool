@@ -9,6 +9,8 @@ class GroupClientMeasurementData {
     required this.nailLength,
     required this.leftHand,
     required this.rightHand,
+    this.leftNfc = const <String, bool>{},
+    this.rightNfc = const <String, bool>{},
   });
 
   final String name;
@@ -17,6 +19,8 @@ class GroupClientMeasurementData {
   final String nailLength;
   final Map<String, String> leftHand;
   final Map<String, String> rightHand;
+  final Map<String, bool> leftNfc;
+  final Map<String, bool> rightNfc;
 }
 
 class GroupClientMeasurementsTabs extends StatelessWidget {
@@ -25,55 +29,79 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
     required this.clients,
     this.compactRequestDetailsLayout = false,
     this.currentViewerEmail = '',
+    this.tabViewHeight,
   });
 
   final List<GroupClientMeasurementData> clients;
   final bool compactRequestDetailsLayout;
   final String currentViewerEmail;
+  final double? tabViewHeight;
 
   String _fmt(String value) {
     final v = value.trim();
     return v.isEmpty ? '-' : v;
   }
 
+  String _formatMm(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty || value == '-') return '-';
+    final cleaned = value.replaceAll(RegExp(r'[^0-9.]'), '');
+    final parsed = double.tryParse(cleaned);
+    if (parsed == null) return value;
+    return '${parsed.toStringAsFixed(2)} mm';
+  }
+
   Widget _measureField(String label, String value) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+        border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.60),
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
+          Flexible(
+            flex: 0,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.blackCat,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                fontFamily: 'Arial',
+              ),
             ),
           ),
-          const Spacer(),
-          Text(
-            _fmt(value),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _fmt(value),
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.blackCat,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                fontFamily: 'ArialBold',
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _handCard(String title, Map<String, String> map) {
-    String value(String key) {
-      final raw = (map[key] ?? '').trim();
-      if (raw.isEmpty || raw == '-') return '-';
-      final normalized = raw.replaceAll(RegExp(r'\s+'), ' ');
-      if (RegExp(r'\bmm$', caseSensitive: false).hasMatch(normalized)) {
-        return normalized;
-      }
-      return '$normalized mm';
-    }
+  Widget _handCard(
+    String title,
+    Map<String, String> map,
+    Map<String, bool> nfc,
+  ) {
+    String value(String key) => _formatMm(map[key] ?? '');
 
     Widget row(String key, String label) {
       return Padding(
@@ -90,13 +118,8 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              value(key),
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            if (nfc[key] == true) ...[_nfcChip(), const SizedBox(width: 6)],
+            Text(value(key), style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
           ],
         ),
       );
@@ -104,18 +127,24 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
 
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+          border: Border.all(color: AppColors.blackCatBorderLight),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
+            Center(
+              child: Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14.5,
+                  color: AppColors.blackCat,
+                ),
+              ),
             ),
             const SizedBox(height: 8),
             row('thumb', 'Thumb'),
@@ -163,58 +192,84 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
     }
 
     if (compactRequestDetailsLayout) {
-      return ListView(
+      return Padding(
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-        children: [
-          Text(
-            'Nail Dimensions (mm)',
-            style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.90),
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: _measureField('Nail Shape', c.nailShape)),
-              const SizedBox(width: 8),
-              Expanded(child: _measureField('Nail Length', c.nailLength)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _handCard('Left Hand', c.leftHand),
-              const SizedBox(width: 8),
-              _handCard('Right Hand', c.rightHand),
-            ],
-          ),
-        ],
+        child: _measurementPanel(c, showOuterBorder: false),
       );
     }
 
-    return ListView(
+    return Padding(
       padding: const EdgeInsets.all(10),
-      children: [
-        Row(
-          children: [
-            Expanded(child: _measureField('Nail Shape', c.nailShape)),
-            const SizedBox(width: 8),
-            Expanded(child: _measureField('Nail Length', c.nailLength)),
-          ],
+      child: _measurementPanel(c),
+    );
+  }
+
+  Widget _measurementPanel(
+    GroupClientMeasurementData c, {
+    bool showOuterBorder = true,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(0, 0, 0, showOuterBorder ? 0 : 2),
+      decoration: showOuterBorder
+          ? BoxDecoration(
+              border: Border.all(color: AppColors.blackCatBorderLight),
+              borderRadius: BorderRadius.zero,
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: Text(
+              'Nail Dimensions',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                fontFamily: 'ArialBold',
+                color: AppColors.blackCat,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _handCard('Left Hand', c.leftHand, c.leftNfc),
+              const SizedBox(width: 10),
+              _handCard('Right Hand', c.rightHand, c.rightNfc),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _measureField('Shape', c.nailShape)),
+              const SizedBox(width: 10),
+              Expanded(child: _measureField('Length', c.nailLength)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _nfcChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Text(
+        'NFC',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          height: 1,
         ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _handCard('Left Hand', c.leftHand),
-            const SizedBox(width: 8),
-            _handCard('Right Hand', c.rightHand),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
@@ -272,7 +327,9 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
                 .toList(),
           ),
           SizedBox(
-            height: compactRequestDetailsLayout ? 230 : 210,
+            height:
+                tabViewHeight ??
+                (compactRequestDetailsLayout ? 312 : 350),
             child: TabBarView(children: clients.map(_clientTab).toList()),
           ),
         ],

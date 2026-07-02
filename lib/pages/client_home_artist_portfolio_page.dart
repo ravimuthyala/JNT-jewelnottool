@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import 'notifications_page.dart';
 
 class ClientHomeArtistPortfolioPage extends StatefulWidget {
@@ -891,68 +891,26 @@ class _ClientHomeArtistPortfolioPageState
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(85),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Stack(
-                children: <Widget>[
-                  Center(
-                    child: ExcludeSemantics(
-                      child: Image.asset(
-                        'assets/images/jnt_logo_black.png',
-                        height: 50,
-                        fit: BoxFit.contain,
-                        excludeFromSemantics: true,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: NotificationBellButton(
-                        onTap: () => _openNotifications(context),
-                        focusNode: _notificationsFocusNode,
-                        unreadCount: 0,
-                        iconSize: 24,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 12,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: Semantics(
-                        button: true,
-                        label: 'Open profile menu',
-                        child: InkWell(
-                          key: profileKey,
-                          borderRadius: BorderRadius.zero,
-                          onTap: () => _openProfileMenu(context, profileKey),
-                          child: SizedBox(
-                            height: 36,
-                            width: 36,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: _SafeSquareAvatar(
-                                imageUrl: _clientAvatarUrl,
-                                displayName: widget.clientName,
-                                size: 36,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+      appBar: JntStandardAppBar(
+        onNotifications: () => _openNotifications(context),
+        notificationFocusNode: _notificationsFocusNode,
+        trailing: Semantics(
+          button: true,
+          label: 'Open profile menu',
+          child: InkWell(
+            key: profileKey,
+            borderRadius: BorderRadius.zero,
+            onTap: () => _openProfileMenu(context, profileKey),
+            child: SizedBox(
+              height: JntHeaderMetrics.avatarSize,
+              width: JntHeaderMetrics.avatarSize,
+              child: ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: _SafeSquareAvatar(
+                  imageUrl: _clientAvatarUrl,
+                  displayName: widget.clientName,
+                  size: JntHeaderMetrics.avatarSize,
+                ),
               ),
             ),
           ),

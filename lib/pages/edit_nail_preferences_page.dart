@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 class EditNailPreferencesPage extends StatefulWidget {
   const EditNailPreferencesPage({super.key, required this.initial});
@@ -221,27 +222,9 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
       label: 'My Measurements',
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          title: ExcludeSemantics(
-            child: Image.asset(
-              'assets/images/jnt_logo_black.png',
-              height: 50,
-              fit: BoxFit.contain,
-              excludeFromSemantics: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          ),
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          actions: [
-            IconButton(
-              tooltip: 'Close measurements',
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.pop(context),
+          closeTooltip: 'Close measurements',
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),

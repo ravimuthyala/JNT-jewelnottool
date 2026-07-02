@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../pages/notifications_page.dart';
 import 'client_profile_avatar_icon.dart';
-import 'notification_bell_button.dart';
+import 'jnt_standard_app_bar.dart';
 
 class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
   const CompanyHeader({
@@ -84,75 +84,30 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(85);
+  Size get preferredSize =>
+      const Size.fromHeight(JntHeaderMetrics.toolbarHeight);
 
   @override
   Widget build(BuildContext context) {
     final GlobalKey profileKey = GlobalKey();
 
-    return Container(
-      color: AppColors.alabaster,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Stack(
-            children: [
-              Center(
-                child: Image.asset(
-                  'assets/images/jnt_logo_black.png',
-                  height: 50,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) =>
-                      const SizedBox(width: 40, height: 40),
-                ),
+    return JntStandardAppBar(
+      onNotifications: () => _openNotifications(context),
+      trailing:
+          trailing ??
+          InkWell(
+            key: profileKey,
+            borderRadius: BorderRadius.zero,
+            onTap: () => _openProfileMenu(context, profileKey),
+            child: SizedBox(
+              height: JntHeaderMetrics.avatarSize,
+              width: JntHeaderMetrics.avatarSize,
+              child: ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: _CompanyAvatarIcon(companyName: companyName),
               ),
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: SizedBox(
-                  width: 44,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: NotificationBellButton(
-                      onTap: () => _openNotifications(context),
-                      iconSize: 24,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 0,
-                child: SizedBox(
-                  width: 44,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child:
-                        trailing ??
-                        InkWell(
-                          key: profileKey,
-                          borderRadius: BorderRadius.zero,
-                          onTap: () => _openProfileMenu(context, profileKey),
-                          child: SizedBox(
-                            height: 36,
-                            width: 36,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: _CompanyAvatarIcon(
-                                companyName: companyName,
-                              ),
-                            ),
-                          ),
-                        ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 }
@@ -323,13 +278,16 @@ class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
   @override
   Widget build(BuildContext context) {
     if (_loading && _avatarUrl.trim().isEmpty) {
-      return ClientProfileAvatarIcon(displayName: widget.companyName, size: 36);
+      return ClientProfileAvatarIcon(
+        displayName: widget.companyName,
+        size: JntHeaderMetrics.avatarSize,
+      );
     }
 
     return ClientProfileAvatarIcon(
       imageUrl: _avatarUrl,
       displayName: widget.companyName,
-      size: 36,
+      size: JntHeaderMetrics.avatarSize,
     );
   }
 }

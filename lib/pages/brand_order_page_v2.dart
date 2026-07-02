@@ -8,7 +8,7 @@ import '../services/client_custom_request_repository.dart';
 import '../services/notifications_service.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import 'client_custom_request_page.dart';
 import 'notifications_page.dart';
 import 'track_order_page.dart';
@@ -135,6 +135,48 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     );
   }
 
+  Map<String, dynamic> _normalizeBrandOrderIdentifierRow(
+    Map<String, dynamic> row,
+  ) {
+    final normalized = Map<String, dynamic>.from(row);
+    final payload = _asMap(normalized['payload']);
+    final details = _asMap(normalized['details']);
+    final requestDetails = _asMap(details['requestDetails']);
+    final order = _asMap(details['order']);
+
+    final canonicalOrderNumber = _firstNonEmpty([
+      normalized['order_number'],
+      normalized['orderNumber'],
+      payload['order_number'],
+      payload['orderNumber'],
+      details['order_number'],
+      details['orderNumber'],
+      requestDetails['order_number'],
+      requestDetails['orderNumber'],
+      order['order_number'],
+      order['orderNumber'],
+      normalized['request_number'],
+      normalized['requestNumber'],
+      payload['request_number'],
+      payload['requestNumber'],
+      details['request_number'],
+      details['requestNumber'],
+      requestDetails['request_number'],
+      requestDetails['requestNumber'],
+      order['request_number'],
+      order['requestNumber'],
+    ]);
+
+    if (canonicalOrderNumber.isEmpty) return normalized;
+
+    normalized['order_number'] = canonicalOrderNumber;
+    normalized['orderNumber'] = canonicalOrderNumber;
+    normalized['request_number'] = canonicalOrderNumber;
+    normalized['requestNumber'] = canonicalOrderNumber;
+
+    return normalized;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -218,6 +260,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               uid: uid,
             ),
           )
+          .map(_normalizeBrandOrderIdentifierRow)
           .toList(growable: false);
       if (kDebugMode) {
         debugPrint(
@@ -872,42 +915,19 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               onOpenProfile: widget.onOpenProfile,
               onLogout: widget.onLogout,
             )
-          : AppBar(
-              backgroundColor: AppColors.alabaster,
-              surfaceTintColor: AppColors.alabaster,
-              elevation: 0,
-              toolbarHeight: 85,
-              automaticallyImplyLeading: false,
-              leadingWidth: 58,
-              leading: NotificationBellButton(
-                onTap: () {
-                  NotificationsPage.showAsModal(context);
-                },
-                iconSize: 24,
+          : JntStandardAppBar(
+              onNotifications: () {
+                NotificationsPage.showAsModal(context);
+              },
+              trailing: _AvatarMenu(
+                onSelected: _onAvatarMenuSelected,
+                avatarUrl: widget.profile.basic.profileImageUrl,
+                displayName: widget.profile.basic.name,
+                showProfile: widget.showProfileMenu,
+                showHistory: widget.showExtendedAvatarMenu,
+                showCalendar: widget.showExtendedAvatarMenu,
+                showArtist: widget.showExtendedAvatarMenu,
               ),
-
-              centerTitle: true,
-              title: Image.asset(
-                'assets/images/jnt_logo_black.png',
-                height: 50,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _AvatarMenu(
-                    onSelected: _onAvatarMenuSelected,
-                    avatarUrl: widget.profile.basic.profileImageUrl,
-                    displayName: widget.profile.basic.name,
-                    showProfile: widget.showProfileMenu,
-                    showHistory: widget.showExtendedAvatarMenu,
-                    showCalendar: widget.showExtendedAvatarMenu,
-                    showArtist: widget.showExtendedAvatarMenu,
-                  ),
-                ),
-              ],
             ),
 
       body: ListView(
@@ -1347,14 +1367,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
-            size: 36,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),

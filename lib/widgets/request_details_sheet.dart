@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import '../services/supabase_firebase_compat.dart';
+import '../services/storage_url_resolver.dart';
 
 /// ==============================
 /// Enums

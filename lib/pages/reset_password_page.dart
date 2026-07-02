@@ -1,6 +1,6 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../services/supabase_auth_service.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key, required this.oobCode, this.email});
@@ -39,20 +39,22 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   Future<void> _verifyCode() async {
     try {
-      final email = await FirebaseAuth.instance.verifyPasswordResetCode(
-        widget.oobCode,
-      );
+      final email =
+          SupabaseAuthService.currentUser?.email ??
+          widget.email ??
+          '';
       if (!mounted) return;
+      if (SupabaseAuthService.currentUser == null) {
+        setState(() {
+          _loading = false;
+          _error = 'Reset link is invalid or expired.';
+        });
+        return;
+      }
       setState(() {
-        _resolvedEmail = email;
+        _resolvedEmail = email.trim();
         _loading = false;
         _error = null;
-      });
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.message ?? 'Reset link is invalid or expired.';
       });
     } catch (_) {
       if (!mounted) return;
@@ -86,20 +88,12 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     if (_formKey.currentState?.validate() != true) return;
     setState(() => _submitting = true);
     try {
-      await FirebaseAuth.instance.confirmPasswordReset(
-        code: widget.oobCode,
-        newPassword: _newCtrl.text.trim(),
-      );
+      await SupabaseAuthService.updatePassword(_newCtrl.text.trim());
+      await SupabaseAuthService.logout();
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil(
         '/reset-password-success',
         (route) => false,
-      );
-
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Failed to reset password')),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);

@@ -1,9 +1,14 @@
+// ignore_for_file: unnecessary_non_null_assertion
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/ascension_service.dart';
+import '../models/client_request_v2.dart';
+import '../services/artist_requests_repository.dart';
+import '../utils/jnt_ascension_engine.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 class JntAscensionPage extends StatefulWidget {
   const JntAscensionPage({super.key});
@@ -15,15 +20,21 @@ class JntAscensionPage extends StatefulWidget {
 class _JntAscensionPageState extends State<JntAscensionPage> {
   static const int goldsmithMin = 1000;
   static const int crownedMin = 9750;
+  static const String _emptyValue = '';
 
   RealtimeChannel? _artistChannel;
-  String _artistCollection = '';
+  RealtimeChannel? _requestsChannel;
+  String _artistCollection = _emptyValue;
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   _AscTab _activeTab = _AscTab.activity;
   bool _syncingAscension = false;
   bool _artistLoaded = false;
   bool _initialAscensionResolved = false;
   bool _hasServerSnapshot = false;
+  String _currentArtistEmail = _emptyValue;
+  String _currentArtistId = _emptyValue;
+  int _portfolioUploads = 0;
+  _AscensionStageSummary _stageSummary = const _AscensionStageSummary.empty();
 
   @override
   void initState() {
@@ -34,40 +45,67 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   @override
   void dispose() {
     _artistChannel?.unsubscribe();
+    _requestsChannel?.unsubscribe();
     super.dispose();
   }
 
   Future<void> _bindArtist() async {
     final supabase = Supabase.instance.client;
-    final email = (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
-    if (email.isEmpty) return;
+    final email = (supabase.auth.currentUser?.email ?? _emptyValue).trim().toLowerCase();
+    final uid = (supabase.auth.currentUser?.id ?? _emptyValue).trim();
+    if (email.isEmpty && uid.isEmpty) return;
+    _currentArtistEmail = email;
+    _currentArtistId = uid;
 
-    for (final collection in const <String>['artist', 'client_artist']) {
+    Map<String, dynamic>? matchedRow;
+    String matchedCollection = _emptyValue;
+
+    for (final collection in const <String>['client_artist', 'artist']) {
       try {
-        final row = await supabase
-            .from(collection)
-            .select()
-            .eq('email', email)
-            .maybeSingle();
-        if (row != null) {
-          _artistCollection = collection;
-          if (mounted) {
-            setState(() {
-              _artistData = _flattenArtistRow(row);
-              _artistLoaded = true;
-              _hasServerSnapshot = true;
-            });
+        if (uid.isNotEmpty) {
+          final row = await supabase.from(collection).select().eq('id', uid).maybeSingle();
+          if (row != null) {
+            matchedRow = Map<String, dynamic>.from(row);
+            matchedCollection = collection;
+            break;
           }
-          unawaited(_syncAscension(email, collection));
-          _subscribeArtistRealtime(email, collection);
-          break;
         }
       } catch (_) {}
     }
+
+    if (matchedRow == null) {
+      for (final collection in const <String>['client_artist', 'artist']) {
+        try {
+          if (email.isNotEmpty) {
+            final row = await supabase.from(collection).select().eq('email', email).maybeSingle();
+            if (row != null) {
+              matchedRow = Map<String, dynamic>.from(row);
+              matchedCollection = collection;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (matchedRow == null) return;
+    _artistCollection = matchedCollection;
+    if (mounted) {
+      setState(() {
+        _artistData = _flattenArtistRow(matchedRow!);
+        _portfolioUploads = _portfolioUploadCount(matchedRow!, _artistData);
+        _artistLoaded = true;
+        _hasServerSnapshot = true;
+      });
+    }
+    unawaited(_syncAscension(email, matchedCollection));
+    _subscribeArtistRealtime(email, uid, matchedCollection);
+    _subscribeRequestRealtime();
   }
 
-  void _subscribeArtistRealtime(String email, String collection) {
+  void _subscribeArtistRealtime(String email, String uid, String collection) {
     _artistChannel?.unsubscribe();
+    _requestsChannel?.unsubscribe();
     _artistChannel = Supabase.instance.client
         .channel('jnt_ascension_artist_$collection')
         .onPostgresChanges(
@@ -76,14 +114,18 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
           table: collection,
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
-            column: 'email',
-            value: email,
+            column: uid.isNotEmpty ? 'id' : 'email',
+            value: uid.isNotEmpty ? uid : email,
           ),
           callback: (payload) {
             if (!mounted) return;
             setState(() {
               _artistData = _flattenArtistRow(
                 Map<String, dynamic>.from(payload.newRecord),
+              );
+              _portfolioUploads = _portfolioUploadCount(
+                Map<String, dynamic>.from(payload.newRecord),
+                _artistData,
               );
               _hasServerSnapshot = true;
             });
@@ -110,69 +152,281 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     if (_syncingAscension) return;
     _syncingAscension = true;
     try {
-      final portfolioItems =
-          (_artistData['portfolioItems'] as List<dynamic>?)?.length ??
-          (_artistData['portfolioImages'] as List<dynamic>?)?.length ??
-          0;
-      final ascension =
-          (_artistData['ascension'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final previousPointsRaw = ascension['points'];
-      final previousPoints = previousPointsRaw is num
-          ? previousPointsRaw.toInt()
-          : int.tryParse((previousPointsRaw ?? '').toString()) ?? 0;
-      final snapshot = await AscensionService.calculateForArtist(
-        artistEmail: email,
-        portfolioUploads: portfolioItems,
-      );
-      final computedPayload = AscensionService.buildAscensionPayload(snapshot);
-      final override = await AscensionService.readActiveOverride(
-        artistDocPath: email,
-        artistEmail: email,
-      );
-      final finalPayload = AscensionService.applyOverrideToPayload(
-        payload: computedPayload,
-        override: override,
-      );
-      final stabilizedPayload = AscensionService.preserveExistingAdminOverride(
-        payload: finalPayload,
-        artistData: _artistData,
-      );
-      await AscensionService.persistAdminCollections(
-        artistEmail: email,
-        artistCollection: collection,
-        artistName: _artistName,
-        ascensionPayload: stabilizedPayload,
-        previousPoints: previousPoints,
-      );
+      final all = await ArtistRequestsRepository.fetchAllRequests();
+      final visible = all
+          .where(
+            (request) => _isVisibleToArtist(
+              request: request,
+              artistEmail: email,
+              artistId: _currentArtistId,
+            ),
+          )
+          .toList(growable: false);
+      final stageSummary = _buildStageSummary(visible);
+      final ascension = stageSummary.result.toAscensionMap();
+      if (!mounted) return;
+      setState(() {
+        _stageSummary = stageSummary;
+        _artistData = <String, dynamic>{
+          ..._artistData,
+          'ascension': ascension,
+          'panel_ascensionLevel': ascension['tier'],
+          'panel_ascensionPoints': ascension['points'],
+        };
+        _initialAscensionResolved = true;
+      });
     } catch (_) {
-    } finally {
-      _syncingAscension = false;
       if (mounted && !_initialAscensionResolved) {
         setState(() => _initialAscensionResolved = true);
       }
+    } finally {
+      _syncingAscension = false;
     }
+  }
+
+  void _subscribeRequestRealtime() {
+    _requestsChannel?.unsubscribe();
+    _requestsChannel = Supabase.instance.client
+        .channel('jnt_ascension_requests')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'client_custom_requests',
+          callback: (_) {
+            final email = _currentArtistEmail;
+            if (email.isNotEmpty && _artistCollection.isNotEmpty) {
+              unawaited(_syncAscension(email, _artistCollection));
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  int _portfolioUploadCount(
+    Map<String, dynamic> row,
+    Map<String, dynamic> flattened,
+  ) {
+    int countList(Object? raw) => raw is List ? raw.length : 0;
+    bool hasText(Object? raw) => (raw ?? _emptyValue).toString().trim().isNotEmpty;
+    final profile =
+        (row['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final portfolio = row['portfolio'];
+    final profilePortfolio = profile['portfolio'];
+    final values = <Object?>[
+      row['portfolioItems'],
+      row['portfolioImages'],
+      row['previousProjects'],
+      row['samplePhotos'],
+      flattened['portfolioItems'],
+      flattened['portfolioImages'],
+      profile['portfolioItems'],
+      profile['portfolioImages'],
+      profile['previousProjects'],
+      profile['samplePhotos'],
+      if (portfolio is Map) portfolio['items'],
+      if (portfolio is Map) portfolio['images'],
+      if (profilePortfolio is Map) profilePortfolio['items'],
+      if (profilePortfolio is Map) profilePortfolio['images'],
+    ];
+    var best = 0;
+    for (final value in values) {
+      final count = countList(value);
+      if (count > best) best = count;
+    }
+
+    final hasProfilePhoto = <Object?>[
+      row['profileImageUrl'],
+      row['profile_image_url'],
+      row['avatarUrl'],
+      row['avatar_url'],
+      row['photoUrl'],
+      row['photo_url'],
+      row['imageUrl'],
+      row['image_url'],
+      row['artistProfileImage'],
+      row['artist_profile_image'],
+      flattened['profileImageUrl'],
+      flattened['avatarUrl'],
+      profile['profileImageUrl'],
+      profile['profileImagePath'],
+      profile['avatarUrl'],
+      profile['photoUrl'],
+      profile['imageUrl'],
+    ].any(hasText);
+
+    return best > 0 ? best : (hasProfilePhoto ? 1 : 0);
+  }
+
+  bool _isVisibleToArtist({
+    required ClientRequestV2 request,
+    required String artistEmail,
+    required String artistId,
+  }) {
+    final ownedBy = request.acceptedByArtistEmail.trim().toLowerCase();
+    final isOwnedByCurrentArtist =
+        artistEmail.isNotEmpty && ownedBy == artistEmail;
+    final declinedByCurrentArtist =
+        artistEmail.isNotEmpty &&
+        request.declinedByArtistEmails.contains(artistEmail);
+
+    switch (request.status) {
+      case RequestStatusV2.inReview:
+        return !declinedByCurrentArtist && isOwnedByCurrentArtist;
+      case RequestStatusV2.accepted:
+      case RequestStatusV2.designing:
+      case RequestStatusV2.completed:
+      case RequestStatusV2.shipped:
+      case RequestStatusV2.delivered:
+      case RequestStatusV2.declined:
+      case RequestStatusV2.cancelled:
+      case RequestStatusV2.expired:
+        return isOwnedByCurrentArtist;
+    }
+  }
+
+  bool _isAscensionCompletedOrder(ClientRequestV2 request) {
+    return request.status == RequestStatusV2.completed ||
+        request.status == RequestStatusV2.shipped ||
+        request.status == RequestStatusV2.delivered ||
+        request.shippedAt != null ||
+        request.deliveredAt != null ||
+        request.artistImages.isNotEmpty;
+  }
+
+  double _amount(ClientRequestV2 request) {
+    final acceptedAmount = request.artistFinalAmount;
+    if (acceptedAmount != null && acceptedAmount > 0) {
+      return acceptedAmount;
+    }
+    final artistMax = request.artistBudgetMax;
+    if (artistMax != null && artistMax > 0) return artistMax.toDouble();
+    final artistMin = request.artistBudgetMin;
+    if (artistMin != null && artistMin > 0) return artistMin.toDouble();
+    final fallback = request.budgetMax > 0 ? request.budgetMax : request.budgetMin;
+    return fallback.toDouble();
+  }
+
+  DateTime _orderDate(ClientRequestV2 request) {
+    return request.deliveredAt ?? request.shippedAt ?? request.neededBy;
+  }
+
+  bool _isOnTimeDelivery(ClientRequestV2 request) {
+    final shippedAt = request.shippedAt;
+    if (shippedAt == null) return false;
+    final due = request.neededBy;
+    final dueEndOfDay = DateTime(due.year, due.month, due.day, 23, 59, 59);
+    return !shippedAt.isAfter(dueEndOfDay);
+  }
+
+  bool _isFiveStarReview(ClientRequestV2 request) {
+    final rating = request.clientRating;
+    if (rating == null) return false;
+    return rating >= 5;
+  }
+
+  String _repeatClientKey(ClientRequestV2 request) {
+    final email = request.clientEmail.trim().toLowerCase();
+    if (email.isNotEmpty) return email;
+    return request.clientName.trim().toLowerCase();
+  }
+
+  _AscensionStageSummary _buildStageSummary(List<ClientRequestV2> requests) {
+    final completed = requests
+        .where(_isAscensionCompletedOrder)
+        .toList(growable: false);
+    final completedSorted = List<ClientRequestV2>.from(completed)
+      ..sort((a, b) => _orderDate(a).compareTo(_orderDate(b)));
+
+    final seenClients = <String>{};
+    final repeatIds = <String>{};
+    for (final request in completedSorted) {
+      final key = _repeatClientKey(request);
+      if (key.isEmpty) continue;
+      if (seenClients.contains(key)) {
+        repeatIds.add(request.id);
+      } else {
+        seenClients.add(key);
+      }
+    }
+
+    final onTime = completed.where(_isOnTimeDelivery).toList(growable: false);
+    final fiveStar = completed.where(_isFiveStarReview).toList(growable: false);
+    final repeat = completed
+        .where((request) => repeatIds.contains(request.id))
+        .toList(growable: false);
+    final delivered = completed
+        .where((request) => request.status == RequestStatusV2.delivered || request.deliveredAt != null)
+        .toList(growable: false);
+    final artistGmv = completed.fold<double>(0, (sum, r) => sum + _amount(r));
+
+    final result = JntAscensionEngine.calculate(
+      completedOrders: completed.length,
+      onTimeDeliveries: onTime.length,
+      fiveStarReviews: fiveStar.length,
+      repeatClientOrders: repeat.length,
+      portfolioUploads: _portfolioUploads,
+      artistGmv: artistGmv,
+    );
+
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+    final thisMonthPoints = <double>[
+      for (final r in completed)
+        if (!_orderDate(r).isBefore(monthStart))
+          JntAscensionEngine.pointsCompleteOrder.toDouble(),
+      for (final r in onTime)
+        if (!r.shippedAt!.isBefore(monthStart))
+          JntAscensionEngine.pointsOnTimeDelivery.toDouble(),
+      for (final r in fiveStar)
+        if (!(r.clientReviewSubmittedAt ?? _orderDate(r)).isBefore(monthStart))
+          JntAscensionEngine.pointsFiveStarReview.toDouble(),
+      for (final r in repeat)
+        if (!_orderDate(r).isBefore(monthStart))
+          JntAscensionEngine.pointsRepeatClientOrder.toDouble(),
+    ].fold<double>(0, (sum, value) => sum + value);
+
+    return _AscensionStageSummary(
+      result: result,
+      completedOrders: completed.length,
+      onTimeDeliveries: onTime.length,
+      fiveStarReviews: fiveStar.length,
+      repeatClientOrders: repeat.length,
+      portfolioUploads: _portfolioUploads,
+      deliveredOrders: delivered.length,
+      artistGmv: artistGmv,
+      jntRevenue: result.jntRevenue,
+      thisMonthPoints: thisMonthPoints,
+    );
   }
 
   String _firstNonEmpty(List<Object?> values) {
     for (final v in values) {
-      final s = (v ?? '').toString().trim();
+      final s = (v ?? _emptyValue).toString().trim();
       if (s.isNotEmpty) return s;
     }
-    return '';
+    return _emptyValue;
   }
 
+  double _asDouble(Object? raw) {
+    if (raw is num) return raw.toDouble();
+    return double.tryParse((raw ?? _emptyValue).toString().trim()) ?? 0;
+  }
+
+  String _fmtPoints(num value) => value.toDouble().toStringAsFixed(2);
+
+  String _fmtSignedPoints(num value) => '+${value.toDouble().toStringAsFixed(2)}';
+
+  String _fmtTierThreshold(num value) => value.toDouble().toStringAsFixed(2);
+
   int _asInt(Object? raw) {
-    if (raw is int) return raw;
-    if (raw is num) return raw.round();
-    return int.tryParse((raw ?? '').toString().trim()) ?? 0;
+    return _asDouble(raw).round();
   }
 
   String get _artistName {
     final profile =
         (_artistData['profile'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-    final email = (Supabase.instance.client.auth.currentUser?.email ?? '')
+    final email = (Supabase.instance.client.auth.currentUser?.email ?? _emptyValue)
         .trim()
         .toLowerCase();
     final emailName = email.contains('@') ? email.split('@').first : email;
@@ -189,14 +443,14 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     ]);
   }
 
-  int get _currentPoints {
+  double get _currentPoints {
     final ascension =
         (_artistData['ascension'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
     final stats =
         (_artistData['stats'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-    return _asInt(
+    return _asDouble(
       ascension['points'] ??
           _artistData['panel_ascensionPoints'] ??
           _artistData['ascensionPoints'] ??
@@ -228,13 +482,13 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
   _AscLevel get _currentLevel => _levelFromStoredTier() ?? _levelForPoints(_currentPoints);
 
-  int get _effectivePointsForProgress {
+  double get _effectivePointsForProgress {
     final points = _currentPoints;
     switch (_currentLevel) {
       case _AscLevel.crowned:
-        return points < crownedMin ? crownedMin : points;
+        return points < crownedMin ? crownedMin.toDouble() : points;
       case _AscLevel.goldsmith:
-        return points < goldsmithMin ? goldsmithMin : points;
+        return points < goldsmithMin ? goldsmithMin.toDouble() : points;
       case _AscLevel.maker:
         return points;
     }
@@ -259,7 +513,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         const <String, dynamic>{};
     final raw = metrics[key];
     if (raw is bool) return raw;
-    final text = (raw ?? '').toString().trim().toLowerCase();
+    final text = (raw ?? _emptyValue).toString().trim().toLowerCase();
     return text == 'true' || text == '1' || text == 'yes';
   }
 
@@ -272,20 +526,49 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         const <String, dynamic>{};
     final raw = metrics[key];
     if (raw is num) return raw.toDouble();
-    return double.tryParse((raw ?? '').toString().trim()) ?? 0;
+    return double.tryParse((raw ?? _emptyValue).toString().trim()) ?? 0;
   }
 
-  _AscLevel _levelForPoints(int pts) {
-    if (pts >= crownedMin) return _AscLevel.crowned;
+  double get artistGmv {
+    final stored = _readMetricNum('artistGmv');
+    return stored > 0 ? stored : _stageSummary.artistGmv;
+  }
+
+  double get jntRevenue {
+    final stored = _readMetricNum('jntRevenue');
+    return stored > 0 ? stored : _stageSummary.jntRevenue;
+  }
+
+  double get artistEarnings {
+    final stored = _readMetricNum('artistEarnings');
+    if (stored > 0) return stored;
+    final derived = artistGmv - jntRevenue;
+    return derived > 0 ? derived : 0;
+  }
+
+  bool get isGoldsmith => _currentLevel == _AscLevel.goldsmith;
+
+  bool get crownedPointsQualified => _readMetricBool('crownedPointsQualified');
+
+  bool get crownedRevenueQualified => _readMetricBool('crownedRevenueQualified');
+
+  double get jntRevenueToCrowned => _readMetricNum('jntRevenueToCrowned');
+
+  _AscLevel _levelForPoints(double pts) {
+    final jntRevenue = _readMetricNum('jntRevenue');
+    if (pts >= crownedMin &&
+        jntRevenue >= JntAscensionEngine.crownedMinJntRevenue) {
+      return _AscLevel.crowned;
+    }
     if (pts >= goldsmithMin) return _AscLevel.goldsmith;
     return _AscLevel.maker;
   }
 
-  int get _nextTierTarget {
+  double get _nextTierTarget {
     final points = _effectivePointsForProgress;
-    if (points < goldsmithMin) return goldsmithMin;
-    if (points < crownedMin) return crownedMin;
-    return crownedMin;
+    if (points < goldsmithMin) return goldsmithMin.toDouble();
+    if (points < crownedMin) return crownedMin.toDouble();
+    return crownedMin.toDouble();
   }
 
   _AscLevel get _nextTierLevel {
@@ -295,7 +578,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     return _AscLevel.crowned;
   }
 
-  int get _pointsToNextTier {
+  double get _pointsToNextTier {
     final remaining = _nextTierTarget - _effectivePointsForProgress;
     return remaining < 0 ? 0 : remaining;
   }
@@ -313,34 +596,28 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     final items = <_PointActivityItem>[
       _PointActivityItem(
         title: 'Completed orders',
-        subtitle: 'Recent progress',
-        points:
-            completedOrders * AscensionService.weightedPointsCompleteOrder,
+        subtitle: '$completedOrders order(s) × 25 pts',
+        points: completedOrders * JntAscensionEngine.pointsCompleteOrder,
       ),
       _PointActivityItem(
         title: '5-star client reviews',
-        subtitle: 'Recent progress',
-        points:
-            fiveStarReviews * AscensionService.weightedPointsFiveStarReview,
+        subtitle: '$fiveStarReviews review(s) × 9 pts',
+        points: fiveStarReviews * JntAscensionEngine.pointsFiveStarReview,
       ),
       _PointActivityItem(
         title: 'On-time delivery',
-        subtitle: 'Delivery consistency',
-        points:
-            onTimeDeliveries * AscensionService.weightedPointsOnTimeDelivery,
+        subtitle: '$onTimeDeliveries shipment(s) × 8.5 pts',
+        points: onTimeDeliveries * JntAscensionEngine.pointsOnTimeDelivery,
       ),
       _PointActivityItem(
         title: 'Repeat client order',
-        subtitle: 'Returning clients',
-        points:
-            repeatClientOrders *
-            AscensionService.weightedPointsRepeatClientOrder,
+        subtitle: '$repeatClientOrders repeat order(s) × 6 pts',
+        points: repeatClientOrders * JntAscensionEngine.pointsRepeatClientOrder,
       ),
       _PointActivityItem(
         title: 'Portfolio upload',
-        subtitle: 'Design showcase',
-        points:
-            portfolioUploads * AscensionService.weightedPointsPortfolioUpload,
+        subtitle: '$portfolioUploads upload(s) × 0.3 pts',
+        points: portfolioUploads * JntAscensionEngine.pointsPortfolioUpload,
       ),
     ];
     return items;
@@ -351,11 +628,9 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     if (!_artistLoaded || !_hasServerSnapshot || !_initialAscensionResolved) {
       return Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          elevation: 0,
-          centerTitle: true,
-          automaticallyImplyLeading: false,
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.of(context).pop(),
+          closeTooltip: 'Close JNT Ascension',
           title: const Text(
             'JNT Ascension',
             style: TextStyle(
@@ -364,12 +639,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
               fontSize: 18,
             ),
           ),
-          actions: [
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close_rounded, color: AppColors.blackCat),
-            ),
-          ],
         ),
         body: const Center(
           child: SizedBox(
@@ -386,11 +655,9 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        elevation: 0,
-        centerTitle: true,
-        automaticallyImplyLeading: false,
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.of(context).pop(),
+        closeTooltip: 'Close JNT Ascension',
         title: const Text(
           'JNT Ascension',
           style: TextStyle(
@@ -399,12 +666,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             fontSize: 18,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close_rounded, color: AppColors.blackCat),
-          ),
-        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -430,9 +691,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     final initial = _artistName.trim().isEmpty
         ? 'A'
         : _artistName.trim().substring(0, 1).toUpperCase();
-    final crownedPointsQualified = _readMetricBool('crownedPointsQualified');
-    final crownedRevenueQualified = _readMetricBool('crownedRevenueQualified');
-    final jntRevenueToCrowned = _readMetricNum('jntRevenueToCrowned');
 
     return Container(
       width: double.infinity,
@@ -484,7 +742,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${level.label}  ·  $_currentPoints pts',
+                      '${level.label}  ·  ${_fmtPoints(_currentPoints)} pts',
                       style: const TextStyle(
                         color: Color(0xFFE2BE83),
                         fontWeight: FontWeight.w600,
@@ -618,7 +876,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                 text: TextSpan(
                   children: [
                     TextSpan(
-                      text: '$_pointsToNextTier',
+                      text: _fmtPoints(_pointsToNextTier),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -637,20 +895,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                 ),
               ),
             ),
-          if (crownedPointsQualified && !crownedRevenueQualified) ...[
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                'Points qualified — \$${jntRevenueToCrowned.toStringAsFixed(0)} JNT revenue needed for Crowned.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFFE2BE83),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12.5,
-                ),
-              ),
-            ),
-          ],
+
         ],
       ),
     );
@@ -702,16 +947,8 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
   Widget _activityTab() {
     final orders = _readMetricInt('completedOrders');
-    final artistGmv = orders * AscensionService.aov;
-    final artistEarnings = orders * AscensionService.artistEarningsPerOrder;
-    final jntRevenue = orders * AscensionService.jntRevPerOrder;
+    final deliveredOrders = _stageSummary.deliveredOrders;
     final currentTier = _currentLevel.label;
-    final isGoldsmith = currentTier.toLowerCase() == 'goldsmith';
-    final crownedPointsQualified = _effectivePointsForProgress >= crownedMin;
-    final crownedRevenueQualified =
-        jntRevenue >= AscensionService.crownedRevenueMin;
-    final jntRevenueToCrowned = (AscensionService.crownedRevenueMin - jntRevenue)
-        .clamp(0, AscensionService.crownedRevenueMin);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -724,7 +961,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             ),
             const Spacer(),
             Text(
-              'This month: +${_activityItems.fold<double>(0, (s, e) => s + e.points).toStringAsFixed(1)} pts',
+              'This month: ${_fmtSignedPoints(_stageSummary.thisMonthPoints)} pts',
               style: const TextStyle(
                 fontSize: 12,
                 color: Color(0xFF8A8F98),
@@ -754,7 +991,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  "At your current pace, you'll reach ${_nextTierLevel.label} in about ${(_pointsToNextTier / AscensionService.blendedAveragePointsPerOrder).ceil()} completed orders.",
+                  "At your current pace, you'll reach ${_nextTierLevel.label} in about ${(_pointsToNextTier / JntAscensionEngine.blendedAveragePointsPerOrder).ceil().clamp(0, 9999)} completed orders.",
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -779,6 +1016,15 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             children: [
               Text(
                 'Completed orders: $orders',
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  color: Color(0xFF4E545E),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                'Delivered orders: $deliveredOrders',
                 style: const TextStyle(
                   fontSize: 13,
                   height: 1.35,
@@ -823,7 +1069,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                 ),
               ),
               Text(
-                'Points to next tier: $_pointsToNextTier',
+                'Points to next tier: ${_fmtPoints(_pointsToNextTier)}',
                 style: const TextStyle(
                   fontSize: 13,
                   height: 1.35,
@@ -891,7 +1137,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             ),
           ),
           Text(
-            '+${item.points.toStringAsFixed(1)}',
+            _fmtSignedPoints(item.points),
             style: const TextStyle(
               fontSize: 16,
               color: Color(0xFF14823A),
@@ -908,19 +1154,19 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       children: [
         _tierCard(
           _AscLevel.maker,
-          '0-999 pts',
+          '${_fmtTierThreshold(0)}-${_fmtTierThreshold(999)} pts',
           currentLevel == _AscLevel.maker,
         ),
         const SizedBox(height: 10),
         _tierCard(
           _AscLevel.goldsmith,
-          '1000-9749 pts',
+          '${_fmtTierThreshold(1000)}-${_fmtTierThreshold(9749)} pts',
           currentLevel == _AscLevel.goldsmith,
         ),
         const SizedBox(height: 10),
         _tierCard(
           _AscLevel.crowned,
-          '9750+ pts + \$5,000 JNT revenue',
+          '${_fmtTierThreshold(9750)}+ pts',
           currentLevel == _AscLevel.crowned,
         ),
       ],
@@ -999,12 +1245,12 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   Widget _earnPointsTab() {
     const earnItems = <_EarnRuleItem>[
       _EarnRuleItem('Complete an order', '+25 pts', Icons.check),
-      _EarnRuleItem('On-time delivery', '+8.5 pts', Icons.timer_outlined),
-      _EarnRuleItem('5-star client review', '+9 pts', Icons.star),
-      _EarnRuleItem('Repeat client order', '+6 pts', Icons.refresh),
+      _EarnRuleItem('On-time delivery', '+10 pts', Icons.timer_outlined),
+      _EarnRuleItem('5-star client review', '+15 pts', Icons.star),
+      _EarnRuleItem('Repeat client order', '+20 pts', Icons.refresh),
       _EarnRuleItem(
         'Portfolio upload',
-        '+0.3 pts',
+        '+5 pts',
         Icons.arrow_upward_rounded,
       ),
     ];
@@ -1018,7 +1264,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         ),
         const SizedBox(height: 4),
         const Text(
-          'Points are frequency-weighted based on expected artist activity.',
+          'Points are awarded in stages as orders move through completion, shipping, delivery, review, and repeat-client activity.',
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w500,
@@ -1092,6 +1338,77 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       ],
     );
   }
+}
+
+
+class _AscensionStageSummary {
+  const _AscensionStageSummary({
+    required this.result,
+    required this.completedOrders,
+    required this.onTimeDeliveries,
+    required this.fiveStarReviews,
+    required this.repeatClientOrders,
+    required this.portfolioUploads,
+    required this.deliveredOrders,
+    required this.artistGmv,
+    required this.jntRevenue,
+    required this.thisMonthPoints,
+  });
+
+  const _AscensionStageSummary.empty()
+      : result = const JntAscensionResult(
+          tier: 'maker',
+          tierLabel: 'Maker',
+          points: 0,
+          completedOrders: 0,
+          onTimeDeliveries: 0,
+          fiveStarReviews: 0,
+          repeatClientOrders: 0,
+          portfolioUploads: 0,
+          artistGmv: 0,
+          jntRevenue: 0,
+          completedOrderPoints: 0,
+          onTimeDeliveryPoints: 0,
+          fiveStarReviewPoints: 0,
+          repeatClientOrderPoints: 0,
+          portfolioUploadPoints: 0,
+          crownedPointsQualified: false,
+          crownedRevenueQualified: false,
+          jntRevenueToCrowned: 5000,
+          prioritySearch: false,
+          sponsorshipEligible: false,
+          insuranceEligible: false,
+          pointsToNextTier: 1000,
+          nextTier: 'goldsmith',
+          nextTierLabel: 'Goldsmith',
+          generatedTags: <String>['Maker'],
+          unlockedPerks: <String>[
+            'Welcome gift',
+            'Group orders',
+            'Learning & development',
+          ],
+          crownedPointsOnlyMessage: '',
+        ),
+        completedOrders = 0,
+        onTimeDeliveries = 0,
+        fiveStarReviews = 0,
+        repeatClientOrders = 0,
+        portfolioUploads = 0,
+        deliveredOrders = 0,
+        artistGmv = 0,
+        jntRevenue = 0,
+        thisMonthPoints = 0;
+
+  final JntAscensionResult result;
+  final int completedOrders;
+  final int onTimeDeliveries;
+  final int fiveStarReviews;
+  final int repeatClientOrders;
+  final int portfolioUploads;
+  final int deliveredOrders;
+  final double artistGmv;
+  final double jntRevenue;
+  final double thisMonthPoints;
 }
 
 enum _AscTab { activity, tiers, earnPoints }

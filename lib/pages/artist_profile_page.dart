@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -16,9 +15,43 @@ import '../services/supabase_bootstrap.dart';
 import 'jnt_ascension_page.dart';
 import 'notifications_page.dart';
 import 'artist_reviews_page.dart';
+import '../widgets/artist_ascension_card.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import '../widgets/searchable_dropdown_field.dart';
-import '../widgets/artist_ascension_card.dart';
+
+String _storageBucketForReference(String raw) {
+  final value = raw.trim();
+  if (value.startsWith('gs://')) {
+    final withoutScheme = value.substring(5);
+    final slash = withoutScheme.indexOf('/');
+    if (slash > 0) return withoutScheme.substring(0, slash);
+  }
+  if (value.startsWith('profile-pictures/')) return 'profile-pictures';
+  if (value.startsWith('artists/')) return 'artists';
+  if (value.startsWith('client_artists/')) return 'client_artists';
+  return 'portfolio-images';
+}
+
+String _storageObjectPathForReference(String raw) {
+  final value = raw.trim();
+  if (value.startsWith('gs://')) {
+    final withoutScheme = value.substring(5);
+    final slash = withoutScheme.indexOf('/');
+    if (slash > 0 && slash + 1 < withoutScheme.length) {
+      return withoutScheme.substring(slash + 1);
+    }
+    return '';
+  }
+  if (value.startsWith('profile-pictures/')) {
+    return value.replaceFirst('profile-pictures/', '');
+  }
+  if (value.startsWith('artists/') || value.startsWith('client_artists/')) {
+    final parts = value.split('/');
+    return parts.skip(1).join('/');
+  }
+  return value;
+}
 
 class ArtistProfilePage extends StatefulWidget {
   const ArtistProfilePage({
@@ -57,6 +90,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   String _artistSupabaseTable = '';
   String _artistSupabaseId = '';
+  bool _portfolioBackfillAttempted = false;
 
   Future<_ArtistIdentity> _resolveArtistIdentity() async {
     final supabaseUser = SupabaseAuthService.currentUser;
@@ -181,16 +215,35 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       _firstNonEmpty([
         profile['profileImageUrl'],
         profile['profilePhotoUrl'],
+        profile['profile_picture_url'],
+        profile['profile_photo_url'],
         profile['photoUrl'],
+        profile['photo_url'],
         profile['avatarUrl'],
+        profile['avatar_url'],
         row['profileImageUrl'],
         row['profile_image_url'],
         row['profilePhotoUrl'],
+        row['profile_photo_url'],
+        row['profile_picture_url'],
         row['photoUrl'],
+        row['photo_url'],
         row['avatarUrl'],
+        row['avatar_url'],
         basic['profileImageUrl'],
+        basic['profile_picture_url'],
+        basic['profile_photo_url'],
         basic['photoUrl'],
+        basic['photo_url'],
         basic['avatarUrl'],
+        basic['avatar_url'],
+        _asMap(row['artist'])['profileImageUrl'],
+        _asMap(row['artist'])['profile_picture_url'],
+        _asMap(row['artist'])['profile_photo_url'],
+        _asMap(row['artist'])['photoUrl'],
+        _asMap(row['artist'])['photo_url'],
+        _asMap(row['artist'])['avatarUrl'],
+        _asMap(row['artist'])['avatar_url'],
       ]),
     );
 
@@ -200,6 +253,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       'name': name,
       'studioName': _firstNonEmpty([
         profile['studioName'],
+        profile['studio_name'],
         row['studioName'],
         row['studio_name'],
       ]),
@@ -209,16 +263,51 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       'panel_displayName': name,
       'panel_studioName': _firstNonEmpty([
         profile['studioName'],
+        profile['studio_name'],
+        row['panel_studioName'],
+        row['panel_studio_name'],
         row['studioName'],
         row['studio_name'],
       ]),
+      'panel_directRequestsEnabled': row['panel_directRequestsEnabled'] ?? row['panel_direct_requests_enabled'],
+      'panel_nfcRequestEnabled': row['panel_nfcRequestEnabled'] ?? row['panel_nfc_request_enabled'],
+      'panel_allClientRequestNotificationsEnabled':
+          row['panel_allClientRequestNotificationsEnabled'] ??
+          row['panel_all_client_request_notifications_enabled'],
       'panel_profileImageUrl': avatar,
       'profile': <String, dynamic>{
         ...profile,
+        if (!profile.containsKey('directRequestsEnabled') &&
+            profile.containsKey('direct_requests_enabled'))
+          'directRequestsEnabled': profile['direct_requests_enabled'],
+        if (!profile.containsKey('nfcRequestEnabled') &&
+            profile.containsKey('nfc_request_enabled'))
+          'nfcRequestEnabled': profile['nfc_request_enabled'],
+        if (!profile.containsKey('allClientRequestsEnabled') &&
+            profile.containsKey('all_client_requests_enabled'))
+          'allClientRequestsEnabled': profile['all_client_requests_enabled'],
         if (name.isNotEmpty) 'displayName': name,
         if (avatar.isNotEmpty) 'profileImageUrl': avatar,
         if (avatar.isNotEmpty) 'photoUrl': avatar,
         if (avatar.isNotEmpty) 'avatarUrl': avatar,
+      },
+      'availability': <String, dynamic>{
+        ..._asMap(row['availability']),
+        if (!_asMap(row['availability']).containsKey('directRequestsEnabled') &&
+            _asMap(row['availability']).containsKey('direct_requests_enabled'))
+          'directRequestsEnabled':
+              _asMap(row['availability'])['direct_requests_enabled'],
+        if (!_asMap(row['availability']).containsKey('nfcRequestEnabled') &&
+            _asMap(row['availability']).containsKey('nfc_request_enabled'))
+          'nfcRequestEnabled':
+              _asMap(row['availability'])['nfc_request_enabled'],
+      },
+      'notifications': <String, dynamic>{
+        ..._asMap(row['notifications']),
+        if (!_asMap(row['notifications']).containsKey('allClientRequestsEnabled') &&
+            _asMap(row['notifications']).containsKey('all_client_requests_enabled'))
+          'allClientRequestsEnabled':
+              _asMap(row['notifications'])['all_client_requests_enabled'],
       },
     };
   }
@@ -327,29 +416,53 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   String get _avatarPath {
-    final profile =
-        (_artistData['profile'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
+    final profile = _asMap(_artistData['profile']);
+    final basic = _asMap(_artistData['basic']);
+    final artist = _asMap(_artistData['artist']);
     return _cleanAvatarValue(
       _firstNonEmpty([
         profile['photoUrl'],
+        profile['photo_url'],
         profile['avatarUrl'],
+        profile['avatar_url'],
         profile['profileImageUrl'],
+        profile['profile_image_url'],
         profile['profilePhotoUrl'],
+        profile['profile_photo_url'],
+        profile['profile_picture_url'],
         profile['photoURL'],
         profile['avatarURL'],
         profile['profilePhoto'],
         _artistData['photoUrl'],
+        _artistData['photo_url'],
         _artistData['avatarUrl'],
+        _artistData['avatar_url'],
         _artistData['panel_profileImageUrl'],
         _artistData['profileImageUrl'],
+        _artistData['profile_image_url'],
         _artistData['profilePhotoUrl'],
+        _artistData['profile_photo_url'],
+        _artistData['profile_picture_url'],
         _artistData['profilePhoto'],
-        (_artistData['basic'] as Map<String, dynamic>?)?['profileImageUrl'],
-        (_artistData['basic'] as Map<String, dynamic>?)?['avatarUrl'],
-        (_artistData['basic'] as Map<String, dynamic>?)?['photoUrl'],
-        (_artistData['basic'] as Map<String, dynamic>?)?['profilePhotoUrl'],
-        (_artistData['basic'] as Map<String, dynamic>?)?['profilePhoto'],
+        basic['profileImageUrl'],
+        basic['profile_image_url'],
+        basic['avatarUrl'],
+        basic['avatar_url'],
+        basic['photoUrl'],
+        basic['photo_url'],
+        basic['profilePhotoUrl'],
+        basic['profile_photo_url'],
+        basic['profile_picture_url'],
+        basic['profilePhoto'],
+        artist['profileImageUrl'],
+        artist['profile_image_url'],
+        artist['avatarUrl'],
+        artist['avatar_url'],
+        artist['photoUrl'],
+        artist['photo_url'],
+        artist['profilePhotoUrl'],
+        artist['profile_photo_url'],
+        artist['profile_picture_url'],
       ]),
     );
   }
@@ -580,13 +693,19 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     addFromAny(portfolio['items']);
     addFromAny(portfolio['images']);
     addFromAny(data['portfolioItems']);
+    addFromAny(data['portfolio_items']);
     addFromAny(data['portfolioImages']);
+    addFromAny(data['portfolio_images']);
     addFromAny(data['panel_portfolioImages']);
+    addFromAny(data['panel_portfolio_images']);
     addFromAny(data['panel_artist_portfolioImages']);
+    addFromAny(data['panel_artist_portfolio_images']);
     addFromAny(artistPortfolio['items']);
     addFromAny(artistPortfolio['images']);
     addFromAny(artist['portfolioItems']);
+    addFromAny(artist['portfolio_items']);
     addFromAny(artist['portfolioImages']);
+    addFromAny(artist['portfolio_images']);
 
     return items;
   }
@@ -605,7 +724,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           .eq('id', id)
           .limit(1);
       final existing =
-          (rows is List && rows.isNotEmpty && rows.first['portfolio'] is Map)
+          (rows.isNotEmpty && rows.first['portfolio'] is Map)
           ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
           : <String, dynamic>{};
       final images = List<dynamic>.from(existing['images'] as List? ?? []);
@@ -633,6 +752,175 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     }
   }
 
+  List<String> _collectCompletedPhotoRefs(Map<String, dynamic> row) {
+    final out = <String>[];
+    final seen = <String>{};
+
+    void addRaw(Object? raw) {
+      if (raw == null) return;
+      if (raw is String) {
+        final value = raw.trim();
+        if (value.isEmpty || !_isPortfolioImageValue(value)) return;
+        final key = _portfolioImageKey(value);
+        if (seen.add(key)) out.add(value);
+        return;
+      }
+      if (raw is List) {
+        for (final value in raw) {
+          addRaw(value);
+        }
+        return;
+      }
+      if (raw is Map) {
+        final map = Map<String, dynamic>.from(raw);
+        final image = _firstNonEmpty([
+          map['imageUrl'],
+          map['imageURL'],
+          map['downloadUrl'],
+          map['downloadURL'],
+          map['photoUrl'],
+          map['photoURL'],
+          map['url'],
+          map['image'],
+        ]);
+        if (image.isNotEmpty) {
+          addRaw(image);
+        }
+        for (final value in map.values) {
+          if (value is List || value is Map) addRaw(value);
+        }
+      }
+    }
+
+    final data = _asMap(row['data']);
+    addRaw(row['artist_completed_photos']);
+    addRaw(row['artistCompletedPhotos']);
+    addRaw(data['artist_completed_photos']);
+    addRaw(data['artistCompletedPhotos']);
+    addRaw(_asMap(data['completedArt'])['imageUrls']);
+    addRaw(_asMap(data['artistCompletion'])['artistPhotos']);
+    return out;
+  }
+
+  bool _rowBelongsToArtist(
+    Map<String, dynamic> row, {
+    required String artistEmail,
+  }) {
+    final data = _asMap(row['data']);
+    final acceptance = _asMap(data['acceptance']);
+    final artistCompletion = _asMap(data['artistCompletion']);
+    final candidates = <String>[
+      _firstNonEmpty([
+        row['accepted_by_artist_email'],
+        row['acceptedByArtistEmail'],
+        data['accepted_by_artist_email'],
+        data['acceptedByArtistEmail'],
+        acceptance['acceptedByArtistEmail'],
+        artistCompletion['acceptedByArtistEmail'],
+      ]).trim().toLowerCase(),
+    ];
+    return candidates.any((value) => value.isNotEmpty && value == artistEmail);
+  }
+
+  bool _rowLooksPostCompletion(Map<String, dynamic> row) {
+    final status = _firstNonEmpty([row['status'], _asMap(row['data'])['status']])
+        .trim()
+        .toLowerCase();
+    if (status == 'completed' || status == 'shipped' || status == 'delivered') {
+      return true;
+    }
+    return _collectCompletedPhotoRefs(row).isNotEmpty;
+  }
+
+  Future<void> _backfillCompletedPortfolioForCurrentArtist() async {
+    if (_portfolioBackfillAttempted) return;
+    _portfolioBackfillAttempted = true;
+
+    if (_artistSupabaseTable.trim().isEmpty || _artistSupabaseId.trim().isEmpty) {
+      await _bindArtistProfile();
+    }
+    final table = _artistSupabaseTable.trim();
+    final id = _artistSupabaseId.trim();
+    if (table.isEmpty || id.isEmpty) return;
+
+    final identity = await _resolveArtistIdentity();
+    final artistEmail = identity.email.trim().toLowerCase();
+    if (artistEmail.isEmpty) return;
+
+    try {
+      final client = SupabaseBootstrap.client;
+      final currentRows = await client.from(table).select().eq('id', id).limit(1);
+      if (currentRows.isEmpty) return;
+      final currentRow = Map<String, dynamic>.from(currentRows.first as Map);
+      final currentCompat = _firestoreCompatArtistData(currentRow);
+      final existingItems = _portfolioItemsFromData(currentCompat);
+      final existingKeys = existingItems
+          .map((item) => _portfolioImageKey(item.image))
+          .toSet();
+
+      final collected = <String>[];
+      for (final sourceTable in const <String>[
+        'client_custom_requests',
+        'company_custom_requests',
+      ]) {
+        final rows = await client
+            .from(sourceTable)
+            .select(
+              'id,order_number,accepted_by_artist_email,artist_completed_photos,data,status,updated_at',
+            )
+            .order('updated_at', ascending: false)
+            .limit(200);
+        for (final raw in rows) {
+          final row = Map<String, dynamic>.from(raw as Map);
+          if (!_rowBelongsToArtist(row, artistEmail: artistEmail)) continue;
+          if (!_rowLooksPostCompletion(row)) continue;
+          collected.addAll(_collectCompletedPhotoRefs(row));
+        }
+      }
+      for (final detailsTable in const <String>[
+        'client_custom_requests_details',
+        'company_custom_requests_details',
+      ]) {
+        final rows = await client
+            .from(detailsTable)
+            .select('id,request_id,detail_key,data,updated_at')
+            .eq('detail_key', 'payload')
+            .order('updated_at', ascending: false)
+            .limit(300);
+        for (final raw in rows) {
+          final row = Map<String, dynamic>.from(raw as Map);
+          if (!_rowBelongsToArtist(row, artistEmail: artistEmail)) continue;
+          if (!_rowLooksPostCompletion(row)) continue;
+          collected.addAll(_collectCompletedPhotoRefs(row));
+        }
+      }
+
+      final nextItems = <ArtistPortfolioItem>[];
+      final seenNew = <String>{};
+      for (final url in collected) {
+        final key = _portfolioImageKey(url);
+        if (existingKeys.contains(key) || !seenNew.add(key)) continue;
+        nextItems.add(
+          ArtistPortfolioItem(
+            image: url,
+            style: 'All',
+            storagePath: _storageObjectPathForReference(url),
+          ),
+        );
+      }
+
+      if (nextItems.isEmpty) return;
+      await _appendPortfolioItemsToSupabase(nextItems);
+      await _bindArtistProfile();
+      debugPrint(
+        'ARTIST PORTFOLIO BACKFILL success table=$table id=$id added=${nextItems.length}',
+      );
+    } catch (e, st) {
+      debugPrint('ARTIST PORTFOLIO BACKFILL failed: $e');
+      debugPrintStack(stackTrace: st);
+    }
+  }
+
   Future<void> _openPortfolio() async {
     if (_artistSupabaseId.isEmpty) {
       await _bindArtistProfile();
@@ -645,6 +933,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       }
       return;
     }
+    await _backfillCompletedPortfolioForCurrentArtist();
     final supabaseId = _artistSupabaseId;
     final supabaseTable = _artistSupabaseTable;
     showModalBottomSheet<void>(
@@ -868,7 +1157,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
                   _jntAscensionTile(context),
 
-                  _artistAscensionSection(),
                   const SizedBox(height: 12),
                   SizedBox(
                     width: 180,
@@ -973,49 +1261,19 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         children: [
           Row(
             children: [
-              NotificationBellButton(onTap: _onNotifications, iconSize: 24),
+              NotificationBellButton(
+                onTap: _onNotifications,
+                iconSize: JntHeaderMetrics.notificationIconSize,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Center(
                   child: Image.asset(
                     'assets/images/jnt_logo_black.png',
-                    height: 50,
+                    height: JntHeaderMetrics.logoHeight,
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 74,
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
-                decoration: BoxDecoration(
-                  color: AppColors.alabaster,
-                  borderRadius: BorderRadius.zero,
-                  border: Border.all(color: AppColors.blackCatLight),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      height: 44,
-                      width: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.blackCat.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.qr_code_rounded, size: 26),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Member ID',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.blackCat.withValues(alpha: 0.70),
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],
@@ -1402,14 +1660,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     );
   }
 
-  Widget _artistAscensionSection() {
-    // Backend hook: points/tier flags should be updated by controlled
-    // admin or server-side order completion logic, not from this UI.
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: ArtistAscensionCard(ascension: _ascensionState),
-    );
-  }
 
   void _openAscension() {
     showModalBottomSheet<void>(
@@ -1570,6 +1820,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       );
     }
     if (src.startsWith('gs://') ||
+        src.startsWith('profile-pictures/') ||
         src.startsWith('artists/') ||
         src.startsWith('client_artists/')) {
       return FutureBuilder<String>(
@@ -1613,13 +1864,14 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       return value;
     }
     try {
-      if (value.startsWith('gs://')) {
-        return await FirebaseStorage.instance
-            .refFromURL(value)
-            .getDownloadURL();
-      }
-      if (value.startsWith('artists/') || value.startsWith('client_artists/')) {
-        return await FirebaseStorage.instance.ref(value).getDownloadURL();
+      if (value.startsWith('gs://') ||
+          value.startsWith('profile-pictures/') ||
+          value.startsWith('artists/') ||
+          value.startsWith('client_artists/')) {
+        return SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(value))
+            .getPublicUrl(_storageObjectPathForReference(value))
+            .trim();
       }
     } catch (_) {}
     return '';
@@ -1629,6 +1881,14 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     final uid = (SupabaseAuthService.currentUserId ?? '').trim();
     if (uid.isEmpty) return '';
     final candidates = <String>[
+      'profile-pictures/artists/$uid/profile/avatar.jpg',
+      'profile-pictures/artists/$uid/profile/avatar.jpeg',
+      'profile-pictures/artists/$uid/profile/avatar.png',
+      'profile-pictures/artists/$uid/profile/avatar.webp',
+      'profile-pictures/client_artists/$uid/profile/avatar.jpg',
+      'profile-pictures/client_artists/$uid/profile/avatar.jpeg',
+      'profile-pictures/client_artists/$uid/profile/avatar.png',
+      'profile-pictures/client_artists/$uid/profile/avatar.webp',
       'artists/$uid/profile/avatar.jpg',
       'artists/$uid/profile/avatar.jpeg',
       'artists/$uid/profile/avatar.png',
@@ -1640,24 +1900,27 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     ];
     for (final path in candidates) {
       try {
-        final url = await FirebaseStorage.instance
-            .ref(path)
-            .getDownloadURL()
-            .timeout(const Duration(seconds: 4));
+        final url = await SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(path))
+            .getPublicUrl(_storageObjectPathForReference(path));
         if (url.trim().isNotEmpty) return url.trim();
       } catch (_) {}
     }
     final folders = <String>[
+      'profile-pictures/artists/$uid/profile',
+      'profile-pictures/client_artists/$uid/profile',
       'artists/$uid/profile',
       'client_artists/$uid/profile',
     ];
     for (final folder in folders) {
       try {
-        final listed = await FirebaseStorage.instance
-            .ref(folder)
-            .listAll()
+        final listed = await SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(folder))
+            .list(
+              path: _storageObjectPathForReference(folder),
+            )
             .timeout(const Duration(seconds: 4));
-        for (final item in listed.items) {
+        for (final item in listed) {
           final name = item.name.toLowerCase();
           if (!(name.endsWith('.jpg') ||
               name.endsWith('.jpeg') ||
@@ -1665,14 +1928,50 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               name.endsWith('.webp'))) {
             continue;
           }
-          final url = await item.getDownloadURL().timeout(
-            const Duration(seconds: 4),
-          );
+          final url = SupabaseBootstrap.client.storage
+              .from(_storageBucketForReference(folder))
+              .getPublicUrl(
+                '${_storageObjectPathForReference(folder)}/${item.name}',
+              )
+              .trim();
           if (url.trim().isNotEmpty) return url.trim();
         }
       } catch (_) {}
     }
     return '';
+  }
+
+  String _storageBucketForReference(String raw) {
+    final value = raw.trim();
+    if (value.startsWith('gs://')) {
+      final withoutScheme = value.substring(5);
+      final slash = withoutScheme.indexOf('/');
+      if (slash > 0) return withoutScheme.substring(0, slash);
+    }
+    if (value.startsWith('profile-pictures/')) return 'profile-pictures';
+    if (value.startsWith('artists/')) return 'artists';
+    if (value.startsWith('client_artists/')) return 'client_artists';
+    return 'portfolio-images';
+  }
+
+  String _storageObjectPathForReference(String raw) {
+    final value = raw.trim();
+    if (value.startsWith('gs://')) {
+      final withoutScheme = value.substring(5);
+      final slash = withoutScheme.indexOf('/');
+      if (slash > 0 && slash + 1 < withoutScheme.length) {
+        return withoutScheme.substring(slash + 1);
+      }
+      return '';
+    }
+    if (value.startsWith('profile-pictures/')) {
+      return value.replaceFirst('profile-pictures/', '');
+    }
+    if (value.startsWith('artists/') || value.startsWith('client_artists/')) {
+      final parts = value.split('/');
+      return parts.skip(1).join('/');
+    }
+    return value;
   }
 }
 
@@ -1896,8 +2195,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
     }
 
     // Fallback by first section with data; else keep PayPal open by default.
-    if (_paypalEmailCtrl.text.trim().isNotEmpty ||
-        _paypalMerchantCtrl.text.trim().isNotEmpty) {
+    if (_paypalEmailCtrl.text.trim().isNotEmpty) {
       _openPaypal = true;
     } else if (_venmoUserCtrl.text.trim().isNotEmpty ||
         _venmoPhoneCtrl.text.trim().isNotEmpty) {
@@ -1940,9 +2238,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
           _appleNameCtrl.text.trim().isNotEmpty ||
           _appleEmailCtrl.text.trim().isNotEmpty ||
           _applePhoneCtrl.text.trim().isNotEmpty;
-      final paypalEnabled =
-          _paypalEmailCtrl.text.trim().isNotEmpty ||
-          _paypalMerchantCtrl.text.trim().isNotEmpty;
+      final paypalEnabled = _paypalEmailCtrl.text.trim().isNotEmpty;
       final achEnabled =
           _achHolderCtrl.text.trim().isNotEmpty ||
           _achBankCtrl.text.trim().isNotEmpty ||
@@ -1962,7 +2258,6 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
         'paypal': {
           'enabled': paypalEnabled,
           'email': _paypalEmailCtrl.text.trim(),
-          'merchantId': _paypalMerchantCtrl.text.trim(),
         },
         'ach': {
           'enabled': achEnabled,
@@ -2012,13 +2307,17 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
           children: [
             Row(
               children: [
+                const SizedBox(width: 48),
                 const Expanded(
-                  child: Text(
-                    'Payout Settings',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat,
+                  child: Center(
+                    child: Text(
+                      'Payout Settings',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
                     ),
                   ),
                 ),
@@ -2064,7 +2363,6 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
               ),
               children: [
                 _field('PayPal Email', _paypalEmailCtrl),
-                _field('Merchant ID (Optional)', _paypalMerchantCtrl),
               ],
             ),
             const SizedBox(height: 12),
@@ -2354,7 +2652,6 @@ class ArtistPortfolioModal extends StatefulWidget {
 }
 
 class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
-  static const int _portfolioPageSize = 24;
   bool _uploading = false;
   bool _initialLoading = true;
   bool _loadingMore = false;
@@ -2419,15 +2716,22 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     try {
       final rows = await SupabaseBootstrap.client
           .from(widget.supabaseTable)
-          .select('portfolio')
+          .select(
+            'portfolio,'
+            'portfolio_items,portfolio_images,'
+            'portfolioItems,portfolioImages,'
+            'panel_portfolio_items,panel_portfolio_images,'
+            'panel_portfolioItems,panel_portfolioImages,'
+            'panel_artist_portfolio_items,panel_artist_portfolio_images,'
+            'panel_artist_portfolioItems,panel_artist_portfolioImages,'
+            'artist',
+          )
           .eq('id', widget.supabaseId)
           .limit(1)
           .timeout(const Duration(seconds: 6));
-      if (rows is List && rows.isNotEmpty && rows.first['portfolio'] is Map) {
-        final portfolio = Map<String, dynamic>.from(
-          rows.first['portfolio'] as Map,
-        );
-        final items = _portfolioItemsFromJson(portfolio);
+      if (rows.isNotEmpty) {
+        final row = Map<String, dynamic>.from(rows.first as Map);
+        final items = _portfolioItemsFromRow(row);
         _appendUnique(items);
       }
     } catch (e) {
@@ -2437,11 +2741,15 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     }
   }
 
-  List<ArtistPortfolioItem> _portfolioItemsFromJson(
-    Map<String, dynamic> portfolio,
-  ) {
+  List<ArtistPortfolioItem> _portfolioItemsFromRow(Map<String, dynamic> row) {
     final items = <ArtistPortfolioItem>[];
     final seen = <String>{};
+
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return const <String, dynamic>{};
+    }
 
     void addItem(String image, String style, String storagePath) {
       final url = image.trim();
@@ -2452,32 +2760,78 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       );
     }
 
-    final rawItems = portfolio['items'];
-    if (rawItems is List) {
-      for (final entry in rawItems.reversed) {
-        if (entry is Map) {
-          final m = Map<String, dynamic>.from(entry);
-          final image = _firstNonEmpty([
-            m['imageUrl'],
-            m['downloadUrl'],
-            m['url'],
-            m['image'],
-          ]);
-          final style = _firstNonEmpty([m['style'], m['category'], 'All']);
-          final path = _firstNonEmpty([m['storagePath'], m['path'], '']);
-          addItem(image, style, path);
-        } else if (entry is String) {
-          addItem(entry, 'All', '');
+    void addFromAny(Object? raw, {String fallbackStyle = 'All'}) {
+      if (raw == null) return;
+      if (raw is String) {
+        final value = raw.trim();
+        if (value.isEmpty || !_isPortfolioImageValue(value)) return;
+        addItem(value, fallbackStyle, '');
+        return;
+      }
+      if (raw is List) {
+        for (final value in raw.reversed) {
+          addFromAny(value, fallbackStyle: fallbackStyle);
+        }
+        return;
+      }
+      if (raw is Map) {
+        final map = Map<String, dynamic>.from(raw);
+        final image = _firstNonEmpty([
+          map['imageUrl'],
+          map['imageURL'],
+          map['downloadUrl'],
+          map['downloadURL'],
+          map['photoUrl'],
+          map['photoURL'],
+          map['url'],
+          map['image'],
+        ]);
+        final style = _firstNonEmpty([
+          map['style'],
+          map['category'],
+          map['type'],
+          fallbackStyle,
+        ]);
+        final storagePath = _firstNonEmpty([
+          map['storagePath'],
+          map['path'],
+          '',
+        ]);
+        if (image.isNotEmpty) {
+          addItem(image, style, storagePath);
+        }
+        for (final nested in map.values) {
+          if (nested is List || nested is Map) {
+            addFromAny(nested, fallbackStyle: fallbackStyle);
+          }
         }
       }
     }
 
-    final rawImages = portfolio['images'];
-    if (rawImages is List) {
-      for (final img in rawImages.reversed) {
-        if (img is String) addItem(img, 'All', '');
-      }
-    }
+    final portfolio = asMap(row['portfolio']);
+    final artist = asMap(row['artist']);
+    final artistPortfolio = asMap(artist['portfolio']);
+
+    addFromAny(portfolio['items']);
+    addFromAny(portfolio['images']);
+    addFromAny(row['portfolioItems']);
+    addFromAny(row['portfolio_items']);
+    addFromAny(row['portfolioImages']);
+    addFromAny(row['portfolio_images']);
+    addFromAny(row['panel_portfolioItems']);
+    addFromAny(row['panel_portfolio_items']);
+    addFromAny(row['panel_portfolioImages']);
+    addFromAny(row['panel_portfolio_images']);
+    addFromAny(row['panel_artist_portfolioItems']);
+    addFromAny(row['panel_artist_portfolio_items']);
+    addFromAny(row['panel_artist_portfolioImages']);
+    addFromAny(row['panel_artist_portfolio_images']);
+    addFromAny(artist['portfolioItems']);
+    addFromAny(artist['portfolio_items']);
+    addFromAny(artist['portfolioImages']);
+    addFromAny(artist['portfolio_images']);
+    addFromAny(artistPortfolio['items']);
+    addFromAny(artistPortfolio['images']);
 
     return items;
   }
@@ -2761,7 +3115,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           .select('portfolio')
           .eq('id', widget.supabaseId)
           .limit(1);
-      if (rows is List && rows.isNotEmpty) {
+      if (rows.isNotEmpty) {
         final portfolio =
             (rows.first['portfolio'] is Map)
             ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
@@ -2794,7 +3148,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
         } catch (_) {}
       } else if (path.isNotEmpty) {
         try {
-          await FirebaseStorage.instance.ref(path).delete();
+          await SupabaseBootstrap.client.storage
+              .from(_storageBucketForReference(path))
+              .remove([_storageObjectPathForReference(path)]);
         } catch (_) {}
       }
 
@@ -2900,12 +3256,14 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     }
     try {
       if (value.startsWith('gs://')) {
-        return await FirebaseStorage.instance
-            .refFromURL(value)
-            .getDownloadURL();
+        return await SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(value))
+            .getPublicUrl(_storageObjectPathForReference(value));
       }
       if (value.contains('/')) {
-        return await FirebaseStorage.instance.ref(value).getDownloadURL();
+        return await SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(value))
+            .getPublicUrl(_storageObjectPathForReference(value));
       }
     } catch (_) {}
     return '';
@@ -2916,16 +3274,18 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     if (value.isEmpty) return null;
     try {
       if (value.startsWith('gs://')) {
-        return await FirebaseStorage.instance
-            .refFromURL(value)
-            .getData(4 * 1024 * 1024)
+        final bytes = await SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(value))
+            .download(_storageObjectPathForReference(value))
             .timeout(const Duration(seconds: 8));
+        return Uint8List.fromList(bytes);
       }
       if (value.contains('/')) {
-        return await FirebaseStorage.instance
-            .ref(value)
-            .getData(4 * 1024 * 1024)
+        final bytes = await SupabaseBootstrap.client.storage
+            .from(_storageBucketForReference(value))
+            .download(_storageObjectPathForReference(value))
             .timeout(const Duration(seconds: 8));
+        return Uint8List.fromList(bytes);
       }
     } catch (_) {}
     return null;
@@ -3034,7 +3394,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
           .eq('id', widget.supabaseId)
           .limit(1);
       final avail =
-          (rows is List && rows.isNotEmpty && rows.first['availability'] is Map)
+          (rows.isNotEmpty && rows.first['availability'] is Map)
           ? Map<String, dynamic>.from(rows.first['availability'] as Map)
           : <String, dynamic>{};
       avail['dayStates'] = _dayStates;
@@ -3153,13 +3513,17 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
           children: [
             Row(
               children: [
+                const SizedBox(width: 48),
                 const Expanded(
-                  child: Text(
-                    'Availability',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat,
+                  child: Center(
+                    child: Text(
+                      'Availability',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
                     ),
                   ),
                 ),
@@ -3810,7 +4174,11 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
     ]);
     _studioNameCtrl.text = firstNonEmpty([
       profile['studioName'],
+      profile['studio_name'],
       data['panel_studioName'],
+      data['panel_studio_name'],
+      data['studioName'],
+      data['studio_name'],
     ]);
     _bioCtrl.text = firstNonEmpty([profile['bio'], data['panel_bio']]);
     _cityCtrl.text = firstNonEmpty([profile['city'], data['panel_city']]);
@@ -3966,15 +4334,6 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
             children: [
-              Container(
-                height: 5,
-                width: 44,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.blackCat,
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
               Row(
                 children: [
                   const Expanded(

@@ -3,6 +3,7 @@ import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 class EditPaymentInfoPage extends StatefulWidget {
   const EditPaymentInfoPage({super.key, required this.initial});
@@ -162,24 +163,9 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.pop(context),
+        closeTooltip: 'Close payment method',
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
@@ -514,4 +500,3 @@ class _ExpiryFormatter extends TextInputFormatter {
     );
   }
 }
-

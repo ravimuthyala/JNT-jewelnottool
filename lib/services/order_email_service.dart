@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'notifications_service.dart';
 
 class OrderEmailService {
   static Future<void> sendDeliveredReviewTipEmail({
@@ -38,25 +38,22 @@ class OrderEmailService {
 
     const appLink = 'https://jnt-app-c3097.web.app/open-app';
 
-    await FirebaseFirestore.instance.collection('mail').add({
-      'to': clientEmail,
-      'template': {
-        'name': 'client_order_delivered_review_tip',
-        'data': {
-          'clientName': clientName,
-          'artistName': artistName,
-          'orderId': orderId,
-          'artistId': artistId,
-          'deliveredDate': deliveredDate,
-          'trackingNumber': trackingNumber,
-          'reviewUrl': reviewUrl,
-          'tip10Url': tip10Url,
-          'tip15Url': tip15Url,
-          'tip20Url': tip20Url,
-          'appLink': appLink,
-        },
+    await NotificationsService.queueTemplatedEmail(
+      to: clientEmail,
+      templateName: 'client_order_delivered_review_tip',
+      data: {
+        'clientName': clientName,
+        'artistName': artistName,
+        'orderId': orderId,
+        'artistId': artistId,
+        'deliveredDate': deliveredDate,
+        'trackingNumber': trackingNumber,
+        'reviewUrl': reviewUrl,
+        'tip10Url': tip10Url,
+        'tip15Url': tip15Url,
+        'tip20Url': tip20Url,
+        'appLink': appLink,
       },
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    );
   }
 }

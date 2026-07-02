@@ -16,6 +16,7 @@ import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../models/client_profile_models.dart';
@@ -58,6 +59,17 @@ class _ClientArtistRegistrationPageState
   static const bool kAllowRegistrationWithoutCheckout = false;
 
   bool _submitting = false;
+  int _registrationStep = 0;
+
+  static const List<String> _registrationStepTitles = <String>[
+    'Profile &\nAddress',
+    'Nail Preference',
+    'Portfolio',
+    'Service &\nLocation',
+    'Payment &\nPayout',
+    'Bundles &\nAccount',
+  ];
+
 
   // -----------------------
   // Font sizes (match your existing pages)
@@ -79,6 +91,8 @@ class _ClientArtistRegistrationPageState
   // -----------------------
   final ImagePicker _picker = ImagePicker();
   Uint8List? _profileBytes;
+  final Map<String, Uint8List> _guidedMeasurementPhotos = {};
+  String _measurementCoinReference = 'US Penny (1¢)';
 
   // -----------------------
   // Shared Account Credentials (no duplicates)
@@ -136,6 +150,73 @@ class _ClientArtistRegistrationPageState
       RegistrationInputUtils.normalizePhone(_phoneCtrl.text);
   String get _fullPhone => '$_normalizedAreaCode$_normalizedPhone';
   String _timeZone = 'America/New_York';
+
+  void _registrationLog(String message) {
+    debugPrint('[CLIENT-ARTIST-REG] $message');
+  }
+
+  static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
+    _NailCaptureStep(
+      key: 'lThumb',
+      hand: 'left',
+      finger: 'thumb',
+      title: 'Left Thumb',
+    ),
+    _NailCaptureStep(
+      key: 'lIndex',
+      hand: 'left',
+      finger: 'index',
+      title: 'Left Index',
+    ),
+    _NailCaptureStep(
+      key: 'lMiddle',
+      hand: 'left',
+      finger: 'middle',
+      title: 'Left Middle',
+    ),
+    _NailCaptureStep(
+      key: 'lRing',
+      hand: 'left',
+      finger: 'ring',
+      title: 'Left Ring',
+    ),
+    _NailCaptureStep(
+      key: 'lPinky',
+      hand: 'left',
+      finger: 'pinky',
+      title: 'Left Pinky',
+    ),
+    _NailCaptureStep(
+      key: 'rThumb',
+      hand: 'right',
+      finger: 'thumb',
+      title: 'Right Thumb',
+    ),
+    _NailCaptureStep(
+      key: 'rIndex',
+      hand: 'right',
+      finger: 'index',
+      title: 'Right Index',
+    ),
+    _NailCaptureStep(
+      key: 'rMiddle',
+      hand: 'right',
+      finger: 'middle',
+      title: 'Right Middle',
+    ),
+    _NailCaptureStep(
+      key: 'rRing',
+      hand: 'right',
+      finger: 'ring',
+      title: 'Right Ring',
+    ),
+    _NailCaptureStep(
+      key: 'rPinky',
+      hand: 'right',
+      finger: 'pinky',
+      title: 'Right Pinky',
+    ),
+  ];
 
   // -----------------------
   // âœ… Checkout/cart state (ONLY changes are here + gating)
@@ -372,9 +453,9 @@ class _ClientArtistRegistrationPageState
 
   static const List<String> practiceDurations = [
     '< 3 months',
-    '3â€“6 months',
-    '6â€“12 months',
-    '1â€“2 years',
+    '3-6 months',
+    '6-12 months',
+    '1-2 years',
     '2+ years',
   ];
 
@@ -711,6 +792,36 @@ class _ClientArtistRegistrationPageState
       debugPrint('CLIENT ARTIST PROFILE UPLOAD FAILED: $e');
       return '';
     }
+  }
+
+  Future<Map<String, String>> _uploadGuidedMeasurementPhotos(String uid) async {
+    if (_guidedMeasurementPhotos.isEmpty) {
+      return const <String, String>{};
+    }
+
+    final storage = Supabase.instance.client.storage.from('profile-pictures');
+    final uploaded = <String, String>{};
+
+    for (final entry in _guidedMeasurementPhotos.entries) {
+      final path = 'client_artists/$uid/guided_measurements/${entry.key}.jpg';
+      try {
+        await storage.uploadBinary(
+          path,
+          entry.value,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        );
+        uploaded[entry.key] = storage.getPublicUrl(path).trim();
+      } catch (e) {
+        debugPrint(
+          'CLIENT ARTIST GUIDED MEASUREMENT UPLOAD FAILED (${entry.key}): $e',
+        );
+      }
+    }
+
+    return uploaded;
   }
 
   Map<String, dynamic> _normalizedArtistPayout() {
@@ -2008,13 +2119,691 @@ class _ClientArtistRegistrationPageState
     });
   }
 
+  NailDimensions _dimensionsWithOverrides(Map<String, double> measured) {
+    final d = _nailPrefs.dimensions;
+    return NailDimensions(
+      lThumb: measured['lThumb'] ?? d.lThumb,
+      lIndex: measured['lIndex'] ?? d.lIndex,
+      lMiddle: measured['lMiddle'] ?? d.lMiddle,
+      lRing: measured['lRing'] ?? d.lRing,
+      lPinky: measured['lPinky'] ?? d.lPinky,
+      rThumb: measured['rThumb'] ?? d.rThumb,
+      rIndex: measured['rIndex'] ?? d.rIndex,
+      rMiddle: measured['rMiddle'] ?? d.rMiddle,
+      rRing: measured['rRing'] ?? d.rRing,
+      rPinky: measured['rPinky'] ?? d.rPinky,
+    );
+  }
+
+  Future<double?> _askManualMeasurement(String fingerTitle) async {
+    final ctrl = TextEditingController();
+    final value = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.snow,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text('Enter $fingerTitle (mm)'),
+        content: TextField(
+          controller: ctrl,
+          style: const TextStyle(fontSize: _inputFs),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            hintText: 'e.g. 14.5',
+            border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.blackCatLight,
+              foregroundColor: AppColors.snow,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+              textStyle: Theme.of(
+                ctx,
+              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final parsed = double.tryParse(ctrl.text.trim());
+              Navigator.pop(ctx, parsed);
+            },
+            style: ElevatedButton.styleFrom(
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              backgroundColor: AppColors.blackCat,
+              foregroundColor: AppColors.snow,
+              textStyle: Theme.of(
+                ctx,
+              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return value;
+  }
+
+  Map<String, double> _currentMeasuredMap() {
+    final d = _nailPrefs.dimensions;
+    final out = <String, double>{};
+    void put(String key, double? v) {
+      if (v != null) out[key] = v;
+    }
+
+    put('lThumb', d.lThumb);
+    put('lIndex', d.lIndex);
+    put('lMiddle', d.lMiddle);
+    put('lRing', d.lRing);
+    put('lPinky', d.lPinky);
+    put('rThumb', d.rThumb);
+    put('rIndex', d.rIndex);
+    put('rMiddle', d.rMiddle);
+    put('rRing', d.rRing);
+    put('rPinky', d.rPinky);
+    return out;
+  }
+
+  void _persistMeasuredMap(Map<String, double> measured) {
+    setState(() {
+      _nailPrefs = NailPreferences(
+        dimensions: _dimensionsWithOverrides(measured),
+        shape: _nailPrefs.shape,
+        length: _nailPrefs.length,
+      );
+    });
+  }
+
+  Future<bool> _showMeasurementGuide() async {
+    final allowed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: AppBar(
+            backgroundColor: AppColors.snow,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () => Navigator.pop(context, false),
+            ),
+            centerTitle: true,
+            title: const Text(
+              'Nail Measurement',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.snow,
+                      borderRadius: BorderRadius.zero,
+                      border: Border.all(
+                        color: AppColors.blackCat.withValues(alpha: 0.10),
+                      ),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.straighten_rounded, size: 26),
+                        SizedBox(height: 12),
+                        Text(
+                          'How to Measure Your Nails',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          "We'll use a coin or currency as a reference guide to accurately measure your nail width.",
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const _MeasureStepTile(
+                    step: 1,
+                    title: 'Keep It Flat',
+                    subtitle:
+                        'Position your finger flat on a table for maximum accuracy.',
+                  ),
+                  const _MeasureStepTile(
+                    step: 2,
+                    title: 'Use a Reference Coin',
+                    subtitle:
+                        'Place the coin next to your fingernail to use as a measurement guide.',
+                  ),
+                  const _MeasureStepTile(
+                    step: 3,
+                    title: 'Scan with Camera',
+                    subtitle:
+                        "Point your phone's camera to capture both your nail and the reference coin.",
+                  ),
+                  const _MeasureStepTile(
+                    step: 4,
+                    title: 'Confirm Measurement',
+                    subtitle:
+                        "We'll calculate your nail width based on the coin reference.",
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.blackCat,
+                        foregroundColor: AppColors.snow,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                      child: const Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.snow,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return allowed == true;
+  }
+
+  Future<String?> _showCoinSelector() async {
+    final selected = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _CoinSelectorPage(
+          items: _coinReferences,
+          progressText: '${_currentMeasuredMap().length}/10',
+        ),
+      ),
+    );
+    return selected;
+  }
+
+  Future<void> _startGuidedNailMeasurement() async {
+    if (!mounted) return;
+    final proceed = await _showMeasurementGuide();
+    if (!proceed || !mounted) return;
+
+    final selectedCoin = await _showCoinSelector();
+    if (selectedCoin == null || selectedCoin.trim().isEmpty || !mounted) {
+      return;
+    }
+    _measurementCoinReference = selectedCoin;
+
+    final measured = _currentMeasuredMap();
+    var stepIndex = 0;
+    var measuring = false;
+    var sheetClosed = false;
+    final pageContext = context;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.blackCat,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (modalContext, setModalState) {
+            final step = _nailCaptureSteps[stepIndex];
+            final progressLabel =
+                '${measured.length}/${_nailCaptureSteps.length}';
+
+            Future<void> saveCurrentAndMoveNext(double mm) async {
+              if (!mm.isFinite || mm <= 0) {
+                _registrationLog('invalid measurement for ${step.key}: $mm');
+                ScaffoldMessenger.of(pageContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Invalid measurement value. Please try again.'),
+                  ),
+                );
+                return;
+              }
+              _registrationLog('saving measurement ${step.key} => $mm');
+              measured[step.key] = (mm * 10).roundToDouble() / 10.0;
+              _persistMeasuredMap(measured);
+              if (stepIndex < _nailCaptureSteps.length - 1) {
+                _registrationLog('moving to next step index=${stepIndex + 1}');
+                setModalState(() => stepIndex += 1);
+              } else {
+                _registrationLog('final step complete; closing measurement sheet');
+                sheetClosed = true;
+                Navigator.of(sheetContext).pop();
+                ScaffoldMessenger.of(pageContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Nail measurements saved for both hands.'),
+                  ),
+                );
+              }
+            }
+
+            Future<void> captureCurrentStep() async {
+              if (measuring) return;
+              setModalState(() => measuring = true);
+              try {
+                _registrationLog('opening camera for ${step.key}');
+                final image = await _picker.pickImage(
+                  source: ImageSource.camera,
+                  imageQuality: 80,
+                  maxWidth: 1080,
+                  maxHeight: 1080,
+                );
+                if (image == null) {
+                  _registrationLog('camera canceled for ${step.key}');
+                  return;
+                }
+
+                final bytes = await image.readAsBytes();
+                _guidedMeasurementPhotos[step.key] = bytes;
+                _registrationLog(
+                  'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
+                );
+
+                final mm = await _askManualMeasurement(step.title);
+                if (mm == null) return;
+                await saveCurrentAndMoveNext(mm);
+              } catch (_) {
+                _registrationLog('capture failed for ${step.key}');
+                if (mounted) {
+                  ScaffoldMessenger.of(pageContext).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Unable to measure from photo. Please try again.',
+                      ),
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted && !sheetClosed) {
+                  setModalState(() => measuring = false);
+                }
+              }
+            }
+
+            return SafeArea(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                ),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  14,
+                  16,
+                  16 + MediaQuery.of(modalContext).viewInsets.bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Measure Your Nail',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          progressLabel,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemBuilder: (_, i) {
+                          final s = _nailCaptureSteps[i];
+                          final done = measured[s.key] != null;
+                          final current = i == stepIndex;
+                          return InkWell(
+                            onTap: () => setModalState(() => stepIndex = i),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: current
+                                    ? AppColors.blackCat
+                                    : (done
+                                          ? AppColors.balletSlippers
+                                          : AppColors.snow),
+                                border: Border.all(
+                                  color: current
+                                      ? AppColors.blackCat
+                                      : AppColors.blackCat.withValues(alpha: 0.12),
+                                ),
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              child: Text(
+                                s.finger,
+                                style: TextStyle(
+                                  color: current
+                                      ? AppColors.snow
+                                      : AppColors.blackCat,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemCount: _nailCaptureSteps.length,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      height: 320,
+                      decoration: const BoxDecoration(
+                        color: AppColors.blackCat,
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.camera_alt_rounded,
+                              size: 70,
+                              color: AppColors.snow,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Scan your ${step.title}',
+                              style: const TextStyle(
+                                color: AppColors.snow,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Reference: $_measurementCoinReference',
+                      style: const TextStyle(
+                        color: AppColors.blackCat,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        fontFamily: 'ArialBold',
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Enter width in mm for each finger (you can re-image any finger and latest value is saved).',
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontSize: 13,
+                        fontFamily: 'Arial',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        color: AppColors.snow,
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: const Text(
+                        'Captured photos will upload with your client-artist account when you sign up.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: measuring
+                                ? null
+                                : () async {
+                                    try {
+                                      _registrationLog(
+                                        'manual entry opened for ${step.key}',
+                                      );
+                                      final manual = await _askManualMeasurement(
+                                        step.title,
+                                      );
+                                      if (manual == null) return;
+                                      await saveCurrentAndMoveNext(manual);
+                                    } catch (e) {
+                                      _registrationLog(
+                                        'manual save failed for ${step.key}: $e',
+                                      );
+                                    }
+                                  },
+                            style: OutlinedButton.styleFrom(
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            child: const Text('Enter Manually'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: measuring ? null : captureCurrentStep,
+                            icon: measuring
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.camera_alt_outlined),
+                            label: Text(
+                              measuring
+                                  ? 'Measuring...'
+                                  : (measured[step.key] == null
+                                        ? 'Capture'
+                                        : 'Re-image'),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () async {
+                        final nextCoin = await _showCoinSelector();
+                        if (nextCoin == null || nextCoin.trim().isEmpty) return;
+                        setModalState(() => _measurementCoinReference = nextCoin);
+                      },
+                      child: const Text('Change Coin/Currency'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // -----------------------
   // Submit
   // -----------------------
-  Future<void> _continue() async {
-    final ok = _formKey.currentState?.validate() ?? false;
-    if (!ok) return;
-    if (_instagramCtrl.text.trim().isEmpty && _tiktokCtrl.text.trim().isEmpty) {
+  String get _registrationDraftId {
+    final email = _emailCtrl.text.trim().toLowerCase();
+    if (email.isNotEmpty) return email;
+    return 'local_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Map<String, dynamic> _criticalRegistrationPayload({required String uid}) {
+    final payload = _buildCombinedFirestorePayload(uid: uid);
+    final basic = <String, dynamic>{
+      'name': _displayNameCtrl.text.trim().isNotEmpty
+          ? _displayNameCtrl.text.trim()
+          : _fullNameOrStudioCtrl.text.trim(),
+      'email': _emailCtrl.text.trim().toLowerCase(),
+      'phone': _fullPhone,
+      'profileImageUrl': '',
+    };
+    final now = DateTime.now().toIso8601String();
+    return <String, dynamic>{
+      'id': uid,
+      'email': _emailCtrl.text.trim().toLowerCase(),
+      'account_type': 'client_artist',
+      'profile': payload['profile'],
+      'basic': basic,
+      'address': payload['address'],
+      'payment': payload['payment'],
+      'nail_preferences': payload['nailPreferences'],
+      'artist_profile': payload['artist'],
+      'services': payload['artist']['services'],
+      'pricing': payload['artist']['pricing'],
+      'availability': payload['artist']['availability'],
+      'portfolio': payload['artist']['portfolio'],
+      'credentials': payload['artist']['credentials'],
+      'bundle': payload['artist']['bundle'],
+      'payout': payload['artist']['payout'],
+      'agreements': payload['artist']['agreements'],
+      'registration': payload['registration'],
+      'displayName': _displayNameCtrl.text.trim(),
+      'studioName': _fullNameOrStudioCtrl.text.trim(),
+      'name': _displayNameCtrl.text.trim().isNotEmpty
+          ? _displayNameCtrl.text.trim()
+          : _fullNameOrStudioCtrl.text.trim(),
+      'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+      'fullName': _displayNameCtrl.text.trim().isNotEmpty
+          ? _displayNameCtrl.text.trim()
+          : _fullNameOrStudioCtrl.text.trim(),
+      'profileImageUrl': '',
+      'profilePhotoUrl': '',
+      'photoUrl': '',
+      'avatarUrl': '',
+      'panel_displayName': _displayNameCtrl.text.trim(),
+      'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+      'panel_profileImageUrl': '',
+      'updated_at': now,
+    };
+  }
+
+  Future<void> _persistRegistrationDraftStep({int? step}) async {
+    final email = _emailCtrl.text.trim().toLowerCase();
+    if (email.isEmpty) return;
+
+    try {
+      final payload = _buildCombinedFirestorePayload(uid: _registrationDraftId);
+      final basic = <String, dynamic>{
+        'name': _displayNameCtrl.text.trim().isNotEmpty
+            ? _displayNameCtrl.text.trim()
+            : _fullNameOrStudioCtrl.text.trim(),
+        'email': email,
+        'phone': _fullPhone,
+        'profileImageUrl': '',
+      };
+
+      await Supabase.instance.client
+          .from('client_artist_registration_drafts')
+          .upsert(<String, dynamic>{
+            'id': _registrationDraftId,
+            'email': email,
+            'current_step': step ?? _registrationStep,
+            'account_type': 'client_artist',
+            'profile': payload['profile'],
+            'basic': basic,
+            'address': payload['address'],
+            'payment': payload['payment'],
+            'nail_preferences': payload['nailPreferences'],
+            'artist_profile': payload['artist'],
+            'registration': payload['registration'],
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .timeout(const Duration(seconds: 4));
+    } catch (e) {
+      // Draft saving should never block the user from continuing the wizard.
+      debugPrint('CLIENT ARTIST DRAFT SAVE SKIPPED: $e');
+    }
+  }
+
+  Future<bool> _validateCurrentRegistrationStep() async {
+    final ok = _formKey.currentState?.validate() ?? true;
+    if (!ok) return false;
+
+    if (_registrationStep == 0 && _isUnitedStates) {
+      try {
+        final addressValidation =
+            await AddressValidationService.validateUsAddress(
+          street: _streetCtrl.text.trim(),
+          city: _cityCtrl.text.trim(),
+          state: _resolvedState,
+          zip: _zipCtrl.text.trim(),
+        ).timeout(const Duration(seconds: 8));
+        if (!addressValidation.isValid) {
+          if (!mounted) return false;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                addressValidation.message ?? 'Invalid U.S. mailing address.',
+              ),
+            ),
+          );
+          return false;
+        }
+      } on TimeoutException {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Address validation timed out. Please try again.'),
+          ),
+        );
+        return false;
+      }
+    }
+
+    if (_registrationStep == 2 &&
+        _instagramCtrl.text.trim().isEmpty &&
+        _tiktokCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -2022,29 +2811,166 @@ class _ClientArtistRegistrationPageState
           ),
         ),
       );
-      return;
+      return false;
     }
-    if (_isUnitedStates) {
-      final addressValidation =
-          await AddressValidationService.validateUsAddress(
-            street: _streetCtrl.text.trim(),
-            city: _cityCtrl.text.trim(),
-            state: _resolvedState,
-            zip: _zipCtrl.text.trim(),
-          );
-      if (!addressValidation.isValid) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              addressValidation.message ?? 'Invalid U.S. mailing address.',
-            ),
-          ),
+
+    return true;
+  }
+
+  Future<void> _saveCriticalClientArtistRows(User supabaseUser) async {
+    final uid = supabaseUser.id;
+    final supabase = Supabase.instance.client;
+    final critical = _criticalRegistrationPayload(uid: uid);
+    final now = DateTime.now().toIso8601String();
+
+    // Save the combined role first so the app can render the correct account
+    // immediately after auth succeeds.
+    await supabase.from('client_artist').upsert(critical).timeout(
+          const Duration(seconds: 12),
         );
-        return;
+
+    // Keep the client table in sync because client-artist can also receive
+    // client requests. This is much smaller than the old full final submit.
+    await supabase.from('client').upsert(<String, dynamic>{
+      'id': uid,
+      'email': critical['email'],
+      'account_type': 'client_artist',
+      'profile': critical['profile'],
+      'basic': critical['basic'],
+      'address': critical['address'],
+      'payment': critical['payment'],
+      'nail_preferences': critical['nail_preferences'],
+      'registration': critical['registration'],
+      'updated_at': now,
+    }).timeout(const Duration(seconds: 12));
+  }
+
+  Future<void> _finishNonBlockingRegistrationSave(User supabaseUser) async {
+    final uid = supabaseUser.id;
+    final supabase = Supabase.instance.client;
+
+    try {
+      final profilePhotoUrl = await _uploadProfileImage(uid);
+      final portfolioImageUrls = await _uploadPortfolioImages(uid);
+      final guidedMeasurementPhotoUrls =
+          await _uploadGuidedMeasurementPhotos(uid);
+
+      final payload = _buildCombinedFirestorePayload(
+        uid: uid,
+        profilePhotoUrl: profilePhotoUrl.trim(),
+        portfolioImageUrls: portfolioImageUrls,
+      );
+      final basic = <String, dynamic>{
+        'name': _displayNameCtrl.text.trim().isNotEmpty
+            ? _displayNameCtrl.text.trim()
+            : _fullNameOrStudioCtrl.text.trim(),
+        'email': _emailCtrl.text.trim().toLowerCase(),
+        'phone': _fullPhone,
+        'profileImageUrl': profilePhotoUrl.trim(),
+      };
+      final registration = Map<String, dynamic>.from(
+        (payload['registration'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{},
+      )..['guidedMeasurementPhotos'] = guidedMeasurementPhotoUrls;
+      final now = DateTime.now().toIso8601String();
+
+      await supabase.from('client_artist').upsert(<String, dynamic>{
+        'id': uid,
+        'email': _emailCtrl.text.trim().toLowerCase(),
+        'account_type': 'client_artist',
+        'displayName': _displayNameCtrl.text.trim(),
+        'studioName': _fullNameOrStudioCtrl.text.trim(),
+        'name': _displayNameCtrl.text.trim().isNotEmpty
+            ? _displayNameCtrl.text.trim()
+            : _fullNameOrStudioCtrl.text.trim(),
+        'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+        'fullName': _displayNameCtrl.text.trim().isNotEmpty
+            ? _displayNameCtrl.text.trim()
+            : _fullNameOrStudioCtrl.text.trim(),
+        'profileImageUrl': profilePhotoUrl.trim(),
+        'profilePhotoUrl': profilePhotoUrl.trim(),
+        'photoUrl': profilePhotoUrl.trim(),
+        'avatarUrl': profilePhotoUrl.trim(),
+        'panel_displayName': _displayNameCtrl.text.trim(),
+        'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+        'panel_profileImageUrl': profilePhotoUrl.trim(),
+        'profile': payload['profile'],
+        'basic': basic,
+        'address': payload['address'],
+        'payment': payload['payment'],
+        'nail_preferences': payload['nailPreferences'],
+        'artist_profile': payload['artist'],
+        'services': payload['artist']['services'],
+        'pricing': payload['artist']['pricing'],
+        'availability': payload['artist']['availability'],
+        'portfolio': payload['artist']['portfolio'],
+        'credentials': payload['artist']['credentials'],
+        'bundle': payload['artist']['bundle'],
+        'payout': payload['artist']['payout'],
+        'agreements': payload['artist']['agreements'],
+        'registration': registration,
+        'updated_at': now,
+      });
+
+      await supabase.from('client').upsert(<String, dynamic>{
+        'id': uid,
+        'email': _emailCtrl.text.trim().toLowerCase(),
+        'account_type': 'client_artist',
+        'profile': payload['profile'],
+        'basic': basic,
+        'address': payload['address'],
+        'payment': payload['payment'],
+        'nail_preferences': payload['nailPreferences'],
+        'registration': registration,
+        'updated_at': now,
+      });
+
+      // Artist table is a mirror only. Do not block account creation if this
+      // table has triggers/schema differences.
+      try {
+        await supabase.from('artist').upsert(<String, dynamic>{
+          'id': uid,
+          'email': _emailCtrl.text.trim().toLowerCase(),
+          'account_type': 'client_artist',
+          'displayName': _displayNameCtrl.text.trim(),
+          'studioName': _fullNameOrStudioCtrl.text.trim(),
+          'name': _displayNameCtrl.text.trim().isNotEmpty
+              ? _displayNameCtrl.text.trim()
+              : _fullNameOrStudioCtrl.text.trim(),
+          'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+          'fullName': _displayNameCtrl.text.trim().isNotEmpty
+              ? _displayNameCtrl.text.trim()
+              : _fullNameOrStudioCtrl.text.trim(),
+          'profileImageUrl': profilePhotoUrl.trim(),
+          'profilePhotoUrl': profilePhotoUrl.trim(),
+          'photoUrl': profilePhotoUrl.trim(),
+          'avatarUrl': profilePhotoUrl.trim(),
+          'panel_displayName': _displayNameCtrl.text.trim(),
+          'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+          'panel_profileImageUrl': profilePhotoUrl.trim(),
+          'profile': payload['profile'],
+          'services': payload['artist']['services'],
+          'pricing': payload['artist']['pricing'],
+          'availability': payload['artist']['availability'],
+          'portfolio': payload['artist']['portfolio'],
+          'credentials': payload['artist']['credentials'],
+          'bundle': payload['artist']['bundle'],
+          'payout': payload['artist']['payout'],
+          'agreements': payload['artist']['agreements'],
+          'updated_at': now,
+        });
+      } catch (e) {
+        debugPrint('CLIENT ARTIST BACKGROUND ARTIST MIRROR SKIPPED: $e');
       }
+    } catch (e, st) {
+      debugPrint('CLIENT ARTIST BACKGROUND SAVE ERROR');
+      debugPrint(e.toString());
+      debugPrint(st.toString());
     }
-    if (!mounted) return;
+  }
+
+  Future<void> _continue() async {
+    if (!await _validateCurrentRegistrationStep()) return;
 
     if (!kAllowRegistrationWithoutCheckout) {
       if (!_canStartCheckout) {
@@ -2081,161 +3007,41 @@ class _ClientArtistRegistrationPageState
     if (_submitting) return;
     setState(() => _submitting = true);
 
-    Future<void> rollbackCreatedUserIfNeeded() async {
-      // Supabase user deletion must be handled server-side/admin-side.
-      // For Phase 3, we avoid deleting the auth user from the app if profile saving fails.
-    }
-
     try {
-      await SupabaseAuthService.logout();
-      final supabaseUser = await SupabaseAuthService.signup(
-        email: _emailCtrl.text.trim().toLowerCase(),
-        password: _passCtrl.text.trim(),
-      );
+      await _persistRegistrationDraftStep(step: _registrationStep);
+      await SupabaseAuthService.logout().timeout(const Duration(seconds: 8));
+
+      User? supabaseUser;
+      try {
+        supabaseUser = await SupabaseAuthService.signup(
+          email: _emailCtrl.text.trim().toLowerCase(),
+          password: _passCtrl.text.trim(),
+        ).timeout(const Duration(seconds: 18));
+      } on AuthException catch (e) {
+        final alreadyRegistered = e.message.toLowerCase().contains('already');
+        if (!alreadyRegistered) rethrow;
+
+        final existingUser = await SupabaseAuthService.login(
+          email: _emailCtrl.text.trim().toLowerCase(),
+          password: _passCtrl.text.trim(),
+        ).timeout(const Duration(seconds: 18));
+        if (existingUser == null) rethrow;
+        supabaseUser = existingUser;
+      }
 
       if (supabaseUser == null) {
         throw Exception('Unable to create user.');
       }
 
-      final uid = supabaseUser.id;
-      // Disabled during Supabase Phase 4 because this helper still writes to Firebase/Firestore.
-      // Recreate this mapping in Supabase if the app still needs login email aliases.
-      // await AuthEmailAliasService.saveAliasMapping(
-      //   loginEmail: _emailCtrl.text,
-      //   authEmail: supabaseUser.email ?? _emailCtrl.text.trim().toLowerCase(),
-      //   uid: uid,
-      // );
-
-      final profilePhotoUrl = await _uploadProfileImage(uid);
-      debugPrint('CLIENT ARTIST FINAL PROFILE URL = $profilePhotoUrl');
-
-      final portfolioImageUrls = await _uploadPortfolioImages(uid);
-      debugPrint('CLIENT ARTIST FINAL PORTFOLIO URLS = $portfolioImageUrls');
-
-      final payload = _buildCombinedFirestorePayload(
-        uid: uid,
-        profilePhotoUrl: profilePhotoUrl.trim(),
-        portfolioImageUrls: portfolioImageUrls,
-      );
-      final draft = _buildClientProfileDraft(profilePhotoUrl: profilePhotoUrl);
-      try {
-        final supabase = Supabase.instance.client;
-
-        await supabase.from('client').upsert({
-          'id': uid,
-          'email': _emailCtrl.text.trim().toLowerCase(),
-          'account_type': 'client_artist',
-
-          'profile': payload['profile'],
-          'basic': {
-            'name': _displayNameCtrl.text.trim().isNotEmpty
-                ? _displayNameCtrl.text.trim()
-                : _fullNameOrStudioCtrl.text.trim(),
-            'email': _emailCtrl.text.trim().toLowerCase(),
-            'phone': _fullPhone,
-            'profileImageUrl': profilePhotoUrl.trim(),
-          },
-          'address': payload['address'],
-          'payment': payload['payment'],
-          'nail_preferences': payload['nailPreferences'],
-          'registration': payload['registration'],
-
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-
-        await supabase.from('artist').upsert({
-          'id': uid,
-          'email': _emailCtrl.text.trim().toLowerCase(),
-          'account_type': 'client_artist',
-          'displayName': _displayNameCtrl.text.trim(),
-          'studioName': _fullNameOrStudioCtrl.text.trim(),
-          'name': _displayNameCtrl.text.trim().isNotEmpty
-              ? _displayNameCtrl.text.trim()
-              : _fullNameOrStudioCtrl.text.trim(),
-          'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-          'fullName': _displayNameCtrl.text.trim().isNotEmpty
-              ? _displayNameCtrl.text.trim()
-              : _fullNameOrStudioCtrl.text.trim(),
-          'profileImageUrl': profilePhotoUrl.trim(),
-          'profilePhotoUrl': profilePhotoUrl.trim(),
-          'photoUrl': profilePhotoUrl.trim(),
-          'avatarUrl': profilePhotoUrl.trim(),
-          'panel_displayName': _displayNameCtrl.text.trim(),
-          'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-          'panel_profileImageUrl': profilePhotoUrl.trim(),
-
-          'profile': payload['profile'],
-          'services': payload['artist']['services'],
-          'pricing': payload['artist']['pricing'],
-          'availability': payload['artist']['availability'],
-          'portfolio': payload['artist']['portfolio'],
-          'credentials': payload['artist']['credentials'],
-          'bundle': payload['artist']['bundle'],
-          'payout': payload['artist']['payout'],
-          'agreements': payload['artist']['agreements'],
-
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-
-        await supabase.from('client_artist').upsert({
-          'id': uid,
-          'email': _emailCtrl.text.trim().toLowerCase(),
-          'account_type': 'client_artist',
-          'displayName': _displayNameCtrl.text.trim(),
-          'studioName': _fullNameOrStudioCtrl.text.trim(),
-          'name': _displayNameCtrl.text.trim().isNotEmpty
-              ? _displayNameCtrl.text.trim()
-              : _fullNameOrStudioCtrl.text.trim(),
-          'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-          'fullName': _displayNameCtrl.text.trim().isNotEmpty
-              ? _displayNameCtrl.text.trim()
-              : _fullNameOrStudioCtrl.text.trim(),
-          'profileImageUrl': profilePhotoUrl.trim(),
-          'profilePhotoUrl': profilePhotoUrl.trim(),
-          'photoUrl': profilePhotoUrl.trim(),
-          'avatarUrl': profilePhotoUrl.trim(),
-          'panel_displayName': _displayNameCtrl.text.trim(),
-          'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-          'panel_profileImageUrl': profilePhotoUrl.trim(),
-
-          'profile': payload['profile'],
-          'address': payload['address'],
-          'payment': payload['payment'],
-          'nail_preferences': payload['nailPreferences'],
-
-          'artist_profile': payload['artist'],
-          'services': payload['artist']['services'],
-          'pricing': payload['artist']['pricing'],
-          'availability': payload['artist']['availability'],
-          'portfolio': payload['artist']['portfolio'],
-          'credentials': payload['artist']['credentials'],
-          'bundle': payload['artist']['bundle'],
-          'payout': payload['artist']['payout'],
-          'agreements': payload['artist']['agreements'],
-          'registration': payload['registration'],
-
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-
-      } catch (e, st) {
-        debugPrint('CLIENT ARTIST SUPABASE SAVE ERROR');
-        debugPrint(e.toString());
-        debugPrint(st.toString());
-
-        await rollbackCreatedUserIfNeeded();
-
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Supabase error: $e')),
-        );
-        return;
-      }
+      await _saveCriticalClientArtistRows(supabaseUser);
 
       if (!mounted) return;
+      final draft = _buildClientProfileDraft();
+      final enableAllTabs =
+          draft.isComplete && (_hasSizingKitAlready || _kitPaid || _bundlePaid);
 
-      // Supabase handles email verification from your Supabase Auth settings.
-      if (!mounted) return;
+      unawaited(_finishNonBlockingRegistrationSave(supabaseUser));
+
       if (kRequireEmailVerification) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
@@ -2247,25 +3053,6 @@ class _ClientArtistRegistrationPageState
           (_) => false,
         );
       } else {
-        final hasSizingKitAlready =
-            payload['panel_client_hasSizingKitAlready'] == true ||
-            ((payload['client']
-                    as Map<String, dynamic>?)?['hasSizingKitAlready'] ==
-                true);
-        final kitPurchased =
-            payload['panel_client_kitPurchased'] == true ||
-            payload['panel_registration_kitPaid'] == true ||
-            ((payload['client'] as Map<String, dynamic>?)?['kitPurchased'] ==
-                true);
-        final bundlePurchased =
-            payload['panel_registration_bundlePaid'] == true ||
-            payload['panel_artist_bundlePurchased'] == true ||
-            (((payload['artist'] as Map<String, dynamic>?)?['bundle']
-                    as Map<String, dynamic>?)?['purchased'] ==
-                true);
-        final enableAllTabs =
-            draft.isComplete &&
-            (hasSizingKitAlready || kitPurchased || bundlePurchased);
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => ClientArtistHomePage(
@@ -2277,8 +3064,12 @@ class _ClientArtistRegistrationPageState
           (_) => false,
         );
       }
+    } on TimeoutException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Registration timed out: $e')),
+      );
     } on AuthException catch (e) {
-      await rollbackCreatedUserIfNeeded();
       if (!mounted) return;
       final message = e.message.toLowerCase().contains('already')
           ? 'Email already registered. Please sign in.'
@@ -2290,8 +3081,6 @@ class _ClientArtistRegistrationPageState
       debugPrint('CLIENT_ARTIST_REGISTRATION_ERROR');
       debugPrint(e.toString());
       debugPrint(st.toString());
-
-      await rollbackCreatedUserIfNeeded();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Registration failed: $e')),
@@ -2354,6 +3143,1902 @@ class _ClientArtistRegistrationPageState
     super.dispose();
   }
 
+
+  Widget _basicProfileSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Basic Profile',
+                        subtitle: 'Enter your profile details.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _profilePicTile(),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Full Name / Studio Name'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _fullNameOrStudioCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Name', 'Enter Name'),
+                              validator: (v) => _requiredValidator(v, 'Name'),
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Display Name'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _displayNameCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Display Name', 'Enter Display Name'),
+                              validator: (v) => _requiredValidator(v, 'Display Name'),
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Language Spoken'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _languageSpokenCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec(
+                                'Language Spoken',
+                                'Enter language(s) spoken',
+                              ),
+                              validator: (v) =>
+                                  _requiredValidator(v, 'Language Spoken'),
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Currency'),
+                            const SizedBox(height: 6),
+                            _typeAheadPicker(
+                              label: 'Currency',
+                              hint: 'Select Currency',
+                              options: currencyOptions,
+                              selectedValue: _currency,
+                              onChanged: (v) => setState(() => _currency = v),
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Currency is required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.normal('Bio'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _bioCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              maxLines: 3,
+                              decoration: _dec('Bio', 'Tell us about you'),
+                            ),
+                            const SizedBox(height: 16),
+
+                            _FieldLabel.required('Phone'),
+                            const SizedBox(height: 6),
+                            FormField<String>(
+                              validator: (value) => _phoneValidator(_phoneCtrl.text),
+                              builder: (field) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      height: _fieldHeight,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.snow,
+                                        borderRadius: BorderRadius.zero,
+                                        border: Border.all(
+                                          color: AppColors.blackCatBorderLight,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 132,
+                                            child: _countryCodeDropdown(
+                                              value: _phoneAreaCode,
+                                              embedded: true,
+                                              onChanged: (code) => setState(
+                                                () => _phoneAreaCode =
+                                                    code.dialCode ?? '+1',
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            width: 1,
+                                            color: AppColors.blackCatBorderLight,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _phoneCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              keyboardType: TextInputType.phone,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                                LengthLimitingTextInputFormatter(10),
+                                                UsPhoneTextInputFormatter(),
+                                              ],
+                                              onChanged: field.didChange,
+                                              decoration: InputDecoration(
+                                                hintText: 'Enter 10-digit phone',
+                                                hintStyle: TextStyle(
+                                                  fontSize: _hintFs - 0.5,
+                                                  color: _blackCat.withValues(alpha: 0.45),
+                                                  fontFamily: 'Arial',
+                                                ),
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: _fieldVerticalPadding,
+                                                    ),
+                                                isDense: false,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                        ],
+                                      ),
+                                    ),
+                                    if (field.hasError)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 6,
+                                          left: 4,
+                                        ),
+                                        child: Text(
+                                          field.errorText!,
+                                          style: const TextStyle(
+                                            color: Color(0xFFB3261E),
+                                            fontSize: 10.5,
+                                            height: 1.1,
+                                            fontFamily: 'Arial',
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            _FieldLabel.required('Email ID'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _emailCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: _dec('Email', 'Enter Email'),
+                              validator: _emailValidator,
+                            ),
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _accountCredentialsSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Account Credentials',
+                        subtitle: 'Enter your details.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel.required('Email'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _emailCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: _dec('Email', 'Enter Email'),
+                              validator: _emailValidator,
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Password'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _passCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              obscureText: _obscurePassword,
+                              decoration: _dec(
+                                'Password',
+                                'Enter Password',
+                                suffixIcon: IconButton(
+                                  iconSize: 18,
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                ),
+                              ),
+                              validator: _passwordValidator,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Password must be 8+ characters and include uppercase, lowercase, number, and symbol.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.blackCat.withValues(alpha: 0.55),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Confirm Password'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _confirmCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              obscureText: _obscureConfirmPassword,
+                              decoration: _dec(
+                                'Confirm Password',
+                                'Re-enter Password',
+                                suffixIcon: IconButton(
+                                  iconSize: 18,
+                                  onPressed: () => setState(
+                                    () => _obscureConfirmPassword =
+                                        !_obscureConfirmPassword,
+                                  ),
+                                  icon: Icon(
+                                    _obscureConfirmPassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                ),
+                              ),
+                              validator: _confirmPasswordValidator,
+                            ),
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _addressInfoSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Address Information',
+                        subtitle: 'Enter your Shipping Information',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel.required('Street Address'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _streetCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec(
+                                'Street Address',
+                                'Enter Street Address',
+                              ),
+                              onChanged: (_) => _autofillAddressFromStreet(),
+                              validator: (v) =>
+                                  _requiredValidator(v, 'Street Address'),
+                            ),
+                            if (_streetSuggestionsLoading)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: LinearProgressIndicator(minHeight: 2),
+                              ),
+                            if (_streetSuggestions.isNotEmpty)
+                              Builder(
+                                builder: (context) {
+                                  final suggestionCount = _streetSuggestions.length;
+                                  final menuHeight =
+                                      AutocompleteDropdownSizing.menuHeight(
+                                        itemCount: suggestionCount,
+                                        itemExtent: 40,
+                                      );
+                                  return Container(
+                                    margin: const EdgeInsets.only(top: 8),
+                                    decoration: BoxDecoration(
+                                      color: _snow,
+                                      borderRadius: BorderRadius.zero,
+                                      border: Border.all(
+                                        color: _blackCat.withValues(alpha: 0.20),
+                                      ),
+                                    ),
+                                    constraints: BoxConstraints(
+                                      maxHeight: menuHeight,
+                                    ),
+                                    child: ListView.separated(
+                                      shrinkWrap:
+                                          AutocompleteDropdownSizing.shrinkWrap(
+                                            suggestionCount,
+                                          ),
+                                      physics:
+                                          AutocompleteDropdownSizing.scrollPhysics(
+                                            suggestionCount,
+                                          ),
+                                      itemCount: suggestionCount,
+                                      separatorBuilder: (_, _) =>
+                                          const Divider(height: 1),
+                                      itemBuilder: (_, i) => ListTile(
+                                        dense: true,
+                                        title: Text(
+                                          _streetSuggestions[i].displayLabel,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        onTap: () => _applyStreetSuggestion(
+                                          _streetSuggestions[i],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('City'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _cityCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('City', 'City'),
+                              validator: (v) => _requiredValidator(v, 'City'),
+                            ),
+                            const SizedBox(height: 16),
+      
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _isUnitedStates
+                                          ? _FieldLabel.required('State')
+                                          : _FieldLabel.normal('State / Region'),
+                                      const SizedBox(height: 6),
+                                      if (_isUnitedStates)
+                                        _typeAheadPicker(
+                                          label: 'State',
+                                          hint: 'Select State',
+                                          options: usStates,
+                                          selectedValue: _state,
+                                          onChanged: (v) =>
+                                              setState(() => _state = v),
+                                          validator: (v) =>
+                                              (v == null || v.trim().isEmpty)
+                                              ? 'State is required'
+                                              : null,
+                                        )
+                                      else
+                                        TextFormField(
+                                          controller: _manualStateCtrl,
+                                          style: const TextStyle(fontSize: _inputFs),
+                                          decoration: _dec(
+                                            'State / Region',
+                                            'Enter State / Region',
+                                          ),
+                                          validator: (_) => null,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _isUnitedStates
+                                          ? _FieldLabel.required('Zip Code')
+                                          : _FieldLabel.normal('Zip Code'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _zipCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.number,
+                                        decoration: _dec(
+                                          'Zip Code',
+                                          'Enter Zip Code',
+                                        ),
+                                        validator: (v) {
+                                          final value = (v ?? '').trim();
+                                          if (value.isEmpty) {
+                                            return _isUnitedStates
+                                                ? 'Zip Code is required'
+                                                : null;
+                                          }
+                                          if (!_isUnitedStates) return null;
+                                          final ok = RegExp(
+                                            r'^\d{5}(-\d{4})?$',
+                                          ).hasMatch(value);
+                                          if (!ok) return 'Enter a valid ZIP code';
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Country'),
+                            const SizedBox(height: 6),
+                            _typeAheadPicker(
+                              label: 'Country',
+                              hint: 'Select Country',
+                              options: countries,
+                              selectedValue: _selectedCountry,
+                              onChanged: (v) => setState(() {
+                                if (v == null) return;
+                                _selectedCountry = v;
+                                if (_isUnitedStates) {
+                                  _manualStateCtrl.clear();
+                                } else {
+                                  _state = null;
+                                }
+                              }),
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Country is required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 16),
+      
+                            _FieldLabel.required('Time Zone'),
+                            const SizedBox(height: 6),
+                            _snowPopupDropdown<String>(
+                              label: 'Time Zone',
+                              hint: 'Select Time Zone',
+                              value: _timeZone,
+                              items: const [
+                                'America/New_York',
+                                'America/Chicago',
+                                'America/Denver',
+                                'America/Los_Angeles',
+                              ],
+                              itemLabel: (v) => v,
+                              onChanged: (v) =>
+                                  setState(() => _timeZone = v ?? 'America/New_York'),
+                            ),
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _nailPreferencesSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Nail Preferences',
+                        subtitle: 'Your preferred nail shape and length.',
+                        child: NailPreferencesInlineEditor(
+                          initial: _nailPrefs,
+                          showDimensionImages: false,
+                          onChanged: (updated) =>
+                              setState(() => _nailPrefs = updated),
+                        ),
+                      )
+    );
+  }
+
+  Widget _nailMeasurementApiSection() {
+    return Builder(
+      builder: (context) => _sectionCard(
+        title: 'Nail Measurement API',
+        subtitle: 'Nail measurement with camera.',
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: AppColors.blackCat.withValues(alpha: 0.06),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Nail Photos',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Capture each finger photo here. The photos will upload with your client-artist account when you sign up.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.72),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _startGuidedNailMeasurement,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: const Text('Capture Photo'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _portfolioSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Portfolio',
+                        subtitle:
+                            'Upload inspiration photos. (${_portfolioImages.length}/$_maxPortfolioImages photo(s))',
+                        gradient: const LinearGradient(colors: [_snow, _snow]),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _techTypeToggle(),
+                            const SizedBox(height: 6),
+                            _techTypeFields(),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Upload inspiration photos',
+                                    style: TextStyle(
+                                      fontSize: _inputFs,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.blackCat.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB. Maximum 10 photos.',
+                              style: TextStyle(
+                                fontSize: _smallFs,
+                                color: AppColors.blackCat.withValues(alpha: 0.6),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                ..._portfolioImages.asMap().entries.map((entry) {
+                                  final index = entry.key;
+                                  final bytes = entry.value;
+                                  return SizedBox(
+                                    width: 86,
+                                    height: 86,
+                                    child: Stack(
+                                      children: [
+                                        Positioned.fill(
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.zero,
+                                            child: Container(
+                                              color: _snow,
+                                              child: Image.memory(
+                                                bytes,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 4,
+                                          right: 4,
+                                          child: InkWell(
+                                            onTap: () => setState(
+                                              () => _portfolioImages.removeAt(index),
+                                            ),
+                                            child: Container(
+                                              width: 22,
+                                              height: 22,
+                                              decoration: BoxDecoration(
+                                                color: AppColors.blackCat.withValues(alpha: 0.82),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                size: 14,
+                                                color: AppColors.snow,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                if (_portfolioImages.length < _maxPortfolioImages)
+                                  InkWell(
+                                    onTap: _pickPortfolioImages,
+                                    borderRadius: BorderRadius.zero,
+                                    child: Container(
+                                      width: 86,
+                                      height: 86,
+                                      decoration: BoxDecoration(
+                                        color: _snow,
+                                        borderRadius: BorderRadius.zero,
+                                        border: Border.all(
+                                          color: AppColors.blackCat.withValues(alpha: 0.10),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: AppColors.blackCat.withValues(alpha: 0.9),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          const Text(
+                                            'Add',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            if (_portfolioImages.isEmpty)
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: _snow,
+                                  borderRadius: BorderRadius.zero,
+                                  border: Border.all(
+                                    color: AppColors.blackCat.withValues(alpha: 0.06),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.image_outlined,
+                                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Expanded(
+                                      child: Text(
+                                        'No previous art uploaded yet',
+                                        style: TextStyle(
+                                          fontSize: _inputFs,
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _projectNotesCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Project Notes', 'Project notes'),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _instagramCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec(
+                                'Instagram or TikTok (one required)',
+                                'Instagram',
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _tiktokCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('TikTok', 'TikTok'),
+                            ),
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _yearCalendarSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Year Calendar Availability',
+                        subtitle: 'Direct requests and blocked dates.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: _directRequestsEnabled,
+                              activeThumbColor: _blackCat,
+                              activeTrackColor: _blackCat.withValues(alpha: 0.45),
+                              inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
+                              inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
+                              onChanged: (v) =>
+                                  setState(() => _directRequestsEnabled = v),
+                              title: const Text(
+                                'Enable direct requests',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Allow clients to request specific dates.',
+                                style: TextStyle(
+                                  fontSize: _smallFs,
+                                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+      
+                            InkWell(
+                              onTap: () => setState(() {
+                                _showYearCalendar = !_showYearCalendar;
+                                if (_showYearCalendar) {
+                                  _yearCalendarNonce =
+                                      DateTime.now().millisecondsSinceEpoch;
+                                }
+                              }),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _showYearCalendar
+                                        ? Icons.expand_less
+                                        : Icons.expand_more,
+                                    color: AppColors.blackCat.withValues(alpha: 0.6),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _showYearCalendar
+                                        ? 'Hide year calendar'
+                                        : 'Show year calendar',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+      
+                            if (_showYearCalendar) ...[
+                              const SizedBox(height: 6),
+                              DirectRequestYearCalendar(
+                                key: ValueKey(_yearCalendarNonce),
+                                initialDirectRequestsOn: _directRequestsEnabled,
+                                initialYear: _directRequestYear,
+                                initialMonth: DateTime.now().month,
+                                initialBlockedDays: _blockedDates,
+                                showDirectRequestsFooter: false,
+                                onChanged: (directRequestsOn, year, blockedDays) {
+                                  setState(() {
+                                    _directRequestsEnabled = directRequestsOn;
+                                    _directRequestYear = year;
+                                    _blockedDates
+                                      ..clear()
+                                      ..addAll(blockedDays);
+                                  });
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _specializationPricingSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Specialization & Pricing',
+                        subtitle: 'Select services and set your range.',
+                        gradient: const LinearGradient(colors: [_snow, _snow]),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _chip(
+                                  'Intricate Nail Art',
+                                  selected: _services.contains('Intricate Nail Art'),
+                                  onTap: () => setState(() {
+                                    _services.contains('Intricate Nail Art')
+                                        ? _services.remove('Intricate Nail Art')
+                                        : _services.add('Intricate Nail Art');
+                                  }),
+                                ),
+                                _chip(
+                                  'Gel / Acrylic',
+                                  selected: _services.contains('Gel / Acrylic'),
+                                  onTap: () => setState(() {
+                                    _services.contains('Gel / Acrylic')
+                                        ? _services.remove('Gel / Acrylic')
+                                        : _services.add('Gel / Acrylic');
+                                  }),
+                                ),
+                                _chip(
+                                  '3D Nail Art',
+                                  selected: _services.contains('3D Nail Art'),
+                                  onTap: () => setState(() {
+                                    _services.contains('3D Nail Art')
+                                        ? _services.remove('3D Nail Art')
+                                        : _services.add('3D Nail Art');
+                                  }),
+                                ),
+                                _chip(
+                                  'Airbrush/Stamping',
+                                  selected: _services.contains('Airbrush/Stamping'),
+                                  onTap: () => setState(() {
+                                    _services.contains('Airbrush/Stamping')
+                                        ? _services.remove('Airbrush/Stamping')
+                                        : _services.add('Airbrush/Stamping');
+                                  }),
+                                ),
+                                _chip(
+                                  'Encapsulation',
+                                  selected: _services.contains('Encapsulation '),
+                                  onTap: () => setState(() {
+                                    _services.contains('Encapsulation ')
+                                        ? _services.remove('Encapsulation ')
+                                        : _services.add('Encapsulation ');
+                                  }),
+                                ),
+                                _chip(
+                                  'Dip Powder',
+                                  selected: _services.contains('Dip Powder'),
+                                  onTap: () => setState(() {
+                                    _services.contains('Dip Powder')
+                                        ? _services.remove('Dip Powder')
+                                        : _services.add('Dip Powder');
+                                  }),
+                                ),
+                                _chip(
+                                  'Sculptured',
+                                  selected: _services.contains('Sculptured'),
+                                  onTap: () => setState(() {
+                                    _services.contains('Sculptured')
+                                        ? _services.remove('Sculptured')
+                                        : _services.add('Sculptured');
+                                  }),
+                                ),
+                                _chip(
+                                  'PolyGel',
+                                  selected: _services.contains('PolyGel'),
+                                  onTap: () => setState(() {
+                                    _services.contains('PolyGel')
+                                        ? _services.remove('PolyGel')
+                                        : _services.add('PolyGel');
+                                  }),
+                                ),
+                                _chip(
+                                  'Chrome & Metallic',
+                                  selected: _services.contains('Chrome & Metallic'),
+                                  onTap: () => setState(() {
+                                    _services.contains('Chrome & Metallic')
+                                        ? _services.remove('Chrome & Metallic')
+                                        : _services.add('Chrome & Metallic');
+                                  }),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+      
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _FieldLabel.required('Min Price'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _minPriceCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.number,
+                                        decoration: _dec('Min Price (\$) *', '15'),
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                            ? 'Required'
+                                            : null,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _FieldLabel.required('Max Price'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _maxPriceCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.number,
+                                        decoration: _dec('Max Price (\$) *', '5000'),
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                            ? 'Required'
+                                            : null,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Rush availability',
+                                        style: TextStyle(
+                                          fontSize: _subFs,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Enable if you can take expedited requests.',
+                                        style: TextStyle(
+                                          fontSize: _smallFs,
+                                          color: AppColors.blackCat.withValues(alpha: 0.6),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Transform.scale(
+                                  scale: 0.9,
+                                  child: Switch(
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    value: _rush,
+                                    onChanged: (v) => setState(() => _rush = v),
+                                    activeThumbColor: _blackCat,
+                                    activeTrackColor: _blackCat.withValues(alpha: 0.45),
+                                    inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
+                                    inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _paymentMethodSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Payment Method',
+                        subtitle: 'Select a method and save it (required).',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            RadioTheme(
+                              data: RadioThemeData(
+                                fillColor: WidgetStateProperty.resolveWith(
+                                  (_) => _blackCat,
+                                ),
+                              ),
+                              child: RadioGroup<String>(
+                                groupValue: _paymentMethod,
+                                onChanged: (value) => setState(() {
+                                  if (value == null) return;
+                                  _paymentMethod = value;
+                                  _paymentSaved = false;
+                                }),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    RadioListTile<String>(
+                                      value: 'PayPal',
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text(
+                                        'PayPal',
+                                        style: TextStyle(
+                                          fontSize: _inputFs,
+                                          color: _blackCat,
+                                          fontFamily: 'Arial',
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_paymentMethod == 'PayPal') ...[
+                                      _FieldLabel.required('PayPal Email'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _paypalEmailCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        decoration: _dec(
+                                          'PayPal Email',
+                                          'name@email.com',
+                                        ),
+                                        validator: (v) =>
+                                            _bundlePurchased ? _emailValidator(v) : null,
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                    RadioListTile<String>(
+                                      value: 'Venmo',
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text(
+                                        'Venmo',
+                                        style: TextStyle(
+                                          fontSize: _inputFs,
+                                          color: _blackCat,
+                                          fontFamily: 'Arial',
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_paymentMethod == 'Venmo') ...[
+                                      _FieldLabel.required('Venmo Handle'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _venmoHandleCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        decoration: _dec(
+                                          'Venmo',
+                                          '@handle or phone/email',
+                                        ),
+                                        validator: (v) {
+                                          if (!_bundlePurchased) return null;
+                                          if (v == null || v.trim().isEmpty) {
+                                            return 'Venmo handle is required';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                    RadioListTile<String>(
+                                      value: 'Apple Pay',
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text(
+                                        'Apple Pay',
+                                        style: TextStyle(
+                                          fontSize: _inputFs,
+                                          color: _blackCat,
+                                          fontFamily: 'Arial',
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_paymentMethod == 'Apple Pay') ...[
+                                      _FieldLabel.required('Apple Pay Name'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _applePayPaymentNameCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        decoration: _dec('Name', 'Name on Apple Pay'),
+                                        validator: (v) => !_bundlePurchased
+                                            ? null
+                                            : _requiredValidator(v, 'Apple Pay Name'),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _FieldLabel.required('Apple Pay Phone'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _applePayPaymentPhoneCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.phone,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.digitsOnly,
+                                          LengthLimitingTextInputFormatter(10),
+                                          UsPhoneTextInputFormatter(),
+                                        ],
+                                        decoration: _dec('Phone', 'Phone'),
+                                        validator: (v) =>
+                                            !_bundlePurchased ? null : _phoneValidator(v),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _FieldLabel.required('Apple Pay Email'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _applePayPaymentEmailCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        decoration: _dec('Email', 'Email'),
+                                        validator: (v) =>
+                                            !_bundlePurchased ? null : _emailValidator(v),
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                    RadioListTile<String>(
+                                      value: 'Credit Card',
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text(
+                                        'Credit Card',
+                                        style: TextStyle(
+                                          fontSize: _inputFs,
+                                          color: _blackCat,
+                                          fontFamily: 'Arial',
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_paymentMethod == 'Credit Card') ...[
+                                      _FieldLabel.required('Card Name'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _cardNameCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        decoration: _dec('Name', 'Name on card'),
+                                        validator: (v) => !_bundlePurchased
+                                            ? null
+                                            : _requiredValidator(v, 'Card Name'),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _FieldLabel.required('Card Number'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _cardNumberCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.digitsOnly,
+                                          LengthLimitingTextInputFormatter(19),
+                                          CardNumberTextInputFormatter(),
+                                        ],
+                                        decoration: _dec(
+                                          'Number',
+                                          '1234 5678 9012 3456',
+                                        ),
+                                        validator: (v) => !_bundlePurchased
+                                            ? null
+                                            : _requiredValidator(v, 'Card Number'),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                _FieldLabel.required('Expiration Date'),
+                                                const SizedBox(height: 6),
+                                                TextFormField(
+                                                  controller: _cardExpiryCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                  ),
+                                                  keyboardType: TextInputType.number,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(4),
+                                                    ExpiryDateTextInputFormatter(),
+                                                  ],
+                                                  decoration: _dec(
+                                                    'Expiration Date',
+                                                    'MM/YY',
+                                                  ),
+                                                  validator: (v) => !_bundlePurchased
+                                                      ? null
+                                                      : _requiredValidator(
+                                                          v,
+                                                          'Expiration Date',
+                                                        ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                _FieldLabel.required('CVV'),
+                                                const SizedBox(height: 6),
+                                                TextFormField(
+                                                  controller: _cardCvvCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                  ),
+                                                  keyboardType: TextInputType.number,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(4),
+                                                  ],
+                                                  decoration: _dec('CVV', '123'),
+                                                  validator: (v) => !_bundlePurchased
+                                                      ? null
+                                                      : _requiredValidator(v, 'CVV'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      _FieldLabel.required('Billing Zip'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _cardZipCtrl,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.number,
+                                        decoration: _dec('Zip', 'Zip'),
+                                        validator: (v) => !_bundlePurchased
+                                            ? null
+                                            : _requiredValidator(v, 'Billing Zip'),
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+      
+                            const SizedBox(height: 6),
+      
+                            SizedBox(
+                              height: 46,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _blackCat,
+                                  foregroundColor: _snow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  final ok = _paymentFieldsValid();
+                                  if (!ok) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Please fill required payment fields.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  setState(() {
+                                    _paymentSaved = true;
+                                    _payment = _currentPaymentInfo();
+                                  });
+                                },
+                                child: const Text(
+                                  'Save Payment Method',
+                                  style: TextStyle(
+                                    fontSize: _inputFs,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                                  size: _inputFs * 1.2,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _paymentSaved
+                                      ? 'Saved: $_paymentMethod'
+                                      : 'Not saved yet',
+                                  style: TextStyle(
+                                    color: AppColors.blackCat.withValues(alpha: 0.65),
+                                    fontSize: _inputFs,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _bundlesSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Nail Material Bundles',
+                        subtitle:
+                            'Starter bundles for gel, tips, tools and more. (Required)',
+                        gradient: const LinearGradient(
+                          colors: [_snow, _snow],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              height: 320,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: [
+                                  _bundleCard(
+                                    title: 'Starter Material Bundle',
+                                    subtitle: 'Perfect for new artists.',
+                                    price: '\$50',
+                                    imageAsset: 'assets/images/nail_bundle_50.png',
+                                    selected:
+                                        (_bundlePurchased &&
+                                            _selectedBundle == 'Starter') ||
+                                        (_bundleInCart &&
+                                            _bundleCartKey == 'Starter'),
+                                    purchased:
+                                        _bundlePurchased &&
+                                        _selectedBundle == 'Starter',
+                                    disableAdd: _bundlePurchased,
+                                    onTap: () =>
+                                        setState(() => _bundleCartKey = 'Starter'),
+                                    onAdd: () => _addBundleToCart('Starter'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _bundleCard(
+                                    title: 'Pro Material Bundle',
+                                    subtitle: 'Gel, tools & tips.',
+                                    price: '\$100',
+                                    imageAsset: 'assets/images/nail_bundle_100.png',
+                                    selected:
+                                        (_bundlePurchased &&
+                                            _selectedBundle == 'Pro') ||
+                                        (_bundleInCart && _bundleCartKey == 'Pro'),
+                                    purchased:
+                                        _bundlePurchased && _selectedBundle == 'Pro',
+                                    disableAdd: _bundlePurchased,
+                                    onTap: () =>
+                                        setState(() => _bundleCartKey = 'Pro'),
+                                    onAdd: () => _addBundleToCart('Pro'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _bundleCard(
+                                    title: 'Elite Bundle',
+                                    subtitle: 'For high volume artists.',
+                                    price: '\$150',
+                                    imageAsset: 'assets/images/nail_bundle_150.png',
+                                    selected:
+                                        (_bundlePurchased &&
+                                            _selectedBundle == 'Elite') ||
+                                        (_bundleInCart && _bundleCartKey == 'Elite'),
+                                    purchased:
+                                        _bundlePurchased &&
+                                        _selectedBundle == 'Elite',
+                                    disableAdd: _bundlePurchased,
+                                    onTap: () =>
+                                        setState(() => _bundleCartKey = 'Elite'),
+                                    onAdd: () => _addBundleToCart('Elite'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!_bundlePurchased) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.lock_outline,
+                                    size: 16,
+                                    color: AppColors.blackCat.withValues(alpha: 0.65),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'You must purchase a bundle before account creation.',
+                                      style: TextStyle(
+                                        fontSize: _smallFs,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.blackCat.withValues(alpha: 0.65),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _payoutSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                        title: 'Payout',
+                        subtitle: 'How you receive payouts (can be updated later).',
+                        gradient: const LinearGradient(colors: [_snow, _snow]),
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<PayoutMethod>(
+                              initialValue: _payoutMethod,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                color: Colors.black,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              hint: Text(
+                                'Select state',
+                                style: TextStyle(
+                                  fontSize: _inputFs,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.blackCat.withValues(alpha: 0.45),
+                                ),
+                              ),
+                              decoration: _dec(
+                                'Payout Method *',
+                                'Select payout method',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: PayoutMethod.paypal,
+                                  child: Text(
+                                    'PayPal',
+                                    style: TextStyle(
+                                      fontSize: _inputFs,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: PayoutMethod.venmo,
+                                  child: Text(
+                                    'Venmo',
+                                    style: TextStyle(
+                                      fontSize: _inputFs,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: PayoutMethod.bankTransfer,
+                                  child: Text(
+                                    'Bank Transfer',
+                                    style: TextStyle(
+                                      fontSize: _inputFs,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: PayoutMethod.applePay,
+                                  child: Text(
+                                    'Apple Pay',
+                                    style: TextStyle(
+                                      fontSize: _inputFs,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) => setState(
+                                () => _payoutMethod = v ?? PayoutMethod.paypal,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+      
+                            if (_payoutMethod == PayoutMethod.paypal ||
+                                _payoutMethod == PayoutMethod.venmo) ...[
+                              TextField(
+                                controller: _legalNameCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                decoration: _dec('Legal Name *', 'Legal Name'),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _payoutEmailCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: _dec(
+                                  _payoutMethod == PayoutMethod.venmo
+                                      ? 'Venmo Email *'
+                                      : 'PayPal Email *',
+                                  'Email',
+                                ),
+                              ),
+                            ],
+      
+                            if (_payoutMethod == PayoutMethod.bankTransfer) ...[
+                              TextField(
+                                controller: _legalNameCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                decoration: _dec('Legal Name *', 'Legal Name'),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _bankNameCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                decoration: _dec('Bank Name *', 'Bank name'),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _routingCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.number,
+                                decoration: _dec(
+                                  'Routing Number *',
+                                  'Routing number',
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _accountNumberCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.number,
+                                decoration: _dec(
+                                  'Account Number *',
+                                  'Account number',
+                                ),
+                              ),
+                            ],
+      
+                            if (_payoutMethod == PayoutMethod.applePay) ...[
+                              TextField(
+                                controller: _applePayNameCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                decoration: _dec('Full Name *', 'Name on Apple Pay'),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _applePayPhoneCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(10),
+                                  UsPhoneTextInputFormatter(),
+                                ],
+                                decoration: _dec('Phone Number *', 'Apple Pay phone'),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _applePayEmailCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.emailAddress,
+                                decoration: _dec(
+                                  'Apple ID Email *',
+                                  'Email linked to Apple Pay',
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+    );
+  }
+
+  Widget _agreementsSection() {
+    return Builder(
+      builder: (context) =>
+      _sectionCard(
+                          title: 'Agreements',
+                          subtitle: 'Required to create your account.',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _smallCheckboxRow(
+                                value: _agreeTerms,
+                                onChanged: (v) =>
+                                    setState(() => _agreeTerms = v ?? false),
+                                text: 'I agree to the Terms',
+                              ),
+                              _smallCheckboxRow(
+                                value: _noCopyright,
+                                onChanged: (v) =>
+                                    setState(() => _noCopyright = v ?? false),
+                                text:
+                                    'I confirm my content does not violate copyright',
+                              ),
+                              _smallCheckboxRow(
+                                value: _agreeSafety,
+                                onChanged: (v) =>
+                                    setState(() => _agreeSafety = v ?? false),
+                                text: 'I agree to safety guidelines',
+                              ),
+                              Row(
+                                children: [
+                                  const Text(
+                                    'Receive updates',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Transform.scale(
+                                    scale: 0.9,
+                                    child: Switch(
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      value: _receiveUpdates,
+                                      onChanged: (v) =>
+                                          setState(() => _receiveUpdates = v),
+                                      activeThumbColor: _blackCat,
+                                      activeTrackColor: _blackCat.withValues(alpha: 0.45),
+                                      inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
+                                      inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        )
+    );
+  }
+
+  Widget _registrationProgressTabs() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 2),
+      child: Row(
+        children: List.generate(_registrationStepTitles.length, (index) {
+          final selected = index == _registrationStep;
+          final completed = index < _registrationStep;
+          final showConnector = index < _registrationStepTitles.length - 1;
+          return Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _registrationStep = index),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 28,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (index > 0)
+                          Expanded(
+                            child: Container(
+                              height: 1.5,
+                              color: completed
+                                  ? AppColors.blackCat.withValues(alpha: 0.55)
+                                  : AppColors.blackCat.withValues(alpha: 0.18),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: (selected || completed)
+                                ? AppColors.blackCat
+                                : AppColors.blackCat.withValues(alpha: 0.10),
+                          ),
+                          child: completed
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 15,
+                                  color: AppColors.snow,
+                                )
+                              : Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    fontFamily: 'Arial',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: selected
+                                        ? AppColors.snow
+                                        : AppColors.blackCat,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 6),
+                        if (showConnector)
+                          Expanded(
+                            child: Container(
+                              height: 1.5,
+                              color: (completed || selected)
+                                  ? AppColors.blackCat.withValues(alpha: 0.55)
+                                  : AppColors.blackCat.withValues(alpha: 0.18),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 30,
+                    child: Text(
+                      _registrationStepTitles[index],
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                      style: TextStyle(
+                        fontFamily: 'Arial',
+                        fontSize: 9,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.65),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    height: 3,
+                    color: selected ? AppColors.blackCat : Colors.transparent,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+
+  Future<void> _goToNextRegistrationStep() async {
+    if (!await _validateCurrentRegistrationStep()) return;
+    await _persistRegistrationDraftStep(step: _registrationStep + 1);
+    if (!mounted) return;
+    setState(() => _registrationStep += 1);
+  }
+
+  Widget _wizardNavButtons() {
+    final isLast = _registrationStep == _registrationStepTitles.length - 1;
+    return Container(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      color: AppColors.snow,
+      child: Row(
+        children: [
+          if (_registrationStep > 0)
+            SizedBox(
+              height: 44,
+              width: 96,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  side: const BorderSide(color: AppColors.blackCatBorderLight),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+                onPressed: () => setState(() => _registrationStep -= 1),
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 96),
+          const Spacer(),
+          SizedBox(
+            height: 44,
+            width: isLast ? 170 : 96,
+            child: ElevatedButton(
+              onPressed: _submitting
+                  ? null
+                  : isLast
+                      ? ((_bundlePurchased && _canStartCheckout) ? _continue : null)
+                      : _goToNextRegistrationStep,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.16),
+                foregroundColor: AppColors.snow,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                elevation: 0,
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.snow),
+                      ),
+                    )
+                  : Text(
+                      isLast ? 'Create account' : 'Next',
+                      style: const TextStyle(
+                        fontFamily: 'Arial',
+                        color: AppColors.snow,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _currentRegistrationStepWidgets() {
+    switch (_registrationStep) {
+      case 0:
+        return <Widget>[
+          _basicProfileSection(),
+          const SizedBox(height: 8),
+          _addressInfoSection(),
+        ];
+      case 1:
+        return <Widget>[
+          _nailMeasurementApiSection(),
+          const SizedBox(height: 8),
+          _nailPreferencesSection(),
+        ];
+      case 2:
+        return <Widget>[_portfolioSection()];
+      case 3:
+        return <Widget>[
+          _specializationPricingSection(),
+          const SizedBox(height: 8),
+          _yearCalendarSection(),
+        ];
+      case 4:
+        return <Widget>[
+          _paymentMethodSection(),
+          const SizedBox(height: 8),
+          _payoutSection(),
+        ];
+      case 5:
+      default:
+        return <Widget>[
+          _accountCredentialsSection(),
+          const SizedBox(height: 8),
+          _bundlesSection(),
+          if (widget.showAdaCompliance) ...<Widget>[
+            const SizedBox(height: 8),
+            _agreementsSection(),
+          ],
+        ];
+    }
+  }
+
   // -----------------------
   // Build
   // -----------------------
@@ -2373,1654 +5058,337 @@ class _ClientArtistRegistrationPageState
       ),
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: Image.asset(
-            'assets/images/jnt_logo_black.png',
-            height: 50,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(
-                context,
-                rootNavigator: true,
-              ).pushNamedAndRemoveUntil('/register', (route) => false),
-            ),
-          ],
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.of(
+            context,
+            rootNavigator: true,
+          ).pushNamedAndRemoveUntil('/register', (route) => false),
+          closeTooltip: 'Close client-artist registration',
+          closeIcon: const Icon(Icons.close),
         ),
         body: SafeArea(
           child: Form(
             key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-              children: [
-                // -----------------------
-                // 1) Basic Profile (merged)
-                // -----------------------
-                _sectionCard(
-                  title: 'Basic Profile',
-                  subtitle: 'Enter your profile details.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _profilePicTile(),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Full Name / Studio Name'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _fullNameOrStudioCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Name', 'Enter Name'),
-                        validator: (v) => _requiredValidator(v, 'Name'),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              child: Column(
+                children: [
+                  _registrationProgressTabs(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        children: _currentRegistrationStepWidgets(),
                       ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Display Name'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _displayNameCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Display Name', 'Enter Display Name'),
-                        validator: (v) => _requiredValidator(v, 'Display Name'),
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Language Spoken'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _languageSpokenCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec(
-                          'Language Spoken',
-                          'Enter language(s) spoken',
-                        ),
-                        validator: (v) =>
-                            _requiredValidator(v, 'Language Spoken'),
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Currency'),
-                      const SizedBox(height: 6),
-                      _typeAheadPicker(
-                        label: 'Currency',
-                        hint: 'Select Currency',
-                        options: currencyOptions,
-                        selectedValue: _currency,
-                        onChanged: (v) => setState(() => _currency = v),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Currency is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.normal('Bio'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _bioCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        maxLines: 3,
-                        decoration: _dec('Bio', 'Tell us about you'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 2) Account Credentials (shared)
-                // -----------------------
-                _sectionCard(
-                  title: 'Account Credentials',
-                  subtitle: 'Enter your details.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _FieldLabel.required('Email'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _emailCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: _dec('Email', 'Enter Email'),
-                        validator: _emailValidator,
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Password'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _passCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        obscureText: _obscurePassword,
-                        decoration: _dec(
-                          'Password',
-                          'Enter Password',
-                          suffixIcon: IconButton(
-                            iconSize: 18,
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                          ),
-                        ),
-                        validator: _passwordValidator,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Password must be 8+ characters and include uppercase, lowercase, number, and symbol.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.blackCat.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Confirm Password'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _confirmCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        obscureText: _obscureConfirmPassword,
-                        decoration: _dec(
-                          'Confirm Password',
-                          'Re-enter Password',
-                          suffixIcon: IconButton(
-                            iconSize: 18,
-                            onPressed: () => setState(
-                              () => _obscureConfirmPassword =
-                                  !_obscureConfirmPassword,
-                            ),
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                          ),
-                        ),
-                        validator: _confirmPasswordValidator,
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Phone'),
-                      const SizedBox(height: 6),
-                      FormField<String>(
-                        validator: (value) => _phoneValidator(_phoneCtrl.text),
-                        builder: (field) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                height: _fieldHeight,
-                                decoration: BoxDecoration(
-                                  color: AppColors.snow,
-                                  borderRadius: BorderRadius.zero,
-                                  border: Border.all(
-                                    color: AppColors.blackCatBorderLight,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 132,
-                                      child: _countryCodeDropdown(
-                                        value: _phoneAreaCode,
-                                        embedded: true,
-                                        onChanged: (code) => setState(
-                                          () => _phoneAreaCode =
-                                              code.dialCode ?? '+1',
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 1,
-                                      color: AppColors.blackCatBorderLight,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _phoneCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType: TextInputType.phone,
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter
-                                              .digitsOnly,
-                                          LengthLimitingTextInputFormatter(10),
-                                          UsPhoneTextInputFormatter(),
-                                        ],
-                                        onChanged: field.didChange,
-                                        decoration: InputDecoration(
-                                          hintText: 'Enter 10-digit phone',
-                                          hintStyle: TextStyle(
-                                            fontSize: _hintFs - 0.5,
-                                            color: _blackCat.withValues(alpha: 0.45),
-                                            fontFamily: 'Arial',
-                                          ),
-                                          border: InputBorder.none,
-                                          enabledBorder: InputBorder.none,
-                                          focusedBorder: InputBorder.none,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                vertical: _fieldVerticalPadding,
-                                              ),
-                                          isDense: false,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                  ],
-                                ),
-                              ),
-                              if (field.hasError)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: 6,
-                                    left: 4,
-                                  ),
-                                  child: Text(
-                                    field.errorText!,
-                                    style: const TextStyle(
-                                      color: Color(0xFFB3261E),
-                                      fontSize: 10.5,
-                                      height: 1.1,
-                                      fontFamily: 'Arial',
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 3) Address Information (merged)
-                // -----------------------
-                _sectionCard(
-                  title: 'Address Information',
-                  subtitle: 'Enter your Shipping Information',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _FieldLabel.required('Street Address'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _streetCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec(
-                          'Street Address',
-                          'Enter Street Address',
-                        ),
-                        onChanged: (_) => _autofillAddressFromStreet(),
-                        validator: (v) =>
-                            _requiredValidator(v, 'Street Address'),
-                      ),
-                      if (_streetSuggestionsLoading)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: LinearProgressIndicator(minHeight: 2),
-                        ),
-                      if (_streetSuggestions.isNotEmpty)
-                        Builder(
-                          builder: (context) {
-                            final suggestionCount = _streetSuggestions.length;
-                            final menuHeight =
-                                AutocompleteDropdownSizing.menuHeight(
-                                  itemCount: suggestionCount,
-                                  itemExtent: 40,
-                                );
-                            return Container(
-                              margin: const EdgeInsets.only(top: 8),
-                              decoration: BoxDecoration(
-                                color: _snow,
-                                borderRadius: BorderRadius.zero,
-                                border: Border.all(
-                                  color: _blackCat.withValues(alpha: 0.20),
-                                ),
-                              ),
-                              constraints: BoxConstraints(
-                                maxHeight: menuHeight,
-                              ),
-                              child: ListView.separated(
-                                shrinkWrap:
-                                    AutocompleteDropdownSizing.shrinkWrap(
-                                      suggestionCount,
-                                    ),
-                                physics:
-                                    AutocompleteDropdownSizing.scrollPhysics(
-                                      suggestionCount,
-                                    ),
-                                itemCount: suggestionCount,
-                                separatorBuilder: (_, _) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (_, i) => ListTile(
-                                  dense: true,
-                                  title: Text(
-                                    _streetSuggestions[i].displayLabel,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  onTap: () => _applyStreetSuggestion(
-                                    _streetSuggestions[i],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('City'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _cityCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('City', 'City'),
-                        validator: (v) => _requiredValidator(v, 'City'),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _isUnitedStates
-                                    ? _FieldLabel.required('State')
-                                    : _FieldLabel.normal('State / Region'),
-                                const SizedBox(height: 6),
-                                if (_isUnitedStates)
-                                  _typeAheadPicker(
-                                    label: 'State',
-                                    hint: 'Select State',
-                                    options: usStates,
-                                    selectedValue: _state,
-                                    onChanged: (v) =>
-                                        setState(() => _state = v),
-                                    validator: (v) =>
-                                        (v == null || v.trim().isEmpty)
-                                        ? 'State is required'
-                                        : null,
-                                  )
-                                else
-                                  TextFormField(
-                                    controller: _manualStateCtrl,
-                                    style: const TextStyle(fontSize: _inputFs),
-                                    decoration: _dec(
-                                      'State / Region',
-                                      'Enter State / Region',
-                                    ),
-                                    validator: (_) => null,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _isUnitedStates
-                                    ? _FieldLabel.required('Zip Code')
-                                    : _FieldLabel.normal('Zip Code'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _zipCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  decoration: _dec(
-                                    'Zip Code',
-                                    'Enter Zip Code',
-                                  ),
-                                  validator: (v) {
-                                    final value = (v ?? '').trim();
-                                    if (value.isEmpty) {
-                                      return _isUnitedStates
-                                          ? 'Zip Code is required'
-                                          : null;
-                                    }
-                                    if (!_isUnitedStates) return null;
-                                    final ok = RegExp(
-                                      r'^\d{5}(-\d{4})?$',
-                                    ).hasMatch(value);
-                                    if (!ok) return 'Enter a valid ZIP code';
-                                    return null;
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Country'),
-                      const SizedBox(height: 6),
-                      _typeAheadPicker(
-                        label: 'Country',
-                        hint: 'Select Country',
-                        options: countries,
-                        selectedValue: _selectedCountry,
-                        onChanged: (v) => setState(() {
-                          if (v == null) return;
-                          _selectedCountry = v;
-                          if (_isUnitedStates) {
-                            _manualStateCtrl.clear();
-                          } else {
-                            _state = null;
-                          }
-                        }),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Country is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      _FieldLabel.required('Time Zone'),
-                      const SizedBox(height: 6),
-                      _snowPopupDropdown<String>(
-                        label: 'Time Zone',
-                        hint: 'Select Time Zone',
-                        value: _timeZone,
-                        items: const [
-                          'America/New_York',
-                          'America/Chicago',
-                          'America/Denver',
-                          'America/Los_Angeles',
-                        ],
-                        itemLabel: (v) => v,
-                        onChanged: (v) =>
-                            setState(() => _timeZone = v ?? 'America/New_York'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 4) Nail Preferences
-                // -----------------------
-                _sectionCard(
-                  title: 'Nail Preferences',
-                  subtitle: 'Your preferred nail shape and length.',
-                  child: NailPreferencesInlineEditor(
-                    initial: _nailPrefs,
-                    showDimensionImages: false,
-                    onChanged: (updated) =>
-                        setState(() => _nailPrefs = updated),
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 5) Portfolio
-                // -----------------------
-                _sectionCard(
-                  title: 'Portfolio',
-                  subtitle:
-                      'Upload inspiration photos. (${_portfolioImages.length}/$_maxPortfolioImages photo(s))',
-                  gradient: const LinearGradient(colors: [_snow, _snow]),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _techTypeToggle(),
-                      const SizedBox(height: 6),
-                      _techTypeFields(),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Upload inspiration photos',
-                              style: TextStyle(
-                                fontSize: _inputFs,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.blackCat.withValues(alpha: 0.8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB. Maximum 10 photos.',
-                        style: TextStyle(
-                          fontSize: _smallFs,
-                          color: AppColors.blackCat.withValues(alpha: 0.6),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      if (_portfolioImages.isNotEmpty)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => setState(_portfolioImages.clear),
-                            child: const Text(
-                              'Clear all',
-                              style: TextStyle(
-                                color: _blackCat,
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
-                                fontWeight: FontWeight.w600,
-                                decoration: TextDecoration.underline,
-                                decorationColor: _blackCat,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (_portfolioImages.isNotEmpty)
-                        const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ..._portfolioImages.map((b) {
-                            return ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: Container(
-                                width: 86,
-                                height: 86,
-                                color: _snow,
-                                child: Image.memory(b, fit: BoxFit.cover),
-                              ),
-                            );
-                          }),
-                          if (_portfolioImages.length < _maxPortfolioImages)
-                            InkWell(
-                              onTap: _pickPortfolioImages,
-                              borderRadius: BorderRadius.zero,
-                              child: Container(
-                                width: 86,
-                                height: 86,
-                                decoration: BoxDecoration(
-                                  color: _snow,
-                                  borderRadius: BorderRadius.zero,
-                                  border: Border.all(
-                                    color: AppColors.blackCat.withValues(alpha: 0.10),
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.add_photo_alternate_outlined,
-                                      color: AppColors.blackCat.withValues(alpha: 0.9),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    const Text(
-                                      'Add',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (_portfolioImages.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: _snow,
-                            borderRadius: BorderRadius.zero,
-                            border: Border.all(
-                              color: AppColors.blackCat.withValues(alpha: 0.06),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.image_outlined,
-                                color: AppColors.blackCat.withValues(alpha: 0.55),
-                              ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Text(
-                                  'No previous art uploaded yet',
-                                  style: TextStyle(
-                                    fontSize: _inputFs,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _projectNotesCtrl,
-                        decoration: _dec('Project Notes', 'Project notes'),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _instagramCtrl,
-                        decoration: _dec(
-                          'Instagram or TikTok (one required)',
-                          'Instagram',
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _tiktokCtrl,
-                        decoration: _dec('TikTok', 'TikTok'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 6) Year Calendar Availability
-                // -----------------------
-                _sectionCard(
-                  title: 'Year Calendar Availability',
-                  subtitle: 'Direct requests and blocked dates.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _directRequestsEnabled,
-                        activeThumbColor: _blackCat,
-                        activeTrackColor: _blackCat.withValues(alpha: 0.45),
-                        inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
-                        inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
-                        onChanged: (v) =>
-                            setState(() => _directRequestsEnabled = v),
-                        title: const Text(
-                          'Enable direct requests',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'Allow clients to request specific dates.',
-                          style: TextStyle(
-                            fontSize: _smallFs,
-                            color: AppColors.blackCat.withValues(alpha: 0.55),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      InkWell(
-                        onTap: () => setState(() {
-                          _showYearCalendar = !_showYearCalendar;
-                          if (_showYearCalendar) {
-                            _yearCalendarNonce =
-                                DateTime.now().millisecondsSinceEpoch;
-                          }
-                        }),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _showYearCalendar
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              color: AppColors.blackCat.withValues(alpha: 0.6),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _showYearCalendar
-                                  ? 'Hide year calendar'
-                                  : 'Show year calendar',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      if (_showYearCalendar) ...[
-                        const SizedBox(height: 6),
-                        DirectRequestYearCalendar(
-                          key: ValueKey(_yearCalendarNonce),
-                          initialDirectRequestsOn: _directRequestsEnabled,
-                          initialYear: _directRequestYear,
-                          initialMonth: DateTime.now().month,
-                          initialBlockedDays: _blockedDates,
-                          showDirectRequestsFooter: false,
-                          onChanged: (directRequestsOn, year, blockedDays) {
-                            setState(() {
-                              _directRequestsEnabled = directRequestsOn;
-                              _directRequestYear = year;
-                              _blockedDates
-                                ..clear()
-                                ..addAll(blockedDays);
-                            });
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 7) Specialization & Pricing
-                // -----------------------
-                _sectionCard(
-                  title: 'Specialization & Pricing',
-                  subtitle: 'Select services and set your range.',
-                  gradient: const LinearGradient(colors: [_snow, _snow]),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _chip(
-                            'Intricate Nail Art',
-                            selected: _services.contains('Intricate Nail Art'),
-                            onTap: () => setState(() {
-                              _services.contains('Intricate Nail Art')
-                                  ? _services.remove('Intricate Nail Art')
-                                  : _services.add('Intricate Nail Art');
-                            }),
-                          ),
-                          _chip(
-                            'Gel / Acrylic',
-                            selected: _services.contains('Gel / Acrylic'),
-                            onTap: () => setState(() {
-                              _services.contains('Gel / Acrylic')
-                                  ? _services.remove('Gel / Acrylic')
-                                  : _services.add('Gel / Acrylic');
-                            }),
-                          ),
-                          _chip(
-                            '3D Nail Art',
-                            selected: _services.contains('3D Nail Art'),
-                            onTap: () => setState(() {
-                              _services.contains('3D Nail Art')
-                                  ? _services.remove('3D Nail Art')
-                                  : _services.add('3D Nail Art');
-                            }),
-                          ),
-                          _chip(
-                            'Airbrush/Stamping',
-                            selected: _services.contains('Airbrush/Stamping'),
-                            onTap: () => setState(() {
-                              _services.contains('Airbrush/Stamping')
-                                  ? _services.remove('Airbrush/Stamping')
-                                  : _services.add('Airbrush/Stamping');
-                            }),
-                          ),
-                          _chip(
-                            'Encapsulation',
-                            selected: _services.contains('Encapsulation '),
-                            onTap: () => setState(() {
-                              _services.contains('Encapsulation ')
-                                  ? _services.remove('Encapsulation ')
-                                  : _services.add('Encapsulation ');
-                            }),
-                          ),
-                          _chip(
-                            'Dip Powder',
-                            selected: _services.contains('Dip Powder'),
-                            onTap: () => setState(() {
-                              _services.contains('Dip Powder')
-                                  ? _services.remove('Dip Powder')
-                                  : _services.add('Dip Powder');
-                            }),
-                          ),
-                          _chip(
-                            'Sculptured',
-                            selected: _services.contains('Sculptured'),
-                            onTap: () => setState(() {
-                              _services.contains('Sculptured')
-                                  ? _services.remove('Sculptured')
-                                  : _services.add('Sculptured');
-                            }),
-                          ),
-                          _chip(
-                            'PolyGel',
-                            selected: _services.contains('PolyGel'),
-                            onTap: () => setState(() {
-                              _services.contains('PolyGel')
-                                  ? _services.remove('PolyGel')
-                                  : _services.add('PolyGel');
-                            }),
-                          ),
-                          _chip(
-                            'Chrome & Metallic',
-                            selected: _services.contains('Chrome & Metallic'),
-                            onTap: () => setState(() {
-                              _services.contains('Chrome & Metallic')
-                                  ? _services.remove('Chrome & Metallic')
-                                  : _services.add('Chrome & Metallic');
-                            }),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _FieldLabel.required('Min Price'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _minPriceCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  decoration: _dec('Min Price (\$) *', '15'),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                      ? 'Required'
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _FieldLabel.required('Max Price'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _maxPriceCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  decoration: _dec('Max Price (\$) *', '5000'),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                      ? 'Required'
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Rush availability',
-                                  style: TextStyle(
-                                    fontSize: _subFs,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Enable if you can take expedited requests.',
-                                  style: TextStyle(
-                                    fontSize: _smallFs,
-                                    color: AppColors.blackCat.withValues(alpha: 0.6),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Transform.scale(
-                            scale: 0.9,
-                            child: Switch(
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              value: _rush,
-                              onChanged: (v) => setState(() => _rush = v),
-                              activeThumbColor: _blackCat,
-                              activeTrackColor: _blackCat.withValues(alpha: 0.45),
-                              inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
-                              inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 8) Payment Method
-                // -----------------------
-                _sectionCard(
-                  title: 'Payment Method',
-                  subtitle: 'Select a method and save it (required).',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RadioTheme(
-                        data: RadioThemeData(
-                          fillColor: WidgetStateProperty.resolveWith(
-                            (_) => _blackCat,
-                          ),
-                        ),
-                        child: RadioGroup<String>(
-                          groupValue: _paymentMethod,
-                          onChanged: (value) => setState(() {
-                            if (value == null) return;
-                            _paymentMethod = value;
-                            _paymentSaved = false;
-                          }),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              RadioListTile<String>(
-                                value: 'PayPal',
-                                dense: true,
-                                visualDensity: VisualDensity.compact,
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text(
-                                  'PayPal',
-                                  style: TextStyle(
-                                    fontSize: _inputFs,
-                                    color: _blackCat,
-                                    fontFamily: 'Arial',
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              if (_paymentMethod == 'PayPal') ...[
-                                _FieldLabel.required('PayPal Email'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _paypalEmailCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  decoration: _dec(
-                                    'PayPal Email',
-                                    'name@email.com',
-                                  ),
-                                  validator: (v) =>
-                                      _bundlePurchased ? _emailValidator(v) : null,
-                                ),
-                                const SizedBox(height: 6),
-                              ],
-                              RadioListTile<String>(
-                                value: 'Venmo',
-                                dense: true,
-                                visualDensity: VisualDensity.compact,
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text(
-                                  'Venmo',
-                                  style: TextStyle(
-                                    fontSize: _inputFs,
-                                    color: _blackCat,
-                                    fontFamily: 'Arial',
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              if (_paymentMethod == 'Venmo') ...[
-                                _FieldLabel.required('Venmo Handle'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _venmoHandleCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  decoration: _dec(
-                                    'Venmo',
-                                    '@handle or phone/email',
-                                  ),
-                                  validator: (v) {
-                                    if (!_bundlePurchased) return null;
-                                    if (v == null || v.trim().isEmpty) {
-                                      return 'Venmo handle is required';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 6),
-                              ],
-                              RadioListTile<String>(
-                                value: 'Apple Pay',
-                                dense: true,
-                                visualDensity: VisualDensity.compact,
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text(
-                                  'Apple Pay',
-                                  style: TextStyle(
-                                    fontSize: _inputFs,
-                                    color: _blackCat,
-                                    fontFamily: 'Arial',
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              if (_paymentMethod == 'Apple Pay') ...[
-                                _FieldLabel.required('Apple Pay Name'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _applePayPaymentNameCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  decoration: _dec('Name', 'Name on Apple Pay'),
-                                  validator: (v) => !_bundlePurchased
-                                      ? null
-                                      : _requiredValidator(v, 'Apple Pay Name'),
-                                ),
-                                const SizedBox(height: 6),
-                                _FieldLabel.required('Apple Pay Phone'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _applePayPaymentPhoneCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.phone,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(10),
-                                    UsPhoneTextInputFormatter(),
-                                  ],
-                                  decoration: _dec('Phone', 'Phone'),
-                                  validator: (v) =>
-                                      !_bundlePurchased ? null : _phoneValidator(v),
-                                ),
-                                const SizedBox(height: 6),
-                                _FieldLabel.required('Apple Pay Email'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _applePayPaymentEmailCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  decoration: _dec('Email', 'Email'),
-                                  validator: (v) =>
-                                      !_bundlePurchased ? null : _emailValidator(v),
-                                ),
-                                const SizedBox(height: 6),
-                              ],
-                              RadioListTile<String>(
-                                value: 'Credit Card',
-                                dense: true,
-                                visualDensity: VisualDensity.compact,
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text(
-                                  'Credit Card',
-                                  style: TextStyle(
-                                    fontSize: _inputFs,
-                                    color: _blackCat,
-                                    fontFamily: 'Arial',
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              if (_paymentMethod == 'Credit Card') ...[
-                                _FieldLabel.required('Card Name'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _cardNameCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  decoration: _dec('Name', 'Name on card'),
-                                  validator: (v) => !_bundlePurchased
-                                      ? null
-                                      : _requiredValidator(v, 'Card Name'),
-                                ),
-                                const SizedBox(height: 6),
-                                _FieldLabel.required('Card Number'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _cardNumberCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(19),
-                                    CardNumberTextInputFormatter(),
-                                  ],
-                                  decoration: _dec(
-                                    'Number',
-                                    '1234 5678 9012 3456',
-                                  ),
-                                  validator: (v) => !_bundlePurchased
-                                      ? null
-                                      : _requiredValidator(v, 'Card Number'),
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          _FieldLabel.required('Expiration Date'),
-                                          const SizedBox(height: 6),
-                                          TextFormField(
-                                            controller: _cardExpiryCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                              LengthLimitingTextInputFormatter(4),
-                                              ExpiryDateTextInputFormatter(),
-                                            ],
-                                            decoration: _dec(
-                                              'Expiration Date',
-                                              'MM/YY',
-                                            ),
-                                            validator: (v) => !_bundlePurchased
-                                                ? null
-                                                : _requiredValidator(
-                                                    v,
-                                                    'Expiration Date',
-                                                  ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          _FieldLabel.required('CVV'),
-                                          const SizedBox(height: 6),
-                                          TextFormField(
-                                            controller: _cardCvvCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                              LengthLimitingTextInputFormatter(4),
-                                            ],
-                                            decoration: _dec('CVV', '123'),
-                                            validator: (v) => !_bundlePurchased
-                                                ? null
-                                                : _requiredValidator(v, 'CVV'),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                _FieldLabel.required('Billing Zip'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _cardZipCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  decoration: _dec('Zip', 'Zip'),
-                                  validator: (v) => !_bundlePurchased
-                                      ? null
-                                      : _requiredValidator(v, 'Billing Zip'),
-                                ),
-                                const SizedBox(height: 6),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 6),
-
-                      SizedBox(
-                        height: 46,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _blackCat,
-                            foregroundColor: _snow,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                          onPressed: () {
-                            final ok = _paymentFieldsValid();
-                            if (!ok) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Please fill required payment fields.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            setState(() {
-                              _paymentSaved = true;
-                              _payment = _currentPaymentInfo();
-                            });
-                          },
-                          child: const Text(
-                            'Save Payment Method',
-                            style: TextStyle(
-                              fontSize: _inputFs,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: AppColors.blackCat.withValues(alpha: 0.55),
-                            size: _inputFs * 1.2,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _paymentSaved
-                                ? 'Saved: $_paymentMethod'
-                                : 'Not saved yet',
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.65),
-                              fontSize: _inputFs,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 9) Nail Material Bundles (Required)
-                // -----------------------
-                _sectionCard(
-                  title: 'Nail Material Bundles',
-                  subtitle:
-                      'Starter bundles for gel, tips, tools and more. (Required)',
-                  gradient: const LinearGradient(
-                    colors: [_snow, _snow],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        height: 320,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            _bundleCard(
-                              title: 'Starter Material Bundle',
-                              subtitle: 'Perfect for new artists.',
-                              price: '\$50',
-                              imageAsset: 'assets/images/nail_bundle_50.png',
-                              selected:
-                                  (_bundlePurchased &&
-                                      _selectedBundle == 'Starter') ||
-                                  (_bundleInCart &&
-                                      _bundleCartKey == 'Starter'),
-                              purchased:
-                                  _bundlePurchased &&
-                                  _selectedBundle == 'Starter',
-                              disableAdd: _bundlePurchased,
-                              onTap: () =>
-                                  setState(() => _bundleCartKey = 'Starter'),
-                              onAdd: () => _addBundleToCart('Starter'),
-                            ),
-                            const SizedBox(width: 12),
-                            _bundleCard(
-                              title: 'Pro Material Bundle',
-                              subtitle: 'Gel, tools & tips.',
-                              price: '\$100',
-                              imageAsset: 'assets/images/nail_bundle_100.png',
-                              selected:
-                                  (_bundlePurchased &&
-                                      _selectedBundle == 'Pro') ||
-                                  (_bundleInCart && _bundleCartKey == 'Pro'),
-                              purchased:
-                                  _bundlePurchased && _selectedBundle == 'Pro',
-                              disableAdd: _bundlePurchased,
-                              onTap: () =>
-                                  setState(() => _bundleCartKey = 'Pro'),
-                              onAdd: () => _addBundleToCart('Pro'),
-                            ),
-                            const SizedBox(width: 12),
-                            _bundleCard(
-                              title: 'Elite Bundle',
-                              subtitle: 'For high volume artists.',
-                              price: '\$150',
-                              imageAsset: 'assets/images/nail_bundle_150.png',
-                              selected:
-                                  (_bundlePurchased &&
-                                      _selectedBundle == 'Elite') ||
-                                  (_bundleInCart && _bundleCartKey == 'Elite'),
-                              purchased:
-                                  _bundlePurchased &&
-                                  _selectedBundle == 'Elite',
-                              disableAdd: _bundlePurchased,
-                              onTap: () =>
-                                  setState(() => _bundleCartKey = 'Elite'),
-                              onAdd: () => _addBundleToCart('Elite'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.lock_outline,
-                            size: 16,
-                            color: AppColors.blackCat.withValues(alpha: 0.65),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'You must purchase a bundle before account creation.',
-                              style: TextStyle(
-                                fontSize: _smallFs,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.blackCat.withValues(alpha: 0.65),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // 10) Payout
-                // -----------------------
-                _sectionCard(
-                  title: 'Payout',
-                  subtitle: 'How you receive payouts (can be updated later).',
-                  gradient: const LinearGradient(colors: [_snow, _snow]),
-                  child: Column(
-                    children: [
-                      DropdownButtonFormField<PayoutMethod>(
-                        initialValue: _payoutMethod,
-                        style: const TextStyle(
-                          fontSize: _inputFs,
-                          color: Colors.black,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        hint: Text(
-                          'Select state',
-                          style: TextStyle(
-                            fontSize: _inputFs,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.blackCat.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        decoration: _dec(
-                          'Payout Method *',
-                          'Select payout method',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: PayoutMethod.paypal,
-                            child: Text(
-                              'PayPal',
-                              style: TextStyle(
-                                fontSize: _inputFs,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: PayoutMethod.venmo,
-                            child: Text(
-                              'Venmo',
-                              style: TextStyle(
-                                fontSize: _inputFs,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: PayoutMethod.bankTransfer,
-                            child: Text(
-                              'Bank Transfer',
-                              style: TextStyle(
-                                fontSize: _inputFs,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: PayoutMethod.applePay,
-                            child: Text(
-                              'Apple Pay',
-                              style: TextStyle(
-                                fontSize: _inputFs,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (v) => setState(
-                          () => _payoutMethod = v ?? PayoutMethod.paypal,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      if (_payoutMethod == PayoutMethod.paypal ||
-                          _payoutMethod == PayoutMethod.venmo) ...[
-                        TextField(
-                          controller: _legalNameCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Legal Name *', 'Legal Name'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _payoutEmailCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _dec(
-                            _payoutMethod == PayoutMethod.venmo
-                                ? 'Venmo Email *'
-                                : 'PayPal Email *',
-                            'Email',
-                          ),
-                        ),
-                      ],
-
-                      if (_payoutMethod == PayoutMethod.bankTransfer) ...[
-                        TextField(
-                          controller: _legalNameCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Legal Name *', 'Legal Name'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _bankNameCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Bank Name *', 'Bank name'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _routingCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec(
-                            'Routing Number *',
-                            'Routing number',
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _accountNumberCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec(
-                            'Account Number *',
-                            'Account number',
-                          ),
-                        ),
-                      ],
-
-                      if (_payoutMethod == PayoutMethod.applePay) ...[
-                        TextField(
-                          controller: _applePayNameCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Full Name *', 'Name on Apple Pay'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _applePayPhoneCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(10),
-                            UsPhoneTextInputFormatter(),
-                          ],
-                          decoration: _dec('Phone Number *', 'Apple Pay phone'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _applePayEmailCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _dec(
-                            'Apple ID Email *',
-                            'Email linked to Apple Pay',
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                if (widget.showAdaCompliance) ...[
-                  // -----------------------
-                  // 11) Agreements
-                  // -----------------------
-                  _sectionCard(
-                    title: 'Agreements',
-                    subtitle: 'Required to create your account.',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _smallCheckboxRow(
-                          value: _agreeTerms,
-                          onChanged: (v) =>
-                              setState(() => _agreeTerms = v ?? false),
-                          text: 'I agree to the Terms',
-                        ),
-                        _smallCheckboxRow(
-                          value: _noCopyright,
-                          onChanged: (v) =>
-                              setState(() => _noCopyright = v ?? false),
-                          text:
-                              'I confirm my content does not violate copyright',
-                        ),
-                        _smallCheckboxRow(
-                          value: _agreeSafety,
-                          onChanged: (v) =>
-                              setState(() => _agreeSafety = v ?? false),
-                          text: 'I agree to safety guidelines',
-                        ),
-                        Row(
-                          children: [
-                            const Text(
-                              'Receive updates',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const Spacer(),
-                            Transform.scale(
-                              scale: 0.9,
-                              child: Switch(
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                value: _receiveUpdates,
-                                onChanged: (v) =>
-                                    setState(() => _receiveUpdates = v),
-                                activeThumbColor: _blackCat,
-                                activeTrackColor: _blackCat.withValues(alpha: 0.45),
-                                inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
-                                inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
+                  _wizardNavButtons(),
                 ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-                const SizedBox(height: 18),
+}
 
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed:
-                        (_bundlePurchased && _canStartCheckout && !_submitting)
-                        ? _continue
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _blackCat,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _submitting
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(_snow),
-                            ),
-                          )
-                        : Text(
-                            'Create account',
-                            style: const TextStyle(
-                              color: _snow,
-                              fontWeight: FontWeight.w400,
-                              fontSize: 12,
-                            ),
-                          ),
+class _NailCaptureStep {
+  const _NailCaptureStep({
+    required this.key,
+    required this.hand,
+    required this.finger,
+    required this.title,
+  });
+
+  final String key;
+  final String hand;
+  final String finger;
+  final String title;
+}
+
+class _MeasureStepTile extends StatelessWidget {
+  const _MeasureStepTile({
+    required this.step,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final int step;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: AppColors.blackCat,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$step',
+              style: const TextStyle(
+                color: AppColors.snow,
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black.withValues(alpha: 0.72),
                   ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoinReference {
+  const _CoinReference({
+    required this.group,
+    required this.name,
+    required this.diameterMm,
+    required this.icon,
+  });
+
+  final String group;
+  final String name;
+  final double diameterMm;
+  final String icon;
+}
+
+const List<_CoinReference> _coinReferences = <_CoinReference>[
+  _CoinReference(
+    group: 'UNITED STATES',
+    name: 'US Penny (1¢)',
+    diameterMm: 19.05,
+    icon: '🇺🇸',
+  ),
+  _CoinReference(
+    group: 'UNITED STATES',
+    name: 'US Nickel (5¢)',
+    diameterMm: 21.21,
+    icon: '🇺🇸',
+  ),
+  _CoinReference(
+    group: 'UNITED STATES',
+    name: 'US Dime (10¢)',
+    diameterMm: 17.91,
+    icon: '🇺🇸',
+  ),
+  _CoinReference(
+    group: 'UNITED STATES',
+    name: 'US Quarter (25¢)',
+    diameterMm: 24.26,
+    icon: '🇺🇸',
+  ),
+  _CoinReference(
+    group: 'CANADA',
+    name: 'Canadian Quarter',
+    diameterMm: 23.88,
+    icon: '🇨🇦',
+  ),
+  _CoinReference(
+    group: 'CANADA',
+    name: 'Canadian Dollar (Loonie)',
+    diameterMm: 26.50,
+    icon: '🇨🇦',
+  ),
+  _CoinReference(
+    group: 'CANADA',
+    name: 'Canadian 2 Dollar (Toonie)',
+    diameterMm: 28.00,
+    icon: '🇨🇦',
+  ),
+  _CoinReference(
+    group: 'MEXICO',
+    name: 'Mexico 10 Peso',
+    diameterMm: 28.00,
+    icon: '🇲🇽',
+  ),
+];
+
+class _CoinSelectorPage extends StatefulWidget {
+  const _CoinSelectorPage({required this.items, required this.progressText});
+
+  final List<_CoinReference> items;
+  final String progressText;
+
+  @override
+  State<_CoinSelectorPage> createState() => _CoinSelectorPageState();
+}
+
+class _CoinSelectorPageState extends State<_CoinSelectorPage> {
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final filtered = widget.items.where((e) {
+      if (query.isEmpty) return true;
+      return e.name.toLowerCase().contains(query) ||
+          e.group.toLowerCase().contains(query);
+    }).toList(growable: false);
+
+    String? previousGroup;
+    final groupedWidgets = <Widget>[];
+    for (final item in filtered) {
+      if (previousGroup != item.group) {
+        previousGroup = item.group;
+        groupedWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 6),
+            child: Text(
+              item.group,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+        );
+      }
+      groupedWidgets.add(
+        InkWell(
+          onTap: () => Navigator.pop(context, item.name),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: 0.12),
+              ),
+            ),
+            child: Row(
+              children: [
+                Text(item.icon, style: const TextStyle(fontSize: 36)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${item.diameterMm.toStringAsFixed(2)}mm diameter',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.blackCat.withValues(alpha: 0.65),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.snow,
+      appBar: AppBar(
+        backgroundColor: AppColors.snow,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
+        centerTitle: true,
+        title: const Text(
+          'Select Coin / Currency',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Choose the coin or currency you will place next to your nail.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    widget.progressText,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'Search coin or country',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView(
+                  children: groupedWidgets,
+                ),
+              ),
+            ],
           ),
         ),
       ),

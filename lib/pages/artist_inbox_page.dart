@@ -5,6 +5,7 @@ import '../theme/app_colors.dart';
 import 'client_artist_profile_page.dart';
 import 'notifications_page.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 
 class ArtistInboxPage extends StatefulWidget {
@@ -59,15 +60,15 @@ class _ArtistInboxPageState extends State<ArtistInboxPage>
 
       // ✅ Header matches your other pages: logo + notifications + avatar dropdown
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(85),
+        preferredSize: const Size.fromHeight(JntHeaderMetrics.toolbarHeight),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
             child: Row(
               children: [
                 Image.asset(
                   'assets/images/jnt_logo_1.png',
-                  height: 50,
+                  height: JntHeaderMetrics.logoHeight,
                   fit: BoxFit.contain,
                   errorBuilder: (_, _, _) =>
                       const SizedBox(width: 40, height: 40),
@@ -92,7 +93,7 @@ class _ArtistInboxPageState extends State<ArtistInboxPage>
                       () {
                         NotificationsPage.showAsModal(context);
                       },
-                  iconSize: 24,
+                  iconSize: JntHeaderMetrics.notificationIconSize,
                 ),
                 const SizedBox(width: 6),
                 _AvatarMenu(
@@ -639,11 +640,11 @@ class _AvatarMenu extends StatelessWidget {
         }
       },
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: 36),
+          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
         ),
       ),
       itemBuilder: (_) => const [
@@ -721,6 +722,4 @@ class _ChatThread {
     this.expandedChevron = false,
   });
 }
-
-
 

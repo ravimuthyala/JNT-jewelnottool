@@ -225,7 +225,7 @@ class _Header extends StatelessWidget {
                 child: TextButton(
                   onPressed: onMarkAll,
                   child: const Text(
-                    'Mark all as read',
+                    'Mark as read',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,

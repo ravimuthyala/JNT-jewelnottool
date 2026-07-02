@@ -17,7 +17,6 @@ class ArtistOrdersPage extends StatefulWidget {
 class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
   ArtistOrdersFilter _filter = ArtistOrdersFilter.all;
 
-  // ✅ Replace with Firestore later
   final List<ArtistOrder> _orders = [
     const ArtistOrder(
       id: 'a1',

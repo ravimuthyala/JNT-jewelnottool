@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 // ✅ Import ClientProfileDraft (and whatever it needs)
 import '../models/client_profile_models.dart';
@@ -62,24 +63,9 @@ class _EditPersonalInfoPageState extends State<EditPersonalInfoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.pop(context),
+        closeTooltip: 'Close personal information',
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
@@ -157,4 +143,3 @@ class _EditPersonalInfoPageState extends State<EditPersonalInfoPage> {
     );
   }
 }
-

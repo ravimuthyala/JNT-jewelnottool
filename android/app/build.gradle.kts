@@ -1,8 +1,5 @@
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
-    id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
@@ -28,10 +25,6 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        // Temporary compatibility workaround:
-        // Android 16 (targetSdk 36) + current GMS stack on some Samsung devices
-        // can trigger broker failures ("Unknown calling package name 'com.google.android.gms'")
-        // after Firebase auth/Firestore init.
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
