@@ -733,14 +733,14 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         if (uid.isNotEmpty) {
           row = await supabase
               .from(table)
-              .select()
+              .select('id, email, display_name, name, profile')
               .eq('id', uid)
               .maybeSingle();
         }
         if (row == null && email.isNotEmpty) {
           row = await supabase
               .from(table)
-              .select()
+              .select('id, email, display_name, name, profile')
               .eq('email', email)
               .maybeSingle();
         }

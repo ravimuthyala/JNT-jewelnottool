@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import 'client_registration_page.dart';
+// ignore: unused_import — keep for easy revert to ArtistRegistrationPage
 import 'artist_registration_page.dart';
+import 'artist_registration/artist_registration_flow.dart';
 import 'client_artist_registration_page.dart';
 import 'login_page.dart';
 import 'brand_registration_page.dart';
@@ -157,7 +159,7 @@ class _RegisterPageState extends State<RegisterPage> {
     } else if (client && artist) {
       page = const ClientArtistRegistrationPage();
     } else if (artist) {
-      page = const ArtistRegistrationPage();
+      page = const ArtistRegistrationFlow(); // v2 multi-step (swap back to ArtistRegistrationPage to revert)
     } else {
       page = const ClientRegistrationPage();
     }

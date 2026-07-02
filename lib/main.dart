@@ -19,6 +19,7 @@ import 'services/startup_frame_gate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/client_profile_models.dart';
+import 'pages/artist_registration/artist_registration_flow.dart';
 import 'pages/review_artist_page.dart';
 import 'pages/tip_artist_page.dart';
 
@@ -281,6 +282,7 @@ class JntApp extends StatelessWidget {
                 profile: ClientProfileDraft.mock(),
               ),
           '/artist-login': (_) => const ArtistLoginPage(),
+          '/artist-register-v2': (_) => const ArtistRegistrationFlow(),
           '/reset-password-success': (_) => const ResetPasswordSuccessPage(),
         },
       ),
