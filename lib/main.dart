@@ -21,6 +21,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'pages/phone_verification_page.dart';
+import 'pages/artist_registration/artist_registration_flow.dart';
 import 'models/client_profile_models.dart';
 import 'pages/review_artist_page.dart';
 import 'pages/tip_artist_page.dart';
@@ -284,6 +285,7 @@ class JntApp extends StatelessWidget {
                 profile: ClientProfileDraft.mock(),
               ),
           '/artist-login': (_) => const ArtistLoginPage(),
+          '/artist-register-v2': (_) => const ArtistRegistrationFlow(),
           '/reset-password-success': (_) => const ResetPasswordSuccessPage(),
         },
       ),
