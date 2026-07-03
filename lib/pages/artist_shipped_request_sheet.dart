@@ -10,6 +10,7 @@ import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../utils/request_nfc_details_loader.dart';
 
 Future<void> showShippedRequestSheet({
   required BuildContext context,
@@ -96,6 +97,94 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     final text = (raw ?? '').toString().trim();
     if (text.isEmpty) return null;
     return DateTime.tryParse(text);
+  }
+
+  double? _asAmount(Object? value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    final text = value.toString().trim().replaceAll(RegExp(r'[^0-9.]'), '');
+    if (text.isEmpty) return null;
+    return double.tryParse(text);
+  }
+
+  double? _amountFromMaps(Iterable<Map<String, dynamic>> maps) {
+    for (final map in maps) {
+      final direct = _asAmount(
+        map['artist_final_amount'] ??
+            map['final_amount_by_artist'] ??
+            map['artistFinalAmount'] ??
+            map['finalAmountByArtist'] ??
+            map['payment_amount'] ??
+            map['paid_amount'] ??
+            map['amount'] ??
+            map['total_amount'],
+      );
+      if (direct != null && direct > 0) return direct;
+
+      final data = _asMap(map['data']);
+      final payload = _asMap(map['payload']);
+      final details = _asMap(map['details']);
+      final payment = _asMap(map['payment']);
+      final payments = _asMap(map['payments']);
+      final artistQuote = _asMap(map['artistQuote'] ?? map['artist_quote']);
+      final dataArtistQuote = _asMap(data['artistQuote'] ?? data['artist_quote']);
+      final payloadArtistQuote = _asMap(payload['artistQuote'] ?? payload['artist_quote']);
+      final detailsArtistQuote = _asMap(details['artistQuote'] ?? details['artist_quote']);
+
+      final nestedMaps = <Map<String, dynamic>>[
+        data,
+        payload,
+        details,
+        payment,
+        payments,
+        artistQuote,
+        dataArtistQuote,
+        payloadArtistQuote,
+        detailsArtistQuote,
+      ];
+
+      for (final nested in nestedMaps) {
+        final nestedAmount = _asAmount(
+          nested['artistFinalAmount'] ??
+              nested['finalAmountByArtist'] ??
+              nested['artist_final_amount'] ??
+              nested['final_amount_by_artist'] ??
+              nested['total'] ??
+              nested['amount'] ??
+              nested['paymentAmount'] ??
+              nested['payment_amount'],
+        );
+        if (nestedAmount != null && nestedAmount > 0) return nestedAmount;
+      }
+    }
+    return null;
+  }
+
+  Future<double?> _loadAcceptedArtistAmount() async {
+    final local = widget.request.artistFinalAmount;
+    if (local != null && local > 0) return local;
+
+    final maps = <Map<String, dynamic>>[];
+    try {
+      final root = await _supabase
+          .from(_requestTable)
+          .select()
+          .eq('id', widget.request.id)
+          .maybeSingle();
+      if (root != null) maps.add(Map<String, dynamic>.from(root));
+
+      final detailRows = await _supabase
+          .from(_requestDetailsTable)
+          .select()
+          .eq('request_id', widget.request.id);
+      for (final row in detailRows) {
+        maps.add(_asMap(row));
+      }
+    } catch (_) {
+      // Keep modal usable if lookup fails.
+    }
+
+    return _amountFromMaps(maps);
   }
 
   _ShipmentInfo _fallbackShipmentInfo() {
@@ -395,6 +484,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                       const SizedBox(height: 12),
                     ],
                     _measurementSection(),
+                    const SizedBox(height: 12),
+                    _paymentSection(),
                     const SizedBox(height: 12),
                     _clientPhotosSection(modalClientPhotos),
                     const SizedBox(height: 12),
@@ -951,10 +1042,11 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 15, color: AppColors.blackCat),
         const SizedBox(width: 5),
-        Expanded(
+        Flexible(
           child: Text(
             text,
             maxLines: 2,
@@ -1010,17 +1102,104 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             leftHand: _dimsMap(widget.request.leftHand),
             rightHand: _dimsMap(widget.request.rightHand),
           );
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: widget.request.sourceCollection,
+        requestId: widget.request.id,
+      ),
+      builder: (context, nfcSnapshot) {
+        final nfc = nfcSnapshot.data ?? RequestNfcDetails.emptyConst;
+        final singleClient = GroupClientMeasurementData(
+          name: fallbackClient.name,
+          clientEmail: fallbackClient.clientEmail,
+          nailShape: fallbackClient.nailShape,
+          nailLength: fallbackClient.nailLength,
+          leftHand: fallbackClient.leftHand,
+          rightHand: fallbackClient.rightHand,
+          leftNfc: nfc.main.left,
+          rightNfc: nfc.main.right,
+        );
+        return _sectionCard(
+          title: 'Nail Dimensions',
+          child: isGroup
+              ? FutureBuilder<List<GroupClientMeasurementData>>(
+                  future: _loadGroupMeasurementClients(),
+                  builder: (context, snapshot) {
+                    final clients = snapshot.data ?? fallbackClients;
+                    return _compactMeasurementTabs(clients);
+                  },
+                )
+              : _measurementBody(singleClient),
+        );
+      },
+    );
+  }
+
+  Widget _paymentSection() {
+    final paymentStatus = widget.request.paymentStatus.trim().isEmpty
+        ? 'Pending'
+        : widget.request.paymentStatus.trim();
+
     return _sectionCard(
-      title: 'Nail Dimensions',
-      child: isGroup
-          ? FutureBuilder<List<GroupClientMeasurementData>>(
-              future: _loadGroupMeasurementClients(),
-              builder: (context, snapshot) {
-                final clients = snapshot.data ?? fallbackClients;
-                return _compactMeasurementTabs(clients);
-              },
-            )
-          : _measurementBody(fallbackClient),
+      title: 'Payment',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FutureBuilder<double?>(
+            future: _loadAcceptedArtistAmount(),
+            initialData: widget.request.artistFinalAmount,
+            builder: (context, snapshot) {
+              final amount = snapshot.data ?? widget.request.artistFinalAmount;
+              final amountText = amount != null && amount > 0
+                  ? '\$${amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2)}'
+                  : '-';
+              return _paymentDetailRow(
+                'Final Amount by Artist',
+                amountText,
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          _paymentDetailRow(
+            'Status',
+            paymentStatus,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paymentDetailRow(
+    String label,
+    String value, {
+    FontWeight valueWeight = FontWeight.w700,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 122,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.60),
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontWeight: valueWeight,
+              fontSize: 13.5,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1113,9 +1292,21 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _handCardFromMap('Left Hand', client.leftHand)),
+              Expanded(
+                child: _handCardFromMap(
+                  'Left Hand',
+                  client.leftHand,
+                  nfc: client.leftNfc,
+                ),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: _handCardFromMap('Right Hand', client.rightHand)),
+              Expanded(
+                child: _handCardFromMap(
+                  'Right Hand',
+                  client.rightHand,
+                  nfc: client.rightNfc,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1142,7 +1333,11 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-  Widget _handCardFromMap(String title, Map<String, String> dims) {
+  Widget _handCardFromMap(
+    String title,
+    Map<String, String> dims, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
     String pick(String key) => (dims[key] ?? '').trim();
     return _softBox(
       Column(
@@ -1156,17 +1351,17 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             ),
           ),
           const SizedBox(height: 8),
-          _dimRow('Thumb', pick('thumb')),
-          _dimRow('Index', pick('index')),
-          _dimRow('Middle', pick('middle')),
-          _dimRow('Ring', pick('ring')),
-          _dimRow('Pinky', pick('pinky')),
+          _dimRow('Thumb', pick('thumb'), nfcRequested: nfc['thumb'] == true),
+          _dimRow('Index', pick('index'), nfcRequested: nfc['index'] == true),
+          _dimRow('Middle', pick('middle'), nfcRequested: nfc['middle'] == true),
+          _dimRow('Ring', pick('ring'), nfcRequested: nfc['ring'] == true),
+          _dimRow('Pinky', pick('pinky'), nfcRequested: nfc['pinky'] == true),
         ],
       ),
     );
   }
 
-  Widget _dimRow(String label, String raw) {
+  Widget _dimRow(String label, String raw, {bool nfcRequested = false}) {
     String formatMm(String value) {
       final v = value.trim();
       if (v.isEmpty || v == '-') return '-';
@@ -1190,6 +1385,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               ),
             ),
           ),
+          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
           Text(
             formatMm(raw),
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
@@ -1199,9 +1395,32 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-    Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
+  Widget _nfcDimensionChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Text(
+        'NFC',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          height: 1.0,
+        ),
+      ),
+    );
+  }
+
+  Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
     final merged = <GroupClientMeasurementData>[];
     final seen = <String>{};
+    final nfcDetails = await loadRequestNfcDetails(
+      sourceCollection: widget.request.sourceCollection,
+      requestId: widget.request.id,
+    );
 
     void addClient(
       GroupClientMeasurementData client, {
@@ -1226,10 +1445,13 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
         name: widget.request.clientName.trim().isEmpty
             ? 'Client'
             : widget.request.clientName.trim(),
+        clientEmail: widget.request.clientEmail,
         nailShape: widget.request.nailShape,
         nailLength: widget.request.nailLength,
         leftHand: _dimsMap(widget.request.leftHand),
         rightHand: _dimsMap(widget.request.rightHand),
+        leftNfc: nfcDetails.main.left,
+        rightNfc: nfcDetails.main.right,
       ),
       email: widget.request.clientEmail,
     );
@@ -1314,6 +1536,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       addClient(
         GroupClientMeasurementData(
           name: name,
+          clientEmail: email,
           nailShape: _firstNonEmpty(<Object?>[
             client['nailShape'],
             client['nail_shape'],
@@ -1330,6 +1553,14 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
           ], fallback: widget.request.nailLength),
           leftHand: left,
           rightHand: right,
+          leftNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .left,
+          rightNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .right,
         ),
         email: email,
         id: id,

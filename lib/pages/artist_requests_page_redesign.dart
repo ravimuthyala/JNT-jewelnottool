@@ -1171,6 +1171,16 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final artistDecline = asMap(data['artistDecline']);
     final roleStatuses = asMap(data['roleStatuses']);
 
+    final acceptedBy = text(row['accepted_by_artist_email']);
+
+    // If the current artist is now the accepted artist, do not treat an old
+    // direct-artist decline/release-to-pool marker as a decline for this artist.
+    // This happens when the originally selected artist declines, the request is
+    // released to the artist pool, and a different pool artist accepts it.
+    if (acceptedBy == email) {
+      return false;
+    }
+
     if (listContains(row['declined_by_artist_emails']) ||
         listContains(data['declinedByArtistEmails']) ||
         listContains(data['declined_by_artist_emails'])) {
@@ -1186,7 +1196,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     ].where((e) => e.isNotEmpty).toSet();
     if (declinedBy.contains(email)) return true;
 
-    final acceptedBy = text(row['accepted_by_artist_email']);
     final selectedArtist = text(row['selected_artist_email']);
     final selectedArtistData = text(data['selectedArtistEmail']);
     final assignedToCurrent = acceptedBy == email ||
@@ -1470,6 +1479,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }) {
     if (_locallyDeclinedRequestIds.contains(request.id)) return false;
     if (_persistedArtistDeclinedRequestIds.contains(request.id)) return false;
+    if (widget.clientArtistMenuStyle &&
+        artistEmail.isNotEmpty &&
+        request.clientEmail.trim().toLowerCase() == artistEmail) {
+      return false;
+    }
     final isCompanyRequest =
         request.sourceCollection == 'Company_Custom_Requests';
     final hasClientAccepted = request.acceptedByClientEmail.trim().isNotEmpty;
@@ -2438,6 +2452,204 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     _replaceById(id, r.copyWith(status: status));
   }
 
+
+  Future<void> _forcePersistArtistAcceptedDesigning(
+    ClientRequestV2 request,
+    double normalizedTotal,
+  ) async {
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    final artistEmail = (currentUser?.email ?? '').trim().toLowerCase();
+    final artistName = (() {
+      final displayName = (currentUser?.displayName ?? '').trim();
+      if (displayName.isNotEmpty) return displayName;
+      if (artistEmail.contains('@')) return artistEmail.split('@').first;
+      return 'Artist';
+    })();
+    if (artistEmail.isEmpty) return;
+
+    final table = _tableForCollection(request.sourceCollection);
+    final orderRef = request.orderNumber.trim();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+      if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+      return <String, dynamic>{};
+    }
+
+    bool asBool(Object? value) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      final text = (value ?? '').toString().trim().toLowerCase();
+      return text == 'true' || text == 'yes' || text == '1' || text == 'open';
+    }
+
+    String text(Object? value) => (value ?? '').toString().trim();
+
+    Map<String, dynamic>? row;
+    try {
+      row = await Supabase.instance.client.from(table).select().eq('id', request.id).maybeSingle();
+      if (row == null && orderRef.isNotEmpty) {
+        row = await Supabase.instance.client
+            .from(table)
+            .select()
+            .or('order_number.eq.$orderRef,request_number.eq.$orderRef')
+            .maybeSingle();
+      }
+    } catch (e) {
+      debugPrint('[Artist Accept] Unable to reload row for status sync: $e');
+    }
+
+    final rowId = text(row?['id']).isNotEmpty ? text(row?['id']) : request.id;
+    final details = asMap(row?['details']);
+    final payload = asMap(row?['payload']);
+    final requestDetails = asMap(row?['request_details']);
+    final data = asMap(row?['data']);
+    final detailsOrder = asMap(details['order']);
+    final payloadOrder = asMap(payload['order']);
+    final requestDetailsOrder = asMap(requestDetails['order']);
+    final dataOrder = asMap(data['order']);
+
+    final wasReleasedToPool =
+        asBool(row?['open_to_artist_pool']) ||
+        asBool(details['openToArtistPool']) ||
+        asBool(detailsOrder['openToArtistPool']) ||
+        asBool(payload['openToArtistPool']) ||
+        asBool(payloadOrder['openToArtistPool']) ||
+        asBool(requestDetails['openToArtistPool']) ||
+        asBool(requestDetailsOrder['openToArtistPool']) ||
+        text(row?['request_type']).toLowerCase() == 'standard' ||
+        text(detailsOrder['artistPoolStatus']).toLowerCase() == 'open' ||
+        text(detailsOrder['artistPoolStatus']).toLowerCase() == 'pending' ||
+        text(payloadOrder['artistPoolStatus']).toLowerCase() == 'open' ||
+        text(dataOrder['artistPoolStatus']).toLowerCase() == 'open';
+
+    Map<String, dynamic> mergeRoleStatuses(Map<String, dynamic> source) {
+      final roleStatuses = asMap(source['roleStatuses'] ?? source['role_statuses']);
+      return <String, dynamic>{
+        ...source,
+        'status': 'designing',
+        'clientStatus': 'in_progress',
+        'artistStatus': 'designing',
+        'acceptedByArtistEmail': artistEmail,
+        'acceptedByArtistName': artistName,
+        'artistFinalAmount': normalizedTotal,
+        'artistAcceptedAt': nowIso,
+        'roleStatuses': <String, dynamic>{
+          ...roleStatuses,
+          'client': 'in_progress',
+          'artist': 'designing',
+        },
+      };
+    }
+
+    Map<String, dynamic> mergeOrder(Map<String, dynamic> source) {
+      return <String, dynamic>{
+        ...source,
+        'artistPoolStatus': 'accepted',
+        'directArtistStatus': 'accepted',
+        'openToArtistPool': false,
+        'acceptedByArtistEmail': artistEmail,
+        'acceptedByArtistName': artistName,
+        'artistFinalAmount': normalizedTotal,
+        'artistAcceptedAt': nowIso,
+      };
+    }
+
+    final nextDetails = mergeRoleStatuses(details);
+    nextDetails['order'] = mergeOrder(detailsOrder);
+    nextDetails['acceptance'] = <String, dynamic>{
+      ...asMap(nextDetails['acceptance']),
+      'acceptedByArtistEmail': artistEmail,
+      'acceptedByArtistName': artistName,
+      'acceptedByArtistAt': nowIso,
+    };
+
+    final nextPayload = mergeRoleStatuses(payload);
+    nextPayload['order'] = mergeOrder(payloadOrder);
+    nextPayload['acceptance'] = <String, dynamic>{
+      ...asMap(nextPayload['acceptance']),
+      'acceptedByArtistEmail': artistEmail,
+      'acceptedByArtistName': artistName,
+      'acceptedByArtistAt': nowIso,
+    };
+
+    final nextRequestDetails = mergeRoleStatuses(requestDetails);
+    nextRequestDetails['order'] = mergeOrder(requestDetailsOrder);
+
+    final nextData = mergeRoleStatuses(data);
+    nextData['order'] = mergeOrder(dataOrder);
+
+    final commonRootUpdate = <String, dynamic>{
+      'status': 'designing',
+      'artist_status': 'designing',
+      'client_status': 'in_progress',
+      'accepted_by_artist_email': artistEmail,
+      'accepted_by_artist_name': artistName,
+      'artist_email': artistEmail,
+      'artist_name': artistName,
+      'artist_final_amount': normalizedTotal,
+      'final_amount_by_artist': normalizedTotal,
+      'direct_artist_status': wasReleasedToPool ? 'released_to_pool' : 'accepted',
+      'artist_pool_status': 'accepted',
+      'updated_at': nowIso,
+      'details': nextDetails,
+      if (payload.isNotEmpty || table == 'client_custom_requests') 'payload': nextPayload,
+      if (requestDetails.isNotEmpty || table == 'client_custom_requests')
+        'request_details': nextRequestDetails,
+      if (data.isNotEmpty || table == 'client_custom_requests') 'data': nextData,
+      if (wasReleasedToPool) 'request_type': 'Standard',
+      if (wasReleasedToPool) 'open_to_artist_pool': false,
+      if (wasReleasedToPool) 'is_direct_request': false,
+    };
+
+    Future<void> updateRoot(Map<String, dynamic> values) async {
+      await Supabase.instance.client.from(table).update(values).eq('id', rowId);
+    }
+
+    try {
+      await updateRoot(commonRootUpdate);
+    } catch (e) {
+      debugPrint('[Artist Accept] full root status sync failed: $e');
+      final fallback = Map<String, dynamic>.from(commonRootUpdate)
+        ..remove('open_to_artist_pool')
+        ..remove('is_direct_request')
+        ..remove('request_type')
+        ..remove('payload')
+        ..remove('request_details')
+        ..remove('data');
+      try {
+        await updateRoot(fallback);
+      } catch (e2) {
+        debugPrint('[Artist Accept] fallback root status sync failed: $e2');
+        await updateRoot(<String, dynamic>{
+          'status': 'designing',
+          'artist_status': 'designing',
+          'client_status': 'in_progress',
+          'accepted_by_artist_email': artistEmail,
+          'accepted_by_artist_name': artistName,
+          'artist_final_amount': normalizedTotal,
+          'direct_artist_status': wasReleasedToPool ? 'released_to_pool' : 'accepted',
+          'artist_pool_status': 'accepted',
+          'updated_at': nowIso,
+        });
+      }
+    }
+
+    final detailTable = _detailsTableFor(table);
+    try {
+      await Supabase.instance.client.from(detailTable).upsert(<String, dynamic>{
+        'id': '$rowId:payload',
+        'request_id': rowId,
+        'detail_key': 'payload',
+        'data': nextDetails,
+        'updated_at': nowIso,
+      }, onConflict: 'id');
+    } catch (e) {
+      debugPrint('[Artist Accept] details status sync failed: $e');
+    }
+  }
+
   Future<bool> _persistArtistAcceptance(
     ClientRequestV2 request,
     _AcceptResult accepted,
@@ -2456,6 +2668,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           'p_artist_amount': normalizedTotal,
         },
       );
+
+      await _forcePersistArtistAcceptedDesigning(request, normalizedTotal);
 
       try {
         final currentUser = Supabase.instance.client.auth.currentUser;
@@ -2945,8 +3159,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final docRef = SupabaseCompatDatabase.instance
         .collection(request.sourceCollection)
         .doc(request.id);
+    final isClientRequest =
+        request.sourceCollection != 'Company_Custom_Requests';
     final releaseDirectToPool =
         request.isDirectRequest && request.fallbackToPool;
+    final releaseDirectClientRequestToArtistPool =
+        isClientRequest && releaseDirectToPool;
+    final releaseDirectBrandRequestToPool =
+        !isClientRequest && releaseDirectToPool;
     final cancelDirectRequest =
         request.isDirectRequest && !request.fallbackToPool;
     String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
@@ -2984,6 +3204,49 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final existingData = existingMap['data'] is Map
         ? Map<String, dynamic>.from(existingMap['data'] as Map)
         : <String, dynamic>{};
+    final existingDetails = existingMap['details'] is Map
+        ? Map<String, dynamic>.from(existingMap['details'] as Map)
+        : <String, dynamic>{};
+    final existingDetailsOrder = existingDetails['order'] is Map
+        ? Map<String, dynamic>.from(existingDetails['order'] as Map)
+        : <String, dynamic>{};
+    final existingDataOrder = existingData['order'] is Map
+        ? Map<String, dynamic>.from(existingData['order'] as Map)
+        : <String, dynamic>{};
+
+    String firstText(List<Object?> values) {
+      for (final value in values) {
+        final text = (value ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return '';
+    }
+
+    final originallySelectedArtistName = firstText(<Object?>[
+      existingMap['selected_artist'],
+      existingMap['artist_name'],
+      existingData['selectedArtist'],
+      existingData['selected_artist'],
+      existingDataOrder['selectedArtist'],
+      existingDataOrder['selected_artist'],
+      existingDetailsOrder['selectedArtist'],
+      existingDetailsOrder['selected_artist'],
+      request.selectedArtist,
+    ]);
+    final originallySelectedArtistEmail = firstText(<Object?>[
+      existingMap['selected_artist_email'],
+      existingMap['artist_email'],
+      existingData['selectedArtistEmail'],
+      existingData['selected_artist_email'],
+      existingDataOrder['selectedArtistEmail'],
+      existingDataOrder['selected_artist_email'],
+      existingDetailsOrder['selectedArtistEmail'],
+      existingDetailsOrder['selected_artist_email'],
+      request.selectedArtistEmail,
+    ]).toLowerCase();
+
+    final shouldReleaseClientDirectToPool = releaseDirectClientRequestToArtistPool;
+
     final existingDeclined = <String>{
       if (existingMap['declined_by_artist_emails'] is List)
         ...(existingMap['declined_by_artist_emails'] as List)
@@ -2998,11 +3261,23 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final updatedData = <String, dynamic>{
       ...existingData,
-      'status': 'declined',
+      'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
       'clientStatus': 'pending',
-      'artistStatus': 'declined',
+      'artistStatus': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
       'directArtistStatus': 'declined',
-      'artistPoolStatus': 'declined',
+      'artistPoolStatus': shouldReleaseClientDirectToPool
+          ? 'in_review'
+          : 'declined',
+      if (shouldReleaseClientDirectToPool) 'openToArtistPool': true,
+      if (shouldReleaseClientDirectToPool) 'isDirectRequest': false,
+      if (shouldReleaseClientDirectToPool) 'requestType': 'Standard',
+      if (shouldReleaseClientDirectToPool) 'selectedArtist': '',
+      if (shouldReleaseClientDirectToPool) 'selectedArtistEmail': '',
+      if (shouldReleaseClientDirectToPool) 'acceptedByArtistEmail': '',
+      if (shouldReleaseClientDirectToPool)
+        'declinedArtistName': originallySelectedArtistName,
+      if (shouldReleaseClientDirectToPool)
+        'declinedArtistEmail': originallySelectedArtistEmail,
       'declinedByArtistEmails': existingDeclined,
       'declinedByArtistEmail': artistEmail,
       'artistDeclinedAt': declinedAtIso,
@@ -3012,10 +3287,43 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       'roleStatuses': <String, dynamic>{'client': 'pending', 'artist': 'declined'},
       'artistDecline': <String, dynamic>{
         'artistEmail': artistEmail,
+        'artistName': originallySelectedArtistName,
         'declinedAt': declinedAtIso,
         'status': 'declined',
         'reason': 'Declined by artist',
       },
+    };
+
+    final updatedDetailsOrder = <String, dynamic>{
+      ...existingDetailsOrder,
+      'directArtistStatus': 'declined',
+      'artistPoolStatus': shouldReleaseClientDirectToPool
+          ? 'open'
+          : 'declined',
+      if (shouldReleaseClientDirectToPool) 'openToArtistPool': true,
+      if (shouldReleaseClientDirectToPool) 'isDirectRequest': false,
+      if (shouldReleaseClientDirectToPool)
+        'declinedArtist': originallySelectedArtistName,
+      if (shouldReleaseClientDirectToPool)
+        'declinedArtistEmail': originallySelectedArtistEmail,
+    };
+    final updatedDetailsRouting = existingDetails['routing'] is Map
+        ? Map<String, dynamic>.from(existingDetails['routing'] as Map)
+        : <String, dynamic>{};
+    if (shouldReleaseClientDirectToPool) {
+      updatedDetailsRouting['openToArtistPool'] = true;
+      updatedDetailsRouting['artistPoolStatus'] = 'open';
+      updatedDetailsRouting['directArtistStatus'] = 'declined';
+    }
+    final updatedDetails = <String, dynamic>{
+      ...existingDetails,
+      'order': updatedDetailsOrder,
+      if (shouldReleaseClientDirectToPool) 'routing': updatedDetailsRouting,
+      if (shouldReleaseClientDirectToPool) 'requestType': 'Standard',
+      if (shouldReleaseClientDirectToPool)
+        'declinedArtistName': originallySelectedArtistName,
+      if (shouldReleaseClientDirectToPool)
+        'declinedArtistEmail': originallySelectedArtistEmail,
     };
 
     try {
@@ -3033,11 +3341,26 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     try {
       await Supabase.instance.client.from(table).update(<String, dynamic>{
-        'status': 'declined',
+        'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
         'client_status': 'pending',
-        'artist_status': 'declined',
+        'artist_status': shouldReleaseClientDirectToPool
+            ? 'pending'
+            : 'declined',
         'direct_artist_status': 'declined',
-        'artist_pool_status': 'declined',
+        'artist_pool_status': shouldReleaseClientDirectToPool
+            ? 'in_review'
+            : 'declined',
+        if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
+        if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
+        if (shouldReleaseClientDirectToPool) 'selected_artist': '',
+        if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
+        if (shouldReleaseClientDirectToPool)
+          'accepted_by_artist_email': '',
+        if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
+        if (shouldReleaseClientDirectToPool)
+          'declined_artist_name': originallySelectedArtistName,
+        if (shouldReleaseClientDirectToPool)
+          'declined_artist_email': originallySelectedArtistEmail,
         'declined_by_artist_emails': existingDeclined,
         'declined_by_artist_email': artistEmail,
         'artist_declined_at': declinedAtIso,
@@ -3046,13 +3369,28 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         'completion_decline_description': artistCancelReason,
         'updated_at': declinedAtIso,
         'data': updatedData,
+        'details': updatedDetails,
       }).eq('id', request.id);
     } catch (_) {
       await Supabase.instance.client.from(table).update(<String, dynamic>{
-        'status': 'declined',
-        'artist_status': 'declined',
+        'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
+        'artist_status': shouldReleaseClientDirectToPool
+            ? 'pending'
+            : 'declined',
+        if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
+        if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
+        if (shouldReleaseClientDirectToPool) 'selected_artist': '',
+        if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
+        if (shouldReleaseClientDirectToPool)
+          'accepted_by_artist_email': '',
+        if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
+        if (shouldReleaseClientDirectToPool)
+          'declined_artist_name': originallySelectedArtistName,
+        if (shouldReleaseClientDirectToPool)
+          'declined_artist_email': originallySelectedArtistEmail,
         'updated_at': declinedAtIso,
         'data': updatedData,
+        'details': updatedDetails,
       }).eq('id', request.id);
     }
 
@@ -3065,7 +3403,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       'updated_at': declinedAtIso,
     }, onConflict: 'id');
 
-    if (releaseDirectToPool) {
+    if (releaseDirectBrandRequestToPool) {
       final rootSnap = await docRef.get();
       final rootData = rootSnap.data() ?? const <String, dynamic>{};
       final detailsSnap = await docRef
@@ -3134,6 +3472,22 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         clientName: acceptedClientName,
         brandName: brandName,
         campaignName: campaignName,
+        isDirectRequest: false,
+        selectedArtistEmail: '',
+        selectedArtistName: '',
+        orderId: request.id,
+        sourceCollection: request.sourceCollection,
+        orderNumber: request.orderNumber,
+        allowNonLicensed: request.allowNonLicensed,
+        excludeArtistEmails: <String>[artistEmail],
+      );
+    }
+
+    if (releaseDirectClientRequestToArtistPool) {
+      await NotificationsService.notifyArtistsForNewClientRequest(
+        clientName: request.clientName.trim().isEmpty
+            ? 'Client'
+            : request.clientName.trim(),
         isDirectRequest: false,
         selectedArtistEmail: '',
         selectedArtistName: '',
@@ -5747,6 +6101,22 @@ class InReviewDetailsSheet extends StatelessWidget {
         _displayTruthy(detailsDataJson['is_direct_request']) ||
         _displayTruthy(orderData['isDirectRequest']) ||
         _displayTruthy(orderData['is_direct_request']);
+    final openToArtistPool = _displayTruthy(rootData['open_to_artist_pool']) ||
+        _displayTruthy(rootData['openToArtistPool']) ||
+        _displayTruthy(rootDetails['openToArtistPool']) ||
+        _displayTruthy(rootDetails['open_to_artist_pool']) ||
+        _displayTruthy(payload['openToArtistPool']) ||
+        _displayTruthy(payload['open_to_artist_pool']) ||
+        _displayTruthy(rootDataJson['openToArtistPool']) ||
+        _displayTruthy(rootDataJson['open_to_artist_pool']) ||
+        _displayTruthy(detailsData['open_to_artist_pool']) ||
+        _displayTruthy(detailsData['openToArtistPool']) ||
+        _displayTruthy(detailsPayload['openToArtistPool']) ||
+        _displayTruthy(detailsPayload['open_to_artist_pool']) ||
+        _displayTruthy(detailsDataJson['openToArtistPool']) ||
+        _displayTruthy(detailsDataJson['open_to_artist_pool']) ||
+        _displayTruthy(orderData['openToArtistPool']) ||
+        _displayTruthy(orderData['open_to_artist_pool']);
 
     final requestTypeSaysDirect = requestTypeText.contains('direct') &&
         !requestTypeText.contains('standard');
@@ -5754,7 +6124,9 @@ class InReviewDetailsSheet extends StatelessWidget {
         !requestTypeText.contains('direct');
     final hasSelectedArtist = selectedArtistEmail.isNotEmpty ||
         selectedArtistName.isNotEmpty;
-    final isDirectRequest = requestTypeSaysStandard
+    final isDirectRequest = openToArtistPool
+        ? false
+        : requestTypeSaysStandard
         ? false
         : (request.isDirectRequest ||
             directFlag ||
@@ -6308,12 +6680,151 @@ class InReviewDetailsSheet extends StatelessWidget {
         return const <String, String>{};
       }
 
+      final detailsPayload = asMap(detailsData['payload']);
+      final detailsDetails = asMap(detailsData['details']);
+      final detailsDataJson = asMap(detailsData['data']);
+      final detailsRequestDetails = asMap(
+        detailsData['requestDetails'] ?? detailsData['request_details'],
+      );
+      final detailsOrderData = asMap(
+        detailsData['order'] ?? detailsData['orderData'] ?? detailsData['order_data'],
+      );
+      final rootPayload = asMap(rootData['payload']);
+      final rootDetails = asMap(rootData['details']);
+      final rootDataJson = asMap(rootData['data']);
+      final rootRequestDetails = asMap(
+        rootData['requestDetails'] ?? rootData['request_details'],
+      );
+      final rootOrderData = asMap(
+        rootData['order'] ?? rootData['orderData'] ?? rootData['order_data'],
+      );
+      final detailsSnapshot = asMap(
+        detailsData['clientProfileSnapshot'] ?? detailsData['client_profile_snapshot'],
+      );
+      final rootSnapshot = asMap(
+        rootData['clientProfileSnapshot'] ?? rootData['client_profile_snapshot'],
+      );
+      final detailsDetailsPayload = asMap(detailsDetails['payload']);
+      final rootDetailsPayload = asMap(rootDetails['payload']);
+      final detailsDetailsRequestDetails = asMap(
+        detailsDetails['requestDetails'] ?? detailsDetails['request_details'],
+      );
+      final rootDetailsRequestDetails = asMap(
+        rootDetails['requestDetails'] ?? rootDetails['request_details'],
+      );
+      final detailsDetailsOrderData = asMap(
+        detailsDetails['order'] ??
+            detailsDetails['orderData'] ??
+            detailsDetails['order_data'],
+      );
+      final rootDetailsOrderData = asMap(
+        rootDetails['order'] ?? rootDetails['orderData'] ?? rootDetails['order_data'],
+      );
+      final detailsDataJsonRequestDetails = asMap(
+        detailsDataJson['requestDetails'] ?? detailsDataJson['request_details'],
+      );
+      final rootDataJsonRequestDetails = asMap(
+        rootDataJson['requestDetails'] ?? rootDataJson['request_details'],
+      );
+      final detailsDataJsonOrderData = asMap(
+        detailsDataJson['order'] ??
+            detailsDataJson['orderData'] ??
+            detailsDataJson['order_data'],
+      );
+      final rootDataJsonOrderData = asMap(
+        rootDataJson['order'] ?? rootDataJson['orderData'] ?? rootDataJson['order_data'],
+      );
+      final detailsDetailsSnapshot = asMap(
+        detailsDetails['clientProfileSnapshot'] ??
+            detailsDetails['client_profile_snapshot'],
+      );
+      final rootDetailsSnapshot = asMap(
+        rootDetails['clientProfileSnapshot'] ?? rootDetails['client_profile_snapshot'],
+      );
+      final detailsDataJsonSnapshot = asMap(
+        detailsDataJson['clientProfileSnapshot'] ??
+            detailsDataJson['client_profile_snapshot'],
+      );
+      final rootDataJsonSnapshot = asMap(
+        rootDataJson['clientProfileSnapshot'] ??
+            rootDataJson['client_profile_snapshot'],
+      );
+
       final mainCandidates = <Map<String, dynamic>>[
         asMap(asMap(detailsData['nailPreferences'] ?? detailsData['nail_preferences'])['dimensions']),
         asMap(asMap(rootData['nailPreferences'] ?? rootData['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDetails['nailPreferences'] ?? detailsDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDetails['nailPreferences'] ?? rootDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDataJson['nailPreferences'] ?? detailsDataJson['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDataJson['nailPreferences'] ?? rootDataJson['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsRequestDetails['nailPreferences'] ?? detailsRequestDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(rootRequestDetails['nailPreferences'] ?? rootRequestDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDetailsRequestDetails['nailPreferences'] ?? detailsDetailsRequestDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDetailsRequestDetails['nailPreferences'] ?? rootDetailsRequestDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDataJsonRequestDetails['nailPreferences'] ?? detailsDataJsonRequestDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDataJsonRequestDetails['nailPreferences'] ?? rootDataJsonRequestDetails['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsPayload['nailPreferences'] ?? detailsPayload['nail_preferences'])['dimensions']),
+        asMap(asMap(rootPayload['nailPreferences'] ?? rootPayload['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDetailsPayload['nailPreferences'] ?? detailsDetailsPayload['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDetailsPayload['nailPreferences'] ?? rootDetailsPayload['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsSnapshot['nailPreferences'] ?? detailsSnapshot['nail_preferences'])['dimensions']),
+        asMap(asMap(rootSnapshot['nailPreferences'] ?? rootSnapshot['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDetailsSnapshot['nailPreferences'] ?? detailsDetailsSnapshot['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDetailsSnapshot['nailPreferences'] ?? rootDetailsSnapshot['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDataJsonSnapshot['nailPreferences'] ?? detailsDataJsonSnapshot['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDataJsonSnapshot['nailPreferences'] ?? rootDataJsonSnapshot['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsOrderData['nailPreferences'] ?? detailsOrderData['nail_preferences'])['dimensions']),
+        asMap(asMap(rootOrderData['nailPreferences'] ?? rootOrderData['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDetailsOrderData['nailPreferences'] ?? detailsDetailsOrderData['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDetailsOrderData['nailPreferences'] ?? rootDetailsOrderData['nail_preferences'])['dimensions']),
+        asMap(asMap(detailsDataJsonOrderData['nailPreferences'] ?? detailsDataJsonOrderData['nail_preferences'])['dimensions']),
+        asMap(asMap(rootDataJsonOrderData['nailPreferences'] ?? rootDataJsonOrderData['nail_preferences'])['dimensions']),
         asMap(asMap(detailsData['apiNailMeasurements'] ?? detailsData['api_nail_measurements'])['dimensions']),
         asMap(asMap(rootData['apiNailMeasurements'] ?? rootData['api_nail_measurements'])['dimensions']),
+        asMap(asMap(detailsDetails['apiNailMeasurements'] ?? detailsDetails['api_nail_measurements'])['dimensions']),
+        asMap(asMap(rootDetails['apiNailMeasurements'] ?? rootDetails['api_nail_measurements'])['dimensions']),
+        asMap(asMap(detailsDataJson['apiNailMeasurements'] ?? detailsDataJson['api_nail_measurements'])['dimensions']),
+        asMap(asMap(rootDataJson['apiNailMeasurements'] ?? rootDataJson['api_nail_measurements'])['dimensions']),
+        asMap(detailsData['dimensions']),
+        asMap(rootData['dimensions']),
+        asMap(detailsDetails['dimensions']),
+        asMap(rootDetails['dimensions']),
+        asMap(detailsDataJson['dimensions']),
+        asMap(rootDataJson['dimensions']),
       ];
+
+      bool truthy(Object? value) {
+        if (value is bool) return value;
+        if (value is num) return value != 0;
+        final text = (value ?? '').toString().trim().toLowerCase();
+        return text == 'true' ||
+            text == 'yes' ||
+            text == '1' ||
+            text == 'selected' ||
+            text == 'requested' ||
+            text == 'enabled';
+      }
+
+      bool requestHasNfc(Map<String, dynamic> source) {
+        final summary = asMap(source['summary']);
+        final nfc = asMap(source['nfc']);
+        return truthy(source['nfcRequested']) ||
+            truthy(source['nfcSelected']) ||
+            truthy(source['hasNfc']) ||
+            truthy(source['nfc_requested']) ||
+            truthy(source['nfc_selected']) ||
+            truthy(source['has_nfc']) ||
+            truthy(summary['nfcRequested']) ||
+            truthy(summary['nfcSelected']) ||
+            truthy(summary['hasNfc']) ||
+            truthy(summary['nfc_requested']) ||
+            truthy(summary['nfc_selected']) ||
+            truthy(summary['has_nfc']) ||
+            truthy(nfc['requested']) ||
+            truthy(nfc['selected']) ||
+            truthy(nfc['hasNfc']) ||
+            truthy(nfc['has_nfc']);
+      }
 
       var main = _FingerNfcSelection.empty();
       for (final candidate in mainCandidates) {
@@ -6321,6 +6832,15 @@ class InReviewDetailsSheet extends StatelessWidget {
         if (parsed.anySelected) {
           main = parsed;
           break;
+        }
+      }
+      if (!main.anySelected && (requestHasNfc(rootData) || requestHasNfc(detailsData))) {
+        for (final candidate in mainCandidates) {
+          final parsed = _FingerNfcSelection.fromEligibleDimensionsMap(candidate);
+          if (parsed.anySelected) {
+            main = parsed;
+            break;
+          }
         }
       }
 
@@ -6530,10 +7050,20 @@ class InReviewDetailsSheet extends StatelessWidget {
               profileRow['dimensions'],
             ], left: false);
 
+            final requestPayload = asMap(client['payload']);
+            final requestDetailsMap = asMap(
+              client['requestDetails'] ?? client['request_details'],
+            );
+            final orderMap = asMap(
+              client['order'] ?? client['orderData'] ?? client['order_data'],
+            );
             final candidateMaps = <Map<String, dynamic>>[
               asMap(asMap(client['savedNails'] ?? client['saved_nails'])['dimensions']),
               asMap(asMap(client['draftNails'] ?? client['draft_nails'])['dimensions']),
               asMap(asMap(client['nailPreferences'] ?? client['nail_preferences'])['dimensions']),
+              asMap(asMap(requestDetailsMap['nailPreferences'] ?? requestDetailsMap['nail_preferences'])['dimensions']),
+              asMap(asMap(requestPayload['nailPreferences'] ?? requestPayload['nail_preferences'])['dimensions']),
+              asMap(asMap(orderMap['nailPreferences'] ?? orderMap['nail_preferences'])['dimensions']),
               asMap(client['dimensions']),
               asMap(profileNails['dimensions']),
             ];
@@ -6544,6 +7074,20 @@ class InReviewDetailsSheet extends StatelessWidget {
                 nfc = parsed;
                 groupBySlot[slotIndex] = parsed;
                 break;
+              }
+            }
+            if (!nfc.anySelected &&
+                (requestHasNfc(client) ||
+                    requestHasNfc(rootData) ||
+                    requestHasNfc(detailsData))) {
+              for (final candidate in candidateMaps) {
+                final parsed =
+                    _FingerNfcSelection.fromEligibleDimensionsMap(candidate);
+                if (parsed.anySelected) {
+                  nfc = parsed;
+                  groupBySlot[slotIndex] = parsed;
+                  break;
+                }
               }
             }
 
@@ -6711,23 +7255,6 @@ class InReviewDetailsSheet extends StatelessWidget {
       await addRequestModelGroupClients();
       await addSelectedGroupClientEmails();
 
-      final rootPayload = asMap(rootData['payload']);
-      final rootRequestDetails = asMap(
-        rootData['requestDetails'] ?? rootData['request_details'],
-      );
-      final rootOrderData = asMap(
-        rootData['order'] ?? rootData['orderData'] ?? rootData['order_data'],
-      );
-      final detailsPayload = asMap(detailsData['payload']);
-      final detailsRequestDetails = asMap(
-        detailsData['requestDetails'] ?? detailsData['request_details'],
-      );
-      final detailsOrderData = asMap(
-        detailsData['order'] ??
-            detailsData['orderData'] ??
-            detailsData['order_data'],
-      );
-
       final submittedRequestNailSources = <Map<String, dynamic>>[
         asMap(detailsData['nailPreferences'] ?? detailsData['nail_preferences']),
         asMap(
@@ -6837,6 +7364,35 @@ class InReviewDetailsSheet extends StatelessWidget {
       final hasSubmittedSnapshotShapeLength =
           submittedShape.trim().isNotEmpty || submittedLength.trim().isNotEmpty;
 
+      final submittedProfileTab = await buildProfileTab(
+        fallbackName: request.clientName,
+        email: request.clientEmail,
+        clientId: '',
+        nfc: main,
+      );
+
+      NailDimensionsV2 mergeDims(
+        Map<String, String> source,
+        NailDimensionsV2? fallback,
+        NailDimensionsV2 requestFallback,
+      ) {
+        String pick(String key, String requestValue, String? profileValue) {
+          final value = (source[key] ?? '').trim();
+          if (value.isNotEmpty) return value;
+          final profile = (profileValue ?? '').trim();
+          if (profile.isNotEmpty) return profile;
+          return requestValue.trim();
+        }
+
+        return NailDimensionsV2(
+          thumb: pick('thumb', requestFallback.thumb, fallback?.thumb),
+          index: pick('index', requestFallback.index, fallback?.index),
+          middle: pick('middle', requestFallback.middle, fallback?.middle),
+          ring: pick('ring', requestFallback.ring, fallback?.ring),
+          pinky: pick('pinky', requestFallback.pinky, fallback?.pinky),
+        );
+      }
+
       final submittedSnapshotTab =
           hasSubmittedSnapshotDimensions || hasSubmittedSnapshotShapeLength
           ? _OrderClientTabData(
@@ -6846,32 +7402,25 @@ class InReviewDetailsSheet extends StatelessWidget {
                 rootData['clientName'],
                 request.clientEmail,
               ], fallback: 'Client'),
-              nailShape: submittedShape,
-              nailLength: submittedLength,
-              leftHand: NailDimensionsV2(
-                thumb: submittedLeft['thumb'] ?? '',
-                index: submittedLeft['index'] ?? '',
-                middle: submittedLeft['middle'] ?? '',
-                ring: submittedLeft['ring'] ?? '',
-                pinky: submittedLeft['pinky'] ?? '',
+              nailShape: submittedShape.trim().isNotEmpty
+                  ? submittedShape
+                  : (submittedProfileTab?.nailShape ?? request.nailShape),
+              nailLength: submittedLength.trim().isNotEmpty
+                  ? submittedLength
+                  : (submittedProfileTab?.nailLength ?? request.nailLength),
+              leftHand: mergeDims(
+                submittedLeft,
+                submittedProfileTab?.leftHand,
+                request.leftHand,
               ),
-              rightHand: NailDimensionsV2(
-                thumb: submittedRight['thumb'] ?? '',
-                index: submittedRight['index'] ?? '',
-                middle: submittedRight['middle'] ?? '',
-                ring: submittedRight['ring'] ?? '',
-                pinky: submittedRight['pinky'] ?? '',
+              rightHand: mergeDims(
+                submittedRight,
+                submittedProfileTab?.rightHand,
+                request.rightHand,
               ),
               nfc: main,
             )
           : null;
-
-      final submittedProfileTab = await buildProfileTab(
-        fallbackName: request.clientName,
-        email: request.clientEmail,
-        clientId: '',
-        nfc: main,
-      );
 
       return _RequestNfcDetails(
         main: main,
@@ -7249,8 +7798,15 @@ class InReviewDetailsSheet extends StatelessWidget {
 
     if (source is Map) {
       final map = source.map((k, v) => MapEntry(k.toString(), v));
+      final upper = key[0].toUpperCase() + key.substring(1);
       final candidates = <String>[
         key,
+        '${key}_width',
+        '${key}Width',
+        'left_$key',
+        'right_$key',
+        'left$upper',
+        'right$upper',
         'l${key[0].toUpperCase()}${key.substring(1)}',
         'r${key[0].toUpperCase()}${key.substring(1)}',
       ];
@@ -7260,7 +7816,7 @@ class InReviewDetailsSheet extends StatelessWidget {
       }
       final nested = map['dimensions'];
       if (nested is Map) return _dimensionText(nested, key);
-      return '';
+      return '-';
     }
 
     try {
@@ -7277,7 +7833,7 @@ class InReviewDetailsSheet extends StatelessWidget {
           return clean(source.pinky);
       }
     } catch (_) {}
-    return '';
+    return '-';
   }
 
   static Widget _sectionTitle(String t) => Text(
@@ -7568,7 +8124,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 displayName,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontWeight: FontWeight.w400,
+                  fontWeight: FontWeight.w700,
                   fontSize: 16 * s,
                   color: AppColors.blackCat,
                 ),
@@ -7623,8 +8179,9 @@ class InReviewDetailsSheet extends StatelessWidget {
 
               Row(
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         const Icon(
                           Icons.calendar_today_outlined,
@@ -7632,9 +8189,11 @@ class InReviewDetailsSheet extends StatelessWidget {
                           color: AppColors.blackCat,
                         ),
                         const SizedBox(width: 8),
-                        Expanded(
+                        Flexible(
                           child: Text(
                             'Need by: ${_needByLabel(request.neededBy)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 13.5 * s,
@@ -7645,15 +8204,16 @@ class InReviewDetailsSheet extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SizedBox(width: 10 * s),
+                  SizedBox(width: 12 * s),
                   Container(
                     width: 1,
                     height: 18 * s,
                     color: AppColors.blackCatBorderLight,
                   ),
-                  SizedBox(width: 10 * s),
-                  Expanded(
+                  SizedBox(width: 12 * s),
+                  Flexible(
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         const Icon(
                           Icons.attach_money_rounded,
@@ -7661,9 +8221,11 @@ class InReviewDetailsSheet extends StatelessWidget {
                           color: AppColors.blackCat,
                         ),
                         const SizedBox(width: 2),
-                        Expanded(
+                        Flexible(
                           child: Text(
                             'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 13.5 * s,
@@ -8640,15 +9202,20 @@ class _FingerNfcSelection {
       if (value is bool) return value;
       if (value is num) return value != 0;
       final text = (value ?? '').toString().trim().toLowerCase();
-      return text == 'true' || text == 'yes' || text == '1';
+      return text == 'true' ||
+          text == 'yes' ||
+          text == '1' ||
+          text == 'selected' ||
+          text == 'requested' ||
+          text == 'enabled';
     }
 
     Object? nfcValue(String key) {
       final nfc = map['nfc'];
       if (nfc is Map) {
-        return map['${key}Nfc'] ?? nfc[key];
+        return map['${key}Nfc'] ?? nfc[key] ?? nfc['${key}Nfc'];
       }
-      return map['${key}Nfc'];
+      return map['${key}Nfc'] ?? map[key];
     }
 
     return _FingerNfcSelection(
@@ -8662,6 +9229,37 @@ class _FingerNfcSelection {
       rMiddle: b(nfcValue('rMiddle')),
       rRing: b(nfcValue('rRing')),
       rPinky: b(nfcValue('rPinky')),
+    );
+  }
+
+  factory _FingerNfcSelection.fromEligibleDimensionsMap(
+    Map<String, dynamic> map,
+  ) {
+    final data = map['dimensions'] is Map
+        ? (map['dimensions'] as Map).map(
+            (key, value) => MapEntry(key.toString(), value),
+          )
+        : map;
+
+    bool eligible(String key) {
+      final text = (data[key] ?? '').toString().trim();
+      if (text.isEmpty || text.toLowerCase() == 'null') return false;
+      final cleaned = text.replaceAll(RegExp(r'[^0-9.]'), '');
+      final parsed = double.tryParse(cleaned);
+      return parsed != null && parsed.isFinite && parsed >= 8;
+    }
+
+    return _FingerNfcSelection(
+      lThumb: eligible('lThumb'),
+      lIndex: eligible('lIndex'),
+      lMiddle: eligible('lMiddle'),
+      lRing: eligible('lRing'),
+      lPinky: eligible('lPinky'),
+      rThumb: eligible('rThumb'),
+      rIndex: eligible('rIndex'),
+      rMiddle: eligible('rMiddle'),
+      rRing: eligible('rRing'),
+      rPinky: eligible('rPinky'),
     );
   }
 

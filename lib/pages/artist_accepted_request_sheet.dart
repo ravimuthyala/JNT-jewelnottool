@@ -12,6 +12,7 @@ import '../services/notifications_service.dart';
 import '../utils/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../utils/request_nfc_details_loader.dart';
 import 'request_chat_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -546,6 +547,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 14),
                   if (!_isDesigningMode)
                     _paymentSectionBox(widget.request),
                   if (!_isDesigningMode) ...[
@@ -1796,7 +1798,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  static Widget _dimRow(String k, String v) {
+  static Widget _dimRow(String k, String v, {bool nfcRequested = false}) {
     String formatMm(String raw) {
       final value = raw.trim();
       if (value.isEmpty || value == '-') return '-';
@@ -1820,6 +1822,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               ),
             ),
           ),
+          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
           Text(
             formatMm(v),
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
@@ -1829,7 +1832,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  static Widget _handCardCentered(String title, NailDimensionsV2 d) {
+  static Widget _handCardCentered(
+    String title,
+    NailDimensionsV2 d, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
     return _softBox(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1842,12 +1849,31 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             ),
           ),
           const SizedBox(height: 10),
-          _dimRow('Thumb', d.thumb),
-          _dimRow('Index', d.index),
-          _dimRow('Middle', d.middle),
-          _dimRow('Ring', d.ring),
-          _dimRow('Pinky', d.pinky),
+          _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
+          _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
+          _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
+          _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
+          _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
         ],
+      ),
+    );
+  }
+
+  static Widget _nfcDimensionChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Text(
+        'NFC',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          height: 1.0,
+        ),
       ),
     );
   }
@@ -2010,15 +2036,22 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         return _requestMeasurementFallback();
       }
 
+      final nfcDetails = await loadRequestNfcDetails(
+        sourceCollection: widget.request.sourceCollection,
+        requestId: widget.request.id,
+      );
       final fallback = _requestMeasurementFallback();
       return GroupClientMeasurementData(
         name: widget.request.clientName.trim().isEmpty
             ? 'Client'
             : widget.request.clientName.trim(),
+        clientEmail: widget.request.clientEmail,
         nailShape: shape,
         nailLength: length,
         leftHand: hasDims ? left : fallback.leftHand,
         rightHand: hasDims ? right : fallback.rightHand,
+        leftNfc: nfcDetails.main.left,
+        rightNfc: nfcDetails.main.right,
       );
     } catch (_) {
       return _requestMeasurementFallback();
@@ -2072,6 +2105,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         child: _handCardCentered(
                           'Left Hand',
                           _dimsObject(client.leftHand),
+                          nfc: client.leftNfc,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -2079,6 +2113,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         child: _handCardCentered(
                           'Right Hand',
                           _dimsObject(client.rightHand),
+                          nfc: client.rightNfc,
                         ),
                       ),
                     ],
@@ -2165,6 +2200,10 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
     final merged = <GroupClientMeasurementData>[];
     final seen = <String>{};
+    final nfcDetails = await loadRequestNfcDetails(
+      sourceCollection: widget.request.sourceCollection,
+      requestId: widget.request.id,
+    );
 
     void addClient(GroupClientMeasurementData client, {String email = '', String id = ''}) {
       final name = client.name.trim();
@@ -2189,7 +2228,19 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     // The submitted client must always be the first tab. Added/group clients
     // are appended after this and deduped by email/id/name.
     final submittedClient = await _loadSubmittedMeasurementClient();
-    addClient(submittedClient, email: widget.request.clientEmail);
+    addClient(
+      GroupClientMeasurementData(
+        name: submittedClient.name,
+        clientEmail: widget.request.clientEmail,
+        nailShape: submittedClient.nailShape,
+        nailLength: submittedClient.nailLength,
+        leftHand: submittedClient.leftHand,
+        rightHand: submittedClient.rightHand,
+        leftNfc: nfcDetails.main.left,
+        rightNfc: nfcDetails.main.right,
+      ),
+      email: widget.request.clientEmail,
+    );
 
     String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
       for (final raw in values) {
@@ -2284,6 +2335,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       addClient(
         GroupClientMeasurementData(
           name: name,
+          clientEmail: email,
           nailShape: firstNonEmpty(<Object?>[
             client['nailShape'],
             client['nail_shape'],
@@ -2300,6 +2352,14 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           ], fallback: widget.request.nailLength),
           leftHand: left,
           rightHand: right,
+          leftNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .left,
+          rightNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .right,
         ),
         email: email,
         id: id,
@@ -2509,10 +2569,10 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                   color: AppColors.blackCat.withValues(alpha: 0.60),
                 ),
               ),
-              const SizedBox(height: 12),
-              _requestTypeOrderRow(r),
-              const SizedBox(height: 12),
-              Row(
+                  const SizedBox(height: 14),
+                  _requestTypeOrderRow(r),
+                  const SizedBox(height: 12),
+                  Row(
                 children: [
                   Expanded(
                     child: Align(
@@ -2540,10 +2600,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     ),
                   ),
                 ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
         Positioned(
           right: 6,
           top: 6,
@@ -2665,44 +2726,38 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group Order'
         : 'Single Order';
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(
-            r.isDirectRequest
-                ? Icons.arrow_outward_rounded
-                : Icons.arrow_forward_rounded,
-            size: 15,
-            color: AppColors.blackCat,
+    return Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _chipInfo(
+              icon: r.isDirectRequest
+                  ? Icons.arrow_outward_rounded
+                  : Icons.arrow_forward_rounded,
+              text: requestType,
+            ),
           ),
-          const SizedBox(width: 5),
-          Text(
-            requestType,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          width: 1,
+          height: 18,
+          color: AppColors.blackCatBorderLight,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _chipInfo(
+              icon: r.orderType == RequestOrderTypeV2.group
+                  ? Icons.groups_2_outlined
+                  : Icons.person_outline_rounded,
+              text: orderType,
+            ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            width: 1,
-            height: 18,
-            color: AppColors.blackCatBorderLight,
-          ),
-          const SizedBox(width: 8),
-          Icon(
-            r.orderType == RequestOrderTypeV2.group
-                ? Icons.groups_2_outlined
-                : Icons.person_outline_rounded,
-            size: 15,
-            color: AppColors.blackCat,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            orderType,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
   static Widget _chipInfo({required IconData icon, required String text}) {
@@ -3030,7 +3085,7 @@ class _CompactGroupClientMeasurementsTabsState
 
   String _dim(Map<String, String> dims, String key) => _mm(dims[key]);
 
-  Widget _dimRow(String label, String value) {
+  Widget _dimRow(String label, String value, {bool nfcRequested = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -3045,6 +3100,7 @@ class _CompactGroupClientMeasurementsTabsState
               ),
             ),
           ),
+          if (nfcRequested) ...[_AcceptedRequestSheetState._nfcDimensionChip(), const SizedBox(width: 6)],
           Text(
             value,
             style: const TextStyle(
@@ -3058,7 +3114,11 @@ class _CompactGroupClientMeasurementsTabsState
     );
   }
 
-  Widget _handBox(String title, Map<String, String> dims) {
+  Widget _handBox(
+    String title,
+    Map<String, String> dims, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
@@ -3080,11 +3140,11 @@ class _CompactGroupClientMeasurementsTabsState
             ),
           ),
           const SizedBox(height: 10),
-          _dimRow('Thumb', _dim(dims, 'thumb')),
-          _dimRow('Index', _dim(dims, 'index')),
-          _dimRow('Middle', _dim(dims, 'middle')),
-          _dimRow('Ring', _dim(dims, 'ring')),
-          _dimRow('Pinky', _dim(dims, 'pinky')),
+          _dimRow('Thumb', _dim(dims, 'thumb'), nfcRequested: nfc['thumb'] == true),
+          _dimRow('Index', _dim(dims, 'index'), nfcRequested: nfc['index'] == true),
+          _dimRow('Middle', _dim(dims, 'middle'), nfcRequested: nfc['middle'] == true),
+          _dimRow('Ring', _dim(dims, 'ring'), nfcRequested: nfc['ring'] == true),
+          _dimRow('Pinky', _dim(dims, 'pinky'), nfcRequested: nfc['pinky'] == true),
         ],
       ),
     );
@@ -3226,9 +3286,21 @@ class _CompactGroupClientMeasurementsTabsState
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _handBox('Left Hand', client.leftHand)),
+                    Expanded(
+                      child: _handBox(
+                        'Left Hand',
+                        client.leftHand,
+                        nfc: client.leftNfc,
+                      ),
+                    ),
                     const SizedBox(width: 10),
-                    Expanded(child: _handBox('Right Hand', client.rightHand)),
+                    Expanded(
+                      child: _handBox(
+                        'Right Hand',
+                        client.rightHand,
+                        nfc: client.rightNfc,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),

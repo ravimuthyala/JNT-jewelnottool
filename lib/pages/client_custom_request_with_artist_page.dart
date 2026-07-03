@@ -43,6 +43,7 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
     this.showClientBottomNav = true,
     this.onClientNavTap,
     this.isActiveTab = true,
+    this.excludeCurrentUserFromArtistDropdown = false,
   }) : profile = profile ?? ClientProfileDraft.mock();
 
   final ClientProfileDraft profile;
@@ -52,6 +53,11 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
   final bool showClientBottomNav;
   final Future<void> Function(BuildContext context, int index)? onClientNavTap;
   final bool isActiveTab;
+
+  /// Only used by the Client-Artist role. A client-artist can submit a
+  /// request as a client, but cannot select themself as the artist.
+  /// Default is false so normal Client flow is unchanged.
+  final bool excludeCurrentUserFromArtistDropdown;
 
   @override
   State<ClientCustomRequestWithArtistPage> createState() =>
@@ -224,9 +230,13 @@ class _ClientCustomRequestWithArtistPageState
     _shipStateCtrl.text = _shipState;
 
     // ✅ prefill artist from Artists page (trim for safety)
-    _selectedArtist = widget.artistName.trim();
+    _selectedArtist = _isSelfArtistName(widget.artistName)
+        ? null
+        : widget.artistName.trim();
     _artistNames.addAll(
-      _dedupeArtistNames(<String>[...widget.artistNames, widget.artistName]),
+      _filterSelfArtistNames(
+        _dedupeArtistNames(<String>[...widget.artistNames, widget.artistName]),
+      ),
     );
     unawaited(_loadArtistNames());
     //unawaited(_loadCompletedClientsFromDb());
@@ -293,8 +303,17 @@ class _ClientCustomRequestWithArtistPageState
     try {
       final entries = await ArtistDirectoryService.fetchAllArtists();
       if (!mounted) return;
+      final currentEmail = _currentUserEmailLower();
       final names = entries
           .where((e) => e.acceptsDirectRequests)
+          .where((e) {
+            if (!widget.excludeCurrentUserFromArtistDropdown) return true;
+            final artistEmail = e.email.trim().toLowerCase();
+            if (currentEmail.isNotEmpty && artistEmail == currentEmail) {
+              return false;
+            }
+            return !_isSelfArtistName(e.name);
+          })
           .map((e) => e.name.trim())
           .where((e) => e.isNotEmpty)
           .toList();
@@ -302,11 +321,13 @@ class _ClientCustomRequestWithArtistPageState
         _artistNames
           ..clear()
           ..addAll(
-            _dedupeArtistNames(<String>[
-              ...widget.artistNames,
-              widget.artistName,
-              ...names,
-            ]),
+            _filterSelfArtistNames(
+              _dedupeArtistNames(<String>[
+                ...widget.artistNames,
+                widget.artistName,
+                ...names,
+              ]),
+            ),
           );
         final selected = (_selectedArtist ?? '').trim();
         final hasSelected =
@@ -314,14 +335,61 @@ class _ClientCustomRequestWithArtistPageState
             _artistNames.any(
               (n) => n.trim().toLowerCase() == selected.toLowerCase(),
             );
-        if (selected.isNotEmpty && !hasSelected) {
+        if (widget.excludeCurrentUserFromArtistDropdown &&
+            selected.isNotEmpty &&
+            _isSelfArtistName(selected)) {
+          _selectedArtist = null;
+        } else if (selected.isNotEmpty && !hasSelected) {
           _artistNames
             ..clear()
-            ..addAll(_dedupeArtistNames(<String>[selected, ..._artistNames]));
+            ..addAll(
+              _filterSelfArtistNames(
+                _dedupeArtistNames(<String>[selected, ..._artistNames]),
+              ),
+            );
         }
       });
     } catch (_) {}
   }
+
+
+  String _currentUserEmailLower() {
+    return (Supabase.instance.client.auth.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+  }
+
+  Set<String> _selfArtistNameKeys() {
+    if (!widget.excludeCurrentUserFromArtistDropdown) return const <String>{};
+
+    String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
+
+    final keys = <String>{
+      norm(widget.profile.basic.name),
+      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['name']),
+      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['displayName']),
+      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['display_name']),
+      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['full_name']),
+    }..removeWhere((e) => e.isEmpty);
+
+    final email = _currentUserEmailLower();
+    if (email.contains('@')) keys.add(email.split('@').first.trim().toLowerCase());
+
+    return keys;
+  }
+
+  bool _isSelfArtistName(String name) {
+    if (!widget.excludeCurrentUserFromArtistDropdown) return false;
+    final key = name.trim().toLowerCase();
+    if (key.isEmpty) return false;
+    return _selfArtistNameKeys().contains(key);
+  }
+
+  List<String> _filterSelfArtistNames(List<String> names) {
+    if (!widget.excludeCurrentUserFromArtistDropdown) return names;
+    return names.where((name) => !_isSelfArtistName(name)).toList(growable: false);
+  }
+
 
   List<String> _dedupeArtistNames(List<String> rawNames) {
     final seen = <String>{};
@@ -1630,7 +1698,9 @@ class _ClientCustomRequestWithArtistPageState
     _allowNonLicensed = true;
     _clientBudget = const RangeValues(15, 5000);
     _orderType = OrderType.single;
-    _selectedArtist = widget.artistName.trim();
+    _selectedArtist = _isSelfArtistName(widget.artistName)
+        ? null
+        : widget.artistName.trim();
     _fallbackToPool = true;
     _shippingDifferent = false;
     _shipStreetCtrl.clear();
@@ -2117,7 +2187,9 @@ class _ClientCustomRequestWithArtistPageState
     }
     if (oldWidget.artistName != widget.artistName) {
       setState(() {
-        _selectedArtist = widget.artistName.trim();
+        _selectedArtist = _isSelfArtistName(widget.artistName)
+        ? null
+        : widget.artistName.trim();
       });
       unawaited(_loadArtistNames());
     }
@@ -2863,19 +2935,22 @@ class _ClientCustomRequestWithArtistPageState
                   Builder(
                     builder: (context) {
                       final selected = (_selectedArtist ?? '').trim();
-                      final options = _dedupeArtistNames(<String>[
-                        if (selected.isNotEmpty) selected,
-                        ..._artistNames,
-                      ]);
+                      final options = _filterSelfArtistNames(
+                        _dedupeArtistNames(<String>[
+                          if (selected.isNotEmpty) selected,
+                          ..._artistNames,
+                        ]),
+                      );
                       return _SearchableSelectField(
                         value: selected,
                         hint: 'Select Artist',
                         items: options,
-                        onChanged: (v) => setState(
-                          () => _selectedArtist = v.trim().isEmpty
+                        onChanged: (v) => setState(() {
+                          final next = v.trim();
+                          _selectedArtist = next.isEmpty || _isSelfArtistName(next)
                               ? null
-                              : v.trim(),
-                        ),
+                              : next;
+                        }),
                       );
                     },
                   ),

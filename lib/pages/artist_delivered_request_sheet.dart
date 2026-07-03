@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/request_nfc_details_loader.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 
 Future<void> showDeliveredRequestSheet({
@@ -878,46 +879,89 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
   Widget _measurementContent() {
     final isGroup = request.orderType == RequestOrderTypeV2.group;
-    if (isGroup) {
-      return GroupClientMeasurementsTabs(
-        clients: _buildGroupMeasurementClients(),
-        compactRequestDetailsLayout: true,
-        tabViewHeight: 248,
-      );
-    }
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: request.sourceCollection,
+        requestId: request.id,
+      ),
+      builder: (context, snapshot) {
+        final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
+        if (isGroup) {
+          final baseClients = _buildGroupMeasurementClients();
+          final clients = <GroupClientMeasurementData>[];
+          for (var i = 0; i < baseClients.length; i++) {
+            final client = baseClients[i];
+            final slotIndex = i + 1;
+            final slotNfc = slotIndex == 1
+                ? nfc.main
+                : (nfc.groupBySlotIndex[slotIndex] ??
+                    RequestFingerNfcSelection.emptyConst);
+            clients.add(
+              GroupClientMeasurementData(
+                name: client.name,
+                clientEmail: client.clientEmail,
+                nailShape: client.nailShape,
+                nailLength: client.nailLength,
+                leftHand: client.leftHand,
+                rightHand: client.rightHand,
+                leftNfc: slotNfc.left,
+                rightNfc: slotNfc.right,
+              ),
+            );
+          }
+          return GroupClientMeasurementsTabs(
+            clients: clients,
+            compactRequestDetailsLayout: true,
+            tabViewHeight: 248,
+          );
+        }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _dimsCard('Left Hand', request.leftHand)),
-            const SizedBox(width: 12),
-            Expanded(child: _dimsCard('Right Hand', request.rightHand)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _metaValueCard(
-                'Shape',
-                request.nailShape.trim().isEmpty ? '-' : request.nailShape,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _dimsCard(
+                    'Left Hand',
+                    request.leftHand,
+                    nfc: nfc.main.left,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _dimsCard(
+                    'Right Hand',
+                    request.rightHand,
+                    nfc: nfc.main.right,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _metaValueCard(
-                'Length',
-                request.nailLength.trim().isEmpty ? '-' : request.nailLength,
-              ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _metaValueCard(
+                    'Shape',
+                    request.nailShape.trim().isEmpty ? '-' : request.nailShape,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _metaValueCard(
+                    'Length',
+                    request.nailLength.trim().isEmpty ? '-' : request.nailLength,
+                  ),
+                ),
+              ],
             ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -988,7 +1032,11 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
-  Widget _dimsCard(String title, NailDimensionsV2 dims) {
+  Widget _dimsCard(
+    String title,
+    NailDimensionsV2 dims, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
     String withMm(String raw) {
       final value = raw.trim();
       if (value.isEmpty || value == '-') return '-';
@@ -998,7 +1046,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       return '${parsed.toStringAsFixed(2)} mm';
     }
 
-    Widget row(String label, String value) {
+    Widget row(String label, String value, {bool nfcRequested = false}) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 7),
         child: Row(
@@ -1013,6 +1061,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                 ),
               ),
             ),
+            if (nfcRequested) ...[_nfcChip(), const SizedBox(width: 6)],
             Text(
               withMm(value),
               style: const TextStyle(
@@ -1041,14 +1090,33 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          row('Thumb', dims.thumb),
-          row('Index', dims.index),
-          row('Middle', dims.middle),
-          row('Ring', dims.ring),
-          row('Pinky', dims.pinky),
+          row('Thumb', dims.thumb, nfcRequested: nfc['thumb'] == true),
+          row('Index', dims.index, nfcRequested: nfc['index'] == true),
+          row('Middle', dims.middle, nfcRequested: nfc['middle'] == true),
+          row('Ring', dims.ring, nfcRequested: nfc['ring'] == true),
+          row('Pinky', dims.pinky, nfcRequested: nfc['pinky'] == true),
         ],
       ),
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+    );
+  }
+
+  Widget _nfcChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Text(
+        'NFC',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          height: 1.0,
+        ),
+      ),
     );
   }
 

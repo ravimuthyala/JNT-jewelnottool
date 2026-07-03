@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -791,15 +792,8 @@ class _ClientHomePageState extends State<ClientHomePage> {
       explicitChildNodes: true,
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          toolbarHeight: 64,
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          titleSpacing: 0,
-          leadingWidth: 56,
+        appBar: JntStandardAppBar(
+          onNotifications: () => _openNotifications(context),
           leading: _CustomSemanticAction(
             label: 'Notifications',
             value: _unreadAnnouncementText,
@@ -810,49 +804,44 @@ class _ClientHomePageState extends State<ClientHomePage> {
             sortKey: const OrdinalSortKey(0),
             child: NotificationBellButton(
               onTap: () => _openNotifications(context),
-              iconSize: 22,
+              iconSize: JntHeaderMetrics.notificationIconSize,
             ),
           ),
           title: ExcludeSemantics(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 42,
+              height: JntHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: _CustomSemanticAction(
-                label: 'Open profile menu',
+          trailing: _CustomSemanticAction(
+            label: 'Open profile menu',
+            onTap: () => _openProfileMenu(context, profileKey),
+            focusRingColor: _focusRing,
+            focusNode: _profileMenuFocusNode,
+            sortKey: const OrdinalSortKey(20),
+            child: ExcludeSemantics(
+              excluding: !_allowAvatarFocus,
+              child: InkWell(
+                key: profileKey,
+                borderRadius: BorderRadius.zero,
                 onTap: () => _openProfileMenu(context, profileKey),
-                focusRingColor: _focusRing,
-                focusNode: _profileMenuFocusNode,
-                sortKey: const OrdinalSortKey(20),
-                child: ExcludeSemantics(
-                  excluding: !_allowAvatarFocus,
-                  child: InkWell(
-                    key: profileKey,
+                child: SizedBox.square(
+                  dimension: JntHeaderMetrics.avatarSize,
+                  child: ClipRRect(
                     borderRadius: BorderRadius.zero,
-                    onTap: () => _openProfileMenu(context, profileKey),
-                    child: SizedBox.square(
-                      dimension: 34,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.zero,
-                        child: ClientProfileAvatarIcon(
-                          imageUrl: _resolvedHeaderAvatarUrl,
-                          displayName: widget.clientName,
-                          size: 34,
-                        ),
-                      ),
+                    child: ClientProfileAvatarIcon(
+                      imageUrl: _resolvedHeaderAvatarUrl,
+                      displayName: widget.clientName,
+                      size: JntHeaderMetrics.avatarSize,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
         body: Column(
           children: <Widget>[

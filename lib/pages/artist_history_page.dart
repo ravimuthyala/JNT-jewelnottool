@@ -29,6 +29,7 @@ class ArtistHistoryPage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.onSignOut,
     this.showExtendedAvatarMenu = false,
     this.hideHistoryMenuItem = false,
@@ -36,6 +37,7 @@ class ArtistHistoryPage extends StatefulWidget {
     this.showBottomNav = false,
     this.bottomNavIndex = 4,
     this.onNavTap,
+    this.bottomNavigationBar,
   });
 
   final VoidCallback? onBackHome;
@@ -45,6 +47,7 @@ class ArtistHistoryPage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final VoidCallback? onSignOut;
   final bool showExtendedAvatarMenu;
   final bool hideHistoryMenuItem;
@@ -52,6 +55,7 @@ class ArtistHistoryPage extends StatefulWidget {
   final bool showBottomNav;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
+  final Widget? bottomNavigationBar;
 
   @override
   State<ArtistHistoryPage> createState() => _ArtistHistoryPageState();
@@ -921,14 +925,6 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     final client = clean(r.clientProfileImage);
     if (client.isNotEmpty) return client;
 
-    for (final photo in r.clientImages) {
-      final value = clean(photo);
-      if (value.isNotEmpty) return value;
-    }
-
-    final preview = clean(r.previewImageAsset);
-    if (preview.isNotEmpty) return preview;
-
     return '';
   }
 
@@ -968,6 +964,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
                       ? r.brandName.trim()
                       : r.clientName)
                 : r.clientName,
+            clientEmail: r.clientEmail,
             title: r.title,
             subtitle: _isBrandRequest(r) ? r.title : _historyReasonForStatus(r),
             isBrandRequest: _isBrandRequest(r),
@@ -1136,6 +1133,10 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   void _openReviewsFromMenu() {
+    if (widget.onOpenReviews != null) {
+      widget.onOpenReviews!.call();
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
@@ -1334,7 +1335,8 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
           ],
         ],
       ),
-      bottomNavigationBar: widget.showBottomNav
+      bottomNavigationBar: widget.bottomNavigationBar ??
+          (widget.showBottomNav
           ? BottomNavigationBar(
               currentIndex: widget.bottomNavIndex,
               selectedItemColor: AppColors.blackCat,
@@ -1372,7 +1374,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
                 ),
               ],
             )
-          : null,
+          : null),
     );
   }
 }
@@ -1469,6 +1471,8 @@ class _HistoryCard extends StatelessWidget {
           children: [
             _Thumb(
               imageAsset: order.imageAsset,
+              clientEmail: order.clientEmail,
+              clientName: order.clientName,
               fallbackLetter: order.clientName.trim().isEmpty
                   ? 'C'
                   : order.clientName.trim()[0].toUpperCase(),
@@ -1528,8 +1532,15 @@ class _HistoryCard extends StatelessWidget {
 }
 
 class _Thumb extends StatelessWidget {
-  const _Thumb({this.imageAsset, required this.fallbackLetter});
+  const _Thumb({
+    this.imageAsset,
+    required this.clientEmail,
+    required this.clientName,
+    required this.fallbackLetter,
+  });
   final String? imageAsset;
+  final String clientEmail;
+  final String clientName;
   final String fallbackLetter;
   static const double _thumbSize = 56;
   static const int _thumbDecode = 256;
@@ -1572,28 +1583,31 @@ class _Thumb extends StatelessWidget {
     final raw = imageAsset?.trim().isNotEmpty == true ? imageAsset!.trim() : '';
     final p = _normalizeImagePath(raw);
 
+    if (p.isEmpty) {
+      return FutureBuilder<String>(
+        future: _lookupClientProfileImage(
+          email: clientEmail,
+          name: clientName,
+        ),
+        builder: (_, snap) {
+          final resolved = _normalizeImagePath((snap.data ?? '').trim());
+          if (resolved.isEmpty) return _fallback();
+          return _buildImage(resolved);
+        },
+      );
+    }
+
+    return _buildImage(p);
+  }
+
+  Widget _buildImage(String p) {
+
     final isNetwork = p.startsWith('http://') || p.startsWith('https://');
     final isAsset = p.startsWith('assets/');
     final isFileUri = p.startsWith('file://');
     final isFilePath = !kIsWeb && (p.startsWith('/') || p.contains(':\\'));
 
-    Widget fallback() => Container(
-      height: _thumbSize,
-      width: _thumbSize,
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        fallbackLetter.trim().isEmpty ? 'C' : fallbackLetter.trim(),
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 20,
-          color: AppColors.blackCat,
-        ),
-      ),
-    );
+    final fallback = _fallback;
 
     final dataBytes = _decodeDataImageBytes(p);
     if (dataBytes != null && dataBytes.isNotEmpty) {
@@ -1670,6 +1684,24 @@ class _Thumb extends StatelessWidget {
     return ClipRRect(borderRadius: BorderRadius.zero, child: image);
   }
 
+  Widget _fallback() => Container(
+      height: _thumbSize,
+      width: _thumbSize,
+      decoration: BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        fallbackLetter.trim().isEmpty ? 'C' : fallbackLetter.trim(),
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+          color: AppColors.blackCat,
+        ),
+      ),
+    );
+
   Uint8List? _decodeDataImageBytes(String value) {
     final src = value.trim();
     if (!src.startsWith('data:image/')) return null;
@@ -1680,6 +1712,126 @@ class _Thumb extends StatelessWidget {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<String> _lookupClientProfileImage({
+    required String email,
+    required String name,
+  }) async {
+    String firstNonEmpty(List<Object?> values) {
+      for (final raw in values) {
+        final text = (raw ?? '').toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return '';
+    }
+
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+      return const <String, dynamic>{};
+    }
+
+    String imageFromRow(Map<String, dynamic> row) {
+      final profile = asMap(row['profile']);
+      final basic = asMap(row['basic']);
+      final client = asMap(row['client']);
+      final clientProfile = asMap(client['profile']);
+      final data = asMap(row['data']);
+      return _normalizeImagePath(
+        firstNonEmpty(<Object?>[
+          row['client_profile_image'],
+          row['clientProfileImage'],
+          row['profileImageUrl'],
+          row['profile_image_url'],
+          row['profile_picture_url'],
+          row['profilePhotoUrl'],
+          row['profile_photo_url'],
+          row['avatarUrl'],
+          row['avatar_url'],
+          row['photoUrl'],
+          row['photo_url'],
+          profile['profileImageUrl'],
+          profile['profile_image_url'],
+          profile['profile_picture_url'],
+          profile['avatarUrl'],
+          profile['avatar_url'],
+          profile['photoUrl'],
+          profile['photo_url'],
+          basic['profileImageUrl'],
+          basic['profile_image_url'],
+          basic['profile_picture_url'],
+          basic['avatarUrl'],
+          basic['avatar_url'],
+          basic['photoUrl'],
+          basic['photo_url'],
+          client['profileImageUrl'],
+          client['profile_image_url'],
+          client['profile_picture_url'],
+          client['avatarUrl'],
+          client['avatar_url'],
+          client['photoUrl'],
+          client['photo_url'],
+          clientProfile['profileImageUrl'],
+          clientProfile['profile_image_url'],
+          clientProfile['profile_picture_url'],
+          clientProfile['avatarUrl'],
+          clientProfile['avatar_url'],
+          clientProfile['photoUrl'],
+          clientProfile['photo_url'],
+          data['clientProfileImage'],
+          data['client_profile_image'],
+          data['profileImageUrl'],
+          data['profile_image_url'],
+          data['avatarUrl'],
+          data['avatar_url'],
+          data['photoUrl'],
+          data['photo_url'],
+        ]),
+      );
+    }
+
+    Future<String> lookupBy(String table, String column, String value) async {
+      final needle = value.trim();
+      if (needle.isEmpty) return '';
+      try {
+        final row = await Supabase.instance.client
+            .from(table)
+            .select()
+            .eq(column, needle)
+            .limit(1)
+            .maybeSingle();
+        if (row == null) return '';
+        return imageFromRow((row as Map).cast<String, dynamic>());
+      } catch (_) {
+        return '';
+      }
+    }
+
+    if (email.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const ['email', 'client_email']) {
+          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    if (name.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const [
+          'name',
+          'full_name',
+          'display_name',
+          'client_name',
+        ]) {
+          final found = await lookupBy(table, column, name.trim());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    return '';
   }
 }
 
@@ -1750,6 +1902,7 @@ enum ArtistOrderLiteStatus { delivered, declined, expired, cancelled }
 class ArtistOrderLite {
   final String id;
   final String clientName;
+  final String clientEmail;
   final String title;
   final String subtitle;
   final ArtistOrderLiteStatus status;
@@ -1769,6 +1922,7 @@ class ArtistOrderLite {
   const ArtistOrderLite({
     required this.id,
     required this.clientName,
+    this.clientEmail = '',
     required this.title,
     required this.subtitle,
     required this.status,

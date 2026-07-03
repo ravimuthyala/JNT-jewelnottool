@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 // for ClientRequestV2 + NailDimensionsV2 (or move models to a shared file)
 import '../models/client_request_v2.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../utils/request_nfc_details_loader.dart';
 import '../services/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/shipping_qr_widgets.dart';
@@ -968,7 +969,11 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
 
-  static Widget _handCardCentered(String title, NailDimensionsV2 d) {
+  static Widget _handCardCentered(
+    String title,
+    NailDimensionsV2 d, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
     return _softBox(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -980,17 +985,17 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             ),
           ),
           const SizedBox(height: 10),
-          _dimRow('Thumb', d.thumb),
-          _dimRow('Index', d.index),
-          _dimRow('Middle', d.middle),
-          _dimRow('Ring', d.ring),
-          _dimRow('Pinky', d.pinky),
+          _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
+          _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
+          _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
+          _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
+          _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
         ],
       ),
     );
   }
 
-  static Widget _dimRow(String k, String v) {
+  static Widget _dimRow(String k, String v, {bool nfcRequested = false}) {
     String formatMm(String raw) {
       final value = raw.trim();
       if (value.isEmpty || value == '-') return '-';
@@ -1014,11 +1019,31 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               ),
             ),
           ),
+          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
           Text(
             formatMm(v),
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
+      ),
+    );
+  }
+
+  static Widget _nfcDimensionChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Text(
+        'NFC',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          height: 1.0,
+        ),
       ),
     );
   }
@@ -1172,36 +1197,51 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Center(
-                child: Text(
-                  'Nail Dimensions',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    fontFamily: 'ArialBold',
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: widget.request.sourceCollection,
+        requestId: widget.request.id,
+      ),
+      builder: (context, snapshot) {
+        final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: _handCardCentered('Left Hand', widget.request.leftHand),
+                  const Center(
+                    child: Text(
+                      'Nail Dimensions',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        fontFamily: 'ArialBold',
+                        color: AppColors.blackCat,
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _handCardCentered('Right Hand', widget.request.rightHand),
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _handCardCentered(
+                          'Left Hand',
+                          widget.request.leftHand,
+                          nfc: nfc.main.left,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _handCardCentered(
+                          'Right Hand',
+                          widget.request.rightHand,
+                          nfc: nfc.main.right,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -1273,7 +1313,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             ],
           ),
         const SizedBox(height: 12),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -1287,6 +1329,10 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
     final merged = <GroupClientMeasurementData>[];
     final seen = <String>{};
+    final nfcDetails = await loadRequestNfcDetails(
+      sourceCollection: widget.request.sourceCollection,
+      requestId: widget.request.id,
+    );
 
     void addClient(
       GroupClientMeasurementData client, {
@@ -1314,10 +1360,13 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         name: widget.request.clientName.trim().isEmpty
             ? 'Client'
             : widget.request.clientName.trim(),
+        clientEmail: widget.request.clientEmail,
         nailShape: widget.request.nailShape,
         nailLength: widget.request.nailLength,
         leftHand: _dimsMap(widget.request.leftHand),
         rightHand: _dimsMap(widget.request.rightHand),
+        leftNfc: nfcDetails.main.left,
+        rightNfc: nfcDetails.main.right,
       ),
       email: widget.request.clientEmail,
     );
@@ -1415,6 +1464,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       addClient(
         GroupClientMeasurementData(
           name: name,
+          clientEmail: email,
           nailShape: firstNonEmpty(<Object?>[
             client['nailShape'],
             client['nail_shape'],
@@ -1431,6 +1481,14 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           ], fallback: widget.request.nailLength),
           leftHand: left,
           rightHand: right,
+          leftNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .left,
+          rightNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .right,
         ),
         email: email,
         id: id,
@@ -1873,6 +1931,7 @@ class _CompactGroupMeasurementsHostState
                     child: _CompactHandCard(
                       title: 'Left Hand',
                       values: selected.leftHand,
+                      nfc: selected.leftNfc,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1880,6 +1939,7 @@ class _CompactGroupMeasurementsHostState
                     child: _CompactHandCard(
                       title: 'Right Hand',
                       values: selected.rightHand,
+                      nfc: selected.rightNfc,
                     ),
                   ),
                 ],
@@ -1917,10 +1977,15 @@ class _CompactGroupMeasurementsHostState
 }
 
 class _CompactHandCard extends StatelessWidget {
-  const _CompactHandCard({required this.title, required this.values});
+  const _CompactHandCard({
+    required this.title,
+    required this.values,
+    this.nfc = const <String, bool>{},
+  });
 
   final String title;
   final Map<String, String> values;
+  final Map<String, bool> nfc;
 
   @override
   Widget build(BuildContext context) {
@@ -1951,17 +2016,17 @@ class _CompactHandCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          _row('Thumb', value('thumb')),
-          _row('Index', value('index')),
-          _row('Middle', value('middle')),
-          _row('Ring', value('ring')),
-          _row('Pinky', value('pinky')),
+          _row('Thumb', value('thumb'), nfcRequested: nfc['thumb'] == true),
+          _row('Index', value('index'), nfcRequested: nfc['index'] == true),
+          _row('Middle', value('middle'), nfcRequested: nfc['middle'] == true),
+          _row('Ring', value('ring'), nfcRequested: nfc['ring'] == true),
+          _row('Pinky', value('pinky'), nfcRequested: nfc['pinky'] == true),
         ],
       ),
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {bool nfcRequested = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
@@ -1976,6 +2041,7 @@ class _CompactHandCard extends StatelessWidget {
               ),
             ),
           ),
+          if (nfcRequested) ...[_CompletedRequestSheetState._nfcDimensionChip(), const SizedBox(width: 6)],
           Text(
             value,
             style: const TextStyle(

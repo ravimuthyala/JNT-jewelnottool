@@ -454,7 +454,7 @@ class Step4CredentialsState extends State<Step4Credentials> {
                   height: 46,
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.deepPlum, foregroundColor: Colors.white, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)),
+                    style: regPrimaryButtonStyle(),
                     onPressed: () {
                       if (!_paymentFieldsValid()) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill required payment fields.')));
@@ -462,7 +462,15 @@ class Step4CredentialsState extends State<Step4Credentials> {
                       }
                       setState(() => _paymentSaved = true);
                     },
-                    child: const Text('Save Payment Method', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.snow)),
+                    child: const Text(
+                      'Save Payment Method',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Arial',
+                        color: AppColors.snow,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),

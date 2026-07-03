@@ -70,6 +70,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
     _profile = widget.profile ?? _fallbackProfile();
     _clientIndex = widget.initialTabIndex.clamp(0, 5);
     unawaited(_loadAmbassadorStatus());
+    unawaited(_loadProfileFromSupabase());
   }
 
   bool _isAmbassadorFromData(Map<String, dynamic> data) {
@@ -133,6 +134,223 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
       return value.map((key, value) => MapEntry(key.toString(), value));
     }
     return const <String, dynamic>{};
+  }
+
+  String _firstNonEmpty(List<Object?> values) {
+    for (final raw in values) {
+      final value = (raw ?? '').toString().trim();
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  NailLength _parseNailLength(Object? raw) {
+    final value = (raw ?? '').toString().trim();
+    switch (value) {
+      case 'short':
+        return NailLength.short;
+      case 'medium':
+        return NailLength.medium;
+      case 'long':
+        return NailLength.long;
+      case 'extraLong':
+        return NailLength.extraLong;
+      case 'xlLong':
+        return NailLength.xlLong;
+      default:
+        return NailLength.none;
+    }
+  }
+
+  NailDimensions _parseNailDimensions(Map<String, dynamic> map) {
+    double? read(String key) {
+      final raw = map[key];
+      if (raw is num) return raw.toDouble();
+      if (raw is String) return double.tryParse(raw.trim());
+      return null;
+    }
+
+    bool readBool(String key) {
+      final raw = map[key];
+      if (raw is bool) return raw;
+      if (raw is num) return raw != 0;
+      final value = (raw ?? '').toString().trim().toLowerCase();
+      return value == 'true' || value == 'yes' || value == '1';
+    }
+
+    return NailDimensions(
+      lThumb: read('lThumb'),
+      lIndex: read('lIndex'),
+      lMiddle: read('lMiddle'),
+      lRing: read('lRing'),
+      lPinky: read('lPinky'),
+      rThumb: read('rThumb'),
+      rIndex: read('rIndex'),
+      rMiddle: read('rMiddle'),
+      rRing: read('rRing'),
+      rPinky: read('rPinky'),
+      lThumbNfc: readBool('lThumbNfc'),
+      lIndexNfc: readBool('lIndexNfc'),
+      lMiddleNfc: readBool('lMiddleNfc'),
+      lRingNfc: readBool('lRingNfc'),
+      lPinkyNfc: readBool('lPinkyNfc'),
+      rThumbNfc: readBool('rThumbNfc'),
+      rIndexNfc: readBool('rIndexNfc'),
+      rMiddleNfc: readBool('rMiddleNfc'),
+      rRingNfc: readBool('rRingNfc'),
+      rPinkyNfc: readBool('rPinkyNfc'),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _readProfileRowFromSupabase() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    final uid = (user?.id ?? '').trim();
+    final email = (user?.email ?? '').trim().toLowerCase();
+
+    if (uid.isEmpty && email.isEmpty) return null;
+
+    for (final table in const <String>['client_artist', 'client']) {
+      try {
+        if (uid.isNotEmpty) {
+          final rows = await supabase.from(table).select().eq('id', uid).limit(1);
+          if (rows.isNotEmpty) {
+            return Map<String, dynamic>.from(rows.first as Map);
+          }
+        }
+
+        if (email.isNotEmpty) {
+          final rows = await supabase.from(table).select().eq('email', email).limit(1);
+          if (rows.isNotEmpty) {
+            return Map<String, dynamic>.from(rows.first as Map);
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  ClientProfileDraft _profileFromSupabaseRow(Map<String, dynamic> data) {
+    final profile = _asMap(data['profile']);
+    final basic = _asMap(data['basic']);
+    final client = _asMap(data['client']);
+    final clientProfile = _asMap(client['profile']);
+    final address = _asMap(data['address']);
+    final clientAddress = _asMap(client['address']);
+    final nail = _asMap(data['nailPreferences']).isNotEmpty
+        ? _asMap(data['nailPreferences'])
+        : _asMap(data['nail_preferences']);
+    final clientNail = _asMap(client['nailPreferences']).isNotEmpty
+        ? _asMap(client['nailPreferences'])
+        : _asMap(client['nail_preferences']);
+    final nextNail = nail.isNotEmpty
+        ? NailPreferences(
+            dimensions: _parseNailDimensions(_asMap(nail['dimensions'])),
+            shape: _firstNonEmpty([nail['shape']]),
+            length: _parseNailLength(nail['length']),
+          )
+        : clientNail.isNotEmpty
+        ? NailPreferences(
+            dimensions: _parseNailDimensions(_asMap(clientNail['dimensions'])),
+            shape: _firstNonEmpty([clientNail['shape']]),
+            length: _parseNailLength(clientNail['length']),
+          )
+        : _profile.nail;
+
+    final name = _firstNonEmpty([
+      basic['name'],
+      profile['name'],
+      clientProfile['name'],
+      data['panel_displayName'],
+      data['name'],
+      _profile.basic.name,
+    ]);
+
+    final email = _firstNonEmpty([
+      basic['email'],
+      data['email'],
+      client['email'],
+      _profile.basic.email,
+    ]);
+
+    final phone = _firstNonEmpty([
+      basic['phone'],
+      profile['phone'],
+      clientProfile['phone'],
+      data['panel_phone'],
+      data['phone'],
+      _profile.basic.phone,
+    ]);
+
+    final profileImageUrl = _firstNonEmpty([
+      basic['profileImageUrl'],
+      basic['photoUrl'],
+      basic['avatarUrl'],
+      profile['profileImageUrl'],
+      profile['photoUrl'],
+      profile['avatarUrl'],
+      clientProfile['profileImageUrl'],
+      clientProfile['photoUrl'],
+      clientProfile['avatarUrl'],
+      data['panel_profileImageUrl'],
+      data['profileImageUrl'],
+      data['photoUrl'],
+      data['avatarUrl'],
+      _profile.basic.profileImageUrl,
+    ]);
+
+    return _profile.copyWith(
+      basic: _profile.basic.copyWith(
+        name: name,
+        email: email,
+        phone: phone,
+        profileImageUrl: profileImageUrl,
+      ),
+      address: AddressInfo(
+        street: _firstNonEmpty([
+          address['street'],
+          address['addressLine1'],
+          clientAddress['street'],
+          clientAddress['addressLine1'],
+          data['panel_street'],
+          _profile.address.street,
+        ]),
+        city: _firstNonEmpty([
+          address['city'],
+          clientAddress['city'],
+          data['panel_city'],
+          _profile.address.city,
+        ]),
+        state: _firstNonEmpty([
+          address['state'],
+          clientAddress['state'],
+          data['panel_state'],
+          _profile.address.state,
+        ]),
+        zip: _firstNonEmpty([
+          address['zip'],
+          clientAddress['zip'],
+          data['panel_zip'],
+          _profile.address.zip,
+        ]),
+        country: _firstNonEmpty([
+          address['country'],
+          clientAddress['country'],
+          data['panel_country'],
+          _profile.address.country,
+        ]),
+      ),
+      nail: nextNail,
+    );
+  }
+
+  Future<void> _loadProfileFromSupabase() async {
+    final row = await _readProfileRowFromSupabase();
+    if (row == null || !mounted) return;
+    setState(() {
+      _profile = _profileFromSupabaseRow(row);
+    });
   }
 
   Future<void> _loadAmbassadorStatus() async {

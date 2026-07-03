@@ -511,11 +511,21 @@ Map<String, dynamic> _toDbColumns(Map<String, dynamic> data) {
 Object? _encodeValue(Object? value) {
   if (value is UpdateValue) {
     if (value.kind == 'now') return DateTime.now().toIso8601String();
-    if (value.kind == 'arrayUnion') return value.values;
+    if (value.kind == 'arrayUnion') {
+      return value.values.map(_encodeValue).toList(growable: false);
+    }
   }
   if (value is DateTime) return value.toIso8601String();
-  if (value is Map) return Map<String, dynamic>.from(value);
-  if (value is List) return value;
+  if (value is Map) {
+    final out = <String, dynamic>{};
+    value.forEach((key, nestedValue) {
+      out[key.toString()] = _encodeValue(nestedValue);
+    });
+    return out;
+  }
+  if (value is List) {
+    return value.map(_encodeValue).toList(growable: false);
+  }
   return value;
 }
 
@@ -530,14 +540,16 @@ Map<String, dynamic> _applyUpdateValues(Map<String, dynamic> current, Map<String
       } else if (value.kind == 'arrayUnion') {
         final existing = out[column] is List ? List<dynamic>.from(out[column] as List) : <dynamic>[];
         for (final item in value.values) {
-          if (!existing.contains(item)) existing.add(item);
+          final encodedItem = _encodeValue(item);
+          if (!existing.contains(encodedItem)) existing.add(encodedItem);
         }
         out[column] = existing;
         out[_snakeToCamel(column)] = existing;
       }
     } else {
-      out[column] = value;
-      out[_snakeToCamel(column)] = value;
+      final encoded = _encodeValue(value);
+      out[column] = encoded;
+      out[_snakeToCamel(column)] = encoded;
     }
   });
   return out;

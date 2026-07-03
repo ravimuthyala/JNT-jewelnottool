@@ -11,6 +11,7 @@ import '../services/ambassador_role_service.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 
@@ -1644,6 +1645,14 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     );
   }
 
+  void _closeProfilePage() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _onBottomNavTap(0);
+  }
+
   void _onBottomNavTap(int i) {
     Navigator.pushReplacement(
       context,
@@ -1660,48 +1669,30 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
-    final headerHeight = topInset + 64;
-
     return Scaffold(
       backgroundColor: AppColors.snow,
 
       // ✅ Your custom header
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(headerHeight),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SizedBox(
-            height: headerHeight,
-            child: Stack(
-              children: [
-                Positioned(
-                  left: 12,
-                  top: topInset + 4,
-                  child: NotificationBellButton(
-                    onTap: _openNotifications,
-                    iconSize: JntHeaderMetrics.notificationIconSize,
-                  ),
-                ),
-                Positioned.fill(
-                  child: Center(
-                    child: Image.asset(
-                      'assets/images/jnt_logo_black.png',
-                      height: JntHeaderMetrics.logoHeight,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      appBar: JntModalAppBar(
+        onClose: _closeProfilePage,
+        closeTooltip: 'Close profile',
+        leading: NotificationBellButton(
+          onTap: _openNotifications,
+          iconSize: JntHeaderMetrics.notificationIconSize,
+        ),
+        title: ExcludeSemantics(
+          child: Image.asset(
+            'assets/images/jnt_logo_black.png',
+            height: JntModalHeaderMetrics.logoHeight,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
         ),
       ),
 
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
           children: [
             _headerGradientCard(
               child: Column(
