@@ -1,4 +1,7 @@
+import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../constants/currency_options.dart';
 import '../../theme/app_colors.dart';
@@ -7,10 +10,7 @@ import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
 class Step1Account extends StatefulWidget {
-  const Step1Account({
-    super.key,
-    required this.draft,
-  });
+  const Step1Account({super.key, required this.draft});
 
   final RegistrationDraft draft;
 
@@ -28,24 +28,31 @@ class Step1AccountState extends State<Step1Account> {
   late final TextEditingController _displayNameCtrl;
   late final TextEditingController _languageCtrl;
   late final TextEditingController _bioCtrl;
+  late final TextEditingController _phoneCtrl;
 
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   bool _emailTouched = false;
   String? _currency;
+  String _phoneAreaCode = '+1';
+  Uint8List? _profileBytes;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    final d = widget.draft;
-    _emailCtrl = TextEditingController(text: d.email);
-    _passCtrl = TextEditingController(text: d.password);
+    final draft = widget.draft;
+    _emailCtrl = TextEditingController(text: draft.email);
+    _passCtrl = TextEditingController(text: draft.password);
     _confirmCtrl = TextEditingController();
-    _studioNameCtrl = TextEditingController(text: d.studioName);
-    _displayNameCtrl = TextEditingController(text: d.displayName);
-    _languageCtrl = TextEditingController(text: d.languageSpoken);
-    _bioCtrl = TextEditingController(text: d.bio);
-    _currency = d.currency.isEmpty ? 'US Dollar (USD)' : d.currency;
+    _studioNameCtrl = TextEditingController(text: draft.studioName);
+    _displayNameCtrl = TextEditingController(text: draft.displayName);
+    _languageCtrl = TextEditingController(text: draft.languageSpoken);
+    _bioCtrl = TextEditingController(text: draft.bio);
+    _phoneCtrl = TextEditingController(text: draft.phone);
+    _phoneAreaCode = draft.phoneAreaCode.isEmpty ? '+1' : draft.phoneAreaCode;
+    _profileBytes = draft.profileBytes;
+    _currency = draft.currency.isEmpty ? 'US Dollar (USD)' : draft.currency;
   }
 
   @override
@@ -57,7 +64,19 @@ class Step1AccountState extends State<Step1Account> {
     _displayNameCtrl.dispose();
     _languageCtrl.dispose();
     _bioCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickProfilePic() async {
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    setState(() => _profileBytes = bytes);
   }
 
   bool get _isEmailValid =>
@@ -74,6 +93,8 @@ class Step1AccountState extends State<Step1Account> {
       _currency = 'US Dollar (USD)';
       _bioCtrl.text =
           'Professional nail artist with 5+ years of experience. Specializing in intricate nail art, gel designs, and 3D nail sculptures. Based in LA.';
+      _phoneCtrl.text = '5551234567';
+      _phoneAreaCode = '+1';
       _emailTouched = true;
     });
   }
@@ -88,6 +109,9 @@ class Step1AccountState extends State<Step1Account> {
     draft.languageSpoken = _languageCtrl.text.trim();
     draft.currency = _currency ?? 'US Dollar (USD)';
     draft.bio = _bioCtrl.text.trim();
+    draft.phone = _phoneCtrl.text.trim();
+    draft.phoneAreaCode = _phoneAreaCode;
+    draft.profileBytes = _profileBytes;
     return true;
   }
 
@@ -123,7 +147,8 @@ class Step1AccountState extends State<Step1Account> {
                   },
                   validator: (_) {
                     if (!_emailTouched) return null;
-                    if (_emailCtrl.text.trim().isEmpty) return 'Email is required';
+                    if (_emailCtrl.text.trim().isEmpty)
+                      return 'Email is required';
                     if (!_isEmailValid) return 'Enter a valid email address';
                     return null;
                   },
@@ -135,9 +160,12 @@ class Step1AccountState extends State<Step1Account> {
                   controller: _passCtrl,
                   obscureText: _obscurePass,
                   textInputAction: TextInputAction.next,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Password is required';
-                    if (v.length < 8) return 'Must be at least 8 characters';
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Password is required';
+                    }
+                    if (value.length < 8)
+                      return 'Must be at least 8 characters';
                     return null;
                   },
                   decoration: regDec(
@@ -160,11 +188,12 @@ class Step1AccountState extends State<Step1Account> {
                   controller: _confirmCtrl,
                   obscureText: _obscureConfirm,
                   textInputAction: TextInputAction.next,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) {
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
                       return 'Please confirm your password';
                     }
-                    if (v != _passCtrl.text) return 'Passwords do not match';
+                    if (value != _passCtrl.text)
+                      return 'Passwords do not match';
                     return null;
                   },
                   decoration: regDec(
@@ -172,13 +201,14 @@ class Step1AccountState extends State<Step1Account> {
                     '',
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                        _obscureConfirm
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: AppColors.blackCatLight,
                         size: 20,
                       ),
-                      onPressed: () => setState(
-                        () => _obscureConfirm = !_obscureConfirm,
-                      ),
+                      onPressed: () =>
+                          setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
                   ),
                   style: fieldStyle,
@@ -194,15 +224,72 @@ class Step1AccountState extends State<Step1Account> {
               children: [
                 Center(
                   child: RegistrationProfileUpload(
-                    onTap: () async {},
-                    imageBytes: widget.draft.profileBytes,
+                    onTap: _pickProfilePic,
+                    imageBytes: _profileBytes,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Localizations.override(
+                  context: context,
+                  locale: const Locale('en'),
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.snow,
+                      border: Border.all(color: AppColors.blackCatBorderLight),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 100,
+                          child: CountryCodePicker(
+                            onChanged: (code) => setState(
+                              () => _phoneAreaCode = code.dialCode ?? '+1',
+                            ),
+                            initialSelection: _phoneAreaCode,
+                            favorite: const ['+1', '+44', '+91'],
+                            showFlag: false,
+                            showFlagMain: false,
+                            hideMainText: false,
+                            alignLeft: true,
+                            padding: EdgeInsets.zero,
+                            textStyle: fieldStyle,
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                            ],
+                            validator: (value) =>
+                                (value == null || value.trim().length < 7)
+                                ? 'Enter a valid phone number'
+                                : null,
+                            decoration: const InputDecoration(
+                              hintText: 'Phone number',
+                              border: InputBorder.none,
+                            ),
+                            style: fieldStyle,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _studioNameCtrl,
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty)
+                  validator: (value) => (value == null || value.trim().isEmpty)
                       ? 'Full Name / Studio Name is required'
                       : null,
                   decoration: regDec(
@@ -215,7 +302,7 @@ class Step1AccountState extends State<Step1Account> {
                 TextFormField(
                   controller: _displayNameCtrl,
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty)
+                  validator: (value) => (value == null || value.trim().isEmpty)
                       ? 'Display Name is required'
                       : null,
                   decoration: regDec('Display Name', 'Display Name'),
@@ -225,7 +312,7 @@ class Step1AccountState extends State<Step1Account> {
                 TextFormField(
                   controller: _languageCtrl,
                   textInputAction: TextInputAction.next,
-                  validator: (v) => (v == null || v.trim().isEmpty)
+                  validator: (value) => (value == null || value.trim().isEmpty)
                       ? 'Language is required'
                       : null,
                   decoration: regDec(
@@ -240,8 +327,8 @@ class Step1AccountState extends State<Step1Account> {
                   hint: 'Select currency',
                   options: currencyOptions,
                   selectedValue: _currency,
-                  onChanged: (v) => setState(() => _currency = v),
-                  validator: (v) => (v == null || v.trim().isEmpty)
+                  onChanged: (value) => setState(() => _currency = value),
+                  validator: (value) => (value == null || value.trim().isEmpty)
                       ? 'Currency is required'
                       : null,
                 ),
@@ -250,8 +337,9 @@ class Step1AccountState extends State<Step1Account> {
                   controller: _bioCtrl,
                   textInputAction: TextInputAction.done,
                   maxLines: 4,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Bio is required' : null,
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? 'Bio is required'
+                      : null,
                   decoration: regDec('Bio / About', 'Tell clients about you'),
                   style: fieldStyle,
                 ),
