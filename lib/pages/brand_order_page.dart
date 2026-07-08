@@ -1,21 +1,21 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/client_custom_request_repository.dart';
 import '../services/notifications_service.dart';
-import '../services/supabase_firebase_compat.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import 'client_custom_request_page.dart';
 import 'notifications_page.dart';
 import 'track_order_page.dart';
 import 'brand_order_details_page.dart';
 
-class BrandOrderPage extends StatefulWidget {
-  const BrandOrderPage({
+class BrandOrderPageV2 extends StatefulWidget {
+  const BrandOrderPageV2({
     super.key,
     required this.profile,
     required this.companyName,
@@ -47,14 +47,136 @@ class BrandOrderPage extends StatefulWidget {
   final ValueChanged<int>? onNavTap;
 
   @override
-  State<BrandOrderPage> createState() => _BrandOrderPageState();
+  State<BrandOrderPageV2> createState() => _BrandOrderPageV2State();
 }
 
-class _BrandOrderPageState extends State<BrandOrderPage> {
+class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   OrdersFilter _filter = OrdersFilter.all;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-  _submittedRequestsSub;
+  RealtimeChannel? _submittedRequestsChannel;
   List<ClientOrder> _submittedOrders = const [];
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  User? get _currentUser => _client.auth.currentUser;
+
+  String get _currentUid => (_currentUser?.id ?? '').trim();
+
+  String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
+  Map<String, dynamic> _asMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return <String, dynamic>{};
+  }
+
+  String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    for (final value in values) {
+      final text = (value ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return fallback;
+  }
+
+  String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    return _firstNonEmpty(values, fallback: fallback);
+  }
+
+  String _snakeLookup(Map<String, dynamic> row, String key) {
+    final lower = key.toLowerCase();
+    return row.keys.firstWhere(
+      (candidate) => candidate.toLowerCase() == lower,
+      orElse: () => key,
+    );
+  }
+
+  dynamic _rowValue(
+    Map<String, dynamic> row,
+    List<String> keys, {
+    Map<String, dynamic>? payload,
+    Map<String, dynamic>? details,
+  }) {
+    for (final key in keys) {
+      final rowKey = _snakeLookup(row, key);
+      if (row.containsKey(rowKey) && row[rowKey] != null) {
+        final value = row[rowKey];
+        if (value is String && value.trim().isEmpty) continue;
+        return value;
+      }
+      if (payload != null && payload.containsKey(key) && payload[key] != null) {
+        final value = payload[key];
+        if (value is String && value.trim().isEmpty) continue;
+        return value;
+      }
+      if (details != null && details.containsKey(key) && details[key] != null) {
+        final value = details[key];
+        if (value is String && value.trim().isEmpty) continue;
+        return value;
+      }
+    }
+    return null;
+  }
+
+  String _rowString(
+    Map<String, dynamic> row,
+    List<String> keys, {
+    Map<String, dynamic>? payload,
+    Map<String, dynamic>? details,
+    String fallback = '',
+  }) {
+    return _firstNonEmpty(
+      keys
+          .map(
+            (key) => _rowValue(row, [key], payload: payload, details: details),
+          )
+          .toList(growable: false),
+      fallback: fallback,
+    );
+  }
+
+  Map<String, dynamic> _normalizeBrandOrderIdentifierRow(
+    Map<String, dynamic> row,
+  ) {
+    final normalized = Map<String, dynamic>.from(row);
+    final payload = _asMap(normalized['payload']);
+    final details = _asMap(normalized['details']);
+    final requestDetails = _asMap(details['requestDetails']);
+    final order = _asMap(details['order']);
+
+    final canonicalOrderNumber = _firstNonEmpty([
+      normalized['order_number'],
+      normalized['orderNumber'],
+      payload['order_number'],
+      payload['orderNumber'],
+      details['order_number'],
+      details['orderNumber'],
+      requestDetails['order_number'],
+      requestDetails['orderNumber'],
+      order['order_number'],
+      order['orderNumber'],
+      normalized['request_number'],
+      normalized['requestNumber'],
+      payload['request_number'],
+      payload['requestNumber'],
+      details['request_number'],
+      details['requestNumber'],
+      requestDetails['request_number'],
+      requestDetails['requestNumber'],
+      order['request_number'],
+      order['requestNumber'],
+    ]);
+
+    if (canonicalOrderNumber.isEmpty) return normalized;
+
+    normalized['order_number'] = canonicalOrderNumber;
+    normalized['orderNumber'] = canonicalOrderNumber;
+    normalized['request_number'] = canonicalOrderNumber;
+    normalized['requestNumber'] = canonicalOrderNumber;
+
+    return normalized;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +184,7 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
   }
 
   @override
-  void didUpdateWidget(covariant BrandOrderPage oldWidget) {
+  void didUpdateWidget(covariant BrandOrderPageV2 oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.profile.basic.email != widget.profile.basic.email) {
       _subscribeSubmittedOrders();
@@ -71,126 +193,181 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
 
   @override
   void dispose() {
-    _submittedRequestsSub?.cancel();
+    if (_submittedRequestsChannel != null) {
+      unawaited(_client.removeChannel(_submittedRequestsChannel!));
+    }
     super.dispose();
   }
 
-  void _subscribeSubmittedOrders() {
-    _submittedRequestsSub?.cancel();
-    final authEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+  Future<void> _subscribeSubmittedOrders() async {
+    if (_submittedRequestsChannel != null) {
+      unawaited(_client.removeChannel(_submittedRequestsChannel!));
+      _submittedRequestsChannel = null;
+    }
+    final authEmail = _currentEmail;
     final profileEmail = widget.profile.basic.email.trim().toLowerCase();
     final effectiveEmail = profileEmail.isNotEmpty ? profileEmail : authEmail;
     final profileName = widget.profile.basic.name.trim();
     final effectiveName = profileName.isNotEmpty
         ? profileName
         : widget.companyName.trim();
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    _submittedRequestsSub = FirebaseFirestore.instance
-        .collection('Company_Custom_Requests')
-        .snapshots()
-        .listen((snap) {
-          unawaited(
-            _handleCompanyRequestsSnapshot(
-              snap: snap,
-              authEmail: authEmail,
-              effectiveEmail: effectiveEmail,
-              effectiveName: effectiveName,
-              uid: uid,
-            ),
+    final uid = _currentUid;
+    _submittedRequestsChannel =
+        _client.channel('brand-order-company-custom-requests')
+          ..onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'company_custom_requests',
+            callback: (_) {
+              unawaited(
+                _loadSubmittedOrders(
+                  authEmail: authEmail,
+                  effectiveEmail: effectiveEmail,
+                  effectiveName: effectiveName,
+                  uid: uid,
+                ),
+              );
+            },
           );
-        });
+    await _submittedRequestsChannel!.subscribe();
+    await _loadSubmittedOrders(
+      authEmail: authEmail,
+      effectiveEmail: effectiveEmail,
+      effectiveName: effectiveName,
+      uid: uid,
+    );
   }
 
-  Future<void> _handleCompanyRequestsSnapshot({
-    required QuerySnapshot<Map<String, dynamic>> snap,
+  Future<void> _loadSubmittedOrders({
     required String authEmail,
     required String effectiveEmail,
     required String effectiveName,
     required String uid,
   }) async {
-    bool matches(Map<String, dynamic> data) {
-      final requestType = (data['requestType'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final allowedTypes = <String>{
-        '',
-        'companycustomrequest',
-        'brandcustomrequest',
-        'brandrequest',
-        'direct',
-        'direct to client',
-        'direct to artist',
-        'standard',
-      };
-      if (!allowedTypes.contains(requestType)) {
-        return false;
+    try {
+      final rows = await _client.from('company_custom_requests').select();
+      final rowMaps = rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+      final matchedRows = rowMaps
+          .where(
+            (row) => _matchesCompanyRequest(
+              row,
+              authEmail: authEmail,
+              effectiveEmail: effectiveEmail,
+              effectiveName: effectiveName,
+              uid: uid,
+            ),
+          )
+          .map(_normalizeBrandOrderIdentifierRow)
+          .toList(growable: false);
+      if (kDebugMode) {
+        debugPrint(
+          '[BrandOrderPage] company requests rows total=${rowMaps.length} matched=${matchedRows.length}',
+        );
       }
-      final docUid =
-          (data['companyUid'] ??
-                  data['requesterUid'] ??
-                  data['createdByUid'] ??
-                  data['uid'] ??
-                  '')
-              .toString()
-              .trim();
-      final companyEmail = (data['companyEmail'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final clientEmail = (data['clientEmail'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final companyName = (data['companyName'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final clientName = (data['clientName'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      if (uid.isNotEmpty && docUid == uid) return true;
-      if (effectiveEmail.isNotEmpty &&
-          (companyEmail == effectiveEmail || clientEmail == effectiveEmail)) {
-        return true;
+      final summaries = await Future.wait(
+        matchedRows.map(SubmittedClientRequestSummary.fromSupabaseRow),
+      );
+      final filteredItems = summaries
+          .where(_isVisibleInCompanyOrders)
+          .toList(growable: false);
+      await _syncExpiredRequests(filteredItems);
+      final orders = filteredItems.map(_mapSubmittedRequestToOrder).toList()
+        ..sort(
+          (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
+            a.createdAt ?? DateTime(1970),
+          ),
+        );
+      if (!mounted) return;
+      setState(() => _submittedOrders = orders);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[BrandOrderPage] failed to load company requests: $e');
       }
-      if (authEmail.isNotEmpty &&
-          (companyEmail == authEmail || clientEmail == authEmail)) {
-        return true;
-      }
-      if (effectiveName.isNotEmpty &&
-          (companyName == effectiveName || clientName == effectiveName)) {
-        return true;
-      }
-      return false;
     }
+  }
 
-    final matchedDocs = snap.docs
-        .where((doc) => matches(doc.data()))
-        .toList(growable: false);
-    if (kDebugMode) {
-      debugPrint(
-        '[BrandOrderPage] company requests snapshot total=${snap.docs.length} matched=${matchedDocs.length}',
-      );
+  bool _matchesCompanyRequest(
+    Map<String, dynamic> row, {
+    required String authEmail,
+    required String effectiveEmail,
+    required String effectiveName,
+    required String uid,
+  }) {
+    final payload = _asMap(row['payload']);
+    final details = _asMap(row['details']);
+    final requestType = _firstNonEmpty([
+      row['request_type'],
+      row['requestType'],
+      payload['request_type'],
+      payload['requestType'],
+      details['request_type'],
+      details['requestType'],
+    ]).toLowerCase().trim();
+    final allowedTypes = <String>{
+      '',
+      'companycustomrequest',
+      'brandcustomrequest',
+      'brandrequest',
+      'direct',
+      'direct to client',
+      'direct to artist',
+      'standard',
+    };
+    if (!allowedTypes.contains(requestType)) return false;
+    final docUid = _firstNonEmpty([
+      row['company_uid'],
+      row['companyUid'],
+      row['requester_uid'],
+      row['requesterUid'],
+      row['created_by_uid'],
+      row['createdByUid'],
+      row['uid'],
+      payload['company_uid'],
+      payload['companyUid'],
+      details['company_uid'],
+      details['companyUid'],
+    ]);
+    final companyEmail = _rowString(
+      row,
+      const ['company_email', 'companyEmail'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    final clientEmail = _rowString(
+      row,
+      const ['client_email', 'clientEmail'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    final companyName = _rowString(
+      row,
+      const ['company_name', 'companyName'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    final clientName = _rowString(
+      row,
+      const ['client_name', 'clientName'],
+      payload: payload,
+      details: details,
+    ).toLowerCase();
+    if (uid.isNotEmpty && docUid == uid) return true;
+    if (effectiveEmail.isNotEmpty &&
+        (companyEmail == effectiveEmail || clientEmail == effectiveEmail)) {
+      return true;
     }
-    final summaries = await Future.wait(
-      matchedDocs.map(SubmittedClientRequestSummary.fromDocWithDetails),
-    );
-    final filteredItems = summaries
-        .where(_isVisibleInCompanyOrders)
-        .toList(growable: false);
-    await _syncExpiredRequests(filteredItems);
-    final orders = filteredItems.map(_mapSubmittedRequestToOrder).toList()
-      ..sort(
-        (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
-          a.createdAt ?? DateTime(1970),
-        ),
-      );
-    if (!mounted) return;
-    setState(() => _submittedOrders = orders);
+    if (authEmail.isNotEmpty &&
+        (companyEmail == authEmail || clientEmail == authEmail)) {
+      return true;
+    }
+    if (effectiveName.isNotEmpty &&
+        (companyName == effectiveName || clientName == effectiveName)) {
+      return true;
+    }
+    return false;
   }
 
   bool _isVisibleInCompanyOrders(SubmittedClientRequestSummary req) {
@@ -200,6 +377,8 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
   Future<void> _syncExpiredRequests(
     List<SubmittedClientRequestSummary> items,
   ) async {
+    const expirationReason =
+        'Request was not accepted by artist, and it is past due.';
     final now = DateTime.now();
     for (final req in items) {
       final raw = req.status.trim().toLowerCase();
@@ -211,7 +390,10 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
           raw == 'delivered' ||
           raw == 'shipped';
       if (terminal) continue;
-      if (req.acceptedByArtistEmail.trim().isNotEmpty) continue;
+      final sourceCollection = req.sourceCollection.trim();
+      final isBrandRequest = sourceCollection == 'Company_Custom_Requests';
+      final artistAccepted = req.acceptedByArtistEmail.trim().isNotEmpty;
+      if (artistAccepted) continue;
       final due = req.needBy;
       if (due == null) continue;
       final pastDue = now.isAfter(
@@ -220,33 +402,83 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
       if (!pastDue) continue;
 
       try {
+        final row = await _client
+            .from('company_custom_requests')
+            .select()
+            .eq('id', req.id)
+            .maybeSingle();
+        final current = _asMap(row);
+        if (current.isEmpty) continue;
+        final payload = _asMap(current['payload']);
+        final details = _asMap(current['details']);
         final collection = req.sourceCollection.trim().isNotEmpty
             ? req.sourceCollection.trim()
-            : 'Client_Custom_Requests';
-        final ref = FirebaseFirestore.instance
-            .collection(collection)
-            .doc(req.id);
-        final snap = await ref.get();
-        final current = snap.data() ?? const <String, dynamic>{};
-        if (current['expiredNotifiedClient'] == true &&
-            ((current['status'] ?? '') as Object)
-                    .toString()
-                    .trim()
-                    .toLowerCase() ==
-                'expired') {
+            : 'Company_Custom_Requests';
+
+        final acceptedClientEmail = firstNonEmpty(<Object?>[
+          current['accepted_by_client_email'],
+          current['acceptedByClientEmail'],
+          req.acceptedByClientEmail,
+        ]).toLowerCase();
+        final currentStatus = firstNonEmpty([
+          current['status'],
+          current['client_status'],
+          current['brand_status'],
+          payload['status'],
+          payload['clientStatus'],
+          payload['brandStatus'],
+          details['status'],
+          details['clientStatus'],
+          details['brandStatus'],
+        ]).toLowerCase();
+        if (currentStatus == 'expired' &&
+            current['expired_notified_client'] == true &&
+            (!isBrandRequest ||
+                (current['expired_notified_brand_admin'] == true &&
+                    (acceptedClientEmail.isEmpty ||
+                        current['expired_notified_accepted_client'] ==
+                            true)))) {
           continue;
         }
-        await ref.set({
+        final nowIso = now.toIso8601String();
+        final updatedPayload = <String, dynamic>{
+          ...payload,
           'status': 'expired',
-          'expiredAt': FieldValue.serverTimestamp(),
+          'expiredAt': nowIso,
+          if (isBrandRequest) 'expiredReason': expirationReason,
           'expiredNotifiedClient': true,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        await ref.collection('details').doc('payload').set({
+          if (isBrandRequest) 'expiredNotifiedBrandAdmin': true,
+          if (isBrandRequest && acceptedClientEmail.isNotEmpty)
+            'expiredNotifiedAcceptedClient': true,
+          'updatedAt': nowIso,
+        };
+        final updatedDetails = <String, dynamic>{
+          ...details,
           'status': 'expired',
-        }, SetOptions(merge: true));
+          'expiredAt': nowIso,
+          if (isBrandRequest) 'expiredReason': expirationReason,
+          'expiredNotifiedClient': true,
+          if (isBrandRequest) 'expiredNotifiedBrandAdmin': true,
+          if (isBrandRequest && acceptedClientEmail.isNotEmpty)
+            'expiredNotifiedAcceptedClient': true,
+          'updatedAt': nowIso,
+        };
+        await _client
+            .from('company_custom_requests')
+            .update({
+              'status': 'expired',
+              'expired_at': nowIso,
+              'expired_notified_client': true,
+              if (isBrandRequest) 'expired_notified_brand_admin': true,
+              if (isBrandRequest && acceptedClientEmail.isNotEmpty)
+                'expired_notified_accepted_client': true,
+              'updated_at': nowIso,
+              'payload': updatedPayload,
+              'details': updatedDetails,
+            })
+            .eq('id', req.id);
 
-        if ((req.clientEmail).trim().isNotEmpty) {
+        if (!isBrandRequest && (req.clientEmail).trim().isNotEmpty) {
           await NotificationsService.createUserNotification(
             receiverEmail: req.clientEmail.trim().toLowerCase(),
             title: 'Request Expired',
@@ -255,6 +487,67 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
             orderId: req.id,
             orderNumber: req.orderNumber,
             sourceCollection: collection,
+          );
+        }
+
+        if (isBrandRequest) {
+          final campaignName = firstNonEmpty(<Object?>[
+            current['campaignName'],
+            current['title'],
+            req.campaignName,
+          ], fallback: 'Campaign');
+          final brandCompany = firstNonEmpty(<Object?>[
+            current['companyName'],
+            current['brandName'],
+            req.contactName,
+          ], fallback: 'Brand Company');
+          final orderRef = req.orderNumber.trim().isNotEmpty
+              ? req.orderNumber.trim()
+              : req.id;
+
+          final brandRecipientEmails =
+              await NotificationsService.resolveBrandRecipientEmails(
+                rootData: current,
+                excludeEmails: <String>[acceptedClientEmail],
+              );
+
+          for (final brandEmail in brandRecipientEmails) {
+            await NotificationsService.createUserNotification(
+              receiverEmail: brandEmail,
+              title: 'Brand Request Expired',
+              body:
+                  'Your $campaignName brand request $orderRef has been expired $expirationReason',
+              type: 'brand_request_expired',
+              orderId: req.id,
+              orderNumber: req.orderNumber,
+              sourceCollection: collection,
+              extra: const <String, dynamic>{'reason': expirationReason},
+            );
+          }
+
+          if (acceptedClientEmail.isNotEmpty) {
+            await NotificationsService.createUserNotification(
+              receiverEmail: acceptedClientEmail,
+              title: 'Brand Request Expired',
+              body:
+                  'Your $brandCompany $campaignName brand request $orderRef has been expired $expirationReason',
+              type: 'client_brand_request_expired',
+              orderId: req.id,
+              orderNumber: req.orderNumber,
+              sourceCollection: collection,
+              extra: const <String, dynamic>{'reason': expirationReason},
+            );
+          }
+
+          await NotificationsService.notifyAdmins(
+            title: 'Brand Request Expired',
+            body:
+                '$brandCompany $campaignName brand request $orderRef has been expired $expirationReason',
+            type: 'admin_brand_request_expired',
+            orderId: req.id,
+            orderNumber: req.orderNumber,
+            sourceCollection: collection,
+            extra: const <String, dynamic>{'reason': expirationReason},
           );
         }
       } catch (_) {}
@@ -331,10 +624,7 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
       rightHandDimensions: req.rightHandDimensions,
       status: mappedStatus,
       expectedOrDeliveredText: statusText,
-      imageAsset: _safeCardAvatar(
-        profileImage: req.clientProfileImage,
-        inspirationPhotos: req.inspirationPhotos,
-      ),
+      imageAsset: _safeCardAvatar(profileImage: req.clientProfileImage),
       artistName: req.acceptedByArtistName.isNotEmpty
           ? req.acceptedByArtistName
           : req.selectedArtist,
@@ -360,6 +650,7 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
       designPreviewPhotos: req.designPreviewPhotos,
       clientEmail: req.clientEmail,
       acceptedByArtistEmail: req.acceptedByArtistEmail,
+      directClientStatus: req.directClientStatus,
       rating: req.clientRating,
       reviewText: req.clientReviewText,
       reviewSubmittedAt: req.clientReviewSubmittedAt,
@@ -445,11 +736,20 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
     if (p.startsWith('http://') ||
         p.startsWith('https://') ||
         p.startsWith('gs://') ||
+        p.startsWith('company_custom_requests/') ||
+        p.startsWith('company/') ||
+        p.startsWith('clients/') ||
+        p.startsWith('client_custom_requests/') ||
+        p.startsWith('artists/') ||
+        p.startsWith('client_artists/') ||
         p.startsWith('blob:') ||
         p.startsWith('data:') ||
         p.startsWith('content://') ||
         p.startsWith('file://') ||
         p.startsWith('assets/')) {
+      return p;
+    }
+    if (!p.contains('://') && p.contains('/')) {
       return p;
     }
     if (!kIsWeb && (p.startsWith('/') || p.contains(':\\'))) {
@@ -458,23 +758,8 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
     return '';
   }
 
-  String _safeCardAvatar({
-    required String profileImage,
-    required List<String> inspirationPhotos,
-  }) {
-    for (final photo in inspirationPhotos) {
-      final pickedPhoto = _pickProfileImage(photo);
-      if (pickedPhoto.isNotEmpty) return pickedPhoto;
-    }
-
-    final picked = _pickProfileImage(profileImage);
-    if (picked.isEmpty) return '';
-    for (final photo in inspirationPhotos) {
-      if (photo.trim().isNotEmpty && photo.trim() == picked) {
-        return '';
-      }
-    }
-    return picked;
+  String _safeCardAvatar({required String profileImage}) {
+    return _pickProfileImage(profileImage);
   }
 
   OrderStatus _statusFromRequestStatus(String raw) {
@@ -613,7 +898,7 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
       await widget.onLogout!.call();
       return;
     }
-    await FirebaseAuth.instance.signOut();
+    await _client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -630,42 +915,19 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
               onOpenProfile: widget.onOpenProfile,
               onLogout: widget.onLogout,
             )
-          : AppBar(
-              backgroundColor: AppColors.alabaster,
-              surfaceTintColor: AppColors.alabaster,
-              elevation: 0,
-              toolbarHeight: 76,
-              automaticallyImplyLeading: false,
-              leadingWidth: 58,
-              leading: NotificationBellButton(
-                onTap: () {
-                  NotificationsPage.showAsModal(context);
-                },
-                iconSize: 22,
+          : JntStandardAppBar(
+              onNotifications: () {
+                NotificationsPage.showAsModal(context);
+              },
+              trailing: _AvatarMenu(
+                onSelected: _onAvatarMenuSelected,
+                avatarUrl: widget.profile.basic.profileImageUrl,
+                displayName: widget.profile.basic.name,
+                showProfile: widget.showProfileMenu,
+                showHistory: widget.showExtendedAvatarMenu,
+                showCalendar: widget.showExtendedAvatarMenu,
+                showArtist: widget.showExtendedAvatarMenu,
               ),
-
-              centerTitle: true,
-              title: Image.asset(
-                'assets/images/jnt_logo_black.png',
-                height: 50,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: _AvatarMenu(
-                    onSelected: _onAvatarMenuSelected,
-                    avatarUrl: widget.profile.basic.profileImageUrl,
-                    displayName: widget.profile.basic.name,
-                    showProfile: widget.showProfileMenu,
-                    showHistory: widget.showExtendedAvatarMenu,
-                    showCalendar: widget.showExtendedAvatarMenu,
-                    showArtist: widget.showExtendedAvatarMenu,
-                  ),
-                ),
-              ],
             ),
 
       body: ListView(
@@ -885,31 +1147,21 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
 
   Future<void> _resubmitCancelledOrder(ClientOrder order) async {
     try {
-      final requestRef = FirebaseFirestore.instance
-          .collection('Client_Custom_Requests')
-          .doc(order.id);
-      final rootSnap = await requestRef.get();
-      final detailSnap = await requestRef
-          .collection('details')
-          .doc('payload')
-          .get();
-
-      final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailData = detailSnap.data() ?? const <String, dynamic>{};
-
-      Map<String, dynamic> asMap(dynamic value) {
-        if (value is Map<String, dynamic>) {
-          return Map<String, dynamic>.from(value);
-        }
-        if (value is Map) {
-          return value.map((k, v) => MapEntry(k.toString(), v));
-        }
-        return <String, dynamic>{};
-      }
+      final row = await _client
+          .from('company_custom_requests')
+          .select()
+          .eq('id', order.id)
+          .maybeSingle();
+      final rowData = _asMap(row);
+      final rootData = <String, dynamic>{
+        ...rowData,
+        ..._asMap(rowData['payload']),
+      };
+      final detailData = _asMap(rowData['details']);
 
       final requestDetails = <String, dynamic>{
-        ...asMap(rootData['requestDetails']),
-        ...asMap(detailData['requestDetails']),
+        ..._asMap(rootData['requestDetails']),
+        ..._asMap(detailData['requestDetails']),
       };
       requestDetails['description'] ??=
           detailData['description'] ??
@@ -917,15 +1169,15 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
           rootData['descriptionPreview'];
 
       final budget = <String, dynamic>{
-        ...asMap(rootData['budget']),
-        ...asMap(detailData['budget']),
+        ..._asMap(rootData['budget']),
+        ..._asMap(detailData['budget']),
       };
       budget['min'] ??= rootData['budgetMin'];
       budget['max'] ??= rootData['budgetMax'];
 
       final orderMap = <String, dynamic>{
-        ...asMap(rootData['order']),
-        ...asMap(detailData['order']),
+        ..._asMap(rootData['order']),
+        ..._asMap(detailData['order']),
       };
       orderMap['type'] ??= detailData['orderType'] ?? rootData['orderType'];
       orderMap['allowNonLicensed'] ??=
@@ -940,8 +1192,8 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
           detailData['fallbackToPool'] ?? rootData['fallbackToPool'];
 
       final groupOrder = <String, dynamic>{
-        ...asMap(rootData['groupOrder']),
-        ...asMap(detailData['groupOrder']),
+        ..._asMap(rootData['groupOrder']),
+        ..._asMap(detailData['groupOrder']),
       };
       if (groupOrder['clients'] == null) {
         groupOrder['clients'] =
@@ -955,17 +1207,19 @@ class _BrandOrderPageState extends State<BrandOrderPage> {
       final initialRequestData = <String, dynamic>{
         ...rootData,
         ...detailData,
+        'payload': rootData['payload'],
+        'details': detailData,
         'requestDetails': requestDetails,
         'budget': budget,
         'order': orderMap,
         'shipping': <String, dynamic>{
-          ...asMap(rootData['shipping']),
-          ...asMap(detailData['shipping']),
+          ..._asMap(rootData['shipping']),
+          ..._asMap(detailData['shipping']),
         },
         'groupOrder': groupOrder,
         'nailPreferences': <String, dynamic>{
-          ...asMap(rootData['nailPreferences']),
-          ...asMap(detailData['nailPreferences']),
+          ..._asMap(rootData['nailPreferences']),
+          ..._asMap(detailData['nailPreferences']),
         },
         'inspirationPhotos':
             (detailData['inspirationPhotos'] as List<dynamic>?) ??
@@ -1113,13 +1367,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),
@@ -1224,7 +1479,6 @@ class _OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isProgress = order.status == OrderStatus.inProgress;
     final submittedLabel = order.createdAt == null
         ? 'Submitted -'
         : 'Submitted ${order.createdAt!.month.toString().padLeft(2, '0')}/${order.createdAt!.day.toString().padLeft(2, '0')}/${order.createdAt!.year}';
@@ -1350,11 +1604,6 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 6),
-                if (isProgress) ...[
-                  _ProgressBar(value: (order.progress ?? 0.0).clamp(0.0, 1.0)),
-                  const SizedBox(height: 4),
-                ],
                 if (!order.expectedOrDeliveredText
                     .trim()
                     .toLowerCase()
@@ -1440,40 +1689,6 @@ class _StatusChip extends StatelessWidget {
         fontWeight: FontWeight.w700,
         fontSize: 14,
         color: AppColors.blackCat,
-      ),
-    );
-  }
-}
-
-class _ProgressBar extends StatelessWidget {
-  const _ProgressBar({required this.value});
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        height: 8,
-        color: AppColors.blackCat.withValues(alpha: 0.06),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: value,
-            child: Container(
-              height: 8,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFF28B8B),
-                    AppColors.blackCat.withValues(alpha: 0.60),
-                    const Color(0xFF7BD9A5),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -1634,6 +1849,7 @@ class ClientOrder {
   final List<String> designPreviewPhotos;
   final String clientEmail;
   final String acceptedByArtistEmail;
+  final String directClientStatus;
   final String artistName;
   final String selectedArtistName;
   final String artistProfileImage;
@@ -1695,6 +1911,7 @@ class ClientOrder {
     this.designPreviewPhotos = const [],
     this.clientEmail = '',
     this.acceptedByArtistEmail = '',
+    this.directClientStatus = '',
     this.artistName = '',
     this.selectedArtistName = '',
     this.artistProfileImage = '',
@@ -1732,5 +1949,3 @@ class OrderClientMeasurement {
     this.rightHandDimensions = const <String, String>{},
   });
 }
-
-

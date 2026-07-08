@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class CompanyShellPage extends StatelessWidget {
-  const CompanyShellPage({super.key});
+class BrandShellPage extends StatelessWidget {
+  const BrandShellPage({super.key});
 
   @override
   Widget build(BuildContext context) {

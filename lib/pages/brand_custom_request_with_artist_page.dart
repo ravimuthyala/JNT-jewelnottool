@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/client_profile_models.dart';
-import 'company_custom_request_page.dart';
+import 'brand_custom_request_page.dart';
 
-class CompanyCustomRequestWithArtistPage extends StatelessWidget {
-  const CompanyCustomRequestWithArtistPage({
+class BrandCustomRequestWithArtistPage extends StatelessWidget {
+  const BrandCustomRequestWithArtistPage({
     super.key,
     required this.profile,
     required this.artistName,
@@ -31,7 +31,7 @@ class CompanyCustomRequestWithArtistPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CompanyCustomRequestPage(
+    return BrandCustomRequestPage(
       profile: profile,
       companyName: companyName,
       onBackHome: onBackHome,

@@ -1,11 +1,9 @@
 import 'dart:typed_data';
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import 'edit_company_business_info_popup.dart';
 import '../widgets/company_shell_chrome.dart';
@@ -96,6 +94,117 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     }
   }
 
+  SupabaseClient get _client => Supabase.instance.client;
+
+  String get _uid => (_client.auth.currentUser?.id ?? '').trim();
+
+  String get _email =>
+      (_client.auth.currentUser?.email ?? '').trim().toLowerCase();
+
+  dynamic get _companyStorage => _client.storage.from('company-logos');
+
+  Map<String, dynamic> _asMap(Object? raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return const <String, dynamic>{};
+  }
+
+  String _firstNonEmpty(List<Object?> values) {
+    for (final raw in values) {
+      final value = (raw ?? '').toString().trim();
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  String _normalizeStorageUrl(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    if (value.startsWith('data:image/')) return value;
+    if (value.startsWith('company-logos/')) {
+      return _companyStorage
+          .getPublicUrl(value.substring('company-logos/'.length))
+          .trim();
+    }
+    if (value.startsWith('companies/')) {
+      return _companyStorage.getPublicUrl(value).trim();
+    }
+    if (value.startsWith('company/')) {
+      return _companyStorage.getPublicUrl(value).trim();
+    }
+    return '';
+  }
+
+  Future<Map<String, dynamic>?> _readCompanyRow() async {
+    if (_uid.isEmpty && _email.isEmpty) return null;
+
+    for (final predicate in <Future<List<dynamic>> Function()>[
+      () async {
+        if (_uid.isEmpty) return const <dynamic>[];
+        return _client.from('company').select().eq('id', _uid).limit(1);
+      },
+      () async {
+        if (_email.isEmpty) return const <dynamic>[];
+        return _client.from('company').select().eq('email', _email).limit(1);
+      },
+    ]) {
+      try {
+        final rows = await predicate();
+        if (rows.isNotEmpty) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      } catch (e) {
+        debugPrint('COMPANY PROFILE LOAD FAILED: $e');
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _upsertCompanyRow(Map<String, dynamic> values) async {
+    final row = <String, dynamic>{
+      'id': _uid,
+      'email': _email,
+      'account_type': 'company',
+      'updated_at': DateTime.now().toIso8601String(),
+      ...values,
+    };
+    final existing = await _readCompanyRow();
+    if (existing != null) {
+      for (final section in const <String>[
+        'profile',
+        'basic',
+        'company',
+        'addresses',
+        'billing',
+      ]) {
+        final nextSection = row[section];
+        if (nextSection is Map) {
+          final currentSection = _asMap(existing[section]);
+          row[section] = <String, dynamic>{
+            ...currentSection,
+            ..._asMap(nextSection),
+          };
+        }
+      }
+      for (final entry in existing.entries) {
+        row.putIfAbsent(entry.key, () => entry.value);
+      }
+      row.addAll(values);
+      row['id'] = _uid;
+      row['email'] = _email;
+      row['account_type'] = 'company';
+      row['updated_at'] = DateTime.now().toIso8601String();
+    }
+
+    await _client.from('company').upsert(row).timeout(_profileSaveTimeout);
+  }
+
   Future<void> _editBusinessInfo() async {
     final updated = await showModalBottomSheet<CompanyBusinessInfoDraft>(
       context: context,
@@ -141,12 +250,23 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   }
 
   Future<void> _persistBillingInfo(CompanyBillingDraft billing) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    if (_uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
 
-    await FirebaseFirestore.instance.collection('company').doc(uid).set({
+    await _upsertCompanyRow({
+      'panel_billingMethod': billing.method,
+      'panel_billing_method': billing.method,
+      'panel_billingSaveForFutureUse': billing.saveForFutureUse,
+      'panel_billing_save_for_future_use': billing.saveForFutureUse,
+      'panel_billingNameOnCard': billing.nameOnCard,
+      'panel_billing_name_on_card': billing.nameOnCard,
+      'panel_billingExpiry': billing.expiry,
+      'panel_billing_expiry': billing.expiry,
+      'panel_billingApplePayEmail': billing.applePayEmail,
+      'panel_billing_apple_pay_email': billing.applePayEmail,
+      'panel_billingGooglePayEmail': billing.googlePayEmail,
+      'panel_billing_google_pay_email': billing.googlePayEmail,
       'billing': {
         'method': billing.method,
         'saveForFutureUse': billing.saveForFutureUse,
@@ -160,29 +280,68 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         'applePayEmail': billing.applePayEmail,
         'googlePayEmail': billing.googlePayEmail,
       },
-      'panel_billingMethod': billing.method,
-      'panel_billingSaveForFutureUse': billing.saveForFutureUse,
-      'panel_billingNameOnCard': billing.nameOnCard,
-      'panel_billingExpiry': billing.expiry,
-      'panel_billingApplePayEmail': billing.applePayEmail,
-      'panel_billingGooglePayEmail': billing.googlePayEmail,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   Future<void> _persistBusinessInfo(CompanyBusinessInfoDraft business) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    if (_uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
-    await FirebaseFirestore.instance.collection('company').doc(uid).set({
+    await _upsertCompanyRow({
       'panel_companyName': business.companyName,
+      'panel_company_name': business.companyName,
       'panel_contactName': business.contactName,
+      'panel_contact_name': business.contactName,
       'panel_contactEmail': business.contactEmail,
+      'panel_contact_email': business.contactEmail,
       'panel_companyPhone': business.companyPhone,
+      'panel_company_phone': business.companyPhone,
       'panel_contactPhone': business.contactPhone,
+      'panel_contact_phone': business.contactPhone,
       'panel_companyWebsite': business.companyUrl,
+      'panel_company_website': business.companyUrl,
       'panel_businessType': business.businessType,
+      'panel_business_type': business.businessType,
+      'profile': {
+        'companyName': business.companyName,
+        'company_name': business.companyName,
+        'displayName': business.companyName,
+        'contactName': business.contactName,
+        'contact_name': business.contactName,
+        'contactEmail': business.contactEmail,
+        'contact_email': business.contactEmail,
+        'contactPhone': business.contactPhone,
+        'contact_phone': business.contactPhone,
+        'companyEmail': business.companyEmail,
+        'company_email': business.companyEmail,
+        'companyPhone': business.companyPhone,
+        'company_phone': business.companyPhone,
+        'companyUrl': business.companyUrl,
+        'company_website': business.companyUrl,
+        'companyWebsite': business.companyUrl,
+        'businessType': business.businessType,
+        'business_type': business.businessType,
+      },
+      'basic': {
+        'companyName': business.companyName,
+        'company_name': business.companyName,
+        'displayName': business.companyName,
+        'contactName': business.contactName,
+        'contact_name': business.contactName,
+        'contactEmail': business.contactEmail,
+        'contact_email': business.contactEmail,
+        'contactPhone': business.contactPhone,
+        'contact_phone': business.contactPhone,
+        'companyEmail': business.companyEmail,
+        'company_email': business.companyEmail,
+        'companyPhone': business.companyPhone,
+        'company_phone': business.companyPhone,
+        'companyUrl': business.companyUrl,
+        'company_website': business.companyUrl,
+        'companyWebsite': business.companyUrl,
+        'businessType': business.businessType,
+        'business_type': business.businessType,
+      },
       'company': {
         'name': business.companyName,
         'contactName': business.contactName,
@@ -191,9 +350,15 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         'contactPhone': business.contactPhone,
         'website': business.companyUrl,
         'businessType': business.businessType,
+        'company_name': business.companyName,
+        'contact_name': business.contactName,
+        'contact_email': business.contactEmail,
+        'contact_phone': business.contactPhone,
+        'company_phone': business.companyPhone,
+        'company_website': business.companyUrl,
+        'business_type': business.businessType,
       },
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   Future<void> _editAddresses() async {
@@ -219,11 +384,10 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   }
 
   Future<void> _persistAddressesInfo(CompanyAddressesDraft addresses) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    if (_uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
-    await FirebaseFirestore.instance.collection('company').doc(uid).set({
+    await _upsertCompanyRow({
       'addresses': {
         'billingStreet': addresses.billingStreet,
         'billingCity': addresses.billingCity,
@@ -238,24 +402,33 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         'shippingCountry': addresses.shippingCountry,
       },
       'panel_billingStreet': addresses.billingStreet,
+      'panel_billing_street': addresses.billingStreet,
       'panel_billingCity': addresses.billingCity,
+      'panel_billing_city': addresses.billingCity,
       'panel_billingState': addresses.billingState,
+      'panel_billing_state': addresses.billingState,
       'panel_billingZip': addresses.billingZip,
+      'panel_billing_zip': addresses.billingZip,
       'panel_billingCountry': addresses.billingCountry,
+      'panel_billing_country': addresses.billingCountry,
       'panel_shippingSameAsBilling': addresses.shippingSameAsBilling,
+      'panel_shipping_same_as_billing': addresses.shippingSameAsBilling,
       'panel_shippingStreet': addresses.shippingStreet,
+      'panel_shipping_street': addresses.shippingStreet,
       'panel_shippingCity': addresses.shippingCity,
+      'panel_shipping_city': addresses.shippingCity,
       'panel_shippingState': addresses.shippingState,
+      'panel_shipping_state': addresses.shippingState,
       'panel_shippingZip': addresses.shippingZip,
+      'panel_shipping_zip': addresses.shippingZip,
       'panel_shippingCountry': addresses.shippingCountry,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'panel_shipping_country': addresses.shippingCountry,
+    });
   }
 
   Future<void> _pickAndUploadProfilePhoto() async {
     if (_uploadingPhoto) return;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (_uid.isEmpty) return;
 
     setState(() => _uploadingPhoto = true);
     try {
@@ -268,7 +441,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (bytes.isEmpty) return;
-      final nextUrl = await _uploadCompanyProfilePhoto(uid, bytes);
+      final nextUrl = await _uploadCompanyProfilePhoto(_uid, bytes);
       await _persistProfilePhoto(nextUrl);
       if (!mounted) return;
       setState(() => _profileImageUrl = nextUrl);
@@ -287,181 +460,122 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   }
 
   Future<String> _resolveCompanyStorageAvatar(String uid) async {
-    final candidates = <String>[
-      'company/$uid/profile/avatar.jpg',
-      'company/$uid/profile/avatar.jpeg',
-      'company/$uid/profile/avatar.png',
-      'company/$uid/profile/avatar.webp',
-      'company/$uid/profile/logo.jpg',
-      'company/$uid/profile/logo.jpeg',
-      'company/$uid/profile/logo.png',
-      'company/$uid/profile/logo.webp',
-    ];
-    for (final path in candidates) {
-      try {
-        await FirebaseStorage.instance.ref(path).getMetadata();
-        return path;
-      } catch (_) {}
-    }
+    try {
+      final entries = await _companyStorage.list(path: 'companies/$uid/logo');
+      for (final file in entries) {
+        final name = (file.name ?? '').toString().trim();
+        final lower = name.toLowerCase();
+        if (name.isEmpty) continue;
+        if (!lower.endsWith('.jpg') &&
+            !lower.endsWith('.jpeg') &&
+            !lower.endsWith('.png') &&
+            !lower.endsWith('.webp')) {
+          continue;
+        }
+        return _companyStorage.getPublicUrl('companies/$uid/logo/$name').trim();
+      }
+    } catch (_) {}
     return '';
   }
 
   Future<void> _hydrateProfileImageUrl() async {
     if (_profileImageUrl.trim().isNotEmpty) return;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('company')
-          .doc(uid)
-          .get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-      final company = (data['company'] as Map<String, dynamic>?) ?? const {};
-      String firstNonEmpty(List<Object?> values) {
-        for (final raw in values) {
-          final value = (raw ?? '').toString().trim();
-          if (value.isNotEmpty) return value;
-        }
-        return '';
-      }
+    if (_uid.isEmpty && _email.isEmpty) return;
 
-      var resolved = firstNonEmpty(<Object?>[
-        data['panel_logoUrl'],
-        data['companyLogoUrl'],
-        data['brandLogoUrl'],
-        data['logoUrl'],
-        data['panel_profileImageUrl'],
-        data['profileImageUrl'],
-        data['photoUrl'],
-        data['avatarUrl'],
-        profile['logoUrl'],
-        profile['profileImageUrl'],
-        profile['photoUrl'],
-        profile['avatarUrl'],
-        basic['profileImageUrl'],
-        basic['photoUrl'],
-        basic['avatarUrl'],
-        company['logoUrl'],
-        company['profileImageUrl'],
-        company['photoUrl'],
-        company['avatarUrl'],
-      ]);
-      if (resolved.isEmpty) {
-        resolved = await _resolveCompanyStorageAvatar(uid);
-      }
-      if (!mounted || resolved.isEmpty) return;
-      setState(() => _profileImageUrl = resolved);
+    try {
+      final row = await _readCompanyRow();
+      final data = row ?? const <String, dynamic>{};
+      final profile = _asMap(data['profile']);
+      final basic = _asMap(data['basic']);
+      final company = _asMap(data['company']);
+
+      final resolved = _normalizeStorageUrl(
+        _firstNonEmpty([
+          data['panel_logoUrl'],
+          data['companyLogoUrl'],
+          data['brandLogoUrl'],
+          data['logoUrl'],
+          data['panel_profileImageUrl'],
+          data['profileImageUrl'],
+          data['photoUrl'],
+          data['avatarUrl'],
+          profile['logoUrl'],
+          profile['profileImageUrl'],
+          profile['photoUrl'],
+          profile['avatarUrl'],
+          basic['profileImageUrl'],
+          basic['photoUrl'],
+          basic['avatarUrl'],
+          company['logoUrl'],
+          company['profileImageUrl'],
+          company['photoUrl'],
+          company['avatarUrl'],
+        ]),
+      );
+
+      final fallbackResolved = resolved.isNotEmpty || _uid.isEmpty
+          ? resolved
+          : await _resolveCompanyStorageAvatar(_uid);
+
+      if (!mounted || fallbackResolved.isEmpty) return;
+      setState(() => _profileImageUrl = fallbackResolved);
     } catch (_) {}
   }
 
   Future<String> _uploadCompanyProfilePhoto(String uid, Uint8List bytes) async {
-    final ref = FirebaseStorage.instance.ref('company/$uid/profile/avatar.jpg');
-    await ref
-        .putData(bytes, SettableMetadata(contentType: 'image/jpeg'))
+    final path =
+        'companies/$uid/logo/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _companyStorage
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        )
         .timeout(_photoUploadTimeout);
-    try {
-      return await ref.getDownloadURL().timeout(_photoUploadTimeout);
-    } catch (_) {
-      return ref.fullPath;
-    }
+    return _companyStorage.getPublicUrl(path).trim();
   }
 
   Future<void> _persistProfilePhoto(String photoUrl) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    if (_uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
-    await _cleanupLegacyInlineAvatarFields(uid);
-    await FirebaseFirestore.instance
-        .collection('company')
-        .doc(uid)
-        .set({
-          'panel_profileImageUrl': photoUrl,
-          'panel_logoUrl': photoUrl,
-          'companyLogoUrl': photoUrl,
-          'brandLogoUrl': photoUrl,
-          'profileImageUrl': photoUrl,
-          'logoUrl': photoUrl,
-          'photoUrl': photoUrl,
-          'avatarUrl': photoUrl,
-          'profile': {
-            'profileImageUrl': photoUrl,
-            'photoUrl': photoUrl,
-            'avatarUrl': photoUrl,
-          },
-          'basic': {
-            'profileImageUrl': photoUrl,
-            'photoUrl': photoUrl,
-            'avatarUrl': photoUrl,
-          },
-          'company': {
-            'logoUrl': photoUrl,
-            'profileImageUrl': photoUrl,
-            'photoUrl': photoUrl,
-            'avatarUrl': photoUrl,
-          },
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true))
-        .timeout(_profileSaveTimeout);
-  }
-
-  Future<void> _cleanupLegacyInlineAvatarFields(String uid) async {
-    final ref = FirebaseFirestore.instance.collection('company').doc(uid);
-    final snap = await ref.get();
-    final data = snap.data() ?? const <String, dynamic>{};
-    final company = (data['company'] as Map<String, dynamic>?) ?? const {};
-
-    bool inlineOrHuge(Object? value) {
-      final text = (value ?? '').toString().trim();
-      if (text.isEmpty) return false;
-      if (text.startsWith('data:image/')) return true;
-      return text.length > 180000;
-    }
-
-    final cleanup = <String, dynamic>{};
-    if (inlineOrHuge(data['panel_profileImageUrl'])) {
-      cleanup['panel_profileImageUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['panel_logoUrl'])) {
-      cleanup['panel_logoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['companyLogoUrl'])) {
-      cleanup['companyLogoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['brandLogoUrl'])) {
-      cleanup['brandLogoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['profileImageUrl'])) {
-      cleanup['profileImageUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['logoUrl'])) {
-      cleanup['logoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['photoUrl'])) {
-      cleanup['photoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(data['avatarUrl'])) {
-      cleanup['avatarUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(company['profileImageUrl'])) {
-      cleanup['company.profileImageUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(company['logoUrl'])) {
-      cleanup['company.logoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(company['photoUrl'])) {
-      cleanup['company.photoUrl'] = FieldValue.delete();
-    }
-    if (inlineOrHuge(company['avatarUrl'])) {
-      cleanup['company.avatarUrl'] = FieldValue.delete();
-    }
-
-    if (cleanup.isNotEmpty) {
-      cleanup['updatedAt'] = FieldValue.serverTimestamp();
-      await ref.set(cleanup, SetOptions(merge: true));
-    }
+    final value = _normalizeStorageUrl(photoUrl);
+    await _upsertCompanyRow({
+      'panel_profileImageUrl': value,
+      'panel_profile_image_url': value,
+      'panel_logoUrl': value,
+      'panel_logo_url': value,
+      'companyLogoUrl': value,
+      'brandLogoUrl': value,
+      'profileImageUrl': value,
+      'logoUrl': value,
+      'photoUrl': value,
+      'avatarUrl': value,
+      'profile': {
+        'profileImageUrl': value,
+        'photoUrl': value,
+        'avatarUrl': value,
+        'logoUrl': value,
+      },
+      'basic': {
+        'profileImageUrl': value,
+        'photoUrl': value,
+        'avatarUrl': value,
+      },
+      'company': {
+        'logoUrl': value,
+        'profileImageUrl': value,
+        'photoUrl': value,
+        'avatarUrl': value,
+        'logo_url': value,
+        'profile_image_url': value,
+        'photo_url': value,
+        'avatar_url': value,
+      },
+    }).timeout(_profileSaveTimeout);
   }
 
   @override
@@ -469,14 +583,6 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     final companyName = _businessInfo.companyName.trim().isNotEmpty
         ? _businessInfo.companyName.trim()
         : widget.companyName;
-    final contactName = _businessInfo.contactName.trim().isNotEmpty
-        ? _businessInfo.contactName.trim()
-        : widget.contactName;
-    final email = _businessInfo.companyEmail.trim().isNotEmpty
-        ? _businessInfo.companyEmail.trim()
-        : (_businessInfo.contactEmail.trim().isNotEmpty
-              ? _businessInfo.contactEmail.trim()
-              : widget.email);
     final city = _addressInfo.billingCity.trim();
     final state = _addressInfo.billingState.trim();
     final locationText = city.isEmpty && state.isEmpty
@@ -564,18 +670,6 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                 fontSize: 12.5,
                 fontWeight: FontWeight.w900,
               ),
-            ),
-          ),
-          const SizedBox(height: 3),
-          Center(
-            child: Text(
-              '${contactName.isEmpty ? 'No contact name' : contactName} • ${email.isEmpty ? 'No email on file' : email}',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: Colors.black.withValues(alpha: 0.55),
-              ),
-              textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(height: 2),
@@ -929,7 +1023,10 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
   InputDecoration _dec(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.35)),
+      hintStyle: TextStyle(
+        fontSize: 12,
+        color: Colors.black.withValues(alpha: 0.35),
+      ),
       isDense: true,
       filled: true,
       fillColor: AppColors.snow,
@@ -1045,76 +1142,79 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                           ],
                         ),
                       ),
-                      Divider(height: 1, color: Colors.black.withValues(alpha: 0.12)),
+                      Divider(
+                        height: 1,
+                        color: Colors.black.withValues(alpha: 0.12),
+                      ),
                       if (selected) ...[
-                    const SizedBox(height: 8),
-                    if (m == 'Credit/Debit Card') ...[
-                      TextField(
-                        controller: _nameOnCardCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Name on Card'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _cardNumberCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Card Number'),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _expiryCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Expiry MM/YY'),
-                            ),
+                        const SizedBox(height: 8),
+                        if (m == 'Credit/Debit Card') ...[
+                          TextField(
+                            controller: _nameOnCardCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Name on Card'),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _cvvCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('CVV'),
-                            ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _cardNumberCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Card Number'),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _expiryCtrl,
+                                  style: const TextStyle(fontSize: 11),
+                                  decoration: _dec('Expiry MM/YY'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _cvvCtrl,
+                                  style: const TextStyle(fontSize: 11),
+                                  decoration: _dec('CVV'),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    ],
-                    if (m == 'ACH Transfer') ...[
-                      TextField(
-                        controller: _achAccountNameCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Account Holder Name'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _achRoutingCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Routing Number'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _achAccountCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Account Number'),
-                      ),
-                    ],
-                    if (m == 'Apple Pay')
-                      TextField(
-                        controller: _applePayEmailCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Apple Pay Email'),
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                    if (m == 'Google Pay')
-                      TextField(
-                        controller: _googlePayEmailCtrl,
-                        style: const TextStyle(fontSize: 11),
-                        decoration: _dec('Google Pay Email'),
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                    const SizedBox(height: 8),
+                        if (m == 'ACH Transfer') ...[
+                          TextField(
+                            controller: _achAccountNameCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Account Holder Name'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _achRoutingCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Routing Number'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _achAccountCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Account Number'),
+                          ),
+                        ],
+                        if (m == 'Apple Pay')
+                          TextField(
+                            controller: _applePayEmailCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Apple Pay Email'),
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                        if (m == 'Google Pay')
+                          TextField(
+                            controller: _googlePayEmailCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Google Pay Email'),
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                        const SizedBox(height: 8),
                       ],
                     ],
                   ),
@@ -1216,7 +1316,10 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
   InputDecoration _dec(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.35)),
+      hintStyle: TextStyle(
+        fontSize: 12,
+        color: Colors.black.withValues(alpha: 0.35),
+      ),
       isDense: true,
       filled: true,
       fillColor: AppColors.snow,
@@ -1361,7 +1464,9 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
                   value: _shippingSameAsBilling,
                   activeThumbColor: AppColors.blackCat,
                   inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
+                  inactiveTrackColor: AppColors.blackCatLight.withValues(
+                    alpha: 0.35,
+                  ),
                   onChanged: (v) => setState(() => _shippingSameAsBilling = v),
                 ),
               ),
@@ -1527,3 +1632,6 @@ class _PopupActions extends StatelessWidget {
     );
   }
 }
+
+
+

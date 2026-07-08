@@ -1,18 +1,17 @@
-// lib/pages/company_custom_request_page.dart
+// lib/pages/brand_custom_request_page.dart
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart'
-    show ClientProfileDraft,  NailLength, nailShapes;
+    show ClientProfileDraft, NailLength, nailShapes;
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../services/artist_directory_service.dart';
@@ -117,6 +116,59 @@ bool hasReachedSponsorshipRequestStatus(Map<String, dynamic> data) {
   return false;
 }
 
+
+bool isEligibleBrandRequestArtist(Map<String, dynamic> data) {
+  String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
+  String normalizedTier(Object? value) =>
+      norm(value).replaceAll('_', ' ').replaceAll('-', ' ');
+  bool eligibleTier(Object? value) {
+    final tier = normalizedTier(value);
+    return tier == 'goldsmith' || tier == 'crowned';
+  }
+
+  final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
+  final artist = (data['artist'] as Map<String, dynamic>?) ?? const {};
+  final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
+  final ascension = (data['ascension'] as Map<String, dynamic>?) ?? const {};
+  final stats = (data['stats'] as Map<String, dynamic>?) ?? const {};
+  final profileAscension =
+      (profile['ascension'] as Map<String, dynamic>?) ?? const {};
+  final artistAscension =
+      (artist['ascension'] as Map<String, dynamic>?) ?? const {};
+  final basicAscension =
+      (basic['ascension'] as Map<String, dynamic>?) ?? const {};
+
+  final values = <Object?>[
+    data['ascensionLevel'],
+    data['ascension_level'],
+    data['ascensionTier'],
+    data['ascension_tier'],
+    data['tier'],
+    data['panel_ascensionLevel'],
+    data['panel_ascensionTier'],
+    data['overrideTier'],
+    data['override_tier'],
+    ascension['level'],
+    ascension['tier'],
+    ascension['currentTier'],
+    ascension['current_tier'],
+    ascension['overrideTier'],
+    ascension['override_tier'],
+    profileAscension['level'],
+    profileAscension['tier'],
+    artistAscension['level'],
+    artistAscension['tier'],
+    basicAscension['level'],
+    basicAscension['tier'],
+    profile['tier'],
+    artist['tier'],
+    basic['tier'],
+    stats['tier'],
+  ];
+
+  return values.any(eligibleTier);
+}
+
 bool isBrandPartnerClient(Map<String, dynamic> data) {
   String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
   String normalizedStatus(Object? value) =>
@@ -170,8 +222,8 @@ class _UploadedReferenceImage {
   final Uint8List bytes;
 }
 
-class CompanyCustomRequestPage extends StatefulWidget {
-  const CompanyCustomRequestPage({
+class BrandCustomRequestPage extends StatefulWidget {
+  const BrandCustomRequestPage({
     super.key,
     required this.profile,
     this.onBackHome,
@@ -199,11 +251,11 @@ class CompanyCustomRequestPage extends StatefulWidget {
   final ValueChanged<int>? onNavTap;
 
   @override
-  State<CompanyCustomRequestPage> createState() =>
-      _CompanyCustomRequestPageState();
+  State<BrandCustomRequestPage> createState() =>
+      _BrandCustomRequestPageState();
 }
 
-class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
+class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   // -----------------------------
   // Request details
   // -----------------------------
@@ -240,7 +292,6 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     text: 'United States',
   );
 
-  
   // Uploads
   final ImagePicker _picker = ImagePicker();
   final List<_UploadedReferenceImage> _uploadedFiles = [];
@@ -259,14 +310,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
   late String _shape;
   late NailLength _length;
 
- 
-
   static const List<String> _defaultArtistOptions = [
     'Artist Mia',
     'Artist Zoe',
     'Artist Lana',
   ];
-
 
   late final ClientProfileDraft _profile;
 
@@ -288,7 +336,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         ? NailLength.medium
         : profileLength;
 
-   // _finish = _finishes.first;
+    // _finish = _finishes.first;
     final initialArtist = widget.initialRequestedArtist?.trim() ?? '';
     _requestedArtist = initialArtist.isEmpty ? null : initialArtist;
     if (widget.defaultSpecificArtistSelection &&
@@ -311,6 +359,91 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     _shipZipCtrl.dispose();
     _shipCountryCtrl.dispose();
     super.dispose();
+  }
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  User? get _currentUser => _client.auth.currentUser;
+
+  String get _uid => (_currentUser?.id ?? '').trim();
+
+  String get _authEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
+  dynamic get _companyCustomRequestsStorage =>
+      _client.storage.from('company-custom-requests');
+
+  void _closeAfterSuccessfulSubmit() {
+    if (!mounted) return;
+
+    if (widget.onBackHome != null) {
+      widget.onBackHome!.call();
+      return;
+    }
+
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+
+    if (widget.onNavTap != null) {
+      widget.onNavTap!(0);
+    }
+  }
+
+  String _snake(String input) {
+    return input
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (m) => '${m.group(1)}_${m.group(2)}',
+        )
+        .replaceAll('-', '_')
+        .toLowerCase();
+  }
+
+  Map<String, dynamic> _asMap(Object? raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return const <String, dynamic>{};
+  }
+
+  String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+    for (final raw in values) {
+      final value = (raw ?? '').toString().trim();
+      if (value.isNotEmpty) return value;
+    }
+    return fallback;
+  }
+
+  String _generateRequestId() {
+    final bytes = List<int>.generate(
+      16,
+      (_) => Random.secure().nextInt(256),
+    );
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    String hex(int value) => value.toRadixString(16).padLeft(2, '0');
+    final parts = <String>[
+      bytes.take(4).map(hex).join(),
+      bytes.skip(4).take(2).map(hex).join(),
+      bytes.skip(6).take(2).map(hex).join(),
+      bytes.skip(8).take(2).map(hex).join(),
+      bytes.skip(10).take(6).map(hex).join(),
+    ];
+    return parts.join('-');
+  }
+
+  String _normalizeStorageUrl(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+      return text;
+    }
+    if (text.startsWith('gs://')) return text;
+    if (text.startsWith('data:image/')) return text;
+    return _companyCustomRequestsStorage.getPublicUrl(text).trim();
   }
 
   Future<void> _pickDate() async {
@@ -773,7 +906,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     return '';
   }
 
-  bool _artistAllowsDirectRequests(Map<String, dynamic> data) {
+  /*bool _artistAllowsDirectRequests(Map<String, dynamic> data) {
     bool asBool(Object? raw) {
       if (raw is bool) return raw;
       if (raw is num) return raw != 0;
@@ -796,60 +929,69 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
           artist['directRequestsEnabled'] ??
           artistAvailability['directRequestsEnabled'],
     );
-  }
+  }*/
 
   bool _isBrandPartner(Map<String, dynamic> data) {
     return isBrandPartnerClient(data);
   }
 
+  Future<List<Map<String, dynamic>>> _fetchTableRows(
+    String table, {
+    int limit = 300,
+  }) async {
+    try {
+      final rows = await _client.from(table).select().limit(limit);
+      return rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
   Future<void> _loadSelectionSources() async {
     try {
-      final db = FirebaseFirestore.instance;
       final emailByName = <String, String>{};
       final nfcEligibleByName = <String, bool>{};
-      final clientSnaps = await Future.wait([
-        db.collection('client').limit(300).get(),
-        db.collection('client_artist').limit(300).get(),
-      ]);
       final clientNames = <String>{};
       final allClientNames = <String>{};
-      for (final snap in clientSnaps) {
-        for (final doc in snap.docs) {
-          final data = doc.data();
-          var name = _clientDisplayName(data).trim();
-          if (name.isEmpty) {
-            final email = _pickFirstString(data, const ['email']);
-            if (email.contains('@')) {
-              name = email.split('@').first.trim();
-            }
+      final clientRows = <Map<String, dynamic>>[];
+      for (final table in const <String>['client', 'client_artist']) {
+        clientRows.addAll(await _fetchTableRows(table));
+      }
+      for (final data in clientRows) {
+        var name = _clientDisplayName(data).trim();
+        if (name.isEmpty) {
+          final email = _pickFirstString(data, const ['email']);
+          if (email.contains('@')) {
+            name = email.split('@').first.trim();
           }
-          if (name.isEmpty) continue;
-          final email = _clientEmail(data);
-          if (email.isNotEmpty) {
-            emailByName.putIfAbsent(name.toLowerCase(), () => email);
-          }
-          nfcEligibleByName[name.toLowerCase()] = _clientIsNfcEligible(data);
-          allClientNames.add(name);
-          if (_isBrandPartner(data)) {
-            clientNames.add(name);
-          }
+        }
+        if (name.isEmpty) continue;
+        final email = _clientEmail(data);
+        if (email.isNotEmpty) {
+          emailByName.putIfAbsent(name.toLowerCase(), () => email);
+        }
+        nfcEligibleByName[name.toLowerCase()] = _clientIsNfcEligible(data);
+        allClientNames.add(name);
+        if (_isBrandPartner(data)) {
+          clientNames.add(name);
         }
       }
 
-      final artistSnaps = await Future.wait([
-        db.collection('artist').limit(300).get(),
-        db.collection('client_artist').limit(300).get(),
-      ]);
       final artistNames = <String>{};
-      for (final snap in artistSnaps) {
-        for (final doc in snap.docs) {
-          final data = doc.data();
-          if (!_artistAllowsDirectRequests(data)) continue;
-          if (!hasReachedSponsorshipRequestStatus(data)) continue;
-          final name = _artistDisplayName(data).trim();
-          if (name.isEmpty) continue;
-          artistNames.add(name);
-        }
+      final artistRows = <Map<String, dynamic>>[];
+      for (final table in const <String>['artist', 'client_artist']) {
+        artistRows.addAll(await _fetchTableRows(table));
+      }
+      for (final data in artistRows) {
+        // Brand requests can only go to eligible artists: Goldsmith or Crowned.
+        // This applies to both Artist Pool and Specific Artist selection.
+        if (!isEligibleBrandRequestArtist(data)) continue;
+        final name = _artistDisplayName(data).trim();
+        if (name.isEmpty) continue;
+        artistNames.add(name);
       }
       if (artistNames.isEmpty) {
         final artists = await ArtistDirectoryService.fetchAllArtists(
@@ -857,7 +999,10 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         );
         artistNames.addAll(
           artists
-              .where((a) => a.acceptsDirectRequests)
+              .where((a) {
+                final tier = a.tierLabel.trim().toLowerCase();
+                return tier == 'goldsmith' || tier == 'crowned';
+              })
               .map((a) => a.name.trim())
               .where((n) => n.isNotEmpty && !n.contains('@')),
         );
@@ -912,6 +1057,115 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         _directRequestArtists = _artistOptions;
       });
     }
+  }
+
+  dynamic _toSnakeCaseValue(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return value.map(
+        (key, innerValue) =>
+            MapEntry(_snake(key), _toSnakeCaseValue(innerValue)),
+      );
+    }
+    if (value is Map) {
+      return value.map(
+        (key, innerValue) =>
+            MapEntry(_snake(key.toString()), _toSnakeCaseValue(innerValue)),
+      );
+    }
+    if (value is List) {
+      return value.map(_toSnakeCaseValue).toList(growable: false);
+    }
+    return value;
+  }
+
+  Map<String, dynamic> _snakeCaseMap(Map<String, dynamic> source) {
+    return source.map(
+      (key, value) => MapEntry(_snake(key), _toSnakeCaseValue(value)),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _readCompanyRow() async {
+    if (_uid.isEmpty && _authEmail.isEmpty) return null;
+    try {
+      if (_uid.isNotEmpty) {
+        final rows = await _client
+            .from('company')
+            .select()
+            .eq('id', _uid)
+            .limit(1);
+        if (rows.isNotEmpty) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      }
+      if (_authEmail.isNotEmpty) {
+        final rows = await _client
+            .from('company')
+            .select()
+            .eq('email', _authEmail)
+            .limit(1);
+        if (rows.isNotEmpty) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Map<String, dynamic> _companyCustomRequestTableColumns(
+    Map<String, dynamic> source,
+  ) {
+    final columns = Map<String, dynamic>.from(source)
+      ..remove('admin')
+      // These values must stay inside payload/details JSON. They are not
+      // physical columns in public.company_custom_requests, so sending them
+      // as top-level PostgREST fields causes PGRST204 schema-cache errors.
+      ..remove('artistEligibilityRequiredTiers')
+      ..remove('eligibleArtistEmails')
+      // NFC routing values also live inside payload/details JSON only.
+      // The company_custom_requests table does not have these physical columns.
+      ..remove('nfcRequested')
+      ..remove('requiresNfcEligibleClient')
+      ..remove('nfcMaxChipsTotal')
+      ..remove('nfcMaxChipsPerHand')
+      ..remove('eligibleNfcClientEmails');
+    return columns;
+  }
+
+  Future<String> _insertCompanyCustomRequestRow({
+    required String requestId,
+    required Map<String, dynamic> summary,
+    required Map<String, dynamic> details,
+    required String companyUid,
+  }) async {
+    final summaryColumns = _companyCustomRequestTableColumns(summary);
+    final payload = <String, dynamic>{
+      ..._snakeCaseMap(summaryColumns),
+      'id': requestId,
+      'payload': summary,
+      'details': details,
+      'company_uid': companyUid,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _client.from('company_custom_requests').insert(payload);
+    return requestId;
+  }
+
+  Future<void> _updateCompanyCustomRequestRow({
+    required String requestId,
+    required Map<String, dynamic> summaryUpdate,
+    required Map<String, dynamic> detailsUpdate,
+  }) async {
+    final summaryColumns = _companyCustomRequestTableColumns(summaryUpdate);
+    final payload = <String, dynamic>{
+      ..._snakeCaseMap(summaryColumns),
+      'payload': summaryUpdate,
+      'details': detailsUpdate,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _client
+        .from('company_custom_requests')
+        .update(payload)
+        .eq('id', requestId);
   }
 
   Future<void> _showRequestInfoDialog({
@@ -994,7 +1248,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     });
   }
 
-    Future<void> _submitRequest() async {
+  Future<void> _submitRequest() async {
     if (_isSubmitting || _pendingRequestDocId != null) return;
     final campaignOk = _campaignNameCtrl.text.trim().isNotEmpty;
     final needByOk = _needBy != null;
@@ -1053,10 +1307,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
           ? 'Unknown'
           : '${city.isEmpty ? '' : city}${city.isNotEmpty && state.isNotEmpty ? ', ' : ''}${state.isEmpty ? '' : state}';
 
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      final authEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-          .trim()
-          .toLowerCase();
+      final uid = _uid;
+      final authEmail = _authEmail;
       final companyEmail = _profile.basic.email.trim().isNotEmpty
           ? _profile.basic.email.trim().toLowerCase()
           : authEmail;
@@ -1081,14 +1333,6 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
       final shippingCountry = shippingDifferent
           ? _shipCountryCtrl.text.trim()
           : _profile.address.country.trim();
-      String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
-        for (final value in values) {
-          final text = (value ?? '').toString().trim();
-          if (text.isNotEmpty) return text;
-        }
-        return fallback;
-      }
-
       final campaign = _campaignNameCtrl.text.trim();
       final isOpenToClientPool =
           _clientRecipientMode == _ClientRecipientMode.pool;
@@ -1114,6 +1358,15 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
               selectedArtist,
             ).timeout(const Duration(seconds: 10), onTimeout: () => '')
           : '';
+      final eligibleArtistEmails = isDirectToArtist
+          ? <String>[
+              if (selectedArtistEmail.trim().isNotEmpty)
+                selectedArtistEmail.trim().toLowerCase(),
+            ]
+          : await _loadEligibleBrandArtistEmails().timeout(
+              const Duration(seconds: 12),
+              onTimeout: () => <String>[],
+            );
       final selectedClient = (_requestedClient ?? '').trim();
       final selectedClientEmail = isOpenToClientPool
           ? ''
@@ -1134,63 +1387,73 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
       final effectiveClientBudgetMin = _effectiveClientBudgetMin();
       final effectiveClientBudgetMax = _clientBudget.end.round();
 
-      final db = FirebaseFirestore.instance;
-      final doc = db.collection('Company_Custom_Requests').doc();
-      _pendingRequestDocId = doc.id;
+      final requestId = _generateRequestId();
+      _pendingRequestDocId = requestId;
       final selectedPhotoCount = _uploadedFiles.length;
       final safeUploadUid = uid.trim().isEmpty ? 'unknown' : uid.trim();
-      final storageBucket = FirebaseStorage.instance.bucket;
       final plannedInspirationPhotos = List<String>.generate(
         selectedPhotoCount,
         (index) =>
-            'gs://$storageBucket/company_custom_requests/$safeUploadUid/${doc.id}/inspiration_${index + 1}.jpg',
+            'company-custom-requests/$safeUploadUid/$requestId/inspiration_${index + 1}.jpg',
         growable: false,
       );
       String companyBioSnapshot = '';
+      String companySnapshotEmail = companyEmail;
+      String companySnapshotName = companyName;
       try {
-        if (uid.trim().isNotEmpty) {
-          final companyDoc = await db
-              .collection('company')
-              .doc(uid.trim())
-              .get();
-          final companyData = companyDoc.data() ?? const <String, dynamic>{};
-          companyBioSnapshot = firstNonEmpty([
-            companyData['panel_companyBio'],
-            companyData['companyBio'],
-            companyData['bio'],
-            companyData['panel_notes'],
-            companyData['description'],
-            companyData['about'],
-            companyData['aboutBrand'],
+        final companyRow = await _readCompanyRow();
+        if (companyRow != null) {
+          Map<String, dynamic> asMap(dynamic value) {
+            if (value is Map<String, dynamic>) return value;
+            if (value is Map) {
+              return value.map((key, value) => MapEntry(key.toString(), value));
+            }
+            return const <String, dynamic>{};
+          }
+
+          final nestedCompany = asMap(companyRow['company']);
+          final nestedProfile = asMap(companyRow['profile']);
+          final nestedBasic = asMap(companyRow['basic']);
+          companyBioSnapshot = _firstNonEmpty([
+            companyRow['panel_companyBio'],
+            companyRow['panel_company_bio'],
+            companyRow['companyBio'],
+            companyRow['company_bio'],
+            nestedCompany['bio'],
+            nestedCompany['companyBio'],
+            nestedCompany['company_bio'],
+            nestedProfile['companyBio'],
+            nestedProfile['company_bio'],
+            nestedBasic['companyBio'],
+            nestedBasic['company_bio'],
+            companyRow['bio'],
+            nestedProfile['bio'],
+            nestedBasic['bio'],
+          ]);
+          companySnapshotEmail = _firstNonEmpty([
+            companyRow['email'],
+            companyRow['panel_contact_email'],
+            companyRow['panel_company_email'],
+            nestedCompany['contactEmail'],
+            nestedCompany['email'],
+            companyEmail,
+          ]);
+          companySnapshotName = _firstNonEmpty([
+            companyRow['panel_company_name'],
+            companyRow['company_name'],
+            companyRow['brand_name'],
+            nestedCompany['name'],
+            nestedCompany['companyName'],
+            companyName,
           ]);
         }
-        if (companyBioSnapshot.isEmpty && companyEmail.isNotEmpty) {
-          final companyQuery = await db
-              .collection('company')
-              .where('email', isEqualTo: companyEmail)
-              .limit(1)
-              .get();
-          if (companyQuery.docs.isNotEmpty) {
-            final companyData = companyQuery.docs.first.data();
-            companyBioSnapshot = firstNonEmpty([
-              companyData['panel_companyBio'],
-              companyData['companyBio'],
-              companyData['bio'],
-              companyData['panel_notes'],
-              companyData['description'],
-              companyData['about'],
-              companyData['aboutBrand'],
-            ]);
-          }
-        }
       } catch (_) {}
-      if (companyBioSnapshot.isEmpty) {
-        companyBioSnapshot = _descCtrl.text.trim();
-      }
+      // Do not fall back to the request description. Company Bio must come
+      // from the brand/company registration profile only.
       final previewImage = plannedInspirationPhotos.isNotEmpty
           ? plannedInspirationPhotos.first
           : '';
-      final orderNumber = _generateBrandOrderNumber(doc.id);
+      final orderNumber = _generateBrandOrderNumber(requestId);
       final requestAcceptBy = DateTime(
         _needBy!.year,
         _needBy!.month,
@@ -1215,11 +1478,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         'clientEmail': companyEmail,
         'companyEmail': companyEmail,
         'companyUid': uid,
-        'needBy': Timestamp.fromDate(_needBy!),
-        'requestAcceptBy': Timestamp.fromDate(requestAcceptBy),
+        'needBy': _needBy!.toIso8601String(),
+        'requestAcceptBy': requestAcceptBy.toIso8601String(),
         'requestAcceptByDisplay': requestAcceptByDisplay,
         if (_jntRevealDate != null)
-          'jntRevealDate': Timestamp.fromDate(_jntRevealDate!),
+          'jntRevealDate': _jntRevealDate!.toIso8601String(),
         if (_jntRevealDate != null)
           'jntRevealDateDisplay': _revealDateCtrl.text.trim(),
         'descriptionPreview': _descCtrl.text.trim(),
@@ -1235,9 +1498,13 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         'openToArtistPool': isOpenToArtistPool,
         'nfcRequested': _nfcRequest,
         'requiresNfcEligibleClient': _nfcRequest,
+        'nfcMaxChipsTotal': _nfcRequest ? 2 : 0,
+        'nfcMaxChipsPerHand': _nfcRequest ? 1 : 0,
         'eligibleNfcClientEmails': nfcEligibleClientEmails,
         'selectedArtist': isDirectToArtist ? selectedArtist : '',
         'selectedArtistEmail': selectedArtistEmail,
+        'eligibleArtistEmails': eligibleArtistEmails,
+        'artistEligibilityRequiredTiers': const <String>['Goldsmith', 'Crowned'],
         'selectedClient': isOpenToClientPool ? '' : selectedClient,
         'selectedClientEmail': selectedClientEmail,
         'selectedGroupClientEmails': selectedGroupClientEmails,
@@ -1297,8 +1564,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
           'zip': shippingZip,
           'country': shippingCountry,
         },
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
       };
 
       final details = <String, dynamic>{
@@ -1312,7 +1579,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         'openToArtistPool': isOpenToArtistPool,
         'nfcRequested': _nfcRequest,
         'requiresNfcEligibleClient': _nfcRequest,
+        'nfcMaxChipsTotal': _nfcRequest ? 2 : 0,
+        'nfcMaxChipsPerHand': _nfcRequest ? 1 : 0,
         'eligibleNfcClientEmails': nfcEligibleClientEmails,
+        'eligibleArtistEmails': eligibleArtistEmails,
+        'artistEligibilityRequiredTiers': const <String>['Goldsmith', 'Crowned'],
         'requestType': requestTypeLabel,
         'requestTypeLabel': requestTypeLabel,
         'orderType': orderTypeValue,
@@ -1322,11 +1593,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         'requestDetails': <String, dynamic>{
           'campaignName': campaign,
           'description': _descCtrl.text.trim(),
-          'needBy': Timestamp.fromDate(_needBy!),
-          'requestAcceptBy': Timestamp.fromDate(requestAcceptBy),
+          'needBy': _needBy!.toIso8601String(),
+          'requestAcceptBy': requestAcceptBy.toIso8601String(),
           'requestAcceptByDisplay': requestAcceptByDisplay,
           if (_jntRevealDate != null)
-            'jntRevealDate': Timestamp.fromDate(_jntRevealDate!),
+            'jntRevealDate': _jntRevealDate!.toIso8601String(),
           if (_jntRevealDate != null)
             'jntRevealDateDisplay': _revealDateCtrl.text.trim(),
           'quantity': _quantity,
@@ -1340,9 +1611,16 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         'brandInspirationPhotos': plannedInspirationPhotos,
         'inspirationPhotos': plannedInspirationPhotos,
         'companyProfileSnapshot': <String, dynamic>{
+          'companyUid': uid,
+          'companyEmail': companySnapshotEmail,
+          'companyName': companySnapshotName,
           'panel_companyBio': companyBioSnapshot,
           'companyBio': companyBioSnapshot,
           'bio': companyBioSnapshot,
+          'basic': <String, dynamic>{
+            'name': companySnapshotName,
+            'email': companySnapshotEmail,
+          },
         },
         'budget': <String, dynamic>{
           'min': _artistBudget.start.round(),
@@ -1367,6 +1645,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
           'eligibleNfcClientEmails': nfcEligibleClientEmails,
           'selectedArtist': isDirectToArtist ? selectedArtist : '',
           'selectedArtistEmail': selectedArtistEmail,
+          'eligibleArtistEmails': eligibleArtistEmails,
+          'artistEligibilityRequiredTiers': const <String>['Goldsmith', 'Crowned'],
           'selectedClient': isOpenToClientPool ? '' : selectedClient,
           'selectedClientEmail': selectedClientEmail,
           'selectedGroupClientEmails': selectedGroupClientEmails,
@@ -1447,26 +1727,32 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
           },
       };
 
-      final batch = db.batch();
-      batch.set(doc, summary, SetOptions(merge: true));
-      batch.set(doc.collection('details').doc('payload'), details);
-      await batch.commit();
+      await _insertCompanyCustomRequestRow(
+        requestId: requestId,
+        summary: summary,
+        details: details,
+        companyUid: uid,
+      );
       final uploadedPhotoUrls = await _uploadInspirationPhotos(
-        orderId: doc.id,
+        orderId: requestId,
         companyUid: uid,
       );
       final photosUploadIncomplete =
           selectedPhotoCount > 0 &&
           uploadedPhotoUrls.length < selectedPhotoCount;
       await _attachUploadedInspirationPhotos(
-        requestRef: doc,
+        requestId: requestId,
         photos: uploadedPhotoUrls,
+        summary: summary,
+        details: details,
       );
       if (photosUploadIncomplete) {
         await _markPhotoUploadFailed(
-          requestRef: doc,
+          requestId: requestId,
           uploadedCount: uploadedPhotoUrls.length,
           selectedCount: selectedPhotoCount,
+          summary: summary,
+          details: details,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1481,11 +1767,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
       if (isOpenToClientPool) {
         unawaited(
           _notifyScenarioOneOnBrandSubmit(
-            orderId: doc.id,
+            orderId: requestId,
             orderNumber: orderNumber,
             companyName: companyName,
             campaignName: campaign,
-            sourceCollection: 'Company_Custom_Requests',
+            sourceCollection: 'company_custom_requests',
             creatorEmail: companyEmail,
           ).catchError((_) {}),
         );
@@ -1494,11 +1780,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         unawaited(
           _notifyDirectClientOnBrandSubmit(
             directClientEmail: selectedClientEmail,
-            orderId: doc.id,
+            orderId: requestId,
             orderNumber: orderNumber,
             companyName: companyName,
             campaignName: campaign,
-            sourceCollection: 'Company_Custom_Requests',
+            sourceCollection: 'company_custom_requests',
             creatorEmail: companyEmail,
           ).catchError((_) {}),
         );
@@ -1508,17 +1794,17 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
         unawaited(
           _notifySelectedGroupClientsOnBrandSubmit(
             selectedGroupClientEmails: selectedGroupClientEmails,
-            orderId: doc.id,
+            orderId: requestId,
             orderNumber: orderNumber,
             companyName: companyName,
             campaignName: campaign,
-            sourceCollection: 'Company_Custom_Requests',
+            sourceCollection: 'company_custom_requests',
             creatorEmail: companyEmail,
           ).catchError((_) {}),
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pop();
+      _closeAfterSuccessfulSubmit();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1557,23 +1843,22 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
       required String path,
       required Uint8List uploadBytes,
     }) async {
-      final ref = FirebaseStorage.instance.ref().child(path);
       if (uploadBytes.isEmpty) return null;
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
-          final snapshot = await ref
-              .putData(uploadBytes, SettableMetadata(contentType: 'image/jpeg'))
+          await _companyCustomRequestsStorage
+              .uploadBinary(
+                path,
+                uploadBytes,
+                fileOptions: const FileOptions(contentType: 'image/jpeg'),
+              )
               .timeout(
                 const Duration(seconds: 60),
                 onTimeout: () {
-                  ref.delete().catchError((_) {});
                   throw TimeoutException('Upload timeout');
                 },
               );
-          if (snapshot.state != TaskState.success) {
-            throw Exception('Upload failed with state: ${snapshot.state}');
-          }
-          return 'gs://${ref.bucket}/${ref.fullPath}';
+          return _normalizeStorageUrl(path);
         } catch (e) {
           debugPrint(
             '[BrandPhotoUpload] failed attempt ${attempt + 1} for $path: $e',
@@ -1587,18 +1872,11 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     Future<String?> uploadOne(int i, _UploadedReferenceImage file) async {
       final uploadBytes = _bytesForUpload(file.bytes);
       final ext = 'jpg';
-      final paths = <String>[
-        'client_custom_requests/$safeUid/$orderId/inspiration_${i + 1}.$ext',
-        'company_custom_requests/$safeUid/$orderId/inspiration_${i + 1}.$ext',
-      ];
-      for (final path in paths) {
-        final uploaded = await uploadToPath(
-          path: path,
-          uploadBytes: uploadBytes,
-        );
-        if ((uploaded ?? '').trim().isNotEmpty) {
-          return uploaded!.trim();
-        }
+      final path =
+          'company-custom-requests/$safeUid/$orderId/inspiration_${i + 1}.$ext';
+      final uploaded = await uploadToPath(path: path, uploadBytes: uploadBytes);
+      if ((uploaded ?? '').trim().isNotEmpty) {
+        return uploaded!.trim();
       }
       final dataUri = _buildInlinePreviewDataUri(file.bytes);
       if (dataUri != null &&
@@ -1622,8 +1900,10 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
   }
 
   Future<void> _attachUploadedInspirationPhotos({
-    required DocumentReference<Map<String, dynamic>> requestRef,
+    required String requestId,
     required List<String> photos,
+    required Map<String, dynamic> summary,
+    required Map<String, dynamic> details,
   }) async {
     final cleaned = photos
         .map((photo) => photo.trim())
@@ -1634,66 +1914,80 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     final previewImageAsset = previewImage.startsWith('data:image/')
         ? ''
         : previewImage;
-    final rootUpdate = <String, dynamic>{
-      'hasInspirationPhotos': hasPhotos,
-      'photoCount': cleaned.length,
-      'photoUploadStatus': hasPhotos ? 'completed' : 'none',
-      'photoUploadError': FieldValue.delete(),
-      'brandHasInspirationPhotos': hasPhotos,
-      'brandPhotoCount': cleaned.length,
-      'brandInspirationPhotos': cleaned,
-      'inspirationPhotos': cleaned,
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (hasPhotos) 'photoUploadCompletedAt': FieldValue.serverTimestamp(),
-      if (previewImage.isNotEmpty) 'previewImage': previewImage,
-      if (previewImageAsset.isNotEmpty) 'previewImageAsset': previewImageAsset,
-    };
-    final detailUpdate = <String, dynamic>{
-      'photoUploadStatus': hasPhotos ? 'completed' : 'none',
-      'photoUploadError': FieldValue.delete(),
-      'brandInspirationPhotos': cleaned,
-      'inspirationPhotos': cleaned,
-      'requestDetails': <String, dynamic>{
+    final nowIso = DateTime.now().toIso8601String();
+    final payloadUpdate = Map<String, dynamic>.from(summary)
+      ..['hasInspirationPhotos'] = hasPhotos
+      ..['photoCount'] = cleaned.length
+      ..['photoUploadStatus'] = hasPhotos ? 'completed' : 'none'
+      ..['photoUploadError'] = null
+      ..['brandHasInspirationPhotos'] = hasPhotos
+      ..['brandPhotoCount'] = cleaned.length
+      ..['brandInspirationPhotos'] = cleaned
+      ..['inspirationPhotos'] = cleaned
+      ..['updatedAt'] = nowIso
+      ..['photoUploadCompletedAt'] = hasPhotos
+          ? nowIso
+          : summary['photoUploadCompletedAt']
+      ..['previewImage'] = previewImage.isNotEmpty
+          ? previewImage
+          : summary['previewImage']
+      ..['previewImageAsset'] = previewImageAsset.isNotEmpty
+          ? previewImageAsset
+          : summary['previewImageAsset'];
+    final detailRequestDetails = _asMap(details['requestDetails']);
+    final detailUpdate = Map<String, dynamic>.from(details)
+      ..['photoUploadStatus'] = hasPhotos ? 'completed' : 'none'
+      ..['photoUploadError'] = null
+      ..['brandInspirationPhotos'] = cleaned
+      ..['inspirationPhotos'] = cleaned
+      ..['requestDetails'] = <String, dynamic>{
+        ...detailRequestDetails,
         'brandInspirationPhotos': cleaned,
         'inspirationPhotos': cleaned,
-      },
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (hasPhotos) 'photoUploadCompletedAt': FieldValue.serverTimestamp(),
-      if (previewImage.isNotEmpty) 'previewImage': previewImage,
-      if (previewImageAsset.isNotEmpty) 'previewImageAsset': previewImageAsset,
-    };
-    final batch = FirebaseFirestore.instance.batch();
-    batch.set(requestRef, rootUpdate, SetOptions(merge: true));
-    batch.set(
-      requestRef.collection('details').doc('payload'),
-      detailUpdate,
-      SetOptions(merge: true),
+      }
+      ..['updatedAt'] = nowIso
+      ..['photoUploadCompletedAt'] = hasPhotos
+          ? nowIso
+          : details['photoUploadCompletedAt']
+      ..['previewImage'] = previewImage.isNotEmpty
+          ? previewImage
+          : details['previewImage']
+      ..['previewImageAsset'] = previewImageAsset.isNotEmpty
+          ? previewImageAsset
+          : details['previewImageAsset'];
+    await _updateCompanyCustomRequestRow(
+      requestId: requestId,
+      summaryUpdate: payloadUpdate,
+      detailsUpdate: detailUpdate,
     );
-    await batch.commit();
   }
 
   Future<void> _markPhotoUploadFailed({
-    required DocumentReference<Map<String, dynamic>> requestRef,
+    required String requestId,
     required int uploadedCount,
     required int selectedCount,
+    required Map<String, dynamic> summary,
+    required Map<String, dynamic> details,
   }) async {
     final error =
         'Only $uploadedCount of $selectedCount inspiration photos uploaded.';
     try {
-      final update = <String, dynamic>{
-        'photoUploadStatus': 'failed',
-        'photoUploadError': error,
-        'photoUploadFailedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      final batch = FirebaseFirestore.instance.batch();
-      batch.set(requestRef, update, SetOptions(merge: true));
-      batch.set(
-        requestRef.collection('details').doc('payload'),
-        update,
-        SetOptions(merge: true),
+      final nowIso = DateTime.now().toIso8601String();
+      final payloadUpdate = Map<String, dynamic>.from(summary)
+        ..['photoUploadStatus'] = 'failed'
+        ..['photoUploadError'] = error
+        ..['photoUploadFailedAt'] = nowIso
+        ..['updatedAt'] = nowIso;
+      final detailUpdate = Map<String, dynamic>.from(details)
+        ..['photoUploadStatus'] = 'failed'
+        ..['photoUploadError'] = error
+        ..['photoUploadFailedAt'] = nowIso
+        ..['updatedAt'] = nowIso;
+      await _updateCompanyCustomRequestRow(
+        requestId: requestId,
+        summaryUpdate: payloadUpdate,
+        detailsUpdate: detailUpdate,
       );
-      await batch.commit();
     } catch (_) {}
   }
 
@@ -1755,9 +2049,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     final brand = companyName.trim().isEmpty
         ? 'Brand company'
         : companyName.trim();
-    final senderEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final senderEmail = _authEmail;
     final creator = creatorEmail.trim().toLowerCase();
     for (final email in recipients) {
       if (senderEmail.isNotEmpty && email == senderEmail) continue;
@@ -1803,9 +2095,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
   }) async {
     final receiverEmail = directClientEmail.trim().toLowerCase();
     if (receiverEmail.isEmpty) return;
-    final senderEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final senderEmail = _authEmail;
     final creator = creatorEmail.trim().toLowerCase();
     if (senderEmail.isNotEmpty && receiverEmail == senderEmail) return;
     if (creator.isNotEmpty && receiverEmail == creator) return;
@@ -1851,9 +2141,7 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     required String sourceCollection,
     required String creatorEmail,
   }) async {
-    final senderEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final senderEmail = _authEmail;
     final creator = creatorEmail.trim().toLowerCase();
     final recipients = selectedGroupClientEmails
         .map((email) => email.trim().toLowerCase())
@@ -1909,25 +2197,19 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     }
     if (recipients.isNotEmpty) return recipients;
 
-    Future<void> scan(String collection) async {
-      final snap = await FirebaseFirestore.instance
-          .collection(collection)
-          .get();
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        if (_nfcRequest) {
-          if (!_clientIsNfcEligible(data)) continue;
-        } else if (!_isBrandPartner(data)) {
-          continue;
-        }
-        final email = _clientEmail(data);
-        if (email.isNotEmpty) recipients.add(email);
-      }
-    }
-
     try {
-      await scan('client');
-      await scan('client_artist');
+      for (final collection in const <String>['client', 'client_artist']) {
+        final rows = await _fetchTableRows(collection);
+        for (final data in rows) {
+          if (_nfcRequest) {
+            if (!_clientIsNfcEligible(data)) continue;
+          } else if (!_isBrandPartner(data)) {
+            continue;
+          }
+          final email = _clientEmail(data);
+          if (email.isNotEmpty) recipients.add(email);
+        }
+      }
     } catch (_) {}
     return recipients;
   }
@@ -1967,15 +2249,56 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     return isOpenToArtistPool ? 'Direct to Client' : 'Direct';
   }
 
+  Future<List<String>> _loadEligibleBrandArtistEmails() async {
+    final emails = <String>{};
+    try {
+      final rows = <Map<String, dynamic>>[];
+      for (final table in const <String>['artist', 'client_artist']) {
+        rows.addAll(await _fetchTableRows(table));
+      }
+      for (final data in rows) {
+        if (!isEligibleBrandRequestArtist(data)) continue;
+        final email = _clientEmail(data).trim().toLowerCase();
+        if (email.isNotEmpty) emails.add(email);
+      }
+      if (emails.isEmpty) {
+        final entries = await ArtistDirectoryService.fetchAllArtists(
+          hydrateMediaFallbacks: false,
+        );
+        for (final artist in entries) {
+          final tier = artist.tierLabel.trim().toLowerCase();
+          if (tier != 'goldsmith' && tier != 'crowned') continue;
+          final email = artist.email.trim().toLowerCase();
+          if (email.isNotEmpty) emails.add(email);
+        }
+      }
+    } catch (_) {}
+    return emails.toList(growable: false)..sort();
+  }
+
   Future<String> _resolveSelectedArtistEmail(String selectedArtist) async {
     final normalized = selectedArtist.trim().toLowerCase();
     if (normalized.isEmpty) return '';
     try {
+      final rows = <Map<String, dynamic>>[];
+      for (final table in const <String>['artist', 'client_artist']) {
+        rows.addAll(await _fetchTableRows(table));
+      }
+      for (final data in rows) {
+        if (_artistDisplayName(data).trim().toLowerCase() != normalized) {
+          continue;
+        }
+        if (!isEligibleBrandRequestArtist(data)) continue;
+        final email = _clientEmail(data).trim().toLowerCase();
+        if (email.isNotEmpty) return email;
+      }
       final entries = await ArtistDirectoryService.fetchAllArtists(
         hydrateMediaFallbacks: false,
       );
       for (final artist in entries) {
         if (artist.name.trim().toLowerCase() != normalized) continue;
+        final tier = artist.tierLabel.trim().toLowerCase();
+        if (tier != 'goldsmith' && tier != 'crowned') continue;
         final email = artist.email.trim().toLowerCase();
         if (email.isNotEmpty) return email;
       }
@@ -1990,11 +2313,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     if (cached.isNotEmpty) return cached;
 
     Future<String> fromCollection(String collection) async {
-      final snap = await FirebaseFirestore.instance
-          .collection(collection)
-          .get();
-      for (final doc in snap.docs) {
-        final data = doc.data();
+      final rows = await _fetchTableRows(collection);
+      for (final data in rows) {
         final name = _clientDisplayName(data).trim().toLowerCase();
         if (name != normalized) continue;
         final email = _clientEmail(data);
@@ -2192,8 +2512,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                           label: const Text('Gallery'),
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size(0, 52),
-                            backgroundColor: AppColors.blackCat.withValues(alpha:
-                              0.12,
+                            backgroundColor: AppColors.blackCat.withValues(
+                              alpha: 0.12,
                             ),
                             foregroundColor: AppColors.blackCat,
                             textStyle: const TextStyle(
@@ -2264,8 +2584,8 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                                     height: 74,
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: AppColors.blackCat.withValues(alpha:
-                                          0.25,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.25,
                                         ),
                                       ),
                                     ),
@@ -2579,7 +2899,9 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                                       : AppColors.blackCat,
                                 ),
                                 side: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -2601,7 +2923,9 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
                                       : AppColors.blackCat,
                                 ),
                                 side: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                             ],
@@ -2894,8 +3218,6 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     );
   }
 
-  
-
   List<String> get _artistOptions {
     final seen = <String>{};
     final result = <String>[];
@@ -2916,7 +3238,6 @@ class _CompanyCustomRequestPageState extends State<CompanyCustomRequestPage> {
     return result;
   }
 
-  
   Widget _fieldLabel(String t) {
     return Text(
       t,
@@ -3064,7 +3385,6 @@ class _OptionCard extends StatelessWidget {
     );
   }
 }
-
 
 class _SearchableSelectField extends StatelessWidget {
   const _SearchableSelectField({
@@ -3380,10 +3700,6 @@ class _InputField extends StatelessWidget {
   }
 }
 
-
-
-
-
 class _BudgetCard extends StatelessWidget {
   const _BudgetCard({
     required this.minLabel,
@@ -3486,7 +3802,6 @@ class _BudgetCard extends StatelessWidget {
 // ----------
 // Nail pieces you already use
 // ----------
-
 
 String _lengthTitle(NailLength l) {
   switch (l) {

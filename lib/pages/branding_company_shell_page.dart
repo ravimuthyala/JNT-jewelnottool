@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,8 +9,8 @@ import '../widgets/company_shell_chrome.dart';
 import 'branding_company_home_page.dart';
 import 'client_artists_page.dart';
 import 'brand_order_page_v2.dart';
-import 'company_custom_request_page.dart';
-import 'company_custom_request_with_artist_page.dart';
+import 'brand_custom_request_page.dart';
+import 'brand_custom_request_with_artist_page.dart';
 import 'company_profile_page.dart';
 import 'edit_company_business_info_popup.dart';
 import 'notifications_page.dart';
@@ -42,9 +41,6 @@ class BrandingCompanyShellPage extends StatefulWidget {
 class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
   late int _index;
   bool _loadingEnrolledArtists = true;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _artistFeedSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientArtistFeedSub;
-  Timer? _feedRefreshDebounce;
   List<CompanyTrendingArtist> _enrolledArtists =
       const <CompanyTrendingArtist>[];
 
@@ -53,35 +49,11 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     super.initState();
     _index = widget.initialIndex;
     _loadEnrolledArtists();
-    _startLiveArtistFeedSync();
   }
 
   @override
   void dispose() {
-    _artistFeedSub?.cancel();
-    _clientArtistFeedSub?.cancel();
-    _feedRefreshDebounce?.cancel();
     super.dispose();
-  }
-
-  void _startLiveArtistFeedSync() {
-    _artistFeedSub = FirebaseFirestore.instance
-        .collection('artist')
-        .snapshots()
-        .listen((_) => _scheduleEnrolledArtistRefresh());
-    _clientArtistFeedSub = FirebaseFirestore.instance
-        .collection('client_artist')
-        .snapshots()
-        .listen((_) => _scheduleEnrolledArtistRefresh());
-  }
-
-  void _scheduleEnrolledArtistRefresh() {
-    if (!mounted) return;
-    _feedRefreshDebounce?.cancel();
-    _feedRefreshDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      unawaited(_loadEnrolledArtists());
-    });
   }
 
   Future<void> _loadEnrolledArtists() async {
@@ -147,7 +119,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CompanyCustomRequestPage(
+        builder: (_) => BrandCustomRequestPage(
           profile: profile,
           onBackHome: () => Navigator.pop(context),
           companyName: companyName,
@@ -232,7 +204,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CompanyCustomRequestWithArtistPage(
+        builder: (_) => BrandCustomRequestWithArtistPage(
           profile: profile,
           companyName: companyName,
           onBackHome: () => Navigator.pop(context),
@@ -289,7 +261,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _loadCompanyDataFromSupabase(uid),
       builder: (context, companySnap) {
-        final data = _CompanyUiData.fromFirestore(
+        final data = _CompanyUiData.fromSupabase(
           uid: uid,
           data: companySnap.data,
           fallbackCompanyName: widget.companyDisplayName,
@@ -298,17 +270,10 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           fallbackAddresses: widget.initialAddressesInfo,
         );
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('Company_Custom_Requests')
-              .snapshots(),
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _loadCompanyRequestsFromSupabase(data),
           builder: (context, requestsSnap) {
-            final docs = requestsSnap.data?.docs ?? const [];
-            final requests = docs
-                .map((d) => d.data())
-                .where((r) => _matchesCompanyRequest(r, data))
-                .toList(growable: false);
-
+            final requests = requestsSnap.data ?? const <Map<String, dynamic>>[];
             return _buildShell(data: data, requests: requests);
           },
         );
@@ -334,6 +299,26 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     }
 
     return const <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> _loadCompanyRequestsFromSupabase(
+    _CompanyUiData data,
+  ) async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('company_custom_requests')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(500);
+
+      return rows
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .where((request) => _matchesCompanyRequest(request, data))
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('COMPANY SHELL REQUEST LOAD FAILED: $e');
+      return const <Map<String, dynamic>>[];
+    }
   }
 
   Widget _buildShell({
@@ -364,8 +349,10 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
         .map(
           (r) => _firstNonEmptyString(
             r['campaignName'],
+            r['campaign_name'],
             r['title'],
             r['requestTitle'],
+            r['request_title'],
           ),
         )
         .where((value) => value.isNotEmpty)
@@ -468,16 +455,26 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
   ) {
     final requestUid = _firstNonEmptyString(
       request['companyUid'],
+      request['company_uid'],
+      request['company_id'],
       request['requesterUid'],
+      request['requester_uid'],
       request['createdByUid'],
+      request['created_by_uid'],
+      request['created_by'],
       request['uid'],
     );
     if (requestUid.isNotEmpty && requestUid == data.uid) return true;
 
     final requestEmail = _firstNonEmptyString(
       request['companyEmail'],
+      request['company_email'],
+      request['brandEmail'],
+      request['brand_email'],
       request['clientEmail'],
+      request['client_email'],
       request['requesterEmail'],
+      request['requester_email'],
       request['email'],
     ).toLowerCase();
     if (requestEmail.isNotEmpty &&
@@ -488,9 +485,13 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
 
     final requestName = _firstNonEmptyString(
       request['companyName'],
+      request['company_name'],
       request['brandName'],
+      request['brand_name'],
       request['clientName'],
+      request['client_name'],
       request['requesterName'],
+      request['requester_name'],
     ).toLowerCase();
     if (requestName.isNotEmpty &&
         data.companyName.isNotEmpty &&
@@ -501,8 +502,21 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     return false;
   }
 
-  String _firstNonEmptyString(Object? a, [Object? b, Object? c, Object? d]) {
-    for (final candidate in <Object?>[a, b, c, d]) {
+  String _firstNonEmptyString(
+    Object? a, [
+    Object? b,
+    Object? c,
+    Object? d,
+    Object? e,
+    Object? f,
+    Object? g,
+    Object? h,
+    Object? i,
+    Object? j,
+    Object? k,
+    Object? l,
+  ]) {
+    for (final candidate in <Object?>[a, b, c, d, e, f, g, h, i, j, k, l]) {
       final value = (candidate ?? '').toString().trim();
       if (value.isNotEmpty) return value;
     }
@@ -547,7 +561,7 @@ class _CompanyUiData {
     );
   }
 
-  factory _CompanyUiData.fromFirestore({
+  factory _CompanyUiData.fromSupabase({
     required String uid,
     required Map<String, dynamic>? data,
     required String fallbackCompanyName,
@@ -621,20 +635,25 @@ class _CompanyUiData {
 
     final companyName = first(
       source['panel_companyName'],
+      source['company_name'],
       company['name'],
       source['companyName'],
+      source['name'],
       fallbackCompanyName,
     );
     final contactName = first(
       source['panel_contactName'],
+      source['contact_name'],
       company['contactName'],
       source['contactName'],
       source['displayName'],
     );
     final email = first(
       source['panel_contactEmail'],
+      source['contact_email'],
       company['contactEmail'],
       source['email'],
+      source['company_email'],
     );
 
     final companyAddress = asMap(company['address']);
@@ -699,7 +718,9 @@ class _CompanyUiData {
       ),
       companyEmail: first(
         source['email'],
+      source['company_email'],
         source['panel_contactEmail'],
+      source['contact_email'],
         company['contactEmail'],
         fallbackBusiness?.companyEmail,
       ),

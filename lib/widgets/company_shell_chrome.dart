@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../pages/notifications_page.dart';
 import 'client_profile_avatar_icon.dart';
-import 'notification_bell_button.dart';
+import 'jnt_standard_app_bar.dart';
 
 class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
   const CompanyHeader({
@@ -84,83 +84,52 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(85);
+  Size get preferredSize =>
+      const Size.fromHeight(JntHeaderMetrics.toolbarHeight);
 
   @override
   Widget build(BuildContext context) {
     final GlobalKey profileKey = GlobalKey();
 
-    return Container(
-      color: AppColors.alabaster,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Stack(
-            children: [
-              Center(
-                child: Image.asset(
-                  'assets/images/jnt_logo_black.png',
-                  height: 50,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) =>
-                      const SizedBox(width: 40, height: 40),
-                ),
+    return JntStandardAppBar(
+      onNotifications: () => _openNotifications(context),
+      trailing:
+          trailing ??
+          InkWell(
+            key: profileKey,
+            borderRadius: BorderRadius.zero,
+            onTap: () => _openProfileMenu(context, profileKey),
+            child: SizedBox(
+              height: JntHeaderMetrics.avatarSize,
+              width: JntHeaderMetrics.avatarSize,
+              child: ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: _CompanyAvatarIcon(companyName: companyName),
               ),
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: SizedBox(
-                  width: 44,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: NotificationBellButton(
-                      onTap: () => _openNotifications(context),
-                      iconSize: 24,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 0,
-                top: 0,
-                bottom: 0,
-                child: SizedBox(
-                  width: 44,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child:
-                        trailing ??
-                        InkWell(
-                          key: profileKey,
-                          borderRadius: BorderRadius.zero,
-                          onTap: () => _openProfileMenu(context, profileKey),
-                          child: SizedBox(
-                            height: 36,
-                            width: 36,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: _CompanyAvatarIcon(
-                                companyName: companyName,
-                              ),
-                            ),
-                          ),
-                        ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 }
 
-class _CompanyAvatarIcon extends StatelessWidget {
+class _CompanyAvatarIcon extends StatefulWidget {
   const _CompanyAvatarIcon({required this.companyName});
 
   final String companyName;
+
+  @override
+  State<_CompanyAvatarIcon> createState() => _CompanyAvatarIconState();
+}
+
+class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
+  String _avatarUrl = '';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCompanyAvatar();
+  }
 
   String _firstNonEmpty(List<dynamic> values) {
     for (final raw in values) {
@@ -170,51 +139,102 @@ class _CompanyAvatarIcon extends StatelessWidget {
     return '';
   }
 
-  Future<String> _resolveCompanyStorageAvatar(String uid) async {
-    final candidates = <String>[
-      'company/$uid/profile/avatar.jpg',
-      'company/$uid/profile/avatar.jpeg',
-      'company/$uid/profile/avatar.png',
-      'company/$uid/profile/avatar.webp',
-      'company/$uid/profile/logo.jpg',
-      'company/$uid/profile/logo.jpeg',
-      'company/$uid/profile/logo.png',
-      'company/$uid/profile/logo.webp',
-    ];
-    for (final path in candidates) {
+  String _normalizeStorageUrl(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+    if (text.startsWith('http://') || text.startsWith('https://')) return text;
+    if (text.startsWith('data:image/')) return text;
+
+    final storage = Supabase.instance.client.storage.from('company-logos');
+    if (text.startsWith('company-logos/')) {
+      return storage
+          .getPublicUrl(text.substring('company-logos/'.length))
+          .trim();
+    }
+    if (text.startsWith('companies/')) {
+      return storage.getPublicUrl(text).trim();
+    }
+    if (text.startsWith('company/')) {
       try {
-        await FirebaseStorage.instance.ref(path).getMetadata();
-        return path;
-      } catch (_) {}
+        return storage.getPublicUrl(text).trim();
+      } catch (_) {
+        return '';
+      }
     }
     return '';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    if (uid.isEmpty) {
-      return ClientProfileAvatarIcon(displayName: companyName, size: 36);
+  Future<Map<String, dynamic>?> _readCompanyRow() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    final uid = (user?.id ?? '').trim();
+    final email = (user?.email ?? '').trim().toLowerCase();
+
+    if (uid.isNotEmpty) {
+      try {
+        final rows = await supabase
+            .from('company')
+            .select()
+            .eq('id', uid)
+            .limit(1);
+        if (rows.isNotEmpty) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      } catch (_) {}
     }
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('company')
-          .doc(uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        final data = snapshot.data?.data() ?? const <String, dynamic>{};
-        final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-        final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-        final company = (data['company'] as Map<String, dynamic>?) ?? const {};
-        final imageUrl = _firstNonEmpty([
-          profile['logoUrl'],
-          profile['profileImageUrl'],
-          profile['photoUrl'],
-          profile['avatarUrl'],
-          basic['profileImageUrl'],
-          basic['photoUrl'],
-          basic['avatarUrl'],
+    if (email.isNotEmpty) {
+      try {
+        final rows = await supabase
+            .from('company')
+            .select()
+            .eq('email', email)
+            .limit(1);
+        if (rows.isNotEmpty) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  Future<String> _resolveCompanyStorageAvatar(String uid) async {
+    final storage = Supabase.instance.client.storage.from('company-logos');
+    try {
+      final entries = await storage.list(path: 'companies/$uid/logo');
+      final files = entries
+          .map((file) => file.name.trim())
+          .where((name) => name.isNotEmpty)
+          .where(
+            (name) =>
+                name.toLowerCase().endsWith('.jpg') ||
+                name.toLowerCase().endsWith('.jpeg') ||
+                name.toLowerCase().endsWith('.png') ||
+                name.toLowerCase().endsWith('.webp'),
+          )
+          .toList(growable: false);
+      if (files.isEmpty) return '';
+      files.sort((a, b) => b.compareTo(a));
+      return storage.getPublicUrl('companies/$uid/logo/${files.first}').trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _loadCompanyAvatar() async {
+    try {
+      final row = await _readCompanyRow();
+      final data = row ?? const <String, dynamic>{};
+      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
+      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
+      final company = (data['company'] as Map<String, dynamic>?) ?? const {};
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+      final uid = (user?.id ?? '').trim();
+
+      final imageUrl = _normalizeStorageUrl(
+        _firstNonEmpty([
           data['panel_logoUrl'],
           data['companyLogoUrl'],
           data['brandLogoUrl'],
@@ -223,31 +243,51 @@ class _CompanyAvatarIcon extends StatelessWidget {
           data['profileImageUrl'],
           data['photoUrl'],
           data['avatarUrl'],
+          profile['logoUrl'],
+          profile['profileImageUrl'],
+          profile['photoUrl'],
+          profile['avatarUrl'],
+          basic['profileImageUrl'],
+          basic['photoUrl'],
+          basic['avatarUrl'],
           company['logoUrl'],
           company['profileImageUrl'],
           company['photoUrl'],
           company['avatarUrl'],
-        ]);
-        final resolvedImageUrl = imageUrl.trim();
-        if (resolvedImageUrl.isNotEmpty) {
-          return ClientProfileAvatarIcon(
-            imageUrl: resolvedImageUrl,
-            displayName: companyName,
-            size: 36,
-          );
-        }
-        return FutureBuilder<String>(
-          future: _resolveCompanyStorageAvatar(uid),
-          builder: (context, storageSnap) {
-            final storagePath = (storageSnap.data ?? '').trim();
-            return ClientProfileAvatarIcon(
-              imageUrl: storagePath,
-              displayName: companyName,
-              size: 36,
-            );
-          },
-        );
-      },
+        ]),
+      );
+
+      final resolved = imageUrl.isNotEmpty
+          ? imageUrl
+          : uid.isNotEmpty
+          ? await _resolveCompanyStorageAvatar(uid)
+          : '';
+
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = resolved;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('COMPANY AVATAR LOAD FAILED: $e');
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading && _avatarUrl.trim().isEmpty) {
+      return ClientProfileAvatarIcon(
+        displayName: widget.companyName,
+        size: JntHeaderMetrics.avatarSize,
+      );
+    }
+
+    return ClientProfileAvatarIcon(
+      imageUrl: _avatarUrl,
+      displayName: widget.companyName,
+      size: JntHeaderMetrics.avatarSize,
     );
   }
 }

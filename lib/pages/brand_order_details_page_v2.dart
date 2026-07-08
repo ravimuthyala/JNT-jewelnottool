@@ -3,12 +3,11 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
@@ -148,9 +147,7 @@ class _OrderSafe {
     }
 
     DateTime? dt(dynamic v) {
-      if (v is DateTime) return v;
-      if (v is Timestamp) return v.toDate();
-      return null;
+      return _parseDate(v);
     }
 
     final detailMap = o is Map ? (o['details'] as Map?) : null;
@@ -570,6 +567,138 @@ class _OrderSafe {
   }
 }
 
+SupabaseClient get _client => Supabase.instance.client;
+
+User? get _currentUser => _client.auth.currentUser;
+
+String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
+String get _currentName {
+  final metadata = _currentUser?.userMetadata;
+  return _firstNonEmpty([
+    metadata?['name'],
+    metadata?['full_name'],
+    metadata?['display_name'],
+    _currentUser?.email,
+  ]);
+}
+
+String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+  for (final value in values) {
+    final text = (value ?? '').toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return fallback;
+}
+
+DateTime? _parseDate(dynamic value) {
+  if (value is DateTime) return value;
+  if (value is String && value.trim().isNotEmpty) {
+    return DateTime.tryParse(value.trim());
+  }
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.round());
+  return null;
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, innerValue) => MapEntry(key.toString(), innerValue));
+  }
+  return const <String, dynamic>{};
+}
+
+List<dynamic> _asList(dynamic value) {
+  if (value is List<dynamic>) return value;
+  if (value is List) return value.toList(growable: false);
+  return const <dynamic>[];
+}
+
+String _normalizeStorageUrl(dynamic raw) {
+  final value = (raw ?? '').toString().trim();
+  if (value.isEmpty) return '';
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    return value;
+  }
+  if (value.startsWith('gs://')) return value;
+  if (value.startsWith('data:image/')) return value;
+  return value;
+}
+
+Future<Map<String, dynamic>?> _supabaseFetchOrderRow(
+  String orderId, {
+  String orderNumber = '',
+}) async {
+  final id = orderId.trim();
+  if (id.isNotEmpty) {
+    try {
+      final rows = await _client
+          .from('company_custom_requests')
+          .select()
+          .eq('id', id)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  final number = orderNumber.trim();
+  if (number.isNotEmpty) {
+    try {
+      final rows = await _client
+          .from('company_custom_requests')
+          .select()
+          .eq('order_number', number)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+Future<Map<String, dynamic>?> _supabaseFetchArtistRowByEmail(
+  String email,
+) async {
+  final normalized = email.trim().toLowerCase();
+  if (normalized.isEmpty) return null;
+  for (final table in const <String>['artist', 'client_artist']) {
+    try {
+      final rows = await _client
+          .from(table)
+          .select()
+          .eq('email', normalized)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+Future<Map<String, dynamic>?> _supabaseFetchClientRowByEmail(
+  String email,
+) async {
+  final normalized = email.trim().toLowerCase();
+  if (normalized.isEmpty) return null;
+  for (final table in const <String>['client', 'client_artist']) {
+    try {
+      final rows = await _client
+          .from(table)
+          .select()
+          .eq('email', normalized)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
 class _OrderGroupClient {
   const _OrderGroupClient({
     this.clientId = '',
@@ -751,6 +880,28 @@ class _BaseOrderDetails extends StatelessWidget {
     return double.tryParse((value ?? '').toString().trim());
   }
 
+  static Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map(
+        (key, innerValue) => MapEntry(key.toString(), innerValue),
+      );
+    }
+    return const <String, dynamic>{};
+  }
+
+  static List<dynamic> _asList(dynamic value) {
+    if (value is List<dynamic>) return value;
+    if (value is List) return value.toList(growable: false);
+    return const <dynamic>[];
+  }
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  User? get _currentUser => _client.auth.currentUser;
+
+  String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
   static Future<_AcceptedArtistMeta> _loadAcceptedArtistMeta(
     _OrderSafe order,
   ) async {
@@ -760,17 +911,17 @@ class _BaseOrderDetails extends StatelessWidget {
     );
     final email = order.acceptedByArtistEmail.trim().toLowerCase();
     if (email.isEmpty) return fallback;
+    final client = Supabase.instance.client;
 
-    final db = FirebaseFirestore.instance;
     for (final collection in const <String>['artist', 'client_artist']) {
-      final snap = await db
-          .collection(collection)
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) continue;
+      final rows = await client
+          .from(collection)
+          .select()
+          .eq('email', email)
+          .limit(1);
+      if (rows.isEmpty) continue;
 
-      final data = snap.docs.first.data();
+      final data = Map<String, dynamic>.from(rows.first as Map);
       final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
       final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
       final address = (data['address'] as Map<String, dynamic>?) ?? const {};
@@ -794,8 +945,11 @@ class _BaseOrderDetails extends StatelessWidget {
         basic['profileImageUrl'],
         basic['avatarUrl'],
         data['panel_profileImageUrl'],
+        data['panel_profile_image_url'],
         data['profileImageUrl'],
+        data['profile_image_url'],
         data['avatarUrl'],
+        data['avatar_url'],
       ]);
       final city = _firstNonEmpty([
         address['city'],
@@ -836,10 +990,8 @@ class _BaseOrderDetails extends StatelessWidget {
       );
       return;
     }
-    final currentName = (FirebaseAuth.instance.currentUser?.displayName ?? '')
-        .trim();
-    final fallbackCurrentName = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim();
+    final currentName = _currentName.trim();
+    final fallbackCurrentName = _currentEmail.trim();
     final clientName = currentName.isNotEmpty
         ? currentName
         : (fallbackCurrentName.contains('@')
@@ -863,10 +1015,8 @@ class _BaseOrderDetails extends StatelessWidget {
       );
       return;
     }
-    final currentName = (FirebaseAuth.instance.currentUser?.displayName ?? '')
-        .trim();
-    final fallbackCurrentName = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim();
+    final currentName = _currentName.trim();
+    final fallbackCurrentName = _currentEmail.trim();
     final clientName = currentName.isNotEmpty
         ? currentName
         : (fallbackCurrentName.contains('@')
@@ -958,25 +1108,10 @@ class _BaseOrderDetails extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 26),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-        leading: const SizedBox.shrink(),
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.pop(context),
+        closeTooltip: 'Close brand order details',
+        closeIcon: const Icon(Icons.close_rounded, size: 26),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
@@ -1126,7 +1261,9 @@ class _BaseOrderDetails extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400,
-                                        color: AppColors.blackCat.withValues(alpha: 0.85),
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.85,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1142,7 +1279,9 @@ class _BaseOrderDetails extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
-                                          color: AppColors.blackCat.withValues(alpha: 0.55),
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.55,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1249,107 +1388,14 @@ class _BaseOrderDetails extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-          ] else if (order.clientDescription.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
+          const SizedBox(height: 12),
+          ] else if (isCancelledStatus) ...[
             _Card(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Description',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.clientDescription.trim(),
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      height: 1.25,
-                      fontFamily: 'Arial',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Description',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.clientDescription.trim().isNotEmpty
-                        ? order.clientDescription.trim()
-                        : 'No description provided.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      fontFamily: 'Arial',
-                      height: 1.25,
-                    ),
-                  ),
+                  _orderDetailsWithRightNailDimensions(),
                   const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Uploaded Photos',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _SubmittedPhotosStrip(
-                    paths: order.inspirationPhotos,
-                    fallbackOrderId: order.id,
-                    fallbackOrderNumber: order.orderNumber,
-                    sourceCollection: order.sourceCollection,
-                    enableFirestoreFallback: true,
-                    showAll: true,
-                  ),
-                  const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withValues(alpha: 20)),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Order Details',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _bullet('Campaign Name', _valueOrDash(order.title)),
-                  _bullet('Need by', _valueOrDash(order.needByDisplay)),
-                  _bullet('Requested Client', _requestedClientDisplay()),
-                  _bullet('Requested Artist', _requestArtistDisplay()),
-                  _bullet('Accepted Clients', _acceptedClientsDisplay()),
-                  // Keep in code per request, but hide from UI:
-                  // _bullet('Status', statusPillText),
-                  const SizedBox(height: 8),
                   Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
                   const SizedBox(height: 5),
                   _paymentSection(context),
@@ -1357,17 +1403,6 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
             ),
           ] else ...[
-            _SubmittedPhotosStrip(
-              paths: order.inspirationPhotos,
-              fallbackOrderId: order.id,
-              fallbackOrderNumber: order.orderNumber,
-              sourceCollection: order.sourceCollection,
-              enableFirestoreFallback: true,
-              showAll: true,
-            ),
-
-            const SizedBox(height: 14),
-
             if (statusPillText == 'Completed' ||
                 statusPillText == 'Shipped' ||
                 statusPillText == 'Delivered') ...[
@@ -1566,18 +1601,12 @@ class _BaseOrderDetails extends StatelessWidget {
                         }
 
                         try {
-                          final docRef = FirebaseFirestore.instance
-                              .collection('Company_Custom_Requests')
-                              .doc(order.id);
-                          final snap = await docRef.get();
-                          final rootData =
-                              snap.data() ?? const <String, dynamic>{};
-                          final detailsSnap = await docRef
-                              .collection('details')
-                              .doc('payload')
-                              .get();
-                          final detailsData =
-                              detailsSnap.data() ?? const <String, dynamic>{};
+                          final row = await _supabaseFetchOrderRow(
+                            order.id,
+                            orderNumber: order.orderNumber,
+                          );
+                          final rootData = row ?? const <String, dynamic>{};
+                          final detailsData = _asMap(rootData['details']);
 
                           final typedReason = result.reason.trim();
                           final selectedReason = typedReason.isNotEmpty
@@ -1595,7 +1624,7 @@ class _BaseOrderDetails extends StatelessWidget {
                             return;
                           }
                           final cancelReason = selectedReason;
-                          final cancelledAt = Timestamp.now();
+                          final cancelledAt = DateTime.now();
                           List<dynamic> cancelGroupClients(dynamic value) {
                             if (value is! List) return const <dynamic>[];
                             return value
@@ -1624,21 +1653,27 @@ class _BaseOrderDetails extends StatelessWidget {
                             updatedGroupOrder['clients'],
                           );
 
-                          await docRef.set({
+                          final nowIso = cancelledAt.toIso8601String();
+                          final updatedRoot = <String, dynamic>{
                             'status': 'cancelled',
-                            'brandStatus': 'cancelled',
-                            'clientStatus': 'cancelled',
-                            'artistStatus': 'cancelled',
-                            'directClientStatus': 'cancelled',
-                            'directArtistStatus': 'cancelled',
+                            'brand_status': 'cancelled',
+                            'client_status': 'cancelled',
+                            'artist_status': 'cancelled',
+                            'direct_client_status': 'cancelled',
+                            'direct_artist_status': 'cancelled',
                             if (updatedGroupClients.isNotEmpty)
-                              'groupClients': updatedGroupClients,
-                            'updatedAt': FieldValue.serverTimestamp(),
-                            'cancelledAt': cancelledAt,
+                              'group_clients': updatedGroupClients,
+                            'groupClients': updatedGroupClients,
+                            'updated_at': nowIso,
+                            'updatedAt': nowIso,
+                            'cancelled_at': nowIso,
+                            'cancelledAt': nowIso,
+                            'cancel_reason': cancelReason,
                             'cancelReason': cancelReason,
-                          }, SetOptions(merge: true));
-                          await docRef.collection('details').doc('payload').set(
-                            {
+                            'cancellation_reason': cancelReason,
+                            'cancellationReason': cancelReason,
+                            'payload': {
+                              ..._asMap(rootData['payload']),
                               'status': 'cancelled',
                               'roleStatuses': {
                                 'brand': 'cancelled',
@@ -1656,12 +1691,40 @@ class _BaseOrderDetails extends StatelessWidget {
                                 },
                               'cancellation': {
                                 'reason': cancelReason,
-                                'cancelledAt': FieldValue.serverTimestamp(),
+                                'cancelledAt': nowIso,
                                 'cancelledBy': 'brand',
                               },
+                              'updatedAt': nowIso,
                             },
-                            SetOptions(merge: true),
-                          );
+                            'details': {
+                              ...detailsData,
+                              'status': 'cancelled',
+                              'roleStatuses': {
+                                'brand': 'cancelled',
+                                'client': 'cancelled',
+                                'artist': 'cancelled',
+                              },
+                              'routing': {
+                                'directClientStatus': 'cancelled',
+                                'directArtistStatus': 'cancelled',
+                              },
+                              if (updatedGroupOrderClients.isNotEmpty)
+                                'groupOrder': {
+                                  ...updatedGroupOrder,
+                                  'clients': updatedGroupOrderClients,
+                                },
+                              'cancellation': {
+                                'reason': cancelReason,
+                                'cancelledAt': nowIso,
+                                'cancelledBy': 'brand',
+                              },
+                              'updatedAt': nowIso,
+                            },
+                          };
+                          await _client
+                              .from('company_custom_requests')
+                              .update(updatedRoot)
+                              .eq('id', order.id);
 
                           await _notifyOnBrandCancellation(
                             reason: cancelReason,
@@ -2009,8 +2072,13 @@ class _BaseOrderDetails extends StatelessWidget {
     String readEmail(Object? v) => (v ?? '').toString().trim().toLowerCase();
     final brandCompany = firstNonEmpty(<Object?>[
       rootData['companyName'],
+      rootData['company_name'],
       rootData['brandName'],
+      rootData['brand_name'],
+      rootData['panel_companyName'],
+      rootData['panel_company_name'],
       detailsData['companyName'],
+      detailsData['company_name'],
     ], fallback: 'Brand Company');
     final campaignName = firstNonEmpty(<Object?>[
       rootData['campaignName'],
@@ -2145,11 +2213,9 @@ class _BaseOrderDetails extends StatelessWidget {
 
       for (final collection in const <String>['artist', 'client_artist']) {
         try {
-          final snap = await FirebaseFirestore.instance
-              .collection(collection)
-              .get();
-          for (final doc in snap.docs) {
-            final data = doc.data();
+          final rows = await _client.from(collection).select();
+          for (final raw in _asList(rows)) {
+            final data = _asMap(raw);
             if (!isBrandEligibleArtist(data)) continue;
             final email = readEmail(data['email']);
             if (email.isNotEmpty) targets.add(email);
@@ -2302,7 +2368,6 @@ class _BaseOrderDetails extends StatelessWidget {
     );
   }
 
-
   Future<void> _simulatePayment(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -2342,51 +2407,82 @@ class _BaseOrderDetails extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection('Company_Custom_Requests')
-          .doc(order.id);
-      final snap = await docRef.get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      final acceptedByArtistEmail =
-          ((data['acceptedByArtistEmail'] ?? '') as Object).toString().trim();
-      final orderNumber = ((data['orderNumber'] ?? '') as Object)
-          .toString()
-          .trim();
-
-      await docRef.set({
-        if (((data['status'] ?? '') as Object)
-                .toString()
-                .trim()
-                .toLowerCase() ==
-            'accepted')
-          'status': 'designing',
+      final row = await _supabaseFetchOrderRow(
+        order.id,
+        orderNumber: order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final acceptedByArtistEmail = _firstNonEmpty([
+        data['accepted_by_artist_email'],
+        data['acceptedByArtistEmail'],
+        payload['acceptedByArtistEmail'],
+        details['acceptedByArtistEmail'],
+      ]);
+      final orderNumber = _firstNonEmpty([
+        data['order_number'],
+        data['orderNumber'],
+        payload['orderNumber'],
+        details['orderNumber'],
+      ]);
+      final currentStatus = _firstNonEmpty([
+        data['status'],
+        payload['status'],
+        details['status'],
+      ]).toLowerCase();
+      final nowIso = DateTime.now().toIso8601String();
+      final paymentMap = <String, dynamic>{
+        'status': 'paid',
+        'paidAt': nowIso,
+        'paymentLink': order.paymentLink,
+      };
+      final mergedPayload = <String, dynamic>{
+        ...payload,
+        'status': currentStatus == 'accepted' ? 'designing' : payload['status'],
         'paymentStatus': 'paid',
-        'paidAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'payment_status': 'paid',
+        'paidAt': nowIso,
+        'paid_at': nowIso,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
         'paymentNotifiedArtist': acceptedByArtistEmail.isNotEmpty,
+        'payment_notified_artist': acceptedByArtistEmail.isNotEmpty,
+        if (acceptedByArtistEmail.isNotEmpty) 'paymentNotifiedArtistAt': nowIso,
         if (acceptedByArtistEmail.isNotEmpty)
-          'paymentNotifiedArtistAt': FieldValue.serverTimestamp(),
-        'payment': {
-          'status': 'paid',
-          'paidAt': FieldValue.serverTimestamp(),
-          'paymentLink': order.paymentLink,
-        },
-      }, SetOptions(merge: true));
-
-      await docRef.collection('details').doc('payload').set({
-        if (((data['status'] ?? '') as Object)
-                .toString()
-                .trim()
-                .toLowerCase() ==
-            'accepted')
-          'status': 'designing',
-        'payment': {
-          'status': 'paid',
-          'paidAt': FieldValue.serverTimestamp(),
-          'paymentLink': order.paymentLink,
-        },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+          'payment_notified_artist_at': nowIso,
+        'payment': paymentMap,
+      };
+      final mergedDetails = <String, dynamic>{
+        ...details,
+        'status': currentStatus == 'accepted' ? 'designing' : details['status'],
+        'payment': paymentMap,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
+      };
+      await _client
+          .from('company_custom_requests')
+          .update({
+            'status': currentStatus == 'accepted'
+                ? 'designing'
+                : data['status'],
+            'payment_status': 'paid',
+            'paymentStatus': 'paid',
+            'paid_at': nowIso,
+            'paidAt': nowIso,
+            'updated_at': nowIso,
+            'updatedAt': nowIso,
+            'payment_notified_artist': acceptedByArtistEmail.isNotEmpty,
+            'paymentNotifiedArtist': acceptedByArtistEmail.isNotEmpty,
+            if (acceptedByArtistEmail.isNotEmpty)
+              'payment_notified_artist_at': nowIso,
+            if (acceptedByArtistEmail.isNotEmpty)
+              'paymentNotifiedArtistAt': nowIso,
+            'payment': paymentMap,
+            'payload': mergedPayload,
+            'details': mergedDetails,
+          })
+          .eq('id', order.id);
 
       if (acceptedByArtistEmail.isNotEmpty) {
         await NotificationsService.createUserNotification(
@@ -2432,10 +2528,30 @@ class _BaseOrderDetails extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _bullet('Campaign Name', _valueOrDash(order.title)),
+          _bullet('Description', _valueOrDash(order.clientDescription)),
           _bullet('Need by', _valueOrDash(order.needByDisplay)),
           _bullet('Requested Client', _requestedClientDisplay()),
           _bullet('Requested Artist', _requestArtistDisplay()),
           _bullet('Accepted Clients', _acceptedClientsDisplay()),
+          const SizedBox(height: 10),
+          const Text(
+            'Uploaded Photos',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              fontFamily: 'ArialBold',
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _SubmittedPhotosStrip(
+            paths: order.inspirationPhotos,
+            fallbackOrderId: order.id,
+            fallbackOrderNumber: order.orderNumber,
+            sourceCollection: order.sourceCollection,
+            enableFirestoreFallback: true,
+            showAll: true,
+          ),
           // Keep in code per request, but hide from UI:
           // _bullet('Status', statusPillText),
         ],
@@ -2464,34 +2580,41 @@ class _BaseOrderDetails extends StatelessWidget {
 
     final fallback = formatRange(order.budgetMin, order.budgetMax);
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('Company_Custom_Requests')
-          .doc(order.id)
-          .get();
-      final root = doc.data() ?? const <String, dynamic>{};
-      final detail = await doc.reference
-          .collection('details')
-          .doc('payload')
-          .get();
-      final payload = detail.data() ?? const <String, dynamic>{};
-      final clientBudget =
-          (payload['clientBudget'] as Map<String, dynamic>?) ?? const {};
-      final artistBudget =
-          (payload['artistBudget'] as Map<String, dynamic>?) ??
-          (payload['budget'] as Map<String, dynamic>?) ??
-          const {};
+      final row = await _supabaseFetchOrderRow(
+        order.id,
+        orderNumber: order.orderNumber,
+      );
+      final root = row ?? const <String, dynamic>{};
+      final payload = _asMap(root['payload']);
+      final detail = _asMap(root['details']);
+      final clientBudget = _asMap(root['client_budget'])
+        ..addAll(_asMap(root['clientBudget']))
+        ..addAll(_asMap(payload['clientBudget']))
+        ..addAll(_asMap(detail['clientBudget']));
+      final artistBudget = _asMap(root['artist_budget'])
+        ..addAll(_asMap(root['artistBudget']))
+        ..addAll(_asMap(payload['artistBudget']))
+        ..addAll(_asMap(detail['artistBudget']))
+        ..addAll(_asMap(payload['budget']))
+        ..addAll(_asMap(detail['budget']));
 
       final clientMin =
-          asInt(clientBudget['min']) ?? asInt(root['clientBudgetMin']);
+          asInt(clientBudget['min']) ??
+          asInt(root['client_budget_min']) ??
+          asInt(root['clientBudgetMin']);
       final clientMax =
-          asInt(clientBudget['max']) ?? asInt(root['clientBudgetMax']);
+          asInt(clientBudget['max']) ??
+          asInt(root['client_budget_max']) ??
+          asInt(root['clientBudgetMax']);
       final artistMin =
           asInt(artistBudget['min']) ??
+          asInt(root['artist_budget_min']) ??
           asInt(root['artistBudgetMin']) ??
           asInt(root['budgetMin']) ??
           order.budgetMin;
       final artistMax =
           asInt(artistBudget['max']) ??
+          asInt(root['artist_budget_max']) ??
           asInt(root['artistBudgetMax']) ??
           asInt(root['budgetMax']) ??
           order.budgetMax;
@@ -2513,16 +2636,22 @@ class _BaseOrderDetails extends StatelessWidget {
       child: RichText(
         text: TextSpan(
           style: TextStyle(
-            color: AppColors.blackCat.withValues(alpha: 0.35),
+            color: AppColors.blackCat,
             fontWeight: FontWeight.w400,
             fontSize: 14,
           ),
           children: [
             TextSpan(
               text: '$k: ',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
             ),
-            TextSpan(text: v),
+            TextSpan(
+              text: v,
+              style: const TextStyle(color: AppColors.blackCat),
+            ),
           ],
         ),
       ),
@@ -2614,7 +2743,6 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 }
 
-
 class _ProgressCard extends StatelessWidget {
   const _ProgressCard({required this.steps});
   final List<_StepItem> steps;
@@ -2693,14 +2821,9 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.blackCat.withValues(alpha: 10),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        border: Border.all(
+          color: AppColors.blackCat.withValues(alpha: 0.12),
+        ),
       ),
       child: child,
     );
@@ -2729,7 +2852,6 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
     'Change in plans',
     'Budget concerns',
     'Unsatisfied with progress',
-    'Other',
   ];
 
   @override
@@ -3028,34 +3150,12 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   Future<List<String>> _loadFallbackPhotos() async {
     final orderId = fallbackOrderId.trim();
     if (orderId.isEmpty) return const <String>[];
-    final collection = sourceCollection.trim().isEmpty
-        ? 'Company_Custom_Requests'
-        : sourceCollection.trim();
-    var doc = await FirebaseFirestore.instance
-        .collection(collection)
-        .doc(orderId)
-        .get();
-    if (!doc.exists) {
-      final orderNo = fallbackOrderNumber.trim();
-      if (orderNo.isNotEmpty) {
-        final query = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('orderNumber', isEqualTo: orderNo)
-            .limit(1)
-            .get();
-        if (query.docs.isNotEmpty) {
-          doc = query.docs.first;
-        }
-      }
-    }
-    if (!doc.exists) return const <String>[];
-    final root = doc.data() ?? const <String, dynamic>{};
-    final detail = await doc.reference
-        .collection('details')
-        .doc('payload')
-        .get();
-    final details = detail.data() ?? const <String, dynamic>{};
-    final payload = (details['payload'] as Map<String, dynamic>?) ?? details;
+    final root = await _supabaseFetchOrderRow(
+      fallbackOrderId,
+      orderNumber: fallbackOrderNumber,
+    );
+    if (root == null) return const <String>[];
+    final payload = _asMap(root['payload']);
     final requestDetails =
         (payload['requestDetails'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
@@ -3109,28 +3209,50 @@ class _SubmittedPhotosStrip extends StatelessWidget {
 
     final companyUid = firstNonEmpty(<Object?>[
       root['companyUid'],
+      root['company_uid'],
       root['requesterUid'],
+      root['requester_uid'],
       root['createdByUid'],
+      root['created_by_uid'],
       root['uid'],
       payload['companyUid'],
+      payload['company_uid'],
       payload['requesterUid'],
+      payload['requester_uid'],
       payload['createdByUid'],
+      payload['created_by_uid'],
       payload['uid'],
     ]);
 
     final folderRefs = <String>[];
     final baseFolders = <String>[
-      if (companyUid.isNotEmpty) 'client_custom_requests/$companyUid/$orderId',
-      if (companyUid.isNotEmpty) 'company_custom_requests/$companyUid/$orderId',
-      'client_custom_requests/unknown/$orderId',
-      'company_custom_requests/unknown/$orderId',
+      if (companyUid.isNotEmpty) 'company-custom-requests/$companyUid/$orderId',
+      'company-custom-requests/unknown/$orderId',
     ];
     for (final folder in baseFolders) {
       try {
-        final list = await FirebaseStorage.instance.ref(folder).listAll();
-        for (final item in list.items) {
-          final fullPath = item.fullPath.trim();
-          if (fullPath.isNotEmpty) folderRefs.add(fullPath);
+        final storage = _client.storage.from('company-custom-requests');
+        final list = await storage.list(path: folder);
+        for (final item in _asList(list)) {
+          final name = _firstNonEmpty([
+            (() {
+              try {
+                return item.name;
+              } catch (_) {
+                return null;
+              }
+            })(),
+            (() {
+              try {
+                return item.path;
+              } catch (_) {
+                return null;
+              }
+            })(),
+          ]);
+          if (name.isEmpty) continue;
+          final fullPath = '$folder/$name';
+          folderRefs.add(_normalizeStorageUrl(fullPath));
         }
       } catch (_) {}
     }
@@ -3452,33 +3574,85 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         setState(() => _promptProcessed = true);
         return;
       }
-      final ref = FirebaseFirestore.instance
-          .collection(_orderCollection)
-          .doc(widget.order.id);
-      final snap = await ref.get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      if (data['clientReviewPromptSentAt'] != null) {
+      final row = await _supabaseFetchOrderRow(
+        widget.order.id,
+        orderNumber: widget.order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final prompt = _asMap(payload['clientReviewPrompt'])
+        ..addAll(_asMap(details['clientReviewPrompt']));
+      final sentAt = _firstNonEmpty([
+        data['client_review_prompt_sent_at'],
+        data['clientReviewPromptSentAt'],
+        payload['clientReviewPromptSentAt'],
+        details['clientReviewPromptSentAt'],
+      ]);
+      if (sentAt.isNotEmpty || prompt['sentAt'] != null) {
         if (!mounted) return;
         setState(() {
           _promptProcessed = true;
-          _promptChannelLabel = _textOrEmpty(data['clientReviewPromptChannel']);
+          _promptChannelLabel = _textOrEmpty(
+            data['client_review_prompt_channel'] ??
+                data['clientReviewPromptChannel'] ??
+                payload['clientReviewPromptChannel'] ??
+                details['clientReviewPromptChannel'] ??
+                prompt['channel'],
+          );
         });
         return;
       }
 
       final prefs = await _loadClientContactPrefs();
       final channelLabel = await _sendPromptByPreference(prefs);
-      await ref.set({
-        'clientReviewPromptSentAt': FieldValue.serverTimestamp(),
+      final nowIso = DateTime.now().toIso8601String();
+      final mergedPayload = <String, dynamic>{
+        ...payload,
+        'clientReviewPromptSentAt': nowIso,
+        'client_review_prompt_sent_at': nowIso,
         'clientReviewPromptChannel': channelLabel,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await ref.collection('details').doc('payload').set({
+        'client_review_prompt_channel': channelLabel,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
         'clientReviewPrompt': {
-          'sentAt': FieldValue.serverTimestamp(),
+          ...prompt,
+          'sentAt': nowIso,
           'channel': channelLabel,
         },
-      }, SetOptions(merge: true));
+        'reviewPrompt': {
+          ..._asMap(payload['reviewPrompt']),
+          'sentAt': nowIso,
+          'channel': channelLabel,
+        },
+      };
+      final mergedDetails = <String, dynamic>{
+        ...details,
+        'clientReviewPromptSentAt': nowIso,
+        'client_review_prompt_sent_at': nowIso,
+        'clientReviewPromptChannel': channelLabel,
+        'client_review_prompt_channel': channelLabel,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
+        'clientReviewPrompt': {
+          ...prompt,
+          'sentAt': nowIso,
+          'channel': channelLabel,
+        },
+      };
+      await _client
+          .from('company_custom_requests')
+          .update({
+            'client_review_prompt_sent_at': nowIso,
+            'clientReviewPromptSentAt': nowIso,
+            'client_review_prompt_channel': channelLabel,
+            'clientReviewPromptChannel': channelLabel,
+            'updated_at': nowIso,
+            'updatedAt': nowIso,
+            'payload': mergedPayload,
+            'details': mergedDetails,
+          })
+          .eq('id', widget.order.id);
 
       if (!mounted) return;
       setState(() {
@@ -3492,40 +3666,29 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   }
 
   Future<_ClientContactPrefs> _loadClientContactPrefs() async {
-    final auth = FirebaseAuth.instance.currentUser;
-    final email = (auth?.email ?? '').trim().toLowerCase();
-    final uid = (auth?.uid ?? '').trim();
-    final db = FirebaseFirestore.instance;
-
-    DocumentSnapshot<Map<String, dynamic>>? found;
+    final email = _currentEmail;
+    final uid = (_currentUser?.id ?? '').trim();
+    Map<String, dynamic>? found;
     if (uid.isNotEmpty) {
-      final c = await db.collection('client').doc(uid).get();
-      if (c.exists) {
-        found = c;
-      } else {
-        final ca = await db.collection('client_artist').doc(uid).get();
-        if (ca.exists) found = ca;
+      for (final table in const <String>['client', 'client_artist']) {
+        try {
+          final rows = await _client
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .limit(1);
+          if (rows.isNotEmpty) {
+            found = Map<String, dynamic>.from(rows.first as Map);
+            break;
+          }
+        } catch (_) {}
       }
     }
     if (found == null && email.isNotEmpty) {
-      final q1 = await db
-          .collection('client')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (q1.docs.isNotEmpty) {
-        found = q1.docs.first;
-      } else {
-        final q2 = await db
-            .collection('client_artist')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (q2.docs.isNotEmpty) found = q2.docs.first;
-      }
+      found = await _supabaseFetchClientRowByEmail(email);
     }
 
-    final data = found?.data() ?? const <String, dynamic>{};
+    final data = found ?? const <String, dynamic>{};
     final profile =
         (data['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
     final prefs =
@@ -3694,24 +3857,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return parsed.clamp(0, 1000000000);
   }
 
-  Future<DocumentReference<Map<String, dynamic>>?> _resolveArtistDocRef(
-    String artistEmail,
-  ) async {
-    final email = artistEmail.trim().toLowerCase();
-    if (email.isEmpty) return null;
-    final db = FirebaseFirestore.instance;
-
-    for (final collection in const <String>['artist', 'client_artist']) {
-      final query = await db
-          .collection(collection)
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (query.docs.isNotEmpty) return query.docs.first.reference;
-    }
-    return null;
-  }
-
   Future<bool> _submitReview() async {
     if (_rating <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3733,130 +3878,168 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       final customTipAmount = _selectedTipPercent == null
           ? _customTipAmount
           : 0;
-      final db = FirebaseFirestore.instance;
-      final ref = db.collection(_orderCollection).doc(widget.order.id);
       final artistEmail = widget.order.acceptedByArtistEmail
           .trim()
           .toLowerCase();
-      final artistRef = await _resolveArtistDocRef(artistEmail);
+      final row = await _supabaseFetchOrderRow(
+        widget.order.id,
+        orderNumber: widget.order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
       double? previousRatingValue;
-
-      await db.runTransaction((tx) async {
-        final orderSnap = await tx.get(ref);
-        final orderData = orderSnap.data() ?? const <String, dynamic>{};
-        final prevRating =
-            _asDouble(orderData['clientRating']) ??
-            _asDouble(
-              (orderData['clientReview'] as Map<String, dynamic>?)?['rating'],
-            );
-        previousRatingValue = prevRating;
-
-        tx.set(ref, {
-          'clientRating': _rating,
-          'clientReviewText': comment,
-          'clientReviewSubmittedAt': FieldValue.serverTimestamp(),
-          'clientTipAmount': tipAmount,
-          'clientTipPercent': tipPercent,
-          'clientTipCustomAmount': customTipAmount,
-          'clientTipSubmittedAt': tipAmount > 0
-              ? FieldValue.serverTimestamp()
-              : null,
-          'updatedAt': FieldValue.serverTimestamp(),
-          'clientReview': {
+      previousRatingValue =
+          _asDouble(data['client_rating']) ??
+          _asDouble(data['clientRating']) ??
+          _asDouble(_asMap(payload['clientReview'])['rating']);
+      final nowIso = DateTime.now().toIso8601String();
+      final reviewMap = <String, dynamic>{
+        'rating': _rating,
+        'comment': comment,
+        'submittedAt': nowIso,
+      };
+      final tipMap = <String, dynamic>{
+        'amount': tipAmount,
+        'percent': tipPercent,
+        'customAmount': customTipAmount,
+        'fundingSource': 'bank_account',
+        'submittedAt': tipAmount > 0 ? nowIso : null,
+      };
+      await _client
+          .from('company_custom_requests')
+          .update({
+            'client_rating': _rating,
             'rating': _rating,
-            'comment': comment,
-            'submittedAt': FieldValue.serverTimestamp(),
-          },
-          'clientTip': {
-            'amount': tipAmount,
-            'percent': tipPercent,
-            'customAmount': customTipAmount,
-            'fundingSource': 'bank_account',
-            'submittedAt': tipAmount > 0 ? FieldValue.serverTimestamp() : null,
-          },
-        }, SetOptions(merge: true));
-      });
-
-      await ref.collection('details').doc('payload').set({
-        'clientReview': {
-          'rating': _rating,
-          'comment': comment,
-          'submittedAt': FieldValue.serverTimestamp(),
-        },
-        'clientTip': {
-          'amount': tipAmount,
-          'percent': tipPercent,
-          'customAmount': customTipAmount,
-          'fundingSource': 'bank_account',
-          'submittedAt': tipAmount > 0 ? FieldValue.serverTimestamp() : null,
-        },
-      }, SetOptions(merge: true));
-
-      if (artistRef != null) {
-        await bestEffort(() async {
-          final artistSnap = await artistRef.get();
-          final artistData = artistSnap.data() ?? const <String, dynamic>{};
-          final stats =
-              (artistData['stats'] as Map<String, dynamic>?) ??
-              const <String, dynamic>{};
-          final currentCount = _asNonNegativeInt(
-            stats['reviewCount'] ??
-                stats['reviews'] ??
-                artistData['reviewCount'] ??
-                artistData['reviews'] ??
-                artistData['panel_reviews'],
-          );
-          final currentRating =
-              _asDouble(
-                stats['rating'] ??
-                    stats['averageRating'] ??
-                    artistData['rating'] ??
-                    artistData['averageRating'] ??
-                    artistData['panel_rating'],
-              ) ??
-              0.0;
-          final hadPrevious = (previousRatingValue ?? 0) > 0;
-          final safeCount = currentCount <= 0
-              ? (hadPrevious ? 1 : 0)
-              : currentCount;
-          final nextCount = hadPrevious ? safeCount : (safeCount + 1);
-          final nextRating = currentRating >= _rating ? currentRating : _rating;
-
-          await artistRef.set({
-            'stats': {
-              'rating': nextRating,
-              'averageRating': nextRating,
-              'reviewCount': nextCount,
-              'reviews': nextCount,
+            'clientReviewText': comment,
+            'client_review_text': comment,
+            'reviewText': comment,
+            'review_text': comment,
+            'clientReviewSubmittedAt': nowIso,
+            'client_review_submitted_at': nowIso,
+            'reviewSubmittedAt': nowIso,
+            'review_submitted_at': nowIso,
+            'clientTipAmount': tipAmount,
+            'clientTipPercent': tipPercent,
+            'clientTipCustomAmount': customTipAmount,
+            'clientTipSubmittedAt': tipAmount > 0 ? nowIso : null,
+            'updatedAt': nowIso,
+            'updated_at': nowIso,
+            'clientReview': reviewMap,
+            'clientReviewPrompt': _asMap(payload['clientReviewPrompt']),
+            'clientTip': tipMap,
+            'payload': {
+              ...payload,
+              'clientReview': reviewMap,
+              'clientTip': tipMap,
+              'clientRating': _rating,
+              'rating': _rating,
+              'clientReviewText': comment,
+              'reviewText': comment,
+              'clientReviewSubmittedAt': nowIso,
+              'reviewSubmittedAt': nowIso,
+              'updatedAt': nowIso,
+              'updated_at': nowIso,
             },
+            'details': {
+              ...details,
+              'clientReview': reviewMap,
+              'clientTip': tipMap,
+              'clientRating': _rating,
+              'rating': _rating,
+              'clientReviewText': comment,
+              'reviewText': comment,
+              'clientReviewSubmittedAt': nowIso,
+              'reviewSubmittedAt': nowIso,
+              'updatedAt': nowIso,
+              'updated_at': nowIso,
+            },
+          })
+          .eq('id', widget.order.id);
+
+      await bestEffort(() async {
+        final artistRow = await _supabaseFetchArtistRowByEmail(artistEmail);
+        if (artistRow == null) return;
+        final artistData = artistRow;
+        final stats = _asMap(artistData['stats']);
+        final currentCount = _asNonNegativeInt(
+          stats['reviewCount'] ??
+              stats['reviews'] ??
+              artistData['reviewCount'] ??
+              artistData['reviews'] ??
+              artistData['panel_reviews'],
+        );
+        final currentRating =
+            _asDouble(
+              stats['rating'] ??
+                  stats['averageRating'] ??
+                  artistData['rating'] ??
+                  artistData['averageRating'] ??
+                  artistData['panel_rating'],
+            ) ??
+            0.0;
+        final hadPrevious = (previousRatingValue ?? 0) > 0;
+        final safeCount = currentCount <= 0
+            ? (hadPrevious ? 1 : 0)
+            : currentCount;
+        final nextCount = hadPrevious ? safeCount : (safeCount + 1);
+        final nextRating = currentRating >= _rating ? currentRating : _rating;
+        final update = {
+          'stats': {
             'rating': nextRating,
             'averageRating': nextRating,
             'reviewCount': nextCount,
             'reviews': nextCount,
-            'panel_rating': nextRating,
-            'panel_reviews': nextCount,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        });
-      }
+          },
+          'rating': nextRating,
+          'averageRating': nextRating,
+          'reviewCount': nextCount,
+          'reviews': nextCount,
+          'panel_rating': nextRating,
+          'panel_reviews': nextCount,
+          'updatedAt': nowIso,
+          'updated_at': nowIso,
+        };
+        final artistId = _firstNonEmpty([
+          artistData['id'],
+          artistData['artist_id'],
+          artistData['client_artist_id'],
+        ]);
+        if (artistId.isNotEmpty) {
+          for (final table in const <String>['artist', 'client_artist']) {
+            try {
+              await _client.from(table).update(update).eq('id', artistId);
+            } catch (_) {}
+          }
+        }
+      });
 
       if (tipAmount > 0) {
         await bestEffort(() async {
-          await FirebaseFirestore.instance.collection('tip_payout_queue').add({
+          await _client.from('tip_payout_queue').insert({
+            'order_id': widget.order.id,
             'orderId': widget.order.id,
+            'order_number': widget.order.orderNumber,
             'orderNumber': widget.order.orderNumber,
+            'source_collection': _orderCollection,
             'sourceCollection': _orderCollection,
+            'artist_email': artistEmail,
             'artistEmail': artistEmail,
+            'artist_name': widget.order.artistName,
             'artistName': widget.order.artistName,
-            'clientEmail': (FirebaseAuth.instance.currentUser?.email ?? '')
-                .trim()
-                .toLowerCase(),
+            'client_email': _currentEmail,
+            'clientEmail': _currentEmail,
+            'tip_amount': tipAmount,
             'tipAmount': tipAmount,
+            'tip_percent': tipPercent,
             'tipPercent': tipPercent,
+            'custom_tip_amount': customTipAmount,
             'customTipAmount': customTipAmount,
+            'funding_source': 'bank_account',
             'fundingSource': 'bank_account',
             'status': 'queued',
-            'createdAt': FieldValue.serverTimestamp(),
+            'created_at': nowIso,
+            'createdAt': nowIso,
           });
         });
       }
@@ -3908,33 +4091,46 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
   Future<void> _loadLatestReviewFromDb() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection(_orderCollection)
-          .doc(widget.order.id)
-          .get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      final review =
-          (data['clientReview'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final tip =
-          (data['clientTip'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final submittedAtRaw =
-          data['clientReviewSubmittedAt'] ?? review['submittedAt'];
-      DateTime? submittedAt;
-      if (submittedAtRaw is Timestamp) submittedAt = submittedAtRaw.toDate();
+      final row = await _supabaseFetchOrderRow(
+        widget.order.id,
+        orderNumber: widget.order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final review = _asMap(data['clientReview'])
+        ..addAll(_asMap(payload['clientReview']));
+      final tip = _asMap(data['clientTip'])
+        ..addAll(_asMap(payload['clientTip']));
+      final submittedAtRaw = _firstNonEmpty([
+        data['client_review_submitted_at'],
+        data['clientReviewSubmittedAt'],
+        review['submittedAt'],
+      ]);
+      final submittedAt = _parseDate(submittedAtRaw);
 
       final latestRating =
           _asDouble(data['clientRating']) ??
+          _asDouble(data['client_rating']) ??
           _asDouble(review['rating']) ??
           _rating;
       final latestComment =
-          (data['clientReviewText'] ?? review['comment'] ?? '')
+          (data['client_review_text'] ??
+                  data['clientReviewText'] ??
+                  review['comment'] ??
+                  details['clientReviewText'] ??
+                  '')
               .toString()
               .trim();
       final latestTipAmount =
-          _asDouble(data['clientTipAmount']) ?? _asDouble(tip['amount']) ?? 0;
-      final latestTipPercentRaw = data['clientTipPercent'] ?? tip['percent'];
+          _asDouble(data['clientTipAmount']) ??
+          _asDouble(data['client_tip_amount']) ??
+          _asDouble(tip['amount']) ??
+          0;
+      final latestTipPercentRaw =
+          data['clientTipPercent'] ??
+          data['client_tip_percent'] ??
+          tip['percent'];
       final latestTipPercent = latestTipPercentRaw is num
           ? latestTipPercentRaw.toInt()
           : int.tryParse((latestTipPercentRaw ?? '').toString().trim());
@@ -4071,13 +4267,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             focusedBorder: const OutlineInputBorder(
@@ -4160,13 +4360,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               focusedBorder: const OutlineInputBorder(
@@ -4355,7 +4559,6 @@ class _AcceptedArtistMeta {
   final double? rating;
 }
 
-
 class DeliveredOrderDetailsPage extends StatelessWidget {
   const DeliveredOrderDetailsPage({super.key, required this.order});
   final dynamic order;
@@ -4451,5 +4654,3 @@ class CancelledOrderDetailsPage extends StatelessWidget {
     );
   }
 }
-
-

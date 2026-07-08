@@ -15,7 +15,6 @@ class CompanyClientRequestCard extends StatelessWidget {
     required this.avatar,
     required this.previewImage,
     required this.onTap,
-    this.showDirectChip = false,
     this.showNfcChip = false,
   });
 
@@ -28,7 +27,6 @@ class CompanyClientRequestCard extends StatelessWidget {
   final Widget avatar;
   final Widget previewImage;
   final VoidCallback onTap;
-  final bool showDirectChip;
   final bool showNfcChip;
 
   @override
@@ -95,31 +93,6 @@ class CompanyClientRequestCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      if (showDirectChip)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFFB89A66)),
-                            color: const Color(0xFFFFF7EA),
-                          ),
-                          child: Text(
-                            'Direct',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11 * scale,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
                   const SizedBox(height: 6),
                   _field(
                     'Order #',

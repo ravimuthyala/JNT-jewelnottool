@@ -1,11 +1,14 @@
 import 'dart:io';
 
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
+import '../services/storage_url_resolver.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
@@ -14,7 +17,9 @@ import 'track_order_page.dart';
 /// But to keep this file self-contained + compile, we accept `dynamic order`.
 /// (We only read simple fields with fallback.)
 class _OrderSafe {
+  final String sourceCollection;
   final String id;
+  final String orderNumber;
   final String title;
   final String subtitle;
   final bool hasAssignedArtist;
@@ -25,6 +30,7 @@ class _OrderSafe {
   final String cancelReason;
   final List<String> inspirationPhotos;
   final String needByDisplay;
+  final String jntRevealDateDisplay;
   final String nailShape;
   final String nailLength;
   final int? budgetMin;
@@ -35,6 +41,8 @@ class _OrderSafe {
   final int? artistAcceptedAmount;
   final String paymentStatus;
   final String paymentLink;
+  final bool openToClientPool;
+  final String selectedClientName;
   final String selectedArtistName;
   final DateTime? paidAt;
   final List<String> artistCompletedPhotos;
@@ -50,6 +58,8 @@ class _OrderSafe {
   final List<String> designPreviewPhotos;
   final String clientEmail;
   final String acceptedByArtistEmail;
+  final String directClientStatus;
+  final String directArtistStatus;
   final String artistName;
   final String artistProfileImage;
   final double? clientRating;
@@ -61,7 +71,9 @@ class _OrderSafe {
   final DateTime? deliveredAt;
 
   const _OrderSafe({
+    required this.sourceCollection,
     required this.id,
+    required this.orderNumber,
     required this.title,
     required this.subtitle,
     required this.hasAssignedArtist,
@@ -72,6 +84,7 @@ class _OrderSafe {
     required this.cancelReason,
     required this.inspirationPhotos,
     required this.needByDisplay,
+    required this.jntRevealDateDisplay,
     required this.nailShape,
     required this.nailLength,
     required this.budgetMin,
@@ -82,6 +95,8 @@ class _OrderSafe {
     required this.artistAcceptedAmount,
     required this.paymentStatus,
     required this.paymentLink,
+    required this.openToClientPool,
+    required this.selectedClientName,
     required this.selectedArtistName,
     required this.paidAt,
     required this.artistCompletedPhotos,
@@ -97,6 +112,8 @@ class _OrderSafe {
     required this.designPreviewPhotos,
     required this.clientEmail,
     required this.acceptedByArtistEmail,
+    required this.directClientStatus,
+    required this.directArtistStatus,
     required this.artistName,
     required this.artistProfileImage,
     required this.clientRating,
@@ -111,22 +128,76 @@ class _OrderSafe {
   static _OrderSafe from(dynamic o) {
     String s(dynamic v, String fb) =>
         (v is String && v.trim().isNotEmpty) ? v : fb;
+    dynamic tryRead(dynamic Function() reader) {
+      try {
+        return reader();
+      } catch (_) {
+        return null;
+      }
+    }
+
     double? d(dynamic v) {
       if (v is num) return v.toDouble();
       return double.tryParse((v ?? '').toString().trim());
     }
 
+    Map<String, dynamic> asMap(dynamic value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        return value.map((k, v) => MapEntry(k.toString(), v));
+      }
+      return const <String, dynamic>{};
+    }
+
     DateTime? dt(dynamic v) {
-      if (v is DateTime) return v;
-      if (v is Timestamp) return v.toDate();
-      return null;
+      return _parseDate(v);
     }
 
     final detailMap = o is Map ? (o['details'] as Map?) : null;
     final payloadMap = detailMap is Map ? (detailMap['payload'] as Map?) : null;
+    final requestDetailsMap = payloadMap is Map
+        ? (payloadMap['requestDetails'] as Map?)
+        : null;
+    final orderMap = payloadMap is Map ? (payloadMap['order'] as Map?) : null;
     final designMap = payloadMap is Map
         ? (payloadMap['designApproval'] as Map?)
         : null;
+    final nailPrefsSources = <Object?>[
+      (o is Map ? o['nailPreferences'] : null),
+      payloadMap?['nailPreferences'],
+      requestDetailsMap?['nailPreferences'],
+      orderMap?['nailPreferences'],
+    ];
+    final leftHandSources = <Object?>[
+      (o is Map ? o['leftHandDimensions'] : null),
+      payloadMap?['leftHandDimensions'],
+      requestDetailsMap?['leftHandDimensions'],
+      orderMap?['leftHandDimensions'],
+    ];
+    final rightHandSources = <Object?>[
+      (o is Map ? o['rightHandDimensions'] : null),
+      payloadMap?['rightHandDimensions'],
+      requestDetailsMap?['rightHandDimensions'],
+      orderMap?['rightHandDimensions'],
+    ];
+    List<String> listOrEmpty(dynamic v) {
+      if (v is List) return List<String>.from(v.whereType<String>());
+      return const <String>[];
+    }
+
+    String dateDisplayFrom(List<Object?> values) {
+      for (final value in values) {
+        final raw = (value ?? '').toString().trim();
+        if (raw.isEmpty) continue;
+        final parsed = dt(value) ?? DateTime.tryParse(raw);
+        if (parsed != null) {
+          return '${parsed.month.toString().padLeft(2, '0')}/${parsed.day.toString().padLeft(2, '0')}/${parsed.year}';
+        }
+        return raw;
+      }
+      return '';
+    }
+
     List<String> collectPhotoRefs(List<dynamic> values) {
       final out = <String>[];
       final seen = <String>{};
@@ -134,7 +205,7 @@ class _OrderSafe {
         if (value == null) return;
         if (value is String) {
           final s = value.trim();
-          if (s.isNotEmpty && seen.add(s)) out.add(s);
+          if (_SubmittedPhotosStrip._isUsablePhotoRef(s) && seen.add(s)) out.add(s);
           return;
         }
         if (value is Iterable) {
@@ -144,8 +215,7 @@ class _OrderSafe {
           return;
         }
         if (value is Map) {
-          final map = Map<String, dynamic>.from(value);
-          const keys = <String>[
+          final keys = <String>[
             'url',
             'downloadUrl',
             'downloadURL',
@@ -157,13 +227,12 @@ class _OrderSafe {
             'fullPath',
             'ref',
             'photo',
-            'src',
-            'uri',
+            'value',
           ];
           for (final key in keys) {
-            if (map.containsKey(key)) addValue(map[key]);
+            if (value.containsKey(key)) addValue(value[key]);
           }
-          map.forEach((k, v) {
+          value.forEach((k, v) {
             final lower = k.toString().toLowerCase();
             if (lower.contains('photo') ||
                 lower.contains('image') ||
@@ -183,13 +252,48 @@ class _OrderSafe {
       return out;
     }
 
-    List<String> listOrEmpty(dynamic v) {
-      if (v is List) return List<String>.from(v.whereType<String>());
-      return const <String>[];
+    Map<String, String> handDimsFromSources(List<Object?> sources) {
+      Map<String, String> readFrom(dynamic value) {
+        final map = _dimsMap(value);
+        if (map.isNotEmpty) return map;
+        final nested = asMap(asMap(value)['dimensions']);
+        if (nested.isNotEmpty) {
+          final nestedDims = _dimsMap(nested);
+          if (nestedDims.isNotEmpty) return nestedDims;
+        }
+        if (value is! Map) return const <String, String>{};
+        String pick(String key, {required bool left}) {
+          final values = left
+              ? <String>[key, 'l${key[0].toUpperCase()}${key.substring(1)}']
+              : <String>[key, 'r${key[0].toUpperCase()}${key.substring(1)}'];
+          for (final candidate in values) {
+            final raw = value[candidate];
+            final text = (raw ?? '').toString().trim();
+            if (text.isNotEmpty) return text;
+          }
+          return '';
+        }
+
+        return <String, String>{
+          'thumb': pick('thumb', left: true),
+          'index': pick('index', left: true),
+          'middle': pick('middle', left: true),
+          'ring': pick('ring', left: true),
+          'pinky': pick('pinky', left: true),
+        };
+      }
+
+      for (final source in sources) {
+        final hand = readFrom(source);
+        if (hand.isNotEmpty) return hand;
+      }
+      return const <String, String>{};
     }
 
     return _OrderSafe(
+      sourceCollection: 'Company_Custom_Requests',
       id: s(o?.id, 'order'),
+      orderNumber: s(o?.orderNumber, ''),
       title: s(o?.title, 'Artist'),
       subtitle: s(o?.subtitle, ''),
       hasAssignedArtist: o?.hasAssignedArtist is bool
@@ -204,36 +308,76 @@ class _OrderSafe {
         o?.inspirationPhotos,
         payloadMap?['brandInspirationPhotos'],
         payloadMap?['inspirationPhotos'],
-        payloadMap?['clientImages'],
-        payloadMap?['photos'],
         payloadMap?['inspirationPhoto'],
         payloadMap?['inspirationPhotoUrl'],
-        payloadMap?['previewImage'],
-        payloadMap?['previewImageAsset'],
-        detailMap?['brandInspirationPhotos'],
-        detailMap?['inspirationPhotos'],
-        detailMap?['clientImages'],
-        detailMap?['photos'],
-        detailMap?['inspirationPhoto'],
-        detailMap?['inspirationPhotoUrl'],
-        detailMap?['inspirationPhotoUrls'],
-        detailMap?['inspirationPhotoRefs'],
-        detailMap?['previewImage'],
-        detailMap?['previewImageAsset'],
+        requestDetailsMap?['brandInspirationPhotos'],
+        requestDetailsMap?['inspirationPhotos'],
+        requestDetailsMap?['inspirationPhoto'],
+        requestDetailsMap?['inspirationPhotoUrl'],
+        requestDetailsMap?['inspirationPhotoUrls'],
+        requestDetailsMap?['inspirationPhotoRefs'],
+        orderMap?['brandInspirationPhotos'],
+        orderMap?['inspirationPhotos'],
+        orderMap?['inspirationPhoto'],
+        orderMap?['inspirationPhotoUrl'],
       ]),
       needByDisplay: s(o?.needByDisplay, ''),
+      jntRevealDateDisplay: dateDisplayFrom(<Object?>[
+        tryRead(() => (o as dynamic).jntRevealDateDisplay),
+        tryRead(() => (o as dynamic).jntRevealDate),
+        tryRead(() => (o as dynamic).jntRevealDateValue),
+        tryRead(() => (o as dynamic).revealDate),
+        (o is Map ? o['jnt_reveal_date'] : null),
+        (o is Map ? o['jntRevealDate'] : null),
+        (o is Map ? o['jnt_reveal_date_display'] : null),
+        (o is Map ? o['jntRevealDateDisplay'] : null),
+        payloadMap?['jntRevealDate'],
+        payloadMap?['jnt_reveal_date'],
+        payloadMap?['revealDate'],
+        payloadMap?['jntRevealDateDisplay'],
+        requestDetailsMap?['jntRevealDate'],
+        requestDetailsMap?['jnt_reveal_date'],
+        requestDetailsMap?['revealDate'],
+        requestDetailsMap?['jntRevealDateDisplay'],
+        orderMap?['jntRevealDate'],
+        orderMap?['jnt_reveal_date'],
+        orderMap?['revealDate'],
+        orderMap?['jntRevealDateDisplay'],
+      ]),
       nailShape: s(o?.nailShape, ''),
       nailLength: s(o?.nailLength, ''),
       budgetMin: o?.budgetMin is int ? o.budgetMin as int : null,
       budgetMax: o?.budgetMax is int ? o.budgetMax as int : null,
-      leftHandDimensions: _dimsMap(o?.leftHandDimensions),
-      rightHandDimensions: _dimsMap(o?.rightHandDimensions),
+      leftHandDimensions: handDimsFromSources([
+        ...leftHandSources,
+        ...nailPrefsSources,
+      ]),
+      rightHandDimensions: handDimsFromSources([
+        ...rightHandSources,
+        ...nailPrefsSources,
+      ]),
       imageAsset: s(o?.imageAsset, 'assets/images/order_thumb_1.png'),
       artistAcceptedAmount: o?.artistAcceptedAmount is int
           ? o.artistAcceptedAmount as int
           : null,
       paymentStatus: s(o?.paymentStatus, ''),
       paymentLink: s(o?.paymentLink, ''),
+      openToClientPool: (tryRead(() => (o as dynamic).openToClientPool) is bool)
+          ? (tryRead(() => (o as dynamic).openToClientPool) as bool)
+          : ((payloadMap?['openToClientPool'] is bool)
+                ? (payloadMap?['openToClientPool'] as bool)
+                : ((orderMap?['openToClientPool'] is bool)
+                      ? (orderMap?['openToClientPool'] as bool)
+                      : true)),
+      selectedClientName: s(
+        tryRead(() => (o as dynamic).selectedClientName) ??
+            tryRead(() => (o as dynamic).selectedClient) ??
+            payloadMap?['selectedClientName'] ??
+            payloadMap?['selectedClient'] ??
+            orderMap?['selectedClientName'] ??
+            orderMap?['selectedClient'],
+        '',
+      ),
       selectedArtistName: s(
         o?.selectedArtistName ??
             o?.selectedArtist ??
@@ -266,6 +410,16 @@ class _OrderSafe {
       ),
       clientEmail: s(o?.clientEmail, ''),
       acceptedByArtistEmail: s(o?.acceptedByArtistEmail, ''),
+      directClientStatus: s(
+        tryRead(() => (o as dynamic).directClientStatus) ??
+            payloadMap?['directClientStatus'],
+        '',
+      ).toLowerCase(),
+      directArtistStatus: s(
+        tryRead(() => (o as dynamic).directArtistStatus) ??
+            payloadMap?['directArtistStatus'],
+        '',
+      ).toLowerCase(),
       artistName: s(o?.artistName, ''),
       artistProfileImage: s(o?.artistProfileImage, ''),
       clientRating: d(o?.rating),
@@ -439,6 +593,138 @@ class _OrderSafe {
   }
 }
 
+SupabaseClient get _client => Supabase.instance.client;
+
+User? get _currentUser => _client.auth.currentUser;
+
+String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
+String get _currentName {
+  final metadata = _currentUser?.userMetadata;
+  return _firstNonEmpty([
+    metadata?['name'],
+    metadata?['full_name'],
+    metadata?['display_name'],
+    _currentUser?.email,
+  ]);
+}
+
+String _firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+  for (final value in values) {
+    final text = (value ?? '').toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return fallback;
+}
+
+DateTime? _parseDate(dynamic value) {
+  if (value is DateTime) return value;
+  if (value is String && value.trim().isNotEmpty) {
+    return DateTime.tryParse(value.trim());
+  }
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.round());
+  return null;
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, innerValue) => MapEntry(key.toString(), innerValue));
+  }
+  return const <String, dynamic>{};
+}
+
+List<dynamic> _asList(dynamic value) {
+  if (value is List<dynamic>) return value;
+  if (value is List) return value.toList(growable: false);
+  return const <dynamic>[];
+}
+
+String _normalizeStorageUrl(dynamic raw) {
+  final value = (raw ?? '').toString().trim();
+  if (value.isEmpty) return '';
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    return value;
+  }
+  if (value.startsWith('gs://')) return value;
+  if (value.startsWith('data:image/')) return value;
+  return value;
+}
+
+Future<Map<String, dynamic>?> _supabaseFetchOrderRow(
+  String orderId, {
+  String orderNumber = '',
+}) async {
+  final id = orderId.trim();
+  if (id.isNotEmpty) {
+    try {
+      final rows = await _client
+          .from('company_custom_requests')
+          .select()
+          .eq('id', id)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  final number = orderNumber.trim();
+  if (number.isNotEmpty) {
+    try {
+      final rows = await _client
+          .from('company_custom_requests')
+          .select()
+          .eq('order_number', number)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+Future<Map<String, dynamic>?> _supabaseFetchArtistRowByEmail(
+  String email,
+) async {
+  final normalized = email.trim().toLowerCase();
+  if (normalized.isEmpty) return null;
+  for (final table in const <String>['artist', 'client_artist']) {
+    try {
+      final rows = await _client
+          .from(table)
+          .select()
+          .eq('email', normalized)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+Future<Map<String, dynamic>?> _supabaseFetchClientRowByEmail(
+  String email,
+) async {
+  final normalized = email.trim().toLowerCase();
+  if (normalized.isEmpty) return null;
+  for (final table in const <String>['client', 'client_artist']) {
+    try {
+      final rows = await _client
+          .from(table)
+          .select()
+          .eq('email', normalized)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return Map<String, dynamic>.from(rows.first as Map);
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
 class _OrderGroupClient {
   const _OrderGroupClient({
     this.clientId = '',
@@ -495,13 +781,20 @@ class InProgressOrderDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
+    final hasArtistCompletedArt = o.artistCompletedPhotos.isNotEmpty;
 
     return _BaseOrderDetails(
       title: 'Order Details',
-      statusPillText: 'In Progress',
-      statusPillColor: AppColors.balletSlippers,
-      statusPillIcon: Icons.timelapse_rounded,
-      statusPillIconColor: const Color(0xFFD36B77),
+      statusPillText: hasArtistCompletedArt ? 'Completed' : 'In Progress',
+      statusPillColor: hasArtistCompletedArt
+          ? const Color(0xFFE3F3E6)
+          : AppColors.balletSlippers,
+      statusPillIcon: hasArtistCompletedArt
+          ? Icons.task_alt_rounded
+          : Icons.timelapse_rounded,
+      statusPillIconColor: hasArtistCompletedArt
+          ? const Color(0xFF2E7D32)
+          : const Color(0xFFD36B77),
       order: o,
       rightPanel: const _ProgressCard(
         steps: [
@@ -531,7 +824,7 @@ class InReviewOrderDetailsPage extends StatelessWidget {
       statusPillText: 'In Review',
       statusPillColor: AppColors.balletSlippers,
       statusPillIcon: Icons.hourglass_bottom_rounded,
-      statusPillIconColor: Colors.black.withValues(alpha: 0.65),
+      statusPillIconColor: AppColors.blackCat.withValues(alpha: 0.65),
       order: o,
       rightPanel: const _InfoCard(
         title: 'Waiting for artist',
@@ -560,7 +853,7 @@ class NewOrderDetailsPage extends StatelessWidget {
       statusPillText: 'Pending',
       statusPillColor: AppColors.balletSlippers,
       statusPillIcon: Icons.fiber_new_rounded,
-      statusPillIconColor: Colors.black.withValues(alpha: 0.65),
+      statusPillIconColor: AppColors.blackCat.withValues(alpha: 0.65),
       order: o,
       rightPanel: const SizedBox.shrink(),
     );
@@ -613,6 +906,28 @@ class _BaseOrderDetails extends StatelessWidget {
     return double.tryParse((value ?? '').toString().trim());
   }
 
+  static Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map(
+        (key, innerValue) => MapEntry(key.toString(), innerValue),
+      );
+    }
+    return const <String, dynamic>{};
+  }
+
+  static List<dynamic> _asList(dynamic value) {
+    if (value is List<dynamic>) return value;
+    if (value is List) return value.toList(growable: false);
+    return const <dynamic>[];
+  }
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  User? get _currentUser => _client.auth.currentUser;
+
+  String get _currentEmail => (_currentUser?.email ?? '').trim().toLowerCase();
+
   static Future<_AcceptedArtistMeta> _loadAcceptedArtistMeta(
     _OrderSafe order,
   ) async {
@@ -622,17 +937,17 @@ class _BaseOrderDetails extends StatelessWidget {
     );
     final email = order.acceptedByArtistEmail.trim().toLowerCase();
     if (email.isEmpty) return fallback;
+    final client = Supabase.instance.client;
 
-    final db = FirebaseFirestore.instance;
     for (final collection in const <String>['artist', 'client_artist']) {
-      final snap = await db
-          .collection(collection)
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) continue;
+      final rows = await client
+          .from(collection)
+          .select()
+          .eq('email', email)
+          .limit(1);
+      if (rows.isEmpty) continue;
 
-      final data = snap.docs.first.data();
+      final data = Map<String, dynamic>.from(rows.first as Map);
       final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
       final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
       final address = (data['address'] as Map<String, dynamic>?) ?? const {};
@@ -656,8 +971,11 @@ class _BaseOrderDetails extends StatelessWidget {
         basic['profileImageUrl'],
         basic['avatarUrl'],
         data['panel_profileImageUrl'],
+        data['panel_profile_image_url'],
         data['profileImageUrl'],
+        data['profile_image_url'],
         data['avatarUrl'],
+        data['avatar_url'],
       ]);
       final city = _firstNonEmpty([
         address['city'],
@@ -698,10 +1016,8 @@ class _BaseOrderDetails extends StatelessWidget {
       );
       return;
     }
-    final currentName = (FirebaseAuth.instance.currentUser?.displayName ?? '')
-        .trim();
-    final fallbackCurrentName = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim();
+    final currentName = _currentName.trim();
+    final fallbackCurrentName = _currentEmail.trim();
     final clientName = currentName.isNotEmpty
         ? currentName
         : (fallbackCurrentName.contains('@')
@@ -725,10 +1041,8 @@ class _BaseOrderDetails extends StatelessWidget {
       );
       return;
     }
-    final currentName = (FirebaseAuth.instance.currentUser?.displayName ?? '')
-        .trim();
-    final fallbackCurrentName = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim();
+    final currentName = _currentName.trim();
+    final fallbackCurrentName = _currentEmail.trim();
     final clientName = currentName.isNotEmpty
         ? currentName
         : (fallbackCurrentName.contains('@')
@@ -744,6 +1058,67 @@ class _BaseOrderDetails extends StatelessWidget {
     );
   }
 
+  bool get _showDirectClientDeclinedBanner =>
+      order.directClientStatus.trim().toLowerCase() == 'declined';
+  bool get _showDirectArtistDeclinedBanner =>
+      order.directArtistStatus.trim().toLowerCase() == 'declined';
+
+  Widget _directClientDeclinedBanner() {
+    final clientName = _requestedClientDisplay();
+    final resolvedName = clientName == 'N/A' ? '{Client Name}' : clientName;
+    final message = 'Direct client $resolvedName declined this brand request.';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(
+          Icons.info_outline_rounded,
+          size: 18,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _directArtistDeclinedBanner() {
+    final artistName = _requestArtistDisplay();
+    final resolvedName = artistName == 'N/A' ? '{Artist Name}' : artistName;
+    final message = 'Direct artist $resolvedName declined this brand request.';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(
+          Icons.info_outline_rounded,
+          size: 18,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSubmittedStatus =
@@ -751,63 +1126,44 @@ class _BaseOrderDetails extends StatelessWidget {
     final isCancelledStatus = statusPillText == 'Cancelled';
     final isExpiredStatus = statusPillText == 'Expired';
     final isClosedHistoryStatus = isCancelledStatus || isExpiredStatus;
+    final canCancelBeforeArtistAccept =
+        isSubmittedStatus &&
+        order.acceptedByArtistEmail.trim().isEmpty &&
+        order.artistAcceptedAmount == null;
     final acceptedArtistMetaFuture = _loadAcceptedArtistMeta(order);
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 26),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-        leading: const SizedBox.shrink(),
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.pop(context),
+        closeTooltip: 'Close brand order details',
+        closeIcon: const Icon(Icons.close_rounded, size: 26),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
         children: [
           if (isCancelledStatus) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.balletSlippers,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.blackCatBorderLight),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: AppColors.blackCat,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Cancelled: This order has been cancelled. If you were charged, refund will be processed.',
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        height: 1.25,
-                      ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: AppColors.blackCat,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Cancelled: This order has been cancelled. If you were charged, refund will be processed.',
+                    style: TextStyle(
+                      color: AppColors.blackCat,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.25,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
           ],
@@ -837,35 +1193,38 @@ class _BaseOrderDetails extends StatelessWidget {
           const SizedBox(height: 12),
 
           if (isSubmittedStatus)
-            _Card(
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        size: 18,
-                        color: Colors.black.withValues(alpha: 0.60),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Artist is not assigned yet. Once your submitted request is accepted, artist details and messaging will appear here.',
-                          style: TextStyle(
-                            color: AppColors.blackCat,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            height: 1.25,
-                          ),
-                        ),
-                      ),
-                    ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 18,
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Artist is not assigned yet. Once your submitted request is accepted, artist details and messaging will appear here.',
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.25,
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             )
-          else if (!isClosedHistoryStatus)
+          else
+            const SizedBox.shrink(),
+
+          if (isSubmittedStatus && _showDirectClientDeclinedBanner) ...[
+            const SizedBox(height: 12),
+            _directClientDeclinedBanner(),
+          ] else if (isSubmittedStatus && _showDirectArtistDeclinedBanner) ...[
+            const SizedBox(height: 12),
+            _directArtistDeclinedBanner(),
+          ] else if (!isSubmittedStatus && !isClosedHistoryStatus)
             _Card(
               child: FutureBuilder<_AcceptedArtistMeta>(
                 future: acceptedArtistMetaFuture,
@@ -888,8 +1247,8 @@ class _BaseOrderDetails extends StatelessWidget {
                   return Row(
                     children: [
                       Container(
-                        height: 56,
-                        width: 56,
+                        height: 48,
+                        width: 48,
                         decoration: BoxDecoration(
                           color: AppColors.blackCat.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.zero,
@@ -928,8 +1287,8 @@ class _BaseOrderDetails extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400,
-                                        color: AppColors.blackCat.withValues(alpha: 
-                                          0.85,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.85,
                                         ),
                                       ),
                                     ),
@@ -946,8 +1305,8 @@ class _BaseOrderDetails extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
-                                          color: AppColors.blackCat.withValues(alpha: 
-                                            0.55,
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.55,
                                           ),
                                         ),
                                       ),
@@ -1000,7 +1359,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ? order.cancelReason.trim()
                         : 'No reason provided.',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.82),
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.25,
@@ -1025,7 +1384,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ? order.cancelReason.trim()
                         : 'This request expired before an artist could complete acceptance and confirmation in time.',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.82),
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.25,
@@ -1035,7 +1394,7 @@ class _BaseOrderDetails extends StatelessWidget {
                   Text(
                     'Common reasons:',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.82),
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w700,
                       fontSize: 12.5,
                     ),
@@ -1046,7 +1405,7 @@ class _BaseOrderDetails extends StatelessWidget {
                     '2. The request was not confirmed in time.\n'
                     '3. Required details needed to proceed were incomplete.',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.82),
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w600,
                       fontSize: 12.5,
                       height: 1.25,
@@ -1055,108 +1414,53 @@ class _BaseOrderDetails extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-          ] else if (order.clientDescription.trim().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          ] else if (isCancelledStatus) ...[
             _Card(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Brand Description',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.clientDescription.trim(),
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      height: 1.25,
-                      fontFamily: 'Arial',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Brand Description',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.clientDescription.trim().isNotEmpty
-                        ? order.clientDescription.trim()
-                        : 'No description provided.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      fontFamily: 'Arial',
-                      height: 1.25,
-                    ),
-                  ),
+                  _orderDetailsWithRightNailDimensions(),
                   const SizedBox(height: 14),
                   Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Uploaded Photos',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _SubmittedPhotosStrip(paths: order.inspirationPhotos),
-                  const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Order Details',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _bullet('Campaign Name', _valueOrDash(order.title)),
-                  _bullet('Need by', _valueOrDash(order.needByDisplay)),
-                  _bullet('Budget', _budgetText()),
-                  _bullet('Request Artist', _requestArtistDisplay()),
-                  // Keep in code per request, but hide from UI:
-                  // _bullet('Status', statusPillText),
-                  const SizedBox(height: 8),
-                  Divider(color: Colors.black.withValues(alpha: 0.08)),
                   const SizedBox(height: 5),
                   _paymentSection(context),
                 ],
               ),
             ),
           ] else ...[
-            _SubmittedPhotosStrip(paths: order.inspirationPhotos),
-
-            const SizedBox(height: 14),
+            if (statusPillText == 'Completed' ||
+                statusPillText == 'Shipped' ||
+                statusPillText == 'Delivered') ...[
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Artist Completed Art',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        fontFamily: 'ArialBold',
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 120,
+                      child: _SubmittedPhotosStrip(
+                        paths: order.artistCompletedPhotos,
+                        fallbackOrderId: order.id,
+                        fallbackOrderNumber: order.orderNumber,
+                        sourceCollection: order.sourceCollection,
+                        enableFirestoreFallback: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
 
             _Card(child: _orderDetailsWithRightNailDimensions()),
 
@@ -1168,6 +1472,8 @@ class _BaseOrderDetails extends StatelessWidget {
             ],
             if (statusPillText != 'In Progress' && statusPillText != 'Shipped')
               _Card(child: _paymentSection(context)),
+            if (statusPillText == 'Delivered' || statusPillText == 'Shipped')
+              const SizedBox(height: 14),
             if (statusPillText == 'In Progress') ...[
               _Card(child: _finalAcceptedAmountSection()),
               const SizedBox(height: 12),
@@ -1175,7 +1481,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 height: 46,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat,
+                    backgroundColor: AppColors.blackCat.withValues(alpha: 0.78),
                     foregroundColor: AppColors.snow,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
@@ -1187,13 +1493,22 @@ class _BaseOrderDetails extends StatelessWidget {
                   },
                   child: const Text(
                     'Chat',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Arial',
+                    ),
                   ),
                 ),
               ),
             ],
             if (statusPillText == 'Shipped') ...[
               _Card(child: _finalAcceptedAmountSection()),
+            ],
+            if (statusPillText == 'Delivered') ...[
+              _Card(child: _finalAcceptedAmountSection()),
+              const SizedBox(height: 12),
+              _Card(child: rightPanel),
             ],
           ],
           if (isClosedHistoryStatus) ...[
@@ -1207,12 +1522,14 @@ class _BaseOrderDetails extends StatelessWidget {
                     height: 50,
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.balletSlippers,
-                        foregroundColor: AppColors.blackCat,
+                        backgroundColor: AppColors.blackCat.withValues(
+                          alpha: 0.78,
+                        ),
+                        foregroundColor: AppColors.snow,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.zero,
                         ),
-                        side: BorderSide(color: AppColors.blackCatBorderLight),
+                        side: const BorderSide(color: AppColors.blackCat),
                       ),
                       onPressed: () {
                         if (isCancelledStatus) {
@@ -1229,8 +1546,9 @@ class _BaseOrderDetails extends StatelessWidget {
                         'Chat',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 12.5,
+                          fontSize: 12,
                           fontFamily: 'Arial',
+                          color: AppColors.snow,
                         ),
                       ),
                     ),
@@ -1276,7 +1594,7 @@ class _BaseOrderDetails extends StatelessWidget {
               ],
             ),
           ],
-          if (isSubmittedStatus) ...[
+          if (canCancelBeforeArtistAccept) ...[
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1309,21 +1627,30 @@ class _BaseOrderDetails extends StatelessWidget {
                         }
 
                         try {
-                          final docRef = FirebaseFirestore.instance
-                              .collection('Company_Custom_Requests')
-                              .doc(order.id);
-                          final snap = await docRef.get();
-                          final rootData =
-                              snap.data() ?? const <String, dynamic>{};
-                          final detailsSnap = await docRef
-                              .collection('details')
-                              .doc('payload')
-                              .get();
-                          final detailsData =
-                              detailsSnap.data() ?? const <String, dynamic>{};
+                          final row = await _supabaseFetchOrderRow(
+                            order.id,
+                            orderNumber: order.orderNumber,
+                          );
+                          final rootData = row ?? const <String, dynamic>{};
+                          final detailsData = _asMap(rootData['details']);
 
-                          final cancelReason = result.reason.trim();
-                          final cancelledAt = Timestamp.now();
+                          final typedReason = result.reason.trim();
+                          final selectedReason = typedReason.isNotEmpty
+                              ? typedReason
+                              : 'Change in plans';
+                          if (selectedReason.isEmpty) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Cancellation reason is required.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          final cancelReason = selectedReason;
+                          final cancelledAt = DateTime.now();
                           List<dynamic> cancelGroupClients(dynamic value) {
                             if (value is! List) return const <dynamic>[];
                             return value
@@ -1352,17 +1679,37 @@ class _BaseOrderDetails extends StatelessWidget {
                             updatedGroupOrder['clients'],
                           );
 
-                          await docRef.set({
+                          final nowIso = cancelledAt.toIso8601String();
+                          final updatedRoot = <String, dynamic>{
                             'status': 'cancelled',
-                            'updatedAt': FieldValue.serverTimestamp(),
-                            'cancelledAt': cancelledAt,
-                            'cancelReason': cancelReason,
+                            'brand_status': 'cancelled',
+                            'client_status': 'cancelled',
+                            'artist_status': 'cancelled',
+                            'direct_client_status': 'cancelled',
+                            'direct_artist_status': 'cancelled',
                             if (updatedGroupClients.isNotEmpty)
-                              'groupClients': updatedGroupClients,
-                          }, SetOptions(merge: true));
-                          await docRef.collection('details').doc('payload').set(
-                            {
+                              'group_clients': updatedGroupClients,
+                            'groupClients': updatedGroupClients,
+                            'updated_at': nowIso,
+                            'updatedAt': nowIso,
+                            'cancelled_at': nowIso,
+                            'cancelledAt': nowIso,
+                            'cancel_reason': cancelReason,
+                            'cancelReason': cancelReason,
+                            'cancellation_reason': cancelReason,
+                            'cancellationReason': cancelReason,
+                            'payload': {
+                              ..._asMap(rootData['payload']),
                               'status': 'cancelled',
+                              'roleStatuses': {
+                                'brand': 'cancelled',
+                                'client': 'cancelled',
+                                'artist': 'cancelled',
+                              },
+                              'routing': {
+                                'directClientStatus': 'cancelled',
+                                'directArtistStatus': 'cancelled',
+                              },
                               if (updatedGroupOrderClients.isNotEmpty)
                                 'groupOrder': {
                                   ...updatedGroupOrder,
@@ -1370,12 +1717,40 @@ class _BaseOrderDetails extends StatelessWidget {
                                 },
                               'cancellation': {
                                 'reason': cancelReason,
-                                'cancelledAt': cancelledAt,
-                                'cancelledBy': 'client',
+                                'cancelledAt': nowIso,
+                                'cancelledBy': 'brand',
                               },
+                              'updatedAt': nowIso,
                             },
-                            SetOptions(merge: true),
-                          );
+                            'details': {
+                              ...detailsData,
+                              'status': 'cancelled',
+                              'roleStatuses': {
+                                'brand': 'cancelled',
+                                'client': 'cancelled',
+                                'artist': 'cancelled',
+                              },
+                              'routing': {
+                                'directClientStatus': 'cancelled',
+                                'directArtistStatus': 'cancelled',
+                              },
+                              if (updatedGroupOrderClients.isNotEmpty)
+                                'groupOrder': {
+                                  ...updatedGroupOrder,
+                                  'clients': updatedGroupOrderClients,
+                                },
+                              'cancellation': {
+                                'reason': cancelReason,
+                                'cancelledAt': nowIso,
+                                'cancelledBy': 'brand',
+                              },
+                              'updatedAt': nowIso,
+                            },
+                          };
+                          await _client
+                              .from('company_custom_requests')
+                              .update(updatedRoot)
+                              .eq('id', order.id);
 
                           await _notifyOnBrandCancellation(
                             reason: cancelReason,
@@ -1384,11 +1759,6 @@ class _BaseOrderDetails extends StatelessWidget {
                           );
 
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Order cancelled successfully.'),
-                            ),
-                          );
                           Navigator.of(context).pop();
                         } catch (e) {
                           if (!context.mounted) return;
@@ -1444,31 +1814,88 @@ class _BaseOrderDetails extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Text(
-              isPaid
-                  ? 'Paid Amount:'
-                  : isPending
-                  ? 'Amount Due:'
-                  : 'Range:',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
+        if (isPaid || isPending)
+          Row(
+            children: [
+              Text(
+                isPaid ? 'Paid Amount:' : 'Amount Due:',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
-            ),
-            const Spacer(),
-            Text(
-              isPending || isPaid ? amountText : rangeText,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
+              const Spacer(),
+              Text(
+                amountText,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          )
+        else
+          FutureBuilder<Map<String, String>>(
+            future: _loadBudgetRanges(),
+            builder: (_, snap) {
+              final ranges = snap.data ?? const <String, String>{};
+              final clientRange = (ranges['client'] ?? '').trim().isNotEmpty
+                  ? ranges['client']!.trim()
+                  : rangeText;
+              final artistRange = (ranges['artist'] ?? '').trim().isNotEmpty
+                  ? ranges['artist']!.trim()
+                  : rangeText;
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Client Budget Range:',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        clientRange,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Text(
+                        'Artist Budget Range:',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        artistRange,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         const SizedBox(height: 8),
         Text(
           isPaid
@@ -1487,7 +1914,7 @@ class _BaseOrderDetails extends StatelessWidget {
           Text(
             'Payment link has been sent to your notifications and email.',
             style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.55),
+              color: AppColors.blackCat.withValues(alpha: 0.55),
               fontWeight: FontWeight.w400,
               fontSize: 12,
             ),
@@ -1671,8 +2098,13 @@ class _BaseOrderDetails extends StatelessWidget {
     String readEmail(Object? v) => (v ?? '').toString().trim().toLowerCase();
     final brandCompany = firstNonEmpty(<Object?>[
       rootData['companyName'],
+      rootData['company_name'],
       rootData['brandName'],
+      rootData['brand_name'],
+      rootData['panel_companyName'],
+      rootData['panel_company_name'],
       detailsData['companyName'],
+      detailsData['company_name'],
     ], fallback: 'Brand Company');
     final campaignName = firstNonEmpty(<Object?>[
       rootData['campaignName'],
@@ -1720,20 +2152,14 @@ class _BaseOrderDetails extends StatelessWidget {
         if (raw is Map) groupClients.add(Map<String, dynamic>.from(raw));
       }
     }
-    if (groupClients.isEmpty &&
-        (detailsData['groupOrder'] as Map<String, dynamic>?)?['clients']
-            is List) {
-      for (final raw
-          in ((detailsData['groupOrder'] as Map)['clients'] as List)) {
-        if (raw is Map) groupClients.add(Map<String, dynamic>.from(raw));
+    if (groupClients.isEmpty && order.groupClients.isNotEmpty) {
+      for (final client in order.groupClients) {
+        groupClients.add({
+          'clientEmail': client.clientEmail,
+          'clientName': client.clientName,
+          'responseStatus': client.responseStatus,
+        });
       }
-    }
-    if (groupClients.isEmpty && acceptedClientEmail.isNotEmpty) {
-      groupClients.add({
-        'clientEmail': acceptedClientEmail,
-        'clientName': clientName,
-        'responseStatus': 'accepted',
-      });
     }
 
     bool isRejectedStatus(String status) {
@@ -1764,16 +2190,38 @@ class _BaseOrderDetails extends StatelessWidget {
         )
         .toList(growable: false);
 
+    final fallbackClientEmails = <String>{
+      acceptedClientEmail,
+      readEmail(rootData['clientEmail']),
+      readEmail(detailsData['clientEmail']),
+    }..removeWhere((email) => email.isEmpty);
+    final fallbackClientName = firstNonEmpty(<Object?>[
+      clientName,
+      rootData['clientName'],
+      detailsData['clientName'],
+      'Client',
+    ], fallback: 'Client');
+    if (groupClients.isEmpty && fallbackClientEmails.isNotEmpty) {
+      eligibleClients.add({
+        'email': fallbackClientEmails.first,
+        'name': fallbackClientName,
+      });
+    }
+
     final isDirect =
         (rootData['isDirectRequest'] == true) ||
         (orderMeta['isDirectRequest'] == true);
     if (!isDirect) {
       bool isBrandEligibleArtist(Map<String, dynamic> data) {
-        final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
+        final profile =
+            (data['profile'] as Map<String, dynamic>?) ??
+            const <String, dynamic>{};
         final ascension =
-            (data['ascension'] as Map<String, dynamic>?) ?? const {};
+            (data['ascension'] as Map<String, dynamic>?) ??
+            const <String, dynamic>{};
         final sponsorshipRequest =
-            (data['sponsorshipRequest'] as Map<String, dynamic>?) ?? const {};
+            (data['sponsorshipRequest'] as Map<String, dynamic>?) ??
+            const <String, dynamic>{};
         final tierCandidates = <Object?>[
           ascension['tier'],
           ascension['levelName'],
@@ -1786,28 +2234,14 @@ class _BaseOrderDetails extends StatelessWidget {
           final tier = (raw ?? '').toString().trim().toLowerCase();
           if (tier == 'goldsmith' || tier == 'crowned') return true;
         }
-        final eligibleCandidates = <Object?>[
-          ascension['sponsorshipEligible'],
-          data['panel_brandEligible'],
-          profile['sponsorshipEligible'],
-        ];
-        for (final raw in eligibleCandidates) {
-          if (raw == true) return true;
-          if (raw is num && raw != 0) return true;
-          if ((raw ?? '').toString().trim().toLowerCase() == 'true') {
-            return true;
-          }
-        }
         return false;
       }
 
       for (final collection in const <String>['artist', 'client_artist']) {
         try {
-          final snap = await FirebaseFirestore.instance
-              .collection(collection)
-              .get();
-          for (final doc in snap.docs) {
-            final data = doc.data();
+          final rows = await _client.from(collection).select();
+          for (final raw in _asList(rows)) {
+            final data = _asMap(raw);
             if (!isBrandEligibleArtist(data)) continue;
             final email = readEmail(data['email']);
             if (email.isNotEmpty) targets.add(email);
@@ -1820,6 +2254,7 @@ class _BaseOrderDetails extends StatelessWidget {
         await NotificationsService.resolveBrandRecipientEmails(
           rootData: rootData,
           detailsData: detailsData,
+          orderData: orderMeta,
         );
     for (final brandEmail in brandRecipientEmails) {
       try {
@@ -1913,7 +2348,10 @@ class _BaseOrderDetails extends StatelessWidget {
       width: 56,
       color: AppColors.balletSlippers,
       alignment: Alignment.center,
-      child: Icon(Icons.person_outline, color: Colors.black.withValues(alpha: 0.5)),
+      child: Icon(
+        Icons.person_outline,
+        color: Colors.black.withValues(alpha: 0.5),
+      ),
     );
   }
 
@@ -1924,6 +2362,8 @@ class _BaseOrderDetails extends StatelessWidget {
     final src = raw.trim();
     if (src.isEmpty) {
       return Container(
+        height: 56,
+        width: 56,
         color: AppColors.balletSlippers,
         alignment: Alignment.center,
         child: Text(
@@ -1953,254 +2393,6 @@ class _BaseOrderDetails extends StatelessWidget {
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
-
-  /*Widget _clientReviewSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Completed Set Review',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Artist uploaded completed set photos. Please accept or decline.',
-          style: TextStyle(
-            color: Colors.black.withValues(alpha: 0.6),
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 120,
-          child: _SubmittedPhotosStrip(paths: order.artistCompletedPhotos),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: () => _clientDeclineCompletedProject(context),
-                child: const Text('Decline'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: () => _clientAcceptCompletedProject(context),
-                child: const Text('Accept'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }*/
-
-  /*Widget _clientReviewAcceptedSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Completed Set Review',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Artist uploaded completed set photos.',
-          style: TextStyle(
-            color: Colors.black.withValues(alpha: 0.6),
-            fontSize: 12,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 120,
-          child: _SubmittedPhotosStrip(paths: order.artistCompletedPhotos),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAF7F2),
-            borderRadius: BorderRadius.zero,
-            border: Border.all(color: const Color(0xFFB9DEC9)),
-          ),
-          child: const Text(
-            'Accepted',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF2E8B57),
-            ),
-          ),
-        ),
-      ],
-    );
-  }*/
-
-  /*Widget _completionDeclineSection() {
-    final declinedDateText = _dateText(order.completionDeclinedAt) ?? '—';
-    final raw = order.completionDeclineReason.trim();
-    final tokens = raw
-        .split(RegExp(r'\s*[|,]\s*'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-
-    String otherReason = '';
-    final regularReasons = <String>[];
-    for (final t in tokens) {
-      final m = RegExp(
-        r'^Other\s*:\s*(.+)$',
-        caseSensitive: false,
-      ).firstMatch(t);
-      if (m != null) {
-        final extracted = (m.group(1) ?? '').trim();
-        if (extracted.isNotEmpty) otherReason = extracted;
-      } else {
-        regularReasons.add(t);
-      }
-    }
-
-    final reasonText = regularReasons.isNotEmpty
-        ? regularReasons.join(', ')
-        : (otherReason.isNotEmpty ? 'Other' : 'No reason provided.');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Decline Reason',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 10),
-        _bullet('Reason to decline', reasonText),
-        if (otherReason.isNotEmpty) _bullet('Other reason', otherReason),
-        _bullet('Date declined', declinedDateText),
-      ],
-    );
-  }*/
-
-  /*Future<void> _clientAcceptCompletedProject(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text(
-          'Accept Completed Set',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-        content: const Text(
-          'Do you confirm the uploaded set is approved for shipping?',
-          style: TextStyle(fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'No',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Yes, Accept',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-
-    try {
-      final isPaid = const {
-        'paid',
-        'completed',
-      }.contains(order.paymentStatus.trim().toLowerCase());
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final generatedTracking =
-          'JNT${(nowMs % 1000000000).toString().padLeft(9, '0')}';
-      final generatedCarrier = 'USPS';
-      final generatedPdfUrl =
-          'jnt://shipping/label?order=${order.id}&download=1';
-      final generatedQrData =
-          'jnt://shipping/scan?order=${order.id}&tracking=$generatedTracking';
-
-      final docRef = FirebaseFirestore.instance
-          .collection('Company_Custom_Requests')
-          .doc(order.id);
-      await docRef.set({
-        'completionReviewStatus': 'approved',
-        'completionReviewedAt': FieldValue.serverTimestamp(),
-        'shippingLabelReady': isPaid,
-        'shippingLabelCarrier': isPaid ? generatedCarrier : '',
-        'shippingLabelTrackingNumber': isPaid ? generatedTracking : '',
-        'shippingLabelPdfUrl': isPaid ? generatedPdfUrl : '',
-        'shippingLabelQrData': isPaid ? generatedQrData : '',
-        'shippingLabelCreatedAt': isPaid ? FieldValue.serverTimestamp() : null,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await docRef.collection('details').doc('payload').set({
-        'artistCompletion': {
-          'reviewStatus': 'approved',
-          'reviewedAt': FieldValue.serverTimestamp(),
-        },
-        'shippingLabel': {
-          'ready': isPaid,
-          'carrier': isPaid ? generatedCarrier : '',
-          'trackingNumber': isPaid ? generatedTracking : '',
-          'pdfUrl': isPaid ? generatedPdfUrl : '',
-          'qrData': isPaid ? generatedQrData : '',
-          'createdAt': isPaid ? FieldValue.serverTimestamp() : null,
-        },
-      }, SetOptions(merge: true));
-
-      final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
-      if (artistEmail.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: artistEmail,
-          title: isPaid
-              ? 'Client Approved - Ready to Ship'
-              : 'Client Approved - Awaiting Payment',
-          body: isPaid
-              ? 'Client approved and paid. Shipping label is ready with tracking auto-filled.'
-              : 'Client approved the completed set. Shipping label will be generated once payment is completed.',
-          type: 'client_approved_shipping',
-          orderId: order.id,
-          sourceCollection: 'Company_Custom_Requests',
-        );
-      }
-
-      if (!context.mounted) return;
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to accept completed set: $e')),
-      );
-    }
-  }*/
 
   Future<void> _simulatePayment(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -2241,51 +2433,82 @@ class _BaseOrderDetails extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection('Company_Custom_Requests')
-          .doc(order.id);
-      final snap = await docRef.get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      final acceptedByArtistEmail =
-          ((data['acceptedByArtistEmail'] ?? '') as Object).toString().trim();
-      final orderNumber = ((data['orderNumber'] ?? '') as Object)
-          .toString()
-          .trim();
-
-      await docRef.set({
-        if (((data['status'] ?? '') as Object)
-                .toString()
-                .trim()
-                .toLowerCase() ==
-            'accepted')
-          'status': 'designing',
+      final row = await _supabaseFetchOrderRow(
+        order.id,
+        orderNumber: order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final acceptedByArtistEmail = _firstNonEmpty([
+        data['accepted_by_artist_email'],
+        data['acceptedByArtistEmail'],
+        payload['acceptedByArtistEmail'],
+        details['acceptedByArtistEmail'],
+      ]);
+      final orderNumber = _firstNonEmpty([
+        data['order_number'],
+        data['orderNumber'],
+        payload['orderNumber'],
+        details['orderNumber'],
+      ]);
+      final currentStatus = _firstNonEmpty([
+        data['status'],
+        payload['status'],
+        details['status'],
+      ]).toLowerCase();
+      final nowIso = DateTime.now().toIso8601String();
+      final paymentMap = <String, dynamic>{
+        'status': 'paid',
+        'paidAt': nowIso,
+        'paymentLink': order.paymentLink,
+      };
+      final mergedPayload = <String, dynamic>{
+        ...payload,
+        'status': currentStatus == 'accepted' ? 'designing' : payload['status'],
         'paymentStatus': 'paid',
-        'paidAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'payment_status': 'paid',
+        'paidAt': nowIso,
+        'paid_at': nowIso,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
         'paymentNotifiedArtist': acceptedByArtistEmail.isNotEmpty,
+        'payment_notified_artist': acceptedByArtistEmail.isNotEmpty,
+        if (acceptedByArtistEmail.isNotEmpty) 'paymentNotifiedArtistAt': nowIso,
         if (acceptedByArtistEmail.isNotEmpty)
-          'paymentNotifiedArtistAt': FieldValue.serverTimestamp(),
-        'payment': {
-          'status': 'paid',
-          'paidAt': FieldValue.serverTimestamp(),
-          'paymentLink': order.paymentLink,
-        },
-      }, SetOptions(merge: true));
-
-      await docRef.collection('details').doc('payload').set({
-        if (((data['status'] ?? '') as Object)
-                .toString()
-                .trim()
-                .toLowerCase() ==
-            'accepted')
-          'status': 'designing',
-        'payment': {
-          'status': 'paid',
-          'paidAt': FieldValue.serverTimestamp(),
-          'paymentLink': order.paymentLink,
-        },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+          'payment_notified_artist_at': nowIso,
+        'payment': paymentMap,
+      };
+      final mergedDetails = <String, dynamic>{
+        ...details,
+        'status': currentStatus == 'accepted' ? 'designing' : details['status'],
+        'payment': paymentMap,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
+      };
+      await _client
+          .from('company_custom_requests')
+          .update({
+            'status': currentStatus == 'accepted'
+                ? 'designing'
+                : data['status'],
+            'payment_status': 'paid',
+            'paymentStatus': 'paid',
+            'paid_at': nowIso,
+            'paidAt': nowIso,
+            'updated_at': nowIso,
+            'updatedAt': nowIso,
+            'payment_notified_artist': acceptedByArtistEmail.isNotEmpty,
+            'paymentNotifiedArtist': acceptedByArtistEmail.isNotEmpty,
+            if (acceptedByArtistEmail.isNotEmpty)
+              'payment_notified_artist_at': nowIso,
+            if (acceptedByArtistEmail.isNotEmpty)
+              'paymentNotifiedArtistAt': nowIso,
+            'payment': paymentMap,
+            'payload': mergedPayload,
+            'details': mergedDetails,
+          })
+          .eq('id', order.id);
 
       if (acceptedByArtistEmail.isNotEmpty) {
         await NotificationsService.createUserNotification(
@@ -2331,38 +2554,107 @@ class _BaseOrderDetails extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _bullet('Campaign Name', _valueOrDash(order.title)),
+          _bullet('Description', _valueOrDash(order.clientDescription)),
           _bullet('Need by', _valueOrDash(order.needByDisplay)),
-          _bullet('Budget', _budgetText()),
-          _bullet('Request Artist', _requestArtistDisplay()),
+          _bullet('JNT Reveal Date', _valueOrDash(order.jntRevealDateDisplay)),
+          _bullet('Requested Client', _requestedClientDisplay()),
+          _bullet('Requested Artist', _requestArtistDisplay()),
           _bullet('Accepted Clients', _acceptedClientsDisplay()),
+          const SizedBox(height: 10),
+          const Text(
+            'Uploaded Photos',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              fontFamily: 'ArialBold',
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _SubmittedPhotosStrip(
+            paths: order.inspirationPhotos,
+            fallbackOrderId: order.id,
+            fallbackOrderNumber: order.orderNumber,
+            sourceCollection: order.sourceCollection,
+            enableFirestoreFallback: false,
+            showAll: true,
+          ),
           // Keep in code per request, but hide from UI:
           // _bullet('Status', statusPillText),
         ],
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [detailsBlock()],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [detailsBlock()],
     );
   }
 
-  String _acceptedClientsDisplay() {
-    final accepted = order.groupClients
-        .where(
-          (client) => client.responseStatus.trim().toLowerCase() == 'accepted',
-        )
-        .map((client) => client.clientName.trim())
-        .where((name) => name.isNotEmpty)
-        .toList(growable: false);
-    if (accepted.isNotEmpty) {
-      return accepted.toSet().join(', ');
+  Future<Map<String, String>> _loadBudgetRanges() async {
+    String formatRange(int? min, int? max) {
+      if (min != null && max != null) return '\$$min - \$$max';
+      if (min != null) return '\$$min';
+      if (max != null) return '\$$max';
+      return '';
     }
-    return '-';
+
+    int? asInt(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.round();
+      return int.tryParse((v ?? '').toString().trim());
+    }
+
+    final fallback = formatRange(order.budgetMin, order.budgetMax);
+    try {
+      final row = await _supabaseFetchOrderRow(
+        order.id,
+        orderNumber: order.orderNumber,
+      );
+      final root = row ?? const <String, dynamic>{};
+      final payload = _asMap(root['payload']);
+      final detail = _asMap(root['details']);
+      final clientBudget = _asMap(root['client_budget'])
+        ..addAll(_asMap(root['clientBudget']))
+        ..addAll(_asMap(payload['clientBudget']))
+        ..addAll(_asMap(detail['clientBudget']));
+      final artistBudget = _asMap(root['artist_budget'])
+        ..addAll(_asMap(root['artistBudget']))
+        ..addAll(_asMap(payload['artistBudget']))
+        ..addAll(_asMap(detail['artistBudget']))
+        ..addAll(_asMap(payload['budget']))
+        ..addAll(_asMap(detail['budget']));
+
+      final clientMin =
+          asInt(clientBudget['min']) ??
+          asInt(root['client_budget_min']) ??
+          asInt(root['clientBudgetMin']);
+      final clientMax =
+          asInt(clientBudget['max']) ??
+          asInt(root['client_budget_max']) ??
+          asInt(root['clientBudgetMax']);
+      final artistMin =
+          asInt(artistBudget['min']) ??
+          asInt(root['artist_budget_min']) ??
+          asInt(root['artistBudgetMin']) ??
+          asInt(root['budgetMin']) ??
+          order.budgetMin;
+      final artistMax =
+          asInt(artistBudget['max']) ??
+          asInt(root['artist_budget_max']) ??
+          asInt(root['artistBudgetMax']) ??
+          asInt(root['budgetMax']) ??
+          order.budgetMax;
+
+      final client = formatRange(clientMin, clientMax);
+      final artist = formatRange(artistMin, artistMax);
+      return <String, String>{
+        'client': client.isEmpty ? fallback : client,
+        'artist': artist.isEmpty ? fallback : artist,
+      };
+    } catch (_) {
+      return <String, String>{'client': fallback, 'artist': fallback};
+    }
   }
 
   static Widget _bullet(String k, String v) {
@@ -2371,16 +2663,22 @@ class _BaseOrderDetails extends StatelessWidget {
       child: RichText(
         text: TextSpan(
           style: TextStyle(
-            color: AppColors.blackCat.withValues(alpha: 0.75),
+            color: AppColors.blackCat,
             fontWeight: FontWeight.w400,
             fontSize: 14,
           ),
           children: [
             TextSpan(
               text: '$k: ',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
             ),
-            TextSpan(text: v),
+            TextSpan(
+              text: v,
+              style: const TextStyle(color: AppColors.blackCat),
+            ),
           ],
         ),
       ),
@@ -2400,6 +2698,45 @@ class _BaseOrderDetails extends StatelessWidget {
       return 'N/A';
     }
     return raw;
+  }
+
+  String _requestedClientDisplay() {
+    final isGroupOrder =
+        order.orderType.trim().toLowerCase() == 'group' ||
+        order.groupClients.isNotEmpty;
+    if (isGroupOrder) {
+      final names = order.groupClients
+          .map((c) => c.clientName.trim())
+          .where((n) => n.isNotEmpty)
+          .toList(growable: false);
+      if (names.isNotEmpty) {
+        return names.toSet().join(', ');
+      }
+      return 'Group';
+    }
+    if (order.openToClientPool) return 'N/A';
+    final raw = order.selectedClientName.trim();
+    if (raw.isEmpty) return 'N/A';
+    final lower = raw.toLowerCase();
+    if (lower == 'client' ||
+        lower == 'select one' ||
+        lower == 'n/a' ||
+        lower == '-') {
+      return 'N/A';
+    }
+    return raw;
+  }
+
+  String _acceptedClientsDisplay() {
+    final accepted = order.groupClients
+        .where(
+          (client) => client.responseStatus.trim().toLowerCase() == 'accepted',
+        )
+        .map((client) => client.clientName.trim())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    if (accepted.isNotEmpty) return accepted.toSet().join(', ');
+    return '-';
   }
 
   String _budgetText() {
@@ -2511,14 +2848,9 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        border: Border.all(
+          color: AppColors.blackCat.withValues(alpha: 0.12),
+        ),
       ),
       child: child,
     );
@@ -2541,12 +2873,12 @@ class _CancelOrderDialog extends StatefulWidget {
 class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   final TextEditingController _reasonCtrl = TextEditingController();
   String _selected = 'Change in plans';
+  String _error = '';
 
   static const List<String> _reasons = [
     'Change in plans',
     'Budget concerns',
     'Unsatisfied with progress',
-    'Other',
   ];
 
   @override
@@ -2580,13 +2912,13 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                     shape: BoxShape.circle,
                     color: AppColors.balletSlippers,
                     border: Border.all(
-                      color: AppColors.blackCat.withValues(alpha: 0.06),
+                      color: AppColors.blackCat.withValues(alpha: 15),
                     ),
                   ),
                   child: Icon(
                     Icons.warning_amber_rounded,
                     size: 38,
-                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    color: AppColors.blackCat.withValues(alpha: 140),
                   ),
                 ),
               ),
@@ -2623,23 +2955,25 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
               const SizedBox(height: 10),
               RadioGroup<String>(
                 groupValue: _selected,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _selected = value);
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() {
+                    _selected = v;
+                    _error = '';
+                  });
                 },
                 child: Column(
-                  children: [
-                    ..._reasons.map(
-                      (r) => RadioListTile<String>(
-                        value: r,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        activeColor: AppColors.blackCat,
-                        selected: _selected == r,
-                        title: Text(r, style: const TextStyle(fontSize: 13)),
-                      ),
-                    ),
-                  ],
+                  children: _reasons
+                      .map(
+                        (r) => RadioListTile<String>(
+                          value: r,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          activeColor: AppColors.blackCat,
+                          title: Text(r, style: const TextStyle(fontSize: 13)),
+                        ),
+                      )
+                      .toList(growable: false),
                 ),
               ),
               TextField(
@@ -2658,13 +2992,13 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(
-                      color: AppColors.blackCat.withValues(alpha: 0.08),
+                      color: AppColors.blackCat.withValues(alpha: 20),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(
-                      color: AppColors.blackCat.withValues(alpha: 0.08),
+                      color: AppColors.blackCat.withValues(alpha: 20),
                     ),
                   ),
                 ),
@@ -2724,6 +3058,10 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                         onPressed: () {
                           final typed = _reasonCtrl.text.trim();
                           final reason = typed.isNotEmpty ? typed : _selected;
+                          if (reason.isEmpty) {
+                            setState(() => _error = 'Reason is required.');
+                            return;
+                          }
                           Navigator.of(context).pop(
                             _CancelOrderResult(confirm: true, reason: reason),
                           );
@@ -2744,6 +3082,17 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                   ),
                 ],
               ),
+              if (_error.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error,
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -2753,147 +3102,598 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
 }
 
 class _SubmittedPhotosStrip extends StatelessWidget {
-  const _SubmittedPhotosStrip({required this.paths});
+  const _SubmittedPhotosStrip({
+    required this.paths,
+    this.fallbackOrderId = '',
+    this.fallbackOrderNumber = '',
+    this.sourceCollection = 'Company_Custom_Requests',
+    this.enableFirestoreFallback = false,
+    this.showAll = false,
+    this.uploadedOnly = false,
+    this.maxItems,
+  });
+
   final List<String> paths;
+  final String fallbackOrderId;
+  final String fallbackOrderNumber;
+  final String sourceCollection;
+  final bool enableFirestoreFallback;
+  final bool showAll;
+  final bool uploadedOnly;
+  final int? maxItems;
 
-  @override
-  Widget build(BuildContext context) {
-    final renderable = paths
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toList(growable: false);
+  static bool _isImageLikePath(String raw) {
+    final noQuery = raw.trim().toLowerCase().split('?').first.split('#').first;
+    return noQuery.endsWith('.jpg') ||
+        noQuery.endsWith('.jpeg') ||
+        noQuery.endsWith('.png') ||
+        noQuery.endsWith('.webp') ||
+        noQuery.endsWith('.gif') ||
+        noQuery.endsWith('.heic') ||
+        noQuery.endsWith('.heif');
+  }
 
-    if (renderable.isEmpty) {
-      return Text(
-        'No photos were uploaded by client.',
-        style: TextStyle(
-          color: Colors.black.withValues(alpha: 0.62),
-          fontWeight: FontWeight.w500,
-          fontSize: 12,
-        ),
+  static bool _isUsablePhotoRef(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return false;
+    final lower = s.toLowerCase();
+
+    if (lower == '-' || lower == 'null' || lower == 'none') return false;
+    if (lower == '[]' || lower == '{}') return false;
+    if (lower.startsWith('blob:')) return false;
+    if (lower.startsWith('content://')) return false;
+    if (lower.startsWith('data:') && !lower.startsWith('data:image/')) {
+      return false;
+    }
+    if (lower.contains('order_thumb')) return false;
+    if (lower.contains('placeholder')) return false;
+    if (lower.contains('default_image')) return false;
+    if (lower.contains('default-image')) return false;
+    if (lower.contains('empty_image')) return false;
+    if (lower.contains('empty-image')) return false;
+    if (lower.contains('blank')) return false;
+    if (lower.contains('spacer')) return false;
+    if (lower.contains('transparent')) return false;
+    if (lower.contains('no_image')) return false;
+    if (lower.contains('no-image')) return false;
+    if (lower.contains('no_photo')) return false;
+    if (lower.contains('no-photo')) return false;
+    if (lower.endsWith('/')) return false;
+
+    if (lower.startsWith('data:image/')) return true;
+    if (lower.startsWith('assets/')) return _isImageLikePath(lower);
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return _isImageLikePath(lower);
+    }
+    if (lower.startsWith('gs://')) return _isImageLikePath(lower);
+
+    return _isImageLikePath(lower);
+  }
+
+  bool _isAllowedForDisplay(String raw) {
+    if (!_isUsablePhotoRef(raw)) return false;
+    if (!uploadedOnly) return true;
+
+    final value = raw.trim().toLowerCase();
+    if (value.startsWith('assets/')) return false;
+    if (value.startsWith('file://')) return false;
+    if (value.startsWith('data:image/')) return false;
+
+    return value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('gs://') ||
+        value.startsWith('company_custom_requests/') ||
+        value.startsWith('client_custom_requests/') ||
+        value.startsWith('clients/') ||
+        value.startsWith('artists/') ||
+        value.startsWith('client_artists/') ||
+        value.startsWith('company/') ||
+        (!value.contains('://') && value.contains('/'));
+  }
+
+  static List<String> _collectPhotoRefs(List<dynamic> values) {
+    final out = <String>[];
+    final seen = <String>{};
+
+    void addValue(dynamic value) {
+      if (value == null) return;
+      if (value is String) {
+        final s = value.trim();
+        if (s.isNotEmpty && seen.add(s)) out.add(s);
+        return;
+      }
+      if (value is Iterable) {
+        for (final item in value) {
+          addValue(item);
+        }
+        return;
+      }
+      if (value is Map) {
+        final map = Map<String, dynamic>.from(value);
+        const keys = <String>[
+          'url',
+          'downloadUrl',
+          'downloadURL',
+          'photoUrl',
+          'imageUrl',
+          'image',
+          'path',
+          'storagePath',
+          'fullPath',
+          'ref',
+          'photo',
+          'src',
+          'uri',
+          'value',
+        ];
+        for (final key in keys) {
+          if (map.containsKey(key)) addValue(map[key]);
+        }
+        map.forEach((k, v) {
+          final lower = k.toString().toLowerCase();
+          if (lower.contains('photo') ||
+              lower.contains('image') ||
+              lower.contains('inspiration') ||
+              lower.contains('preview') ||
+              lower.endsWith('url') ||
+              lower.endsWith('path')) {
+            addValue(v);
+          }
+        });
+      }
+    }
+
+    for (final value in values) {
+      addValue(value);
+    }
+    return out;
+  }
+
+  Future<List<String>> _loadFallbackPhotos() async {
+    final orderId = fallbackOrderId.trim();
+    if (orderId.isEmpty) return const <String>[];
+
+    final root = await _supabaseFetchOrderRow(
+      fallbackOrderId,
+      orderNumber: fallbackOrderNumber,
+    );
+    if (root == null) return const <String>[];
+
+    final payload = _asMap(root['payload']);
+    final requestDetails =
+        (payload['requestDetails'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final order =
+        (payload['order'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+
+    final collected = _collectPhotoRefs(<dynamic>[
+      payload['brandInspirationPhotos'],
+      payload['inspirationPhotos'],
+      payload['clientImages'],
+      payload['photos'],
+      payload['inspirationPhoto'],
+      payload['inspirationPhotoUrl'],
+      requestDetails['brandInspirationPhotos'],
+      requestDetails['inspirationPhotos'],
+      requestDetails['clientImages'],
+      requestDetails['photos'],
+      requestDetails['inspirationPhoto'],
+      requestDetails['inspirationPhotoUrl'],
+      requestDetails['inspirationPhotoUrls'],
+      requestDetails['inspirationPhotoRefs'],
+      order['brandInspirationPhotos'],
+      order['inspirationPhotos'],
+      order['clientImages'],
+      order['photos'],
+      order['inspirationPhoto'],
+      order['inspirationPhotoUrl'],
+      root['brandInspirationPhotos'],
+      root['inspirationPhotos'],
+      root['clientImages'],
+      root['photos'],
+      root['inspirationPhoto'],
+      root['inspirationPhotoUrl'],
+    ]);
+
+    String firstNonEmpty(List<Object?> values) {
+      for (final value in values) {
+        final text = (value ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return '';
+    }
+
+    final companyUid = firstNonEmpty(<Object?>[
+      root['companyUid'],
+      root['company_uid'],
+      root['requesterUid'],
+      root['requester_uid'],
+      root['createdByUid'],
+      root['created_by_uid'],
+      root['uid'],
+      payload['companyUid'],
+      payload['company_uid'],
+      payload['requesterUid'],
+      payload['requester_uid'],
+      payload['createdByUid'],
+      payload['created_by_uid'],
+      payload['uid'],
+    ]);
+
+    final folderRefs = <String>[];
+    final baseFolders = <String>[
+      if (companyUid.isNotEmpty) 'company-custom-requests/$companyUid/$orderId',
+      'company-custom-requests/unknown/$orderId',
+    ];
+
+    for (final folder in baseFolders) {
+      try {
+        final storage = _client.storage.from('company-custom-requests');
+        final list = await storage.list(path: folder);
+        for (final item in _asList(list)) {
+          final name = _firstNonEmpty([
+            (() {
+              try {
+                return item.name;
+              } catch (_) {
+                return null;
+              }
+            })(),
+            (() {
+              try {
+                return item.path;
+              } catch (_) {
+                return null;
+              }
+            })(),
+          ]);
+          if (name.isEmpty) continue;
+          try {
+            final metadata = (item as dynamic).metadata;
+            final sizeRaw = metadata is Map ? metadata['size'] : null;
+            final sizeText = (sizeRaw ?? '').toString().trim();
+            final size = int.tryParse(sizeText);
+            if (size != null && size <= 0) continue;
+          } catch (_) {}
+          final fullPath = '$folder/$name';
+          folderRefs.add(_normalizeStorageUrl(fullPath));
+        }
+      } catch (_) {}
+    }
+
+    return <String>{...collected, ...folderRefs}.toList(growable: false);
+  }
+
+  ImageProvider _providerFor(String p) {
+    if (p.startsWith('data:image/')) {
+      try {
+        final comma = p.indexOf(',');
+        if (comma > 0) {
+          final b64 = p.substring(comma + 1).trim();
+          final bytes = base64Decode(b64);
+          return MemoryImage(bytes);
+        }
+      } catch (_) {}
+    }
+    if (p.startsWith('http://') || p.startsWith('https://')) {
+      return NetworkImage(p);
+    }
+    if (p.startsWith('assets/')) return AssetImage(p);
+    if (p.startsWith('file://')) {
+      final localPath = p.replaceFirst('file://', '');
+      if (kIsWeb) return NetworkImage(p);
+      return FileImage(File(localPath));
+    }
+    if (kIsWeb) return NetworkImage(p);
+    return FileImage(File(p));
+  }
+
+  ({String bucket, String objectPath})? _parseStorageReference(String raw) {
+    var value = raw.trim();
+    if (value.isEmpty) return null;
+
+    if (value.startsWith('gs://')) {
+      value = value.substring(5);
+      final slash = value.indexOf('/');
+      if (slash < 0 || slash + 1 >= value.length) return null;
+      return (
+        bucket: value.substring(0, slash),
+        objectPath: value.substring(slash + 1),
       );
     }
 
-    ImageProvider providerFor(String path) {
-      var p = path.trim();
-      if (p.startsWith('assets/')) {
-        final rest = p.substring('assets/'.length);
-        final decodedRest = Uri.decodeFull(rest);
-        if (rest.startsWith('data:') ||
-            rest.startsWith('blob:') ||
-            decodedRest.startsWith('data:') ||
-            decodedRest.startsWith('blob:') ||
-            decodedRest.startsWith('http://') ||
-            decodedRest.startsWith('https://')) {
-          p = decodedRest;
-        }
-      }
-      if (p.startsWith('data%3A') ||
-          p.startsWith('blob%3A') ||
-          p.startsWith('http%3A') ||
-          p.startsWith('https%3A')) {
-        p = Uri.decodeFull(p);
-      }
-      if (p.startsWith('http://') ||
-          p.startsWith('https://') ||
-          p.startsWith('blob:') ||
-          p.startsWith('data:') ||
-          p.startsWith('content://')) {
-        return NetworkImage(p);
-      }
-      if (p.startsWith('assets/')) {
-        return AssetImage(p);
-      }
-      if (p.startsWith('file://')) {
-        final localPath = p.replaceFirst('file://', '');
-        if (kIsWeb) {
-          return NetworkImage(p);
-        }
-        return FileImage(File(localPath));
-      }
-      if (kIsWeb) {
-        return NetworkImage(p);
-      }
-      return FileImage(File(p));
+    if (value.startsWith('storage/v1/object/public/')) {
+      value = value.substring('storage/v1/object/public/'.length);
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tileSize = ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0);
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: renderable.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            mainAxisExtent: tileSize,
-          ),
-          itemBuilder: (context, index) {
-            final path = renderable[index];
-            final provider = providerFor(path);
-            return FutureBuilder<void>(
-              future: precacheImage(provider, context),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return SizedBox(width: tileSize, height: tileSize);
-                }
-                if (snap.hasError) return const SizedBox.shrink();
-                return ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: InkWell(
-                    onTap: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => Dialog(
-                          backgroundColor: Colors.black,
-                          insetPadding: const EdgeInsets.all(8),
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: InteractiveViewer(
-                                  minScale: 0.8,
-                                  maxScale: 4,
-                                  child: Center(
-                                    child: Image(
-                                      image: provider,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, _, _) =>
-                                          const SizedBox.shrink(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: IconButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: AppColors.snow,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      final uri = Uri.tryParse(value);
+      if (uri == null) return null;
+      if (!uri.host.contains('supabase.co')) return null;
+      final segments = uri.pathSegments;
+      final index = segments.indexOf('public');
+      if (index >= 0 && index + 2 <= segments.length) {
+        final bucket = segments[index + 1];
+        final objectPath = Uri.decodeComponent(
+          segments.sublist(index + 2).join('/'),
+        );
+        if (bucket.isNotEmpty && objectPath.isNotEmpty) {
+          return (bucket: bucket, objectPath: objectPath);
+        }
+      }
+      return null;
+    }
+
+    value = value.replaceAll(RegExp(r'^/+'), '');
+    final parts = value.split('/');
+    if (parts.length < 2) return null;
+    return (bucket: parts.first, objectPath: parts.skip(1).join('/'));
+  }
+
+  Future<bool> _storageObjectExists(String raw) async {
+    try {
+      final parsed = _parseStorageReference(raw);
+      if (parsed == null) return true;
+      final objectPath = parsed.objectPath.trim();
+      if (objectPath.isEmpty) return false;
+      final lastSlash = objectPath.lastIndexOf('/');
+      final folder = lastSlash >= 0 ? objectPath.substring(0, lastSlash) : '';
+      final fileName = lastSlash >= 0
+          ? objectPath.substring(lastSlash + 1)
+          : objectPath;
+      if (fileName.isEmpty) return false;
+
+      final items = await Supabase.instance.client.storage
+          .from(parsed.bucket)
+          .list(path: folder);
+      for (final item in _asList(items)) {
+        final name = _firstNonEmpty([
+          (() {
+            try {
+              return item.name;
+            } catch (_) {
+              return null;
+            }
+          })(),
+          (() {
+            try {
+              return item.path;
+            } catch (_) {
+              return null;
+            }
+          })(),
+        ]);
+        if (name.trim() == fileName) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<String> _resolveDisplayPath(String raw) async {
+    var p = raw.trim();
+    for (var j = 0; j < 3; j++) {
+      final decoded = Uri.decodeFull(p);
+      if (decoded == p) break;
+      p = decoded.trim();
+    }
+    if (p.isEmpty || !_isAllowedForDisplay(p)) return '';
+    if (p.startsWith('http://') ||
+        p.startsWith('https://') ||
+        p.startsWith('assets/') ||
+        p.startsWith('data:image/') ||
+        p.startsWith('file://')) {
+      if (!_isAllowedForDisplay(p)) return '';
+      final parsedStorage = _parseStorageReference(p);
+      if (parsedStorage != null && !await _storageObjectExists(p)) {
+        return '';
+      }
+      return p;
+    }
+
+    final looksStoragePath =
+        p.startsWith('gs://') ||
+        p.startsWith('company_custom_requests/') ||
+        p.startsWith('client_custom_requests/') ||
+        p.startsWith('clients/') ||
+        p.startsWith('artists/') ||
+        p.startsWith('client_artists/') ||
+        p.startsWith('company/') ||
+        (!p.contains('://') && p.contains('/'));
+
+    if (looksStoragePath) {
+      final resolved = await StorageUrlResolver.resolve(p);
+      final text = (resolved ?? '').trim();
+      if (text.isNotEmpty &&
+          _isAllowedForDisplay(text) &&
+          await _storageObjectExists(p)) {
+        return text;
+      }
+    }
+
+    final resolved = await StorageUrlResolver.resolve(p);
+    final text = (resolved ?? '').trim();
+    if (!_isAllowedForDisplay(text)) return '';
+    final parsedStorage = _parseStorageReference(text);
+    if (parsedStorage != null && !await _storageObjectExists(text)) {
+      return '';
+    }
+    return text;
+  }
+
+  Future<List<String>> _validDisplayPaths(BuildContext context, List<String> rawPaths) async {
+    final seen = <String>{};
+    final valid = <String>[];
+    final limit = maxItems;
+
+    for (final raw in rawPaths) {
+      if (limit != null && valid.length >= limit) break;
+      final resolved = await _resolveDisplayPath(raw);
+      if (resolved.isEmpty) continue;
+      if (!seen.add(resolved)) continue;
+
+      try {
+        if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
+          await NetworkAssetBundle(Uri.parse(resolved)).load(resolved);
+        }
+        await precacheImage(_providerFor(resolved), context);
+        valid.add(resolved);
+      } catch (_) {
+        // Do not reserve a grid cell for broken/invalid image refs.
+      }
+    }
+
+    return valid;
+  }
+
+  Widget _emptyMessage() {
+    return Text(
+      'No photos were uploaded by Brand.',
+      style: TextStyle(
+        color: AppColors.blackCat.withValues(alpha: 0.62),
+        fontWeight: FontWeight.w500,
+        fontSize: 12,
+      ),
+    );
+  }
+
+  Widget _buildTile(BuildContext context, String path, {required double size}) {
+    final provider = _providerFor(path);
+    return ClipRRect(
+      borderRadius: BorderRadius.zero,
+      child: InkWell(
+        onTap: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => Dialog(
+              backgroundColor: Colors.black,
+              insetPadding: const EdgeInsets.all(8),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4,
+                      child: Center(
+                        child: Image(
+                          image: provider,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
                         ),
-                      );
-                    },
-                    child: Container(
-                      width: tileSize,
-                      height: tileSize,
-                      color: AppColors.blackCat.withValues(alpha: 0.04),
-                      child: Image(
-                        image: provider,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
                     ),
                   ),
-                );
-              },
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: AppColors.snow),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        child: Container(
+          width: size,
+          height: size,
+          color: Colors.transparent,
+          child: Image(
+            image: provider,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = paths
+        .map((p) => p.trim())
+        .where(_isAllowedForDisplay)
+        .take(maxItems ?? paths.length)
+        .toList(growable: false);
+
+    if (enableFirestoreFallback && fallbackOrderId.trim().isNotEmpty) {
+      return FutureBuilder<List<String>>(
+        future: _loadFallbackPhotos(),
+        builder: (context, snap) {
+          final fetched = (snap.data ?? const <String>[])
+              .map((e) => e.trim())
+              .where(_isAllowedForDisplay)
+              .toList(growable: false);
+          var merged = <String>{...initial, ...fetched}.toList(growable: false);
+          final limit = maxItems;
+          if (limit != null && merged.length > limit) {
+            merged = merged.take(limit).toList(growable: false);
+          }
+          if (snap.connectionState != ConnectionState.done && merged.isEmpty) {
+            return SizedBox(height: showAll ? 96 : 120);
+          }
+          if (merged.isEmpty) return _emptyMessage();
+          return _SubmittedPhotosStrip(
+            paths: merged,
+            enableFirestoreFallback: false,
+            showAll: showAll,
+            uploadedOnly: uploadedOnly,
+            maxItems: maxItems,
+          );
+        },
+      );
+    }
+
+    if (initial.isEmpty) return _emptyMessage();
+
+    return FutureBuilder<List<String>>(
+      future: _validDisplayPaths(context, initial),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return SizedBox(height: showAll ? 96 : 120);
+        }
+
+        final displayPaths = snap.data ?? const <String>[];
+        if (displayPaths.isEmpty) return _emptyMessage();
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final tileSize = showAll
+                ? ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0)
+                : 120.0;
+
+            if (showAll) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: displayPaths
+                    .map(
+                      (path) => _buildTile(
+                        context,
+                        path,
+                        size: tileSize,
+                      ),
+                    )
+                    .toList(growable: false),
+              );
+            }
+
+            return SizedBox(
+              height: tileSize,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: displayPaths.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (_, i) => _buildTile(
+                  context,
+                  displayPaths[i],
+                  size: tileSize,
+                ),
+              ),
             );
           },
         );
@@ -2935,17 +3735,24 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   String _promptChannelLabel = '';
   DateTime? _submittedAt;
   int? _selectedTipPercent;
-  bool _autoModalOpened = false;
+  double _submittedTipAmount = 0;
+  String _submittedComment = '';
 
   String _textOrEmpty(Object? raw) => (raw ?? '').toString().trim();
+  String get _orderCollection {
+    final raw = widget.order.sourceCollection.trim();
+    return raw.isEmpty ? 'Company_Custom_Requests' : raw;
+  }
 
   @override
   void initState() {
     super.initState();
     _rating = (widget.order.clientRating ?? 0).clamp(0, 5).toDouble();
     _commentCtrl = TextEditingController(text: widget.order.clientReviewText);
+    _submittedComment = widget.order.clientReviewText.trim();
     _customTipCtrl = TextEditingController();
     _submittedAt = widget.order.clientReviewSubmittedAt;
+    _loadLatestReviewFromDb();
     _ensureReviewPromptSent();
   }
 
@@ -2989,92 +3796,121 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         setState(() => _promptProcessed = true);
         return;
       }
-      final ref = FirebaseFirestore.instance
-          .collection('Company_Custom_Requests')
-          .doc(widget.order.id);
-      final snap = await ref.get();
-      final data = snap.data() ?? const <String, dynamic>{};
-      if (data['clientReviewPromptSentAt'] != null) {
+      final row = await _supabaseFetchOrderRow(
+        widget.order.id,
+        orderNumber: widget.order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final prompt = _asMap(payload['clientReviewPrompt'])
+        ..addAll(_asMap(details['clientReviewPrompt']));
+      final sentAt = _firstNonEmpty([
+        data['client_review_prompt_sent_at'],
+        data['clientReviewPromptSentAt'],
+        payload['clientReviewPromptSentAt'],
+        details['clientReviewPromptSentAt'],
+      ]);
+      if (sentAt.isNotEmpty || prompt['sentAt'] != null) {
         if (!mounted) return;
         setState(() {
           _promptProcessed = true;
-          _promptChannelLabel = _textOrEmpty(data['clientReviewPromptChannel']);
+          _promptChannelLabel = _textOrEmpty(
+            data['client_review_prompt_channel'] ??
+                data['clientReviewPromptChannel'] ??
+                payload['clientReviewPromptChannel'] ??
+                details['clientReviewPromptChannel'] ??
+                prompt['channel'],
+          );
         });
         return;
       }
 
       final prefs = await _loadClientContactPrefs();
       final channelLabel = await _sendPromptByPreference(prefs);
-      await ref.set({
-        'clientReviewPromptSentAt': FieldValue.serverTimestamp(),
+      final nowIso = DateTime.now().toIso8601String();
+      final mergedPayload = <String, dynamic>{
+        ...payload,
+        'clientReviewPromptSentAt': nowIso,
+        'client_review_prompt_sent_at': nowIso,
         'clientReviewPromptChannel': channelLabel,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      await ref.collection('details').doc('payload').set({
+        'client_review_prompt_channel': channelLabel,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
         'clientReviewPrompt': {
-          'sentAt': FieldValue.serverTimestamp(),
+          ...prompt,
+          'sentAt': nowIso,
           'channel': channelLabel,
         },
-      }, SetOptions(merge: true));
+        'reviewPrompt': {
+          ..._asMap(payload['reviewPrompt']),
+          'sentAt': nowIso,
+          'channel': channelLabel,
+        },
+      };
+      final mergedDetails = <String, dynamic>{
+        ...details,
+        'clientReviewPromptSentAt': nowIso,
+        'client_review_prompt_sent_at': nowIso,
+        'clientReviewPromptChannel': channelLabel,
+        'client_review_prompt_channel': channelLabel,
+        'updatedAt': nowIso,
+        'updated_at': nowIso,
+        'clientReviewPrompt': {
+          ...prompt,
+          'sentAt': nowIso,
+          'channel': channelLabel,
+        },
+      };
+      await _client
+          .from('company_custom_requests')
+          .update({
+            'client_review_prompt_sent_at': nowIso,
+            'clientReviewPromptSentAt': nowIso,
+            'client_review_prompt_channel': channelLabel,
+            'clientReviewPromptChannel': channelLabel,
+            'updated_at': nowIso,
+            'updatedAt': nowIso,
+            'payload': mergedPayload,
+            'details': mergedDetails,
+          })
+          .eq('id', widget.order.id);
 
       if (!mounted) return;
       setState(() {
         _promptProcessed = true;
         _promptChannelLabel = channelLabel;
       });
-      _maybeAutoOpenReviewModal();
     } catch (_) {
       if (!mounted) return;
       setState(() => _promptProcessed = true);
-      _maybeAutoOpenReviewModal();
     }
-  }
-
-  void _maybeAutoOpenReviewModal() {
-    if (!mounted || _autoModalOpened) return;
-    if (_submittedAt != null || (widget.order.clientRating ?? 0) > 0) return;
-    _autoModalOpened = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _openReviewTipModal();
-    });
   }
 
   Future<_ClientContactPrefs> _loadClientContactPrefs() async {
-    final auth = FirebaseAuth.instance.currentUser;
-    final email = (auth?.email ?? '').trim().toLowerCase();
-    final uid = (auth?.uid ?? '').trim();
-    final db = FirebaseFirestore.instance;
-
-    DocumentSnapshot<Map<String, dynamic>>? found;
+    final email = _currentEmail;
+    final uid = (_currentUser?.id ?? '').trim();
+    Map<String, dynamic>? found;
     if (uid.isNotEmpty) {
-      final c = await db.collection('client').doc(uid).get();
-      if (c.exists) {
-        found = c;
-      } else {
-        final ca = await db.collection('client_artist').doc(uid).get();
-        if (ca.exists) found = ca;
+      for (final table in const <String>['client', 'client_artist']) {
+        try {
+          final rows = await _client
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .limit(1);
+          if (rows.isNotEmpty) {
+            found = Map<String, dynamic>.from(rows.first as Map);
+            break;
+          }
+        } catch (_) {}
       }
     }
     if (found == null && email.isNotEmpty) {
-      final q1 = await db
-          .collection('client')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (q1.docs.isNotEmpty) {
-        found = q1.docs.first;
-      } else {
-        final q2 = await db
-            .collection('client_artist')
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (q2.docs.isNotEmpty) found = q2.docs.first;
-      }
+      found = await _supabaseFetchClientRowByEmail(email);
     }
 
-    final data = found?.data() ?? const <String, dynamic>{};
+    final data = found ?? const <String, dynamic>{};
     final profile =
         (data['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
     final prefs =
@@ -3182,7 +4018,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         body: body,
         type: 'delivered_review_prompt',
         orderId: widget.order.id,
-        sourceCollection: 'Company_Custom_Requests',
+        sourceCollection: _orderCollection,
         extra: <String, dynamic>{'deepLink': deepLink, 'action': 'review_tip'},
       );
     }
@@ -3243,24 +4079,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return parsed.clamp(0, 1000000000);
   }
 
-  Future<DocumentReference<Map<String, dynamic>>?> _resolveArtistDocRef(
-    String artistEmail,
-  ) async {
-    final email = artistEmail.trim().toLowerCase();
-    if (email.isEmpty) return null;
-    final db = FirebaseFirestore.instance;
-
-    for (final collection in const <String>['artist', 'client_artist']) {
-      final query = await db
-          .collection(collection)
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (query.docs.isNotEmpty) return query.docs.first.reference;
-    }
-    return null;
-  }
-
   Future<bool> _submitReview() async {
     if (_rating <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3270,143 +4088,217 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     }
     setState(() => _saving = true);
     try {
+      Future<void> bestEffort(Future<void> Function() action) async {
+        try {
+          await action();
+        } catch (_) {}
+      }
+
       final comment = _commentCtrl.text.trim();
       final tipAmount = _calculatedTip;
       final tipPercent = _selectedTipPercent;
       final customTipAmount = _selectedTipPercent == null
           ? _customTipAmount
           : 0;
-      final db = FirebaseFirestore.instance;
-      final ref = db.collection('Company_Custom_Requests').doc(widget.order.id);
       final artistEmail = widget.order.acceptedByArtistEmail
           .trim()
           .toLowerCase();
-      final artistRef = await _resolveArtistDocRef(artistEmail);
-
-      await db.runTransaction((tx) async {
-        final orderSnap = await tx.get(ref);
-        final orderData = orderSnap.data() ?? const <String, dynamic>{};
-        final prevRating =
-            _asDouble(orderData['clientRating']) ??
-            _asDouble(
-              (orderData['clientReview'] as Map<String, dynamic>?)?['rating'],
-            );
-
-        tx.set(ref, {
-          'clientRating': _rating,
-          'clientReviewText': comment,
-          'clientReviewSubmittedAt': FieldValue.serverTimestamp(),
-          'clientTipAmount': tipAmount,
-          'clientTipPercent': tipPercent,
-          'clientTipCustomAmount': customTipAmount,
-          'clientTipSubmittedAt': tipAmount > 0
-              ? FieldValue.serverTimestamp()
-              : null,
-          'updatedAt': FieldValue.serverTimestamp(),
-          'clientReview': {
+      final row = await _supabaseFetchOrderRow(
+        widget.order.id,
+        orderNumber: widget.order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      double? previousRatingValue;
+      previousRatingValue =
+          _asDouble(data['client_rating']) ??
+          _asDouble(data['clientRating']) ??
+          _asDouble(_asMap(payload['clientReview'])['rating']);
+      final nowIso = DateTime.now().toIso8601String();
+      final reviewMap = <String, dynamic>{
+        'rating': _rating,
+        'comment': comment,
+        'submittedAt': nowIso,
+      };
+      final tipMap = <String, dynamic>{
+        'amount': tipAmount,
+        'percent': tipPercent,
+        'customAmount': customTipAmount,
+        'fundingSource': 'bank_account',
+        'submittedAt': tipAmount > 0 ? nowIso : null,
+      };
+      await _client
+          .from('company_custom_requests')
+          .update({
+            'client_rating': _rating,
             'rating': _rating,
-            'comment': comment,
-            'submittedAt': FieldValue.serverTimestamp(),
-          },
-          'clientTip': {
-            'amount': tipAmount,
-            'percent': tipPercent,
-            'customAmount': customTipAmount,
-            'submittedAt': tipAmount > 0 ? FieldValue.serverTimestamp() : null,
-          },
-        }, SetOptions(merge: true));
-
-        if (artistRef != null) {
-          final artistSnap = await tx.get(artistRef);
-          final artistData = artistSnap.data() ?? const <String, dynamic>{};
-          final stats =
-              (artistData['stats'] as Map<String, dynamic>?) ??
-              const <String, dynamic>{};
-
-          final currentCount = _asNonNegativeInt(
-            stats['reviewCount'] ??
-                stats['reviews'] ??
-                artistData['reviewCount'] ??
-                artistData['reviews'] ??
-                artistData['panel_reviews'],
-          );
-          final currentRating =
-              _asDouble(
-                stats['rating'] ??
-                    stats['averageRating'] ??
-                    artistData['rating'] ??
-                    artistData['averageRating'] ??
-                    artistData['panel_rating'],
-              ) ??
-              0.0;
-
-          final hadPrevious = (prevRating ?? 0) > 0;
-          final safeCount = currentCount <= 0
-              ? (hadPrevious ? 1 : 0)
-              : currentCount;
-          final nextCount = hadPrevious ? safeCount : (safeCount + 1);
-          final nextRating = currentRating >= _rating ? currentRating : _rating;
-
-          tx.set(artistRef, {
-            'stats': {
-              'rating': nextRating,
-              'averageRating': nextRating,
-              'reviewCount': nextCount,
-              'reviews': nextCount,
+            'clientReviewText': comment,
+            'client_review_text': comment,
+            'reviewText': comment,
+            'review_text': comment,
+            'clientReviewSubmittedAt': nowIso,
+            'client_review_submitted_at': nowIso,
+            'reviewSubmittedAt': nowIso,
+            'review_submitted_at': nowIso,
+            'clientTipAmount': tipAmount,
+            'clientTipPercent': tipPercent,
+            'clientTipCustomAmount': customTipAmount,
+            'clientTipSubmittedAt': tipAmount > 0 ? nowIso : null,
+            'updatedAt': nowIso,
+            'updated_at': nowIso,
+            'clientReview': reviewMap,
+            'clientReviewPrompt': _asMap(payload['clientReviewPrompt']),
+            'clientTip': tipMap,
+            'payload': {
+              ...payload,
+              'clientReview': reviewMap,
+              'clientTip': tipMap,
+              'clientRating': _rating,
+              'rating': _rating,
+              'clientReviewText': comment,
+              'reviewText': comment,
+              'clientReviewSubmittedAt': nowIso,
+              'reviewSubmittedAt': nowIso,
+              'updatedAt': nowIso,
+              'updated_at': nowIso,
             },
+            'details': {
+              ...details,
+              'clientReview': reviewMap,
+              'clientTip': tipMap,
+              'clientRating': _rating,
+              'rating': _rating,
+              'clientReviewText': comment,
+              'reviewText': comment,
+              'clientReviewSubmittedAt': nowIso,
+              'reviewSubmittedAt': nowIso,
+              'updatedAt': nowIso,
+              'updated_at': nowIso,
+            },
+          })
+          .eq('id', widget.order.id);
+
+      await bestEffort(() async {
+        final artistRow = await _supabaseFetchArtistRowByEmail(artistEmail);
+        if (artistRow == null) return;
+        final artistData = artistRow;
+        final stats = _asMap(artistData['stats']);
+        final currentCount = _asNonNegativeInt(
+          stats['reviewCount'] ??
+              stats['reviews'] ??
+              artistData['reviewCount'] ??
+              artistData['reviews'] ??
+              artistData['panel_reviews'],
+        );
+        final currentRating =
+            _asDouble(
+              stats['rating'] ??
+                  stats['averageRating'] ??
+                  artistData['rating'] ??
+                  artistData['averageRating'] ??
+                  artistData['panel_rating'],
+            ) ??
+            0.0;
+        final hadPrevious = (previousRatingValue ?? 0) > 0;
+        final safeCount = currentCount <= 0
+            ? (hadPrevious ? 1 : 0)
+            : currentCount;
+        final nextCount = hadPrevious ? safeCount : (safeCount + 1);
+        final nextRating = currentRating >= _rating ? currentRating : _rating;
+        final update = {
+          'stats': {
             'rating': nextRating,
             'averageRating': nextRating,
             'reviewCount': nextCount,
             'reviews': nextCount,
-            'panel_rating': nextRating,
-            'panel_reviews': nextCount,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          },
+          'rating': nextRating,
+          'averageRating': nextRating,
+          'reviewCount': nextCount,
+          'reviews': nextCount,
+          'panel_rating': nextRating,
+          'panel_reviews': nextCount,
+          'updatedAt': nowIso,
+          'updated_at': nowIso,
+        };
+        final artistId = _firstNonEmpty([
+          artistData['id'],
+          artistData['artist_id'],
+          artistData['client_artist_id'],
+        ]);
+        if (artistId.isNotEmpty) {
+          for (final table in const <String>['artist', 'client_artist']) {
+            try {
+              await _client.from(table).update(update).eq('id', artistId);
+            } catch (_) {}
+          }
         }
       });
 
-      await ref.collection('details').doc('payload').set({
-        'clientReview': {
-          'rating': _rating,
-          'comment': comment,
-          'submittedAt': FieldValue.serverTimestamp(),
-        },
-        'clientTip': {
-          'amount': tipAmount,
-          'percent': tipPercent,
-          'customAmount': customTipAmount,
-          'submittedAt': tipAmount > 0 ? FieldValue.serverTimestamp() : null,
-        },
-      }, SetOptions(merge: true));
-
+      if (tipAmount > 0) {
+        await bestEffort(() async {
+          await _client.from('tip_payout_queue').insert({
+            'order_id': widget.order.id,
+            'orderId': widget.order.id,
+            'order_number': widget.order.orderNumber,
+            'orderNumber': widget.order.orderNumber,
+            'source_collection': _orderCollection,
+            'sourceCollection': _orderCollection,
+            'artist_email': artistEmail,
+            'artistEmail': artistEmail,
+            'artist_name': widget.order.artistName,
+            'artistName': widget.order.artistName,
+            'client_email': _currentEmail,
+            'clientEmail': _currentEmail,
+            'tip_amount': tipAmount,
+            'tipAmount': tipAmount,
+            'tip_percent': tipPercent,
+            'tipPercent': tipPercent,
+            'custom_tip_amount': customTipAmount,
+            'customTipAmount': customTipAmount,
+            'funding_source': 'bank_account',
+            'fundingSource': 'bank_account',
+            'status': 'queued',
+            'created_at': nowIso,
+            'createdAt': nowIso,
+          });
+        });
+      }
       if (artistEmail.isNotEmpty) {
-        await NotificationsService.createUserNotification(
-          receiverEmail: artistEmail,
-          title: 'New Client Review',
-          body:
-              'A client left a ${_rating.toStringAsFixed(1)} star review on a delivered order.',
-          type: 'client_review_submitted',
-          orderId: widget.order.id,
-          sourceCollection: 'Company_Custom_Requests',
-        );
-        if (tipAmount > 0) {
+        await bestEffort(() async {
           await NotificationsService.createUserNotification(
             receiverEmail: artistEmail,
-            title: 'New Client Tip',
+            title: 'New Client Review',
             body:
-                'A client sent you a tip of \$${tipAmount.toStringAsFixed(2)} on a delivered order.',
-            type: 'client_tip_submitted',
+                'A client left a ${_rating.toStringAsFixed(1)} star review on a delivered order.',
+            type: 'client_review_submitted',
             orderId: widget.order.id,
-            sourceCollection: 'Company_Custom_Requests',
+            sourceCollection: _orderCollection,
           );
+        });
+        if (tipAmount > 0) {
+          await bestEffort(() async {
+            await NotificationsService.createUserNotification(
+              receiverEmail: artistEmail,
+              title: 'New Client Tip',
+              body:
+                  'A client sent you a tip of \$${tipAmount.toStringAsFixed(2)} on a delivered order.',
+              type: 'client_tip_submitted',
+              orderId: widget.order.id,
+              sourceCollection: _orderCollection,
+            );
+          });
         }
       }
 
       if (!mounted) return false;
-      setState(() => _submittedAt = DateTime.now());
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Review saved. Thank you!')));
+      setState(() {
+        _submittedAt = DateTime.now();
+        _submittedTipAmount = tipAmount;
+        _submittedComment = comment;
+      });
+      _loadLatestReviewFromDb();
       return true;
     } catch (e) {
       if (!mounted) return false;
@@ -3417,6 +4309,63 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _loadLatestReviewFromDb() async {
+    try {
+      final row = await _supabaseFetchOrderRow(
+        widget.order.id,
+        orderNumber: widget.order.orderNumber,
+      );
+      final data = row ?? const <String, dynamic>{};
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final review = _asMap(data['clientReview'])
+        ..addAll(_asMap(payload['clientReview']));
+      final tip = _asMap(data['clientTip'])
+        ..addAll(_asMap(payload['clientTip']));
+      final submittedAtRaw = _firstNonEmpty([
+        data['client_review_submitted_at'],
+        data['clientReviewSubmittedAt'],
+        review['submittedAt'],
+      ]);
+      final submittedAt = _parseDate(submittedAtRaw);
+
+      final latestRating =
+          _asDouble(data['clientRating']) ??
+          _asDouble(data['client_rating']) ??
+          _asDouble(review['rating']) ??
+          _rating;
+      final latestComment =
+          (data['client_review_text'] ??
+                  data['clientReviewText'] ??
+                  review['comment'] ??
+                  details['clientReviewText'] ??
+                  '')
+              .toString()
+              .trim();
+      final latestTipAmount =
+          _asDouble(data['clientTipAmount']) ??
+          _asDouble(data['client_tip_amount']) ??
+          _asDouble(tip['amount']) ??
+          0;
+      final latestTipPercentRaw =
+          data['clientTipPercent'] ??
+          data['client_tip_percent'] ??
+          tip['percent'];
+      final latestTipPercent = latestTipPercentRaw is num
+          ? latestTipPercentRaw.toInt()
+          : int.tryParse((latestTipPercentRaw ?? '').toString().trim());
+
+      if (!mounted) return;
+      setState(() {
+        _rating = latestRating.clamp(0, 5).toDouble();
+        _submittedComment = latestComment;
+        _submittedTipAmount = latestTipAmount < 0 ? 0 : latestTipAmount;
+        _selectedTipPercent = latestTipPercent;
+        _submittedAt = submittedAt ?? _submittedAt;
+      });
+    } catch (_) {}
   }
 
   Widget _tipOptionChip({
@@ -3509,7 +4458,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                         Text(
                           'Rate your delivered order, leave comments, and add an optional tip.',
                           style: TextStyle(
-                            color: Colors.black.withValues(alpha: 0.62),
+                            color: AppColors.blackCat.withValues(alpha: 0.62),
                             fontSize: 12.5,
                           ),
                         ),
@@ -3517,7 +4466,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                         Row(
                           children: [
                             const Text(
-                              'Rating',
+                              'Artist Review Rating',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 12.5,
@@ -3540,13 +4489,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             focusedBorder: const OutlineInputBorder(
@@ -3629,13 +4582,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               focusedBorder: const OutlineInputBorder(
@@ -3683,8 +4640,18 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                                 ? null
                                 : () async {
                                     final success = await _submitReview();
-                                    if (success && mounted) {
-                                      Navigator.of(context).pop();
+                                    if (success) {
+                                      final localNav = Navigator.of(
+                                        sheetContext,
+                                      );
+                                      if (localNav.canPop()) {
+                                        localNav.pop();
+                                      } else {
+                                        Navigator.of(
+                                          sheetContext,
+                                          rootNavigator: true,
+                                        ).pop();
+                                      }
                                     }
                                   },
                             child: _saving
@@ -3729,24 +4696,42 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Delivered successfully. Please rate your order and add an optional tip.',
+          'Delivered successfully. Add an Artist Review Rating and optional tip (charged from your bank account).',
           style: TextStyle(
-            color: Colors.black.withValues(alpha: 0.62),
+            color: AppColors.blackCat.withValues(alpha: 0.62),
             fontSize: 12,
             fontWeight: FontWeight.w400,
           ),
         ),
-        if (_promptProcessed && _promptChannelLabel.isNotEmpty) ...[
+        if (_submittedAt == null &&
+            _rating <= 0 &&
+            _promptProcessed &&
+            _promptChannelLabel.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Text(
+              'Review prompt sent via: $_promptChannelLabel',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+        if (_submittedAt != null || _rating > 0) ...[
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
               color: const Color(0xFFF3F0FA),
               borderRadius: BorderRadius.zero,
             ),
             child: Text(
-              'Review prompt sent via: $_promptChannelLabel',
+              'Your Review: ${_rating.toStringAsFixed(1)}★'
+              '${_submittedComment.isEmpty ? '' : ' • $_submittedComment'}'
+              '${_submittedTipAmount > 0 ? ' • Tip \$${_submittedTipAmount.toStringAsFixed(2)}' : ''}',
               style: const TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
@@ -3891,5 +4876,3 @@ class CancelledOrderDetailsPage extends StatelessWidget {
     );
   }
 }
-
-
