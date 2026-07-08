@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StorageUrlResolver {
   StorageUrlResolver._();
@@ -28,19 +28,22 @@ class StorageUrlResolver {
 
   static Future<String?> _resolveInternal(String key) async {
     try {
-      final String url;
-      if (key.startsWith('gs://')) {
-        url = await FirebaseStorage.instance.refFromURL(key).getDownloadURL();
-      } else if (key.startsWith('http://') || key.startsWith('https://')) {
-        final reparsed = await _resolveFirebaseStorageHttpUrl(key);
-        url = reparsed ?? key;
-      } else if (key.startsWith('data:') ||
-          key.startsWith('blob:') ||
-          key.startsWith('content://')) {
-        url = key;
-      } else {
-        url = await FirebaseStorage.instance.ref(key).getDownloadURL();
+      final parsed = _parseStorageReference(key);
+      if (parsed == null) {
+        if (key.startsWith('data:') ||
+            key.startsWith('blob:') ||
+            key.startsWith('content://') ||
+            key.startsWith('http://') ||
+            key.startsWith('https://')) {
+          return key;
+        }
+        _missing.add(key);
+        return null;
       }
+
+      final url = Supabase.instance.client.storage
+          .from(parsed.bucket)
+          .getPublicUrl(parsed.objectPath);
       final trimmed = url.trim();
       if (trimmed.isEmpty) {
         _missing.add(key);
@@ -48,33 +51,50 @@ class StorageUrlResolver {
       }
       _resolved[key] = trimmed;
       return trimmed;
-    } on FirebaseException catch (e) {
-      if (e.code == 'object-not-found' || e.code == '404') {
-        _missing.add(key);
-        return null;
-      }
-      rethrow;
     } catch (_) {
       _missing.add(key);
       return null;
     }
   }
 
-  static Future<String?> _resolveFirebaseStorageHttpUrl(String key) async {
-    try {
-      final uri = Uri.tryParse(key);
+  static ({String bucket, String objectPath})? _parseStorageReference(String key) {
+    var value = key.trim();
+    if (value.isEmpty) return null;
+
+    if (value.startsWith('gs://')) {
+      value = value.substring(5);
+      final slash = value.indexOf('/');
+      if (slash < 0 || slash + 1 >= value.length) return null;
+      return (
+        bucket: value.substring(0, slash),
+        objectPath: value.substring(slash + 1),
+      );
+    }
+
+    if (value.startsWith('storage/v1/object/public/')) {
+      value = value.substring('storage/v1/object/public/'.length);
+    }
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      final uri = Uri.tryParse(value);
       if (uri == null) return null;
-      if (!uri.host.contains('firebasestorage.googleapis.com')) return null;
+      if (!uri.host.contains('supabase.co')) return null;
       final segments = uri.pathSegments;
-      final oIndex = segments.indexOf('o');
-      if (oIndex == -1 || oIndex + 1 >= segments.length) return null;
-      final encodedObjectPath = segments[oIndex + 1];
-      final objectPath = Uri.decodeComponent(encodedObjectPath).trim();
-      if (objectPath.isEmpty) return null;
-      return await FirebaseStorage.instance.ref(objectPath).getDownloadURL();
-    } catch (_) {
+      final index = segments.indexOf('public');
+      if (index >= 0 && index + 2 <= segments.length) {
+        final bucket = segments[index + 1];
+        final objectPath = Uri.decodeComponent(segments.sublist(index + 2).join('/'));
+        if (bucket.isNotEmpty && objectPath.isNotEmpty) {
+          return (bucket: bucket, objectPath: objectPath);
+        }
+      }
       return null;
     }
+
+    value = value.replaceAll(RegExp(r'^/+'), '');
+    final parts = value.split('/');
+    if (parts.length < 2) return null;
+    return (bucket: parts.first, objectPath: parts.skip(1).join('/'));
   }
 
   static String _normalize(String raw) {

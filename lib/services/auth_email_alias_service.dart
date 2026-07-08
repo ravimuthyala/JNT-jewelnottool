@@ -1,7 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthEmailAliasService {
   static const String _collection = 'auth_email_aliases';
+  static SupabaseClient get _supabase => Supabase.instance.client;
 
   static Future<void> saveAliasMapping({
     required String loginEmail,
@@ -13,29 +14,46 @@ class AuthEmailAliasService {
     if (normalizedLogin.isEmpty || normalizedAuth.isEmpty || uid.trim().isEmpty) {
       return;
     }
-    await FirebaseFirestore.instance.collection(_collection).doc(normalizedLogin).set({
-      'loginEmail': normalizedLogin,
-      'authEmail': normalizedAuth,
+    final payload = <String, dynamic>{
+      'id': uid.trim(),
+      'login_email': normalizedLogin,
+      'auth_email': normalizedAuth,
       'uid': uid.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    final existing = await _supabase
+        .from(_collection)
+        .select('login_email')
+        .eq('login_email', normalizedLogin)
+        .maybeSingle();
+    if (existing == null) {
+      await _supabase.from(_collection).insert(payload);
+    } else {
+      await _supabase
+          .from(_collection)
+          .update(payload)
+          .eq('login_email', normalizedLogin);
+    }
   }
 
   static Future<String?> resolveAuthEmailForLogin(String loginEmail) async {
     try {
       final normalized = loginEmail.trim().toLowerCase();
       if (normalized.isEmpty) return null;
-      final snap = await FirebaseFirestore.instance
-          .collection(_collection)
-          .doc(normalized)
-          .get();
-      final data = snap.data();
+      final data = await _supabase
+          .from(_collection)
+          .select()
+          .eq('login_email', normalized)
+          .maybeSingle();
       if (data == null) return null;
-      final authEmail = (data['authEmail'] ?? '').toString().trim().toLowerCase();
+      final map = Map<String, dynamic>.from(data);
+      final authEmail = (map['auth_email'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
       if (authEmail.isEmpty) return null;
       return authEmail;
     } catch (_) {
-      // Avoid blocking login if anonymous reads are restricted by Firestore rules.
       return null;
     }
   }
@@ -44,13 +62,14 @@ class AuthEmailAliasService {
     try {
       final normalized = loginEmail.trim().toLowerCase();
       if (normalized.isEmpty) return null;
-      final snap = await FirebaseFirestore.instance
-          .collection(_collection)
-          .doc(normalized)
-          .get();
-      final data = snap.data();
+      final data = await _supabase
+          .from(_collection)
+          .select()
+          .eq('login_email', normalized)
+          .maybeSingle();
       if (data == null) return null;
-      final uid = (data['uid'] ?? '').toString().trim();
+      final map = Map<String, dynamic>.from(data);
+      final uid = (map['uid'] ?? '').toString().trim();
       if (uid.isEmpty) return null;
       return uid;
     } catch (_) {
