@@ -39,17 +39,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- Password reset deep links -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="jnt-app-c3097.firebaseapp.com" android:pathPrefix="/__/auth/action" />
-                <data android:scheme="https" android:host="jnt-app-c3097.firebaseapp.com" android:pathPrefix="/reset-password" />
-                <data android:scheme="https" android:host="jnt-app-c3097.web.app" android:pathPrefix="/__/auth/action" />
-                <data android:scheme="https" android:host="jnt-app-c3097.web.app" android:pathPrefix="/reset-password" />
-            </intent-filter>
-
             <!-- Optional fallback custom scheme -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
