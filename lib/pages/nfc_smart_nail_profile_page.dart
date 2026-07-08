@@ -2,11 +2,67 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
+
+SupabaseClient get _supabase => Supabase.instance.client;
+
+Map<String, dynamic> _asMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return <String, dynamic>{};
+}
+
+class _NfcProfileTarget {
+  const _NfcProfileTarget({
+    required this.table,
+    required this.uid,
+    required this.data,
+  });
+
+  final String table;
+  final String uid;
+  final Map<String, dynamic> data;
+
+  Map<String, dynamic> get profile =>
+      _asMap(data['nfc_smart_nail_profile'] ?? data['nfcSmartNailProfile']);
+}
+
+Future<_NfcProfileTarget?> _findNfcProfileTarget(String uid) async {
+  for (final table in const <String>['client', 'client_artist']) {
+    final row = await _supabase.from(table).select().eq('id', uid).maybeSingle();
+    if (row != null) {
+      return _NfcProfileTarget(
+        table: table,
+        uid: uid,
+        data: Map<String, dynamic>.from(row),
+      );
+    }
+  }
+  return null;
+}
+
+Future<void> _saveNfcProfileForUser({
+  required String uid,
+  required Map<String, dynamic> profile,
+}) async {
+  final target = await _findNfcProfileTarget(uid);
+  final resolvedTarget =
+      target ?? _NfcProfileTarget(table: 'client_artist', uid: uid, data: const {});
+  final mergedClient = <String, dynamic>{
+    ..._asMap(resolvedTarget.data['client']),
+    'nfcSmartNailProfile': profile,
+  };
+  final nowIso = DateTime.now().toIso8601String();
+  await _supabase.from(resolvedTarget.table).upsert({
+    'id': uid,
+    'nfc_smart_nail_profile': profile,
+    'client': mergedClient,
+    'updated_at': nowIso,
+  }, onConflict: 'id');
+}
 
 class NfcSmartNailProfilePage extends StatefulWidget {
   const NfcSmartNailProfilePage({super.key});
@@ -65,17 +121,11 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
   }
 
   Future<void> _loadExistingProfile() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _supabase.auth.currentUser?.id;
     if (uid == null) return;
 
-    final db = FirebaseFirestore.instance;
-    final clientRef = db.collection('client').doc(uid);
-    final clientSnap = await clientRef.get();
-    final targetRef = clientSnap.exists
-        ? clientRef
-        : db.collection('client_artist').doc(uid);
-    final snap = await targetRef.get();
-    final data = snap.data()?['nfcSmartNailProfile'] as Map<String, dynamic>?;
+    final target = await _findNfcProfileTarget(uid);
+    final data = target?.profile;
     if (!mounted || data == null) return;
 
     for (final entry in _controllers.entries) {
@@ -87,7 +137,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _supabase.auth.currentUser?.id;
     if (uid == null) {
       ScaffoldMessenger.of(
         context,
@@ -103,21 +153,9 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
         'isActivated': false,
         'activeItemType': null,
         'activeItemValue': null,
-        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedAt': DateTime.now().toIso8601String(),
       };
-
-      final db = FirebaseFirestore.instance;
-      final clientRef = db.collection('client').doc(uid);
-      final clientSnap = await clientRef.get();
-      final targetRef = clientSnap.exists
-          ? clientRef
-          : db.collection('client_artist').doc(uid);
-
-      await targetRef.set({
-        'nfcSmartNailProfile': payload,
-        'client': {'nfcSmartNailProfile': payload},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await _saveNfcProfileForUser(uid: uid, profile: payload);
 
       if (!mounted) return;
       Navigator.push(
@@ -942,34 +980,24 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
   }
 
   Future<void> _persistActivation({required String payload}) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _supabase.auth.currentUser?.id;
     if (uid == null) {
       throw Exception('Missing signed-in user.');
     }
 
-    final db = FirebaseFirestore.instance;
-    final clientRef = db.collection('client').doc(uid);
-    final clientSnap = await clientRef.get();
-    final targetRef = clientSnap.exists
-        ? clientRef
-        : db.collection('client_artist').doc(uid);
-
-    final activationPayload = {
+    final existing = (await _findNfcProfileTarget(uid))?.profile ?? const <String, dynamic>{};
+    final activationPayload = <String, dynamic>{
+      ...existing,
       'isActivated': true,
       'activeItemKey': widget.selectedItem.key,
       'activeItemType': widget.selectedItem.title,
       'activeItemSection': widget.selectedItem.section,
       'activeItemValue': widget.selectedItem.value,
       'nfcWrittenPayload': payload,
-      'activatedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      'activatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
     };
-
-    await targetRef.set({
-      'nfcSmartNailProfile': activationPayload,
-      'client': {'nfcSmartNailProfile': activationPayload},
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _saveNfcProfileForUser(uid: uid, profile: activationPayload);
   }
 
   @override
