@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
@@ -55,17 +57,27 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       ),
     );
     if (path.isEmpty) return fallback();
-    final isNetwork =
-        path.startsWith('http://') ||
-        path.startsWith('https://') ||
-        path.startsWith('blob:') ||
-        path.startsWith('data:') ||
-        path.startsWith('content://');
+    final dataBytes = _decodeDataImageBytes(path);
+    if (dataBytes != null && dataBytes.isNotEmpty) {
+      return Image.memory(
+        dataBytes,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback(),
+      );
+    }
+    final isNetwork = path.startsWith('http://') || path.startsWith('https://');
     final isAsset = path.startsWith('assets/');
     final isFileUri = path.startsWith('file://');
     final isFilePath =
         !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
-    if (isNetwork || path.startsWith('gs://') || (kIsWeb && !isAsset)) {
+    if (isNetwork) {
+      return Image.network(
+        path,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback(),
+      );
+    }
+    if (path.startsWith('gs://') || path.startsWith('blob:') || path.startsWith('content://') || (kIsWeb && !isAsset)) {
       return FutureBuilder<String>(
         future: StorageUrlResolver.resolve(path).then((v) => v ?? ''),
         builder: (_, snap) {
@@ -106,6 +118,19 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
         );
       },
     );
+  }
+
+
+  Uint8List? _decodeDataImageBytes(String value) {
+    final src = value.trim();
+    if (!src.startsWith('data:image/')) return null;
+    final comma = src.indexOf(',');
+    if (comma <= 0 || comma >= src.length - 1) return null;
+    try {
+      return base64Decode(src.substring(comma + 1));
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -261,7 +286,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
             width: 78 * s,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.zero,
-              color: AppColors.blackCat.withValues(alpha: 0.06),
+              color: AppColors.balletSlippers,
             ),
             alignment: Alignment.center,
             child: Text(

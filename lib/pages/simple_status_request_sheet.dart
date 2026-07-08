@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
@@ -223,47 +224,53 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
   }
 
   Widget _topHeroCondensed(ClientRequestV2 r) {
-    final avatarPath = r.clientProfileImage.trim();
     final letter = r.clientName.isEmpty ? '' : r.clientName[0].toUpperCase();
     final showTitle = r.title.trim().isNotEmpty &&
         r.title.trim().toLowerCase() != r.clientName.trim().toLowerCase();
 
     return Column(
       children: [
-        if (avatarPath.isNotEmpty)
-          SizedBox(
-            height: 70,
-            width: 70,
-            child: ClipRRect(
-              borderRadius: BorderRadius.zero,
-              child: _imageForPath(avatarPath),
-            ),
-          )
-        else
-          Container(
-            height: 70,
-            width: 70,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.zero,
-              color: AppColors.balletSlippers,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
+        FutureBuilder<String>(
+          future: _resolveClientProfileImage(r),
+          initialData: r.clientProfileImage.trim(),
+          builder: (context, snapshot) {
+            final avatarPath = _normalizeImagePath((snapshot.data ?? '').trim());
+            if (avatarPath.isNotEmpty) {
+              return SizedBox(
+                height: 70,
+                width: 70,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.zero,
+                  child: _imageForPath(avatarPath),
                 ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              letter,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: AppColors.blackCat,
+              );
+            }
+            return Container(
+              height: 70,
+              width: 70,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.zero,
+                color: AppColors.balletSlippers,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-            ),
-          ),
+              alignment: Alignment.center,
+              child: Text(
+                letter,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            );
+          },
+        ),
         const SizedBox(height: 10),
         Text(
           r.clientName,
@@ -298,6 +305,141 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Future<String> _resolveClientProfileImage(ClientRequestV2 request) async {
+    final accepted = _normalizeImagePath(
+      request.acceptedClientProfileImage.trim(),
+    );
+    if (accepted.isNotEmpty) return accepted;
+
+    final existing = _normalizeImagePath(request.clientProfileImage.trim());
+    if (existing.isNotEmpty) return existing;
+
+    return _lookupClientProfileImage(
+      email: request.clientEmail.trim(),
+      name: request.clientName.trim(),
+    );
+  }
+
+  Future<String> _lookupClientProfileImage({
+    required String email,
+    required String name,
+  }) async {
+    String firstNonEmpty(List<Object?> values) {
+      for (final raw in values) {
+        final text = (raw ?? '').toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return '';
+    }
+
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+      return const <String, dynamic>{};
+    }
+
+    String imageFromRow(Map<String, dynamic> row) {
+      final profile = asMap(row['profile']);
+      final basic = asMap(row['basic']);
+      final client = asMap(row['client']);
+      final clientProfile = asMap(client['profile']);
+      final data = asMap(row['data']);
+      return _normalizeImagePath(
+        firstNonEmpty(<Object?>[
+          row['client_profile_image'],
+          row['clientProfileImage'],
+          row['profileImageUrl'],
+          row['profile_image_url'],
+          row['profile_picture_url'],
+          row['profilePhotoUrl'],
+          row['profile_photo_url'],
+          row['avatarUrl'],
+          row['avatar_url'],
+          row['photoUrl'],
+          row['photo_url'],
+          profile['profileImageUrl'],
+          profile['profile_image_url'],
+          profile['profile_picture_url'],
+          profile['avatarUrl'],
+          profile['avatar_url'],
+          profile['photoUrl'],
+          profile['photo_url'],
+          basic['profileImageUrl'],
+          basic['profile_image_url'],
+          basic['profile_picture_url'],
+          basic['avatarUrl'],
+          basic['avatar_url'],
+          basic['photoUrl'],
+          basic['photo_url'],
+          client['profileImageUrl'],
+          client['profile_image_url'],
+          client['profile_picture_url'],
+          client['avatarUrl'],
+          client['avatar_url'],
+          client['photoUrl'],
+          client['photo_url'],
+          clientProfile['profileImageUrl'],
+          clientProfile['profile_image_url'],
+          clientProfile['profile_picture_url'],
+          clientProfile['avatarUrl'],
+          clientProfile['avatar_url'],
+          clientProfile['photoUrl'],
+          clientProfile['photo_url'],
+          data['clientProfileImage'],
+          data['client_profile_image'],
+          data['profileImageUrl'],
+          data['profile_image_url'],
+          data['avatarUrl'],
+          data['avatar_url'],
+          data['photoUrl'],
+          data['photo_url'],
+        ]),
+      );
+    }
+
+    Future<String> lookupBy(String table, String column, String value) async {
+      final needle = value.trim();
+      if (needle.isEmpty) return '';
+      try {
+        final row = await Supabase.instance.client
+            .from(table)
+            .select()
+            .eq(column, needle)
+            .limit(1)
+            .maybeSingle();
+        if (row == null) return '';
+        return imageFromRow((row as Map).cast<String, dynamic>());
+      } catch (_) {
+        return '';
+      }
+    }
+
+    if (email.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const ['email', 'client_email']) {
+          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    if (name.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const [
+          'name',
+          'full_name',
+          'display_name',
+          'client_name',
+        ]) {
+          final found = await lookupBy(table, column, name.trim());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    return '';
   }
 
   String _normalizeImagePath(String raw) {
@@ -493,6 +635,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
       if (request.completionDeclineDescription.trim().isNotEmpty) {
         return request.completionDeclineDescription.trim();
       }
+      return 'Declined by Artist';
     }
     return 'Request expired';
   }
