@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -7,9 +8,40 @@ import '../theme/app_colors.dart';
 // for ClientRequestV2 + NailDimensionsV2 (or move models to a shared file)
 import '../models/client_request_v2.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../utils/request_nfc_details_loader.dart';
 import '../services/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/shipping_qr_widgets.dart';
+
+part 'artist_completed_details_tab.dart';
+part 'artist_completed_photos_tab.dart';
+part 'artist_completed_shipping_tab.dart';
+
+
+Widget completedSectionTitle(String text) {
+  return Text(
+    text,
+    style: const TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 16,
+      color: AppColors.blackCat,
+    ),
+  );
+}
+
+Widget completedSoftBox(Widget child) {
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.snow,
+      borderRadius: BorderRadius.zero,
+      border: Border.all(color: AppColors.blackCatBorderLight),
+    ),
+    child: child,
+  );
+}
+
+Widget _softBox(Widget child) => completedSoftBox(child);
 
 Future<void> showCompletedRequestSheet({
   required BuildContext context,
@@ -61,6 +93,7 @@ class _CompletedRequestSheet extends StatefulWidget {
 }
 
 class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
+  final SupabaseClient _supabase = Supabase.instance.client;
   final _trackingCtrl = TextEditingController();
 
   // ✅ NEW (optional, but helps keep formatting consistent)
@@ -69,8 +102,37 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
   String? _courier;
   bool _submitting = false;
+  int _completedTabIndex = 0;
+  bool? _dbShippingLabelReady;
+  String _dbShippingLabelQrData = '';
+  String _dbShippingQrCode = '';
+  String _dbShippingLabelPdfUrl = '';
+  String _dbShippingLabelCarrier = '';
+  String _dbShippingLabelTrackingNumber = '';
 
-  final _couriers = const ['USPS', 'UPS', 'FedEx', 'DHL', 'Other'];
+  final _couriers = const ['USPS', 'UPS', 'FedEx', 'DHL'];
+
+  String get _requestTable =>
+      widget.request.sourceCollection == 'Company_Custom_Requests'
+          ? 'company_custom_requests'
+          : 'client_custom_requests';
+
+  String get _requestDetailsTable =>
+      widget.request.sourceCollection == 'Company_Custom_Requests'
+          ? 'company_custom_requests_details'
+          : 'client_custom_requests_details';
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return <String, dynamic>{};
+  }
+
+  List<dynamic> _asList(Object? value) {
+    if (value is List) return value;
+    if (value is Iterable) return value.toList(growable: false);
+    return const <dynamic>[];
+  }
 
   @override
   void initState() {
@@ -83,6 +145,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     if (prefillCourier.isNotEmpty && _couriers.contains(prefillCourier)) {
       _courier = prefillCourier;
     }
+    Future<void>.microtask(_loadLatestShippingLabel);
   }
 
   @override
@@ -107,14 +170,145 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       _shippedDate != null; // ✅ NEW requirement
 
   bool get _isShippingLabelReady {
-    if (widget.request.status == RequestStatusV2.completed) return true;
-    if (widget.request.shippingStatus.trim().toLowerCase() == 'label_ready') {
-      return true;
+    if (_dbShippingLabelReady == true) return true;
+    if (_shippingStatusValue.toLowerCase() == 'label_ready') return true;
+    if (_shippingQrValue.isNotEmpty) return true;
+    if (_shippingPdfValue.isNotEmpty) return true;
+    if (_shippingTrackingValue.isNotEmpty) return true;
+    return widget.request.shippingLabelReady;
+  }
+
+  String get _shippingQrValue => _firstNonEmpty([
+        _dbShippingQrCode,
+        _dbShippingLabelQrData,
+        widget.request.shippingQrCode,
+        widget.request.shippingLabelQrData,
+      ]);
+
+  String get _shippingPdfValue => _firstNonEmpty([
+        _dbShippingLabelPdfUrl,
+        widget.request.shippingLabelPdfUrl,
+      ]);
+
+  String get _shippingCarrierValue => _firstNonEmpty([
+        _dbShippingLabelCarrier,
+        widget.request.shippingLabelCarrier,
+        _courier ?? '',
+        'USPS',
+      ]);
+
+  String get _shippingTrackingValue => _firstNonEmpty([
+        _dbShippingLabelTrackingNumber,
+        widget.request.shippingLabelTrackingNumber,
+        _trackingCtrl.text,
+      ]);
+
+  String get _shippingStatusValue => _firstNonEmpty([
+        widget.request.shippingStatus,
+        _dbShippingLabelReady == true ? 'label_ready' : '',
+      ]);
+
+  String _firstNonEmpty(Iterable<Object?> values) {
+    for (final raw in values) {
+      final value = (raw ?? '').toString().trim();
+      if (value.isNotEmpty && value != '-') return value;
     }
-    if (widget.request.shippingLabelReady) return true;
-    return widget.request.shippingLabelPdfUrl.trim().isNotEmpty ||
-        widget.request.shippingLabelQrData.trim().isNotEmpty ||
-        widget.request.shippingLabelTrackingNumber.trim().isNotEmpty;
+    return '';
+  }
+
+  bool _asBool(Object? raw) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final text = (raw ?? '').toString().trim().toLowerCase();
+    return text == 'true' || text == '1' || text == 'yes';
+  }
+
+  Future<void> _loadLatestShippingLabel() async {
+    try {
+      final row = await _supabase
+          .from(_requestTable)
+          .select()
+          .eq('id', widget.request.id)
+          .maybeSingle();
+      if (row == null) return;
+      final data = Map<String, dynamic>.from(row as Map);
+      final rootData = _asMap(data['data']);
+      final payload = _asMap(data['payload']);
+      final details = _asMap(data['details']);
+      final shipping = <String, dynamic>{
+        ..._asMap(rootData['shipping']),
+        ..._asMap(payload['shipping']),
+        ..._asMap(details['shipping']),
+      };
+      final shippingLabel = <String, dynamic>{
+        ..._asMap(rootData['shippingLabel']),
+        ..._asMap(payload['shippingLabel']),
+        ..._asMap(details['shippingLabel']),
+      };
+      final ready = _asBool(data['shipping_label_ready']) ||
+          _asBool(rootData['shippingLabelReady']) ||
+          _asBool(payload['shippingLabelReady']) ||
+          _asBool(details['shippingLabelReady']) ||
+          _firstNonEmpty([
+            data['shipping_label_qr_data'],
+            data['shipping_qr_code'],
+            rootData['shippingLabelQrData'],
+            payload['shippingLabelQrData'],
+            details['shippingLabelQrData'],
+            shipping['qrCode'],
+            shippingLabel['qrData'],
+          ]).isNotEmpty;
+      if (!mounted) return;
+      setState(() {
+        _dbShippingLabelReady = ready;
+        _dbShippingLabelQrData = _firstNonEmpty([
+          data['shipping_label_qr_data'],
+          rootData['shippingLabelQrData'],
+          payload['shippingLabelQrData'],
+          details['shippingLabelQrData'],
+          shippingLabel['qrData'],
+        ]);
+        _dbShippingQrCode = _firstNonEmpty([
+          data['shipping_qr_code'],
+          rootData['shippingQrCode'],
+          payload['shippingQrCode'],
+          details['shippingQrCode'],
+          shipping['qrCode'],
+        ]);
+        _dbShippingLabelPdfUrl = _firstNonEmpty([
+          data['shipping_label_pdf_url'],
+          rootData['shippingLabelPdfUrl'],
+          payload['shippingLabelPdfUrl'],
+          details['shippingLabelPdfUrl'],
+          shippingLabel['pdfUrl'],
+        ]);
+        _dbShippingLabelCarrier = _firstNonEmpty([
+          data['shipping_label_carrier'],
+          rootData['shippingLabelCarrier'],
+          payload['shippingLabelCarrier'],
+          details['shippingLabelCarrier'],
+          shippingLabel['carrier'],
+          shipping['carrier'],
+        ]);
+        _dbShippingLabelTrackingNumber = _firstNonEmpty([
+          data['shipping_label_tracking_number'],
+          rootData['shippingLabelTrackingNumber'],
+          payload['shippingLabelTrackingNumber'],
+          details['shippingLabelTrackingNumber'],
+          shippingLabel['trackingNumber'],
+          shipping['trackingNumber'],
+        ]);
+        if (_dbShippingLabelTrackingNumber.isNotEmpty) {
+          _trackingCtrl.text = _dbShippingLabelTrackingNumber;
+        }
+        if (_dbShippingLabelCarrier.isNotEmpty &&
+            _couriers.contains(_dbShippingLabelCarrier)) {
+          _courier = _dbShippingLabelCarrier;
+        }
+      });
+    } catch (_) {
+      // Best-effort refresh only. The sheet still renders from widget.request.
+    }
   }
 
   Future<void> _pickShippedDate() async {
@@ -198,537 +392,141 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
     return MediaQuery(
       data: sheetMediaQuery,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Container(
-          constraints: BoxConstraints(maxHeight: maxH),
-          decoration: const BoxDecoration(
-            color: AppColors.snow,
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                height: 5,
-                width: 54,
-                decoration: BoxDecoration(
-                  color: AppColors.blackCat.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
-              const SizedBox(height: 6),
-
-              Expanded(
-                child: ListView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    0,
-                    16,
-                    16 + math.max(0, bottomInset),
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            constraints: BoxConstraints(maxHeight: maxH),
+            decoration: const BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  height: 5,
+                  width: 54,
+                  decoration: BoxDecoration(
+                    color: AppColors.blackCat.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.zero,
                   ),
-                  children: [
-                    _topHeroCentered(context, widget.request, widget.onClose),
-                    const SizedBox(height: 12),
-
-                    // Completed status message (NOT shipped yet)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: 26,
-                          width: 26,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFDBF4E6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check,
-                            size: 16,
-                            color: Color(0xFF1E8E5A),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.80,
-                                ),
-                                height: 1.25,
-                              ),
-                              children: [
-                                const TextSpan(
-                                  text: 'Completed!\n',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const TextSpan(
-                                  text:
-                                      'Add courier, tracking #, and shipped date to mark as shipped and notify the client.',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w400,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
-                    const SizedBox(height: 12),
-                    // ✅ Bio
-                    _sectionTitle('Shipping Label'),
-                    const SizedBox(height: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_isShippingLabelReady) ...[
-                          _kv(
-                            'Client',
-                            _firstNameOnly(widget.request.clientName),
-                          ),
-                          _kv(
-                            'City/State',
-                            widget.request.clientLocation.trim().isEmpty
-                                ? '-'
-                                : widget.request.clientLocation.trim(),
-                          ),
-                          _kv(
-                            'Carrier',
-                            widget.request.shippingLabelCarrier.trim().isEmpty
-                                ? 'USPS'
-                                : widget.request.shippingLabelCarrier.trim(),
-                          ),
-                          _kv(
-                            'Tracking',
-                            widget.request.shippingLabelTrackingNumber
-                                    .trim()
-                                    .isEmpty
-                                ? (_trackingCtrl.text.trim().isEmpty
-                                      ? 'Auto-filled on label'
-                                      : _trackingCtrl.text.trim())
-                                : widget.request.shippingLabelTrackingNumber
-                                      .trim(),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: () => _openLabelPreview(
-                                  widget.request.shippingLabelPdfUrl,
-                                ),
-                                icon: const Icon(
-                                  Icons.download_rounded,
-                                  size: 16,
-                                ),
-                                label: const Text('Download Label'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: () => _openLabelPreview(
-                                  widget.request.shippingLabelPdfUrl,
-                                ),
-                                icon: const Icon(Icons.print_rounded, size: 16),
-                                label: const Text('Print Label'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: _openQrDialog,
-                                icon: const Icon(
-                                  Icons.qr_code_2_rounded,
-                                  size: 16,
-                                ),
-                                label: const Text('QR Code'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Use Download/Print to attach the label, or show the QR at the carrier counter for scan-and-print drop-off.',
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.62),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                              height: 1.25,
-                            ),
-                          ),
-                        ] else ...[
-                          Text(
-                            'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.68),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
-                    const SizedBox(height: 12),
-                    _sectionTitle('Description'),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.request.bio.isEmpty ? '—' : widget.request.bio,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w400,
-                        height: 1.2,
-                        fontSize: 14,
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
-                    const SizedBox(height: 12),
-                    if (_isBrandRequest(widget.request)) ...[
-                      _acceptedClientDetailsSection(widget.request),
-                      const SizedBox(height: 12),
-                      const Divider(
-                        height: 1,
-                        color: AppColors.blackCatBorderLight,
-                      ),
-                      const SizedBox(height: 12),
+                ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: IndexedStack(
+                    index: _completedTabIndex,
+                    children: [
+                      _completedDetailsTab(context, bottomInset),
+                      _completedPhotosTab(context, bottomInset),
+                      _completedShippingTab(context, bottomInset),
                     ],
-                    _measurementSection(),
-
-                    const SizedBox(height: 12),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ✅ Client uploaded photos
-                    _sectionTitle('Uploaded Photos (Client)'),
-                    const SizedBox(height: 10),
-                    if (widget.request.clientImages.isEmpty)
-                      _softBox(
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.image_outlined,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'No images uploaded',
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.65,
-                                ),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      _photosGrid(widget.request.clientImages),
-
-                    const SizedBox(height: 12),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ✅ Artist uploaded photos
-                    _sectionTitle('Uploaded Photos (Artist)'),
-                    const SizedBox(height: 10),
-                    if (widget.request.artistImages.isEmpty)
-                      _softBox(
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.image_outlined,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'No artist photos uploaded',
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.65,
-                                ),
-                                fontWeight: FontWeight.w400,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      _photosGrid(widget.request.artistImages),
-
-                    const SizedBox(height: 16),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ✅ Shipping input
-                    _sectionTitle('Shipping (required)'),
-                    const SizedBox(height: 10),
-
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Shipped by',
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.60),
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<String>(
-                          initialValue: _courier,
-                          dropdownColor: AppColors.snow,
-                          items: _couriers
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(
-                                    c,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) => setState(() => _courier = v),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: AppColors.snow,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(color: AppColors.blackCat),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        Text(
-                          'Tracking #',
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.60),
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _trackingCtrl,
-                          onChanged: (_) => setState(() {}),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Enter tracking number',
-                            hintStyle: const TextStyle(
-                              fontWeight: FontWeight.w400,
-                              fontSize: 14,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.snow,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(color: AppColors.blackCat),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                          ),
-                        ),
-
-                        // ✅ NEW: Shipped Date AFTER Tracking #
-                        const SizedBox(height: 12),
-                        Text(
-                          'Shipped Date',
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.60),
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-
-                        InkWell(
-                          borderRadius: BorderRadius.zero,
-                          onTap: _pickShippedDate,
-                          child: Container(
-                            height: 52,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: AppColors.snow,
-                              borderRadius: BorderRadius.zero,
-                              border: Border.all(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _shippedDate == null
-                                        ? 'Select shipped date'
-                                        : '${_shippedDate!.month}/${_shippedDate!.day}/${_shippedDate!.year}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w400,
-                                      fontSize: 13.5,
-                                      color: _shippedDate == null
-                                          ? AppColors.blackCat.withValues(
-                                              alpha: 0.45,
-                                            )
-                                          : AppColors.blackCat.withValues(
-                                              alpha: 0.90,
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.calendar_today_rounded,
-                                  size: 18,
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.45,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Bottom CTA
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  10,
-                  16,
-                  16 + math.max(0, bottomInset),
-                ),
-                child: Center(
-                  child: SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        disabledBackgroundColor: AppColors.blackCat.withValues(
-                          alpha: 0.18,
-                        ),
-                        foregroundColor: AppColors.snow,
-                        disabledForegroundColor: AppColors.snow.withValues(
-                          alpha: 0.78,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 22),
-                      ),
-                      onPressed: (!_isValid || _submitting)
-                          ? null
-                          : () async {
-                              setState(() => _submitting = true);
-                              try {
-                                await widget.onMarkShipped(
-                                  courier: _courier!.trim(),
-                                  tracking: _trackingCtrl.text.trim(),
-                                  shippedDate: _shippedDate!,
-                                );
-                                if (mounted) Navigator.pop(context);
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _submitting = false);
-                                }
-                              }
-                            },
-                      child: Text(
-                        _submitting ? 'Updating...' : 'Mark as Shipped',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          color: AppColors.snow,
-                        ),
-                      ),
-                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _completedTabsBar() {
+    return Row(
+      children: [
+        _completedTabButton('Details', 0),
+        const SizedBox(width: 8),
+        _completedTabButton('Photos', 1),
+        const SizedBox(width: 8),
+        _completedTabButton('Shipping', 2),
+      ],
+    );
+  }
+
+  Widget _completedStatusBanner() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 26,
+          width: 26,
+          decoration: const BoxDecoration(
+            color: Color(0xFFDBF4E6),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.check,
+            size: 16,
+            color: Color(0xFF1E8E5A),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.80),
+                height: 1.25,
+              ),
+              children: const [
+                TextSpan(
+                  text: 'Completed!\n',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+                TextSpan(
+                  text:
+                      'Review the order details, photos, then use Shipping when the label is ready.',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _completedTabButton(String label, int index) {
+    final selected = _completedTabIndex == index;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.zero,
+        onTap: () => setState(() => _completedTabIndex = index),
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? AppColors.blackCat : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              fontSize: 13.5,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
 
   Widget _topHeroCentered(
     BuildContext context,
@@ -754,32 +552,36 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 8),
-                if (avatarPath.isNotEmpty)
-                  SizedBox(
-                    height: 78,
-                    width: 78,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.zero,
-                      child: _imageForPath(avatarPath),
-                    ),
-                  )
-                else
-                  Container(
-                    height: 78,
-                    width: 78,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.zero,
-                      color: AppColors.balletSlippers,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      avatarLetter,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 22,
-                      ),
+                SizedBox(
+                  height: 78,
+                  width: 78,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: FutureBuilder<String>(
+                      future: _resolveCompletedClientProfileImage(request),
+                      builder: (context, snapshot) {
+                        final resolved = (snapshot.data ?? avatarPath).trim();
+                        if (resolved.isNotEmpty) {
+                          return _imageForPath(resolved);
+                        }
+                        return Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.zero,
+                            color: AppColors.balletSlippers,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            avatarLetter,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
+                ),
 
                 const SizedBox(height: 12),
 
@@ -823,23 +625,32 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 Row(
                   children: [
                     Expanded(
-                      child: _chipInfo(
-                        icon: Icons.calendar_today_outlined,
-                        text: 'Need by: ${_needByLabel(request.neededBy)}',
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _chipInfo(
+                          icon: Icons.calendar_today_outlined,
+                          text: 'Need by: ${_needByLabel(request.neededBy)}',
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 1,
+                      height: 18,
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: _chipInfo(
-                        icon: Icons.attach_money_rounded,
-                        text:
-                            'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _chipInfo(
+                          icon: Icons.attach_money_rounded,
+                          text: 'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: AppColors.blackCatBorderLight),
               ],
             ),
           ),
@@ -940,16 +751,150 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     );
   }
 
+
+  Future<String> _resolveCompletedClientProfileImage(ClientRequestV2 request) async {
+    final existing = request.clientProfileImage.trim();
+    if (existing.isNotEmpty && existing.toLowerCase() != 'null') return existing;
+
+    final accepted = request.acceptedClientProfileImage.trim();
+    if (accepted.isNotEmpty && accepted.toLowerCase() != 'null') return accepted;
+
+    return _lookupCompletedClientProfileImage(
+      email: request.clientEmail.trim(),
+      name: request.clientName.trim(),
+    );
+  }
+
+  Future<String> _lookupCompletedClientProfileImage({
+    required String email,
+    required String name,
+  }) async {
+    String firstNonEmpty(List<Object?> values) {
+      for (final raw in values) {
+        final text = (raw ?? '').toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return '';
+    }
+
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+      return const <String, dynamic>{};
+    }
+
+    String imageFromRow(Map<String, dynamic> row) {
+      final profile = asMap(row['profile']);
+      final basic = asMap(row['basic']);
+      final client = asMap(row['client']);
+      final clientProfile = asMap(client['profile']);
+      final data = asMap(row['data']);
+      return firstNonEmpty(<Object?>[
+        row['client_profile_image'],
+        row['clientProfileImage'],
+        row['profileImageUrl'],
+        row['profile_image_url'],
+        row['profile_picture_url'],
+        row['profilePhotoUrl'],
+        row['profile_photo_url'],
+        row['avatarUrl'],
+        row['avatar_url'],
+        row['photoUrl'],
+        row['photo_url'],
+        profile['profileImageUrl'],
+        profile['profile_image_url'],
+        profile['profile_picture_url'],
+        profile['avatarUrl'],
+        profile['avatar_url'],
+        profile['photoUrl'],
+        profile['photo_url'],
+        basic['profileImageUrl'],
+        basic['profile_image_url'],
+        basic['profile_picture_url'],
+        basic['avatarUrl'],
+        basic['avatar_url'],
+        basic['photoUrl'],
+        basic['photo_url'],
+        client['profileImageUrl'],
+        client['profile_image_url'],
+        client['profile_picture_url'],
+        client['avatarUrl'],
+        client['avatar_url'],
+        client['photoUrl'],
+        client['photo_url'],
+        clientProfile['profileImageUrl'],
+        clientProfile['profile_image_url'],
+        clientProfile['profile_picture_url'],
+        clientProfile['avatarUrl'],
+        clientProfile['avatar_url'],
+        clientProfile['photoUrl'],
+        clientProfile['photo_url'],
+        data['clientProfileImage'],
+        data['client_profile_image'],
+        data['profileImageUrl'],
+        data['profile_image_url'],
+        data['avatarUrl'],
+        data['avatar_url'],
+        data['photoUrl'],
+        data['photo_url'],
+      ]);
+    }
+
+    Future<String> lookupBy(String table, String column, String value) async {
+      final needle = value.trim();
+      if (needle.isEmpty) return '';
+      try {
+        final row = await Supabase.instance.client
+            .from(table)
+            .select()
+            .eq(column, needle)
+            .limit(1)
+            .maybeSingle();
+        if (row == null) return '';
+        return imageFromRow((row as Map).cast<String, dynamic>());
+      } catch (_) {
+        return '';
+      }
+    }
+
+    if (email.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const ['email', 'client_email']) {
+          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    if (name.trim().isNotEmpty) {
+      for (final table in const ['client', 'clients', 'client_artist']) {
+        for (final column in const ['name', 'full_name', 'display_name', 'client_name']) {
+          final found = await lookupBy(table, column, name.trim());
+          if (found.isNotEmpty) return found;
+        }
+      }
+    }
+
+    return '';
+  }
+
   String _safeAcceptedClientAvatarPath(ClientRequestV2 request) {
     final accepted = _normalizeImagePath(
       request.acceptedClientProfileImage.trim(),
     );
     if (accepted.isEmpty) return '';
     final blocked = <String>{
+      _normalizeImagePath(_heroPhotoSource(request)),
       _normalizeImagePath(request.clientProfileImage),
       _normalizeImagePath(request.previewImageAsset),
     }..removeWhere((e) => e.trim().isEmpty);
     return blocked.contains(accepted) ? '' : accepted;
+  }
+
+  String _heroPhotoSource(ClientRequestV2 request) {
+    final profile = request.clientProfileImage.trim();
+    if (profile.isNotEmpty) return profile;
+    return '';
   }
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
@@ -959,37 +904,44 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group Order'
         : 'Single Order';
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          r.isDirectRequest
-              ? Icons.arrow_outward_rounded
-              : Icons.arrow_forward_rounded,
-          size: 16,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          requestType,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5),
-        ),
-        const SizedBox(width: 14),
-        Container(width: 1, height: 16, color: AppColors.blackCatBorderLight),
-        const SizedBox(width: 14),
-        Icon(
-          r.orderType == RequestOrderTypeV2.group
-              ? Icons.groups_2_outlined
-              : Icons.person_outline_rounded,
-          size: 16,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          orderType,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5),
-        ),
-      ],
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            r.isDirectRequest
+                ? Icons.arrow_outward_rounded
+                : Icons.arrow_forward_rounded,
+            size: 15,
+            color: AppColors.blackCat,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            requestType,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            width: 1,
+            height: 18,
+            color: AppColors.blackCatBorderLight,
+          ),
+          const SizedBox(width: 10),
+          Icon(
+            r.orderType == RequestOrderTypeV2.group
+                ? Icons.groups_2_outlined
+                : Icons.person_outline_rounded,
+            size: 15,
+            color: AppColors.blackCat,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            orderType,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+          ),
+        ],
+      ),
     );
   }
 
@@ -998,36 +950,30 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
   );
 
-  static Widget _softBox(Widget child) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: child,
-    );
-  }
-
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: AppColors.blackCat),
-        const SizedBox(width: 6),
-        Expanded(
+        Icon(icon, size: 15, color: AppColors.blackCat),
+        const SizedBox(width: 5),
+        Flexible(
           child: Text(
             text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
           ),
         ),
       ],
     );
   }
 
-  static Widget _handCardCentered(String title, NailDimensionsV2 d) {
+
+  static Widget _handCardCentered(
+    String title,
+    NailDimensionsV2 d, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
     return _softBox(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1039,17 +985,26 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             ),
           ),
           const SizedBox(height: 10),
-          _dimRow('Thumb', d.thumb),
-          _dimRow('Index', d.index),
-          _dimRow('Middle', d.middle),
-          _dimRow('Ring', d.ring),
-          _dimRow('Pinky', d.pinky),
+          _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
+          _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
+          _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
+          _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
+          _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
         ],
       ),
     );
   }
 
-  static Widget _dimRow(String k, String v) {
+  static Widget _dimRow(String k, String v, {bool nfcRequested = false}) {
+    String formatMm(String raw) {
+      final value = raw.trim();
+      if (value.isEmpty || value == '-') return '-';
+      final cleaned = value.replaceAll(RegExp(r'[^0-9.]'), '');
+      final parsed = double.tryParse(cleaned);
+      if (parsed == null) return value;
+      return '${parsed.toStringAsFixed(2)} mm';
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -1064,11 +1019,31 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               ),
             ),
           ),
+          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
           Text(
-            v,
+            formatMm(v),
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
+      ),
+    );
+  }
+
+  static Widget _nfcDimensionChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.balletSlippers,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: const Text(
+        'NFC',
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          height: 1.0,
+        ),
       ),
     );
   }
@@ -1106,6 +1081,102 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     return p;
   }
 
+  Widget _shippingLabelSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('Shipping Label'),
+        const SizedBox(height: 10),
+        if (_isShippingLabelReady) ...[
+          _kv('Client', _firstNameOnly(widget.request.clientName)),
+          _kv(
+            'City/State',
+            widget.request.clientLocation.trim().isEmpty
+                ? '-'
+                : widget.request.clientLocation.trim(),
+          ),
+          _kv(
+            'Carrier',
+            _shippingCarrierValue,
+          ),
+          _kv(
+            'Tracking',
+            _shippingTrackingValue.isEmpty ? 'Auto-filled on label' : _shippingTrackingValue,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  side: const BorderSide(color: AppColors.blackCat),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: () => _openLabelPreview(
+                  _shippingPdfValue,
+                ),
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: const Text('Download Label'),
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  side: const BorderSide(color: AppColors.blackCat),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: () => _openLabelPreview(
+                  _shippingPdfValue,
+                ),
+                icon: const Icon(Icons.print_rounded, size: 16),
+                label: const Text('Print Label'),
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  side: const BorderSide(color: AppColors.blackCat),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: _openQrDialog,
+                icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+                label: const Text('QR Code'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Use Download/Print to attach the label, or show the QR at the carrier counter for scan-and-print drop-off.',
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.62),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              height: 1.25,
+            ),
+          ),
+        ] else ...[
+          Text(
+            'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.68),
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _measurementSection() {
     final isGroup = widget.request.orderType == RequestOrderTypeV2.group;
     if (isGroup) {
@@ -1113,90 +1184,377 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle('Client Measurements'),
-          const SizedBox(height: 10),
-          GroupClientMeasurementsTabs(clients: _buildGroupMeasurementClients()),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          FutureBuilder<List<GroupClientMeasurementData>>(
+            future: _loadGroupMeasurementClients(),
+            builder: (context, snapshot) {
+              final clients = snapshot.data ?? _buildGroupMeasurementClients();
+              return _compactGroupClientMeasurementsTabs(clients);
+            },
+          ),
+          const SizedBox(height: 4),
         ],
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('Nail Dimensions (mm)'),
-        const SizedBox(height: 10),
-        Row(
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: widget.request.sourceCollection,
+        requestId: widget.request.id,
+      ),
+      builder: (context, snapshot) {
+        final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: _handCardCentered('Left Hand', widget.request.leftHand),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _handCardCentered('Right Hand', widget.request.rightHand),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _softBox(
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Nail Shape',
-                        style: TextStyle(
-                          color: AppColors.blackCat.withValues(alpha: 0.60),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Center(
+                    child: Text(
+                      'Nail Dimensions',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        fontFamily: 'ArialBold',
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _handCardCentered(
+                          'Left Hand',
+                          widget.request.leftHand,
+                          nfc: nfc.main.left,
                         ),
                       ),
-                    ),
-                    Text(
-                      widget.request.nailShape,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _softBox(
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Nail Length',
-                        style: TextStyle(
-                          color: AppColors.blackCat.withValues(alpha: 0.60),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _handCardCentered(
+                          'Right Hand',
+                          widget.request.rightHand,
+                          nfc: nfc.main.right,
                         ),
                       ),
-                    ),
-                    Text(
-                      _lengthLabel(widget.request.nailLength),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                    ],
+                  ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _softBox(
+                      Row(
+                        children: [
+                          const Text(
+                            'Shape',
+                            style: TextStyle(
+                              color: AppColors.blackCat,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.request.nailShape.trim().isEmpty ? '-' : widget.request.nailShape,
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                fontFamily: 'ArialBold',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      textAlign: TextAlign.right,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _softBox(
+                      Row(
+                        children: [
+                          const Text(
+                            'Length',
+                            style: TextStyle(
+                              color: AppColors.blackCat,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _lengthLabel(widget.request.nailLength).trim().isEmpty
+                                  ? '-'
+                                  : _lengthLabel(widget.request.nailLength),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                fontFamily: 'ArialBold',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         const SizedBox(height: 12),
-      ],
+          ],
+        );
+      },
     );
+  }
+
+
+  Widget _compactGroupClientMeasurementsTabs(List<GroupClientMeasurementData> clients) {
+    final safeClients = clients.isEmpty ? _buildGroupMeasurementClients() : clients;
+    if (safeClients.isEmpty) return const SizedBox.shrink();
+    return _CompactGroupMeasurementsHost(clients: safeClients);
+  }
+
+  Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
+    final merged = <GroupClientMeasurementData>[];
+    final seen = <String>{};
+    final nfcDetails = await loadRequestNfcDetails(
+      sourceCollection: widget.request.sourceCollection,
+      requestId: widget.request.id,
+    );
+
+    void addClient(
+      GroupClientMeasurementData client, {
+      String email = '',
+      String id = '',
+    }) {
+      final name = client.name.trim();
+      final normalizedEmail = email.trim().toLowerCase();
+      final normalizedId = id.trim().toLowerCase();
+      final normalizedName = name.toLowerCase();
+      final keys = <String>{
+        if (normalizedEmail.isNotEmpty) 'email:$normalizedEmail',
+        if (normalizedId.isNotEmpty) 'id:$normalizedId',
+        if (normalizedName.isNotEmpty) 'name:$normalizedName',
+      };
+      if (keys.isEmpty) return;
+      if (keys.any(seen.contains)) return;
+      seen.addAll(keys);
+      merged.add(client);
+    }
+
+    // Submitted client must always be first.
+    addClient(
+      GroupClientMeasurementData(
+        name: widget.request.clientName.trim().isEmpty
+            ? 'Client'
+            : widget.request.clientName.trim(),
+        clientEmail: widget.request.clientEmail,
+        nailShape: widget.request.nailShape,
+        nailLength: widget.request.nailLength,
+        leftHand: _dimsMap(widget.request.leftHand),
+        rightHand: _dimsMap(widget.request.rightHand),
+        leftNfc: nfcDetails.main.left,
+        rightNfc: nfcDetails.main.right,
+      ),
+      email: widget.request.clientEmail,
+    );
+
+    String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
+      for (final raw in values) {
+        final text = (raw ?? '').toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return fallback;
+    }
+
+    Map<String, String> dimsFrom(Object? source, {required bool left}) {
+      final map = _asMap(source);
+      if (map.isEmpty) return const <String, String>{};
+      final nested = _asMap(map['dimensions']);
+      final data = nested.isNotEmpty ? nested : map;
+
+      String pick(String finger) {
+        final upper = finger[0].toUpperCase() + finger.substring(1);
+        final candidates = left
+            ? <String>[finger, 'l$upper', 'left$upper', 'left_$finger']
+            : <String>[finger, 'r$upper', 'right$upper', 'right_$finger'];
+        for (final key in candidates) {
+          final text = (data[key] ?? '').toString().trim();
+          if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+        }
+        return '';
+      }
+
+      return <String, String>{
+        'thumb': pick('thumb'),
+        'index': pick('index'),
+        'middle': pick('middle'),
+        'ring': pick('ring'),
+        'pinky': pick('pinky'),
+      };
+    }
+
+    Map<String, String> firstDims(List<Object?> sources, {required bool left}) {
+      for (final source in sources) {
+        final dims = dimsFrom(source, left: left);
+        if (dims.values.any((v) => v.trim().isNotEmpty)) return dims;
+      }
+      return const <String, String>{};
+    }
+
+    void addGroupClientFromMap(Map<String, dynamic> client, int index) {
+      if (client.isEmpty) return;
+
+      final email = firstNonEmpty(<Object?>[
+        client['clientEmail'],
+        client['client_email'],
+        client['email'],
+      ]).toLowerCase();
+      final id = firstNonEmpty(<Object?>[
+        client['clientId'],
+        client['client_id'],
+        client['id'],
+        client['uid'],
+      ]);
+      final name = firstNonEmpty(<Object?>[
+        client['clientName'],
+        client['client_name'],
+        client['name'],
+        client['displayName'],
+        client['display_name'],
+      ], fallback: 'Client $index');
+
+      final savedNails = _asMap(client['savedNails'] ?? client['saved_nails']);
+      final draftNails = _asMap(client['draftNails'] ?? client['draft_nails']);
+      final nailPreferences = _asMap(client['nailPreferences'] ?? client['nail_preferences']);
+      final nailSource = savedNails.isNotEmpty
+          ? savedNails
+          : (draftNails.isNotEmpty ? draftNails : nailPreferences);
+
+      final left = firstDims(<Object?>[
+        client['leftHandDimensions'],
+        client['left_hand_dimensions'],
+        nailSource['leftHandDimensions'],
+        nailSource['left_hand_dimensions'],
+        nailSource['dimensions'],
+        client['dimensions'],
+      ], left: true);
+
+      final right = firstDims(<Object?>[
+        client['rightHandDimensions'],
+        client['right_hand_dimensions'],
+        nailSource['rightHandDimensions'],
+        nailSource['right_hand_dimensions'],
+        nailSource['dimensions'],
+        client['dimensions'],
+      ], left: false);
+
+      addClient(
+        GroupClientMeasurementData(
+          name: name,
+          clientEmail: email,
+          nailShape: firstNonEmpty(<Object?>[
+            client['nailShape'],
+            client['nail_shape'],
+            nailSource['shape'],
+            nailSource['nailShape'],
+            nailSource['nail_shape'],
+          ], fallback: widget.request.nailShape),
+          nailLength: firstNonEmpty(<Object?>[
+            client['nailLength'],
+            client['nail_length'],
+            nailSource['length'],
+            nailSource['nailLength'],
+            nailSource['nail_length'],
+          ], fallback: widget.request.nailLength),
+          leftHand: left,
+          rightHand: right,
+          leftNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .left,
+          rightNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .right,
+        ),
+        email: email,
+        id: id,
+      );
+    }
+
+    void addGroupClientsFromSource(Map<String, dynamic> source) {
+      final payload = _asMap(source['payload']);
+      final details = _asMap(source['details']);
+      final data = _asMap(source['data']);
+      final requestDetails = _asMap(source['requestDetails'] ?? source['request_details']);
+      final orderData = _asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
+      final nestedSources = <Map<String, dynamic>>[
+        source,
+        payload,
+        details,
+        data,
+        requestDetails,
+        orderData,
+      ];
+
+      var index = 1;
+      for (final nested in nestedSources) {
+        final groupSources = <Object?>[
+          _asMap(nested['groupOrder'] ?? nested['group_order'])['clients'],
+          nested['groupClients'],
+          nested['group_clients'],
+          nested['selectedGroupClients'],
+          nested['selected_group_clients'],
+          nested['groupClientMeasurements'],
+          nested['group_client_measurements'],
+        ];
+        for (final groupSource in groupSources) {
+          for (final rawClient in _asList(groupSource)) {
+            addGroupClientFromMap(_asMap(rawClient), index++);
+          }
+        }
+      }
+    }
+
+    try {
+      final root = await _supabase
+          .from(_requestTable)
+          .select()
+          .eq('id', widget.request.id)
+          .maybeSingle();
+      if (root != null) addGroupClientsFromSource(Map<String, dynamic>.from(root));
+
+      final detailRows = await _supabase
+          .from(_requestDetailsTable)
+          .select()
+          .eq('request_id', widget.request.id);
+      for (final row in detailRows) {
+        final map = _asMap(row);
+        addGroupClientsFromSource(map);
+        addGroupClientsFromSource(_asMap(map['data']));
+      }
+    } catch (_) {
+      // Keep the sheet usable if RLS blocks migrated detail lookup.
+    }
+
+    for (final client in _buildGroupMeasurementClients()) {
+      addClient(client);
+    }
+
+    return merged.isEmpty ? _buildGroupMeasurementClients() : merged;
   }
 
   List<GroupClientMeasurementData> _buildGroupMeasurementClients() {
@@ -1209,16 +1567,25 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         rightHand: _dimsMap(widget.request.rightHand),
       ),
     ];
-    final seen = <String>{widget.request.clientName.trim().toLowerCase()};
+    final seen = <String>{
+      if (widget.request.clientName.trim().isNotEmpty)
+        'name:${widget.request.clientName.trim().toLowerCase()}',
+      if (widget.request.clientEmail.trim().isNotEmpty)
+        'email:${widget.request.clientEmail.trim().toLowerCase()}',
+    };
     for (final client in widget.request.groupClients) {
       final name = client.clientName.trim().isEmpty
           ? 'Client ${client.slotIndex}'
           : client.clientName.trim();
-      final key = client.clientId.trim().isNotEmpty
-          ? client.clientId.trim().toLowerCase()
-          : name.toLowerCase();
-      if (seen.contains(key)) continue;
-      seen.add(key);
+      final keys = <String>{
+        if (client.clientId.trim().isNotEmpty)
+          'id:${client.clientId.trim().toLowerCase()}',
+        if (client.clientEmail.trim().isNotEmpty)
+          'email:${client.clientEmail.trim().toLowerCase()}',
+        if (name.trim().isNotEmpty) 'name:${name.trim().toLowerCase()}',
+      };
+      if (keys.isEmpty || keys.any(seen.contains)) continue;
+      seen.addAll(keys);
       clients.add(
         GroupClientMeasurementData(
           name: name,
@@ -1387,7 +1754,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               '$label:',
               style: TextStyle(
                 fontWeight: FontWeight.w400,
-                color: AppColors.blackCat.withValues(alpha: 0.55),
+                color: AppColors.blackCat,
                 fontSize: 12,
               ),
             ),
@@ -1412,9 +1779,10 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Future<void> _openLabelPreview(String pdfUrl) async {
-    final link = pdfUrl.trim().isEmpty
+    final resolvedPdf = pdfUrl.trim().isNotEmpty ? pdfUrl.trim() : _shippingPdfValue;
+    final link = resolvedPdf.trim().isEmpty
         ? 'jnt://shipping/label?order=${widget.request.id}&download=1'
-        : pdfUrl.trim();
+        : resolvedPdf.trim();
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -1436,18 +1804,16 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Future<void> _openQrDialog() async {
-    final qr = widget.request.shippingQrCode.trim().isNotEmpty
-        ? widget.request.shippingQrCode.trim()
-        : (widget.request.shippingLabelQrData.trim().isEmpty
-              ? generateShippingQrCode(
-                  collectionName: widget.request.sourceCollection,
-                  orderDocId: widget.request.id,
-                  orderNumber: widget.request.orderNumber.trim().isNotEmpty
-                      ? widget.request.orderNumber.trim()
-                      : widget.request.id,
-                  artistId: widget.request.acceptedByArtistEmail.trim(),
-                )
-              : widget.request.shippingLabelQrData.trim());
+    final qr = _shippingQrValue.isNotEmpty
+        ? _shippingQrValue
+        : generateShippingQrCode(
+            collectionName: widget.request.sourceCollection,
+            orderDocId: widget.request.id,
+            orderNumber: widget.request.orderNumber.trim().isNotEmpty
+                ? widget.request.orderNumber.trim()
+                : widget.request.id,
+            artistId: widget.request.acceptedByArtistEmail.trim(),
+          );
     if (!mounted) return;
     await showSimpleQrPrintDialog(context, qr);
   }
@@ -1478,5 +1844,259 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     if (v == 'long') return 'Long';
     if (v == 'extra long' || v == 'xlong' || v == 'xl') return 'Extra Long';
     return len.trim();
+  }
+}
+
+
+class _CompactGroupMeasurementsHost extends StatefulWidget {
+  const _CompactGroupMeasurementsHost({required this.clients});
+
+  final List<GroupClientMeasurementData> clients;
+
+  @override
+  State<_CompactGroupMeasurementsHost> createState() =>
+      _CompactGroupMeasurementsHostState();
+}
+
+class _CompactGroupMeasurementsHostState
+    extends State<_CompactGroupMeasurementsHost> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final clients = widget.clients;
+    final selected = clients[_selectedIndex.clamp(0, clients.length - 1)];
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 56,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemCount: clients.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final client = clients[index];
+              final selectedTab = index == _selectedIndex;
+              return InkWell(
+                onTap: () => setState(() => _selectedIndex = index),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: selectedTab
+                            ? AppColors.alabaster
+                            : Colors.transparent,
+                        width: 3,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    client.name.trim().isEmpty ? 'Client' : client.name.trim(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          selectedTab ? FontWeight.w800 : FontWeight.w600,
+                      color: AppColors.blackCat.withValues(
+                        alpha: selectedTab ? 0.95 : 0.70,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Nail Dimensions',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _CompactHandCard(
+                      title: 'Left Hand',
+                      values: selected.leftHand,
+                      nfc: selected.leftNfc,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _CompactHandCard(
+                      title: 'Right Hand',
+                      values: selected.rightHand,
+                      nfc: selected.rightNfc,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _CompactInfoBox(
+                      label: 'Shape',
+                      value: _cleanText(selected.nailShape),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _CompactInfoBox(
+                      label: 'Length',
+                      value: _cleanText(selected.nailLength),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _cleanText(Object? raw) {
+    final text = (raw ?? '').toString().trim();
+    if (text.isEmpty || text.toLowerCase() == 'null') return '-';
+    return text;
+  }
+}
+
+class _CompactHandCard extends StatelessWidget {
+  const _CompactHandCard({
+    required this.title,
+    required this.values,
+    this.nfc = const <String, bool>{},
+  });
+
+  final String title;
+  final Map<String, String> values;
+  final Map<String, bool> nfc;
+
+  @override
+  Widget build(BuildContext context) {
+    String value(String key) {
+      final raw = (values[key] ?? '').trim();
+      if (raw.isEmpty || raw.toLowerCase() == 'null') return '-';
+      final parsed = num.tryParse(raw.replaceAll(RegExp(r'[^0-9.]'), ''));
+      if (parsed == null) return raw;
+      return '${parsed.toStringAsFixed(parsed % 1 == 0 ? 0 : 2)} mm';
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _row('Thumb', value('thumb'), nfcRequested: nfc['thumb'] == true),
+          _row('Index', value('index'), nfcRequested: nfc['index'] == true),
+          _row('Middle', value('middle'), nfcRequested: nfc['middle'] == true),
+          _row('Ring', value('ring'), nfcRequested: nfc['ring'] == true),
+          _row('Pinky', value('pinky'), nfcRequested: nfc['pinky'] == true),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value, {bool nfcRequested = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.blackCat.withValues(alpha: 0.70),
+              ),
+            ),
+          ),
+          if (nfcRequested) ...[_CompletedRequestSheetState._nfcDimensionChip(), const SizedBox(width: 6)],
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactInfoBox extends StatelessWidget {
+  const _CompactInfoBox({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.blackCat,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.blackCat,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
