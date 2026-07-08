@@ -9,6 +9,7 @@ import '../../services/supabase_auth_service.dart';
 import '../artist_login_page.dart';
 import '../artist_shell_page.dart';
 import '../email_verification_pending_page.dart';
+import '../../widgets/jnt_modal_app_bar.dart';
 import 'registration_draft.dart';
 import '_widgets/reg_helpers.dart';
 import 'step1_account.dart';
@@ -17,6 +18,7 @@ import 'step3_specialization.dart';
 import 'step4_credentials.dart';
 import '_widgets/step_progress_bar.dart';
 import '_widgets/continue_button.dart';
+import '_widgets/reg_helpers.dart';
 
 class ArtistRegistrationFlow extends StatefulWidget {
   const ArtistRegistrationFlow({super.key});
@@ -505,34 +507,29 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        centerTitle: true,
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        actions: [
-          Tooltip(
-            message: 'Fill dummy data',
-            child: IconButton(
-              icon: const Icon(Icons.auto_fix_high),
-              color: AppColors.blackCatLight,
-              onPressed: _autofillCurrentStep,
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.of(
+          context,
+          rootNavigator: true,
+        ).pushNamedAndRemoveUntil('/register', (route) => false),
+        closeTooltip: 'Close artist registration',
+        closeIcon: const Icon(Icons.close),
+        leadingWidth: 60,
+        leading: Tooltip(
+          message: 'Fill dummy data',
+          child: IconButton(
+            icon: const Icon(Icons.auto_fix_high),
+            iconSize: 20,
+            color: AppColors.blackCat,
+            onPressed: _autofillCurrentStep,
+            style: IconButton.styleFrom(
+              foregroundColor: AppColors.blackCat,
+              minimumSize: const Size(40, 40),
+              padding: const EdgeInsets.all(8),
+              shape: const RoundedRectangleBorder(),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.close),
-            color: AppColors.blackCatLight,
-            onPressed: () => Navigator.of(context, rootNavigator: true)
-                .pushNamedAndRemoveUntil('/register', (route) => false),
-          ),
-        ],
+        ),
       ),
       body: ColoredBox(
         color: AppColors.snow,
@@ -553,35 +550,41 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
             // ── Bottom action row ──────────────────────────────────────────
             Container(
               color: AppColors.snow,
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Back / Cancel
-                  SizedBox(
-                    height: 52,
-                    child: OutlinedButton(
-                      onPressed: _onBack,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.blackCat,
-                        side: const BorderSide(color: AppColors.blackCat),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                      ),
-                      child: Text(
-                        _currentStep == 1 ? 'Cancel' : 'Back',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                  if (_currentStep > 1) ...[
+                    SizedBox(
+                      height: 46,
+                      child: OutlinedButton(
+                        onPressed: _onBack,
+                        style: regSecondaryButtonStyle().copyWith(
+                          padding: WidgetStateProperty.all(
+                            const EdgeInsets.symmetric(horizontal: 20),
+                          ),
+                        ),
+                        child: Text(
+                          'Back',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Arial',
+                                fontSize: 12,
+                                color: AppColors.snow,
+                              ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Continue / Create
-                  Expanded(
-                    child: ContinueButton(
-                      onTap: _onContinue,
-                      loading: _submitting,
-                      embedded: true,
-                      label: _currentStep == _totalSteps ? 'Create My Account' : 'Continue',
-                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  ContinueButton(
+                    onTap: _onContinue,
+                    loading: _submitting,
+                    embedded: true,
+                    label: _currentStep == _totalSteps
+                        ? 'Create My Account'
+                        : 'Continue',
                   ),
                 ],
               ),

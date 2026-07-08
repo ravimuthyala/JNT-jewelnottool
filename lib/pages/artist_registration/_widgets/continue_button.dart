@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
+import 'package:flutter/material.dart';
+import 'reg_helpers.dart';
 
 class ContinueButton extends StatelessWidget {
   const ContinueButton({
@@ -21,27 +22,28 @@ class ContinueButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final button = SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: FilledButton(
+      width: embedded ? null : double.infinity,
+      height: 46,
+      child: ElevatedButton(
         onPressed: (enabled && !loading) ? onTap : null,
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.blackCat,
-          disabledBackgroundColor: AppColors.blackCatBorderLight,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+        style: regPrimaryButtonStyle(),
         child: loading
             ? const SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.snow,
+                ),
               )
             : Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: AppColors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  color: AppColors.snow,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  fontSize: 12,
+                ),
               ),
       ),
     );
@@ -49,8 +51,7 @@ class ContinueButton extends StatelessWidget {
     if (embedded) return button;
 
     return Container(
-      color: AppColors.snow,
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
       child: button,
     );
   }

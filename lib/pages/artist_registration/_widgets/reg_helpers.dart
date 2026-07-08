@@ -54,7 +54,53 @@ const double kInputFs = 13;
 const double kLabelFs = 16;
 const double kHintFs = 12.5;
 const double kFieldHeight = 46;
-const double kFieldVertPad = 14;
+const double kFieldVertPad = 16;
+const Color kSectionFill = AppColors.snow;
+
+TextStyle get kRegTitleStyle => const TextStyle(
+  fontSize: 16,
+  fontWeight: FontWeight.w700,
+  fontFamily: 'Arial',
+  color: AppColors.blackCat,
+);
+
+TextStyle get kRegSubtitleStyle => TextStyle(
+  fontSize: 14,
+  fontWeight: FontWeight.w500,
+  fontFamily: 'Arial',
+  color: AppColors.blackCat.withValues(alpha: 0.72),
+  height: 1.25,
+);
+
+ButtonStyle regPrimaryButtonStyle({double minHeight = 46}) {
+  return ElevatedButton.styleFrom(
+    backgroundColor: AppColors.blackCat,
+    foregroundColor: AppColors.snow,
+    minimumSize: Size(0, minHeight),
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    textStyle: const TextStyle(
+      fontFamily: 'Arial',
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+    ),
+  );
+}
+
+ButtonStyle regSecondaryButtonStyle({double minHeight = 46}) {
+  return ElevatedButton.styleFrom(
+    backgroundColor: AppColors.blackCat,
+    foregroundColor: AppColors.snow,
+    minimumSize: Size(0, minHeight),
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    textStyle: const TextStyle(
+      fontFamily: 'Arial',
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+    ),
+  );
+}
 
 // ── InputDecoration factory ───────────────────────────────────────────────────
 
@@ -64,10 +110,20 @@ InputDecoration regDec(String label, String hint, {Widget? suffixIcon}) {
     hintText: hint,
     hintStyle: TextStyle(
       fontSize: kHintFs,
-      color: AppColors.blackCat.withValues(alpha: 0.35),
+      color: AppColors.blackCat.withValues(alpha: 0.42),
+      fontFamily: 'Arial',
     ),
-    labelStyle: TextStyle(fontSize: kLabelFs, color: AppColors.blackCat),
-    errorStyle: const TextStyle(fontSize: 10.5, height: 1.1, fontWeight: FontWeight.w500),
+    labelStyle: TextStyle(
+      fontSize: kLabelFs,
+      color: AppColors.blackCat.withValues(alpha: 0.78),
+      fontFamily: 'Arial',
+    ),
+    errorStyle: const TextStyle(
+      fontSize: 10.5,
+      height: 1.1,
+      fontWeight: FontWeight.w400,
+      fontFamily: 'Arial',
+    ),
     filled: true,
     fillColor: AppColors.snow,
     suffixIcon: suffixIcon,
@@ -99,33 +155,27 @@ Widget regSectionCard({
   return Container(
     padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
     decoration: BoxDecoration(
-      color: AppColors.snow,
+      color: kSectionFill,
       borderRadius: BorderRadius.zero,
-      border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
+      border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.08)),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.blackCat.withValues(alpha: 0.04),
+          blurRadius: 16,
+          offset: const Offset(0, 10),
+        ),
+      ],
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'ArialBold',
-            color: AppColors.blackCat,
-          ),
+          style: kRegTitleStyle,
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.blackCat,
-              height: 1.25,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(subtitle, style: kRegSubtitleStyle),
         ],
         const SizedBox(height: 6),
         child,
