@@ -1,10 +1,11 @@
 import 'dart:ui';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
+import '../services/supabase_auth_service.dart';
 
 Future<void> showForgotPasswordModal(BuildContext context) async {
   await showModalBottomSheet<void>(
@@ -106,35 +107,10 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
   }
 
   Future<void> _sendResetEmail(String email) async {
-    final settings = ActionCodeSettings(
-      url: 'https://jnt-app-c3097.web.app/reset-password',
-      handleCodeInApp: true,
-      androidPackageName: 'com.example.jnt_app_0120',
-      androidInstallApp: true,
-      androidMinimumVersion: '1',
-      iOSBundleId: 'com.example.jntApp0120',
+    await SupabaseAuthService.sendPasswordResetEmail(
+      email: email,
+      redirectTo: 'https://jnt-app-c3097.web.app/reset-password',
     );
-
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: email,
-        actionCodeSettings: settings,
-      );
-    } on FirebaseAuthException catch (e) {
-      final shouldFallback =
-          e.code == 'invalid-continue-uri' ||
-          e.code == 'unauthorized-continue-uri' ||
-          e.code == 'missing-android-pkg-name' ||
-          e.code == 'invalid-hosting-link-domain' ||
-          e.code == 'invalid-dynamic-link-domain' ||
-          e.code == 'argument-error';
-      if (!shouldFallback) rethrow;
-
-      debugPrint(
-        'Password reset with ActionCodeSettings failed (${e.code}). Falling back to default reset email.',
-      );
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-    }
   }
 
   Future<void> _onSend() async {
@@ -214,54 +190,9 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    height: 40,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Center(
-                          child: ExcludeSemantics(
-                            child: Image.asset(
-                              'assets/images/jnt_logo_black.png',
-                              height: 50,
-                              fit: BoxFit.contain,
-                              excludeFromSemantics: true,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          child: IconButton(
-                            tooltip: 'Close forgot password',
-                            onPressed: () => Navigator.pop(context),
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
-                            ),
-                            style: ButtonStyle(
-                              shape: WidgetStateProperty.all(
-                                const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                              ),
-                              overlayColor: WidgetStateProperty.all(
-                                AppColors.blackCat.withValues(alpha: 0.08),
-                              ),
-                              side: WidgetStateProperty.resolveWith((states) {
-                                if (states.contains(WidgetState.focused)) {
-                                  return const BorderSide(
-                                    color: _focusRing,
-                                    width: 2,
-                                  );
-                                }
-                                return BorderSide.none;
-                              }),
-                            ),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ),
-                      ],
-                    ),
+                  JntModalHeaderBar(
+                    onClose: () => Navigator.pop(context),
+                    closeTooltip: 'Close forgot password',
                   ),
                 ],
               ),
@@ -491,4 +422,3 @@ class _ResetLinkSentDialog extends StatelessWidget {
     );
   }
 }
-

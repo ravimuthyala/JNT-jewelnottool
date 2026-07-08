@@ -9,8 +9,9 @@ import 'artist_registration_page.dart';
 import 'artist_registration/artist_registration_flow.dart';
 import 'client_artist_registration_page.dart';
 import 'login_page.dart';
-import 'company_registration_page_v2.dart';
+import 'brand_registration_page.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 Future<void> showRegisterModal(BuildContext context) async {
   await showDialog<void>(
@@ -181,77 +182,43 @@ class _RegisterPageState extends State<RegisterPage> {
       explicitChildNodes: true,
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: ExcludeSemantics(
-            child: Image.asset(
-              'assets/images/jnt_logo_black.png',
-              height: 50,
-              fit: BoxFit.contain,
-              excludeFromSemantics: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          ),
-          actions: [
-            Semantics(
-              sortKey: const OrdinalSortKey(99),
-              onDidGainAccessibilityFocus: () {
-                if (_didRedirectInitialA11yFocus || !mounted) return;
-                _didRedirectInitialA11yFocus = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  _focusClientTile();
-                  SemanticsService.sendAnnouncement(
-                    'Client. Collaborate with top artists on personalized designs.' as FlutterView,
-                    Directionality.of(context) as String,
-                    WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
-                  );
-                });
-              },
-              child: Focus(
-                canRequestFocus: false,
-                skipTraversal: true,
-                child: ExcludeSemantics(
-                  excluding: !_closeSemanticsEnabled,
-                  child: IconButton(
-                    tooltip: 'Close create account',
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    style: ButtonStyle(
-                      shape: WidgetStateProperty.all(
-                        const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                      ),
-                      side: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.focused)) {
-                          return const BorderSide(color: _focusRing, width: 2);
-                        }
-                        return BorderSide.none;
-                      }),
-                    ),
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      if (widget.isModal) {
-                        Navigator.pop(context);
-                        return;
-                      }
-                      Navigator.of(
-                        context,
-                        rootNavigator: true,
-                      ).pushNamedAndRemoveUntil('/', (route) => false);
-                    },
-                  ),
-                ),
+        appBar: JntModalAppBar(
+          onClose: () {
+            if (widget.isModal) {
+              Navigator.pop(context);
+              return;
+            }
+            Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pushNamedAndRemoveUntil('/', (route) => false);
+          },
+          closeTooltip: 'Close create account',
+          autofocusClose: _closeSemanticsEnabled,
+          closeIcon: Semantics(
+            sortKey: const OrdinalSortKey(99),
+            onDidGainAccessibilityFocus: () {
+              if (_didRedirectInitialA11yFocus || !mounted) return;
+              _didRedirectInitialA11yFocus = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                _focusClientTile();
+                SemanticsService.sendAnnouncement(
+                  'Client. Collaborate with top artists on personalized designs.' as FlutterView,
+                  Directionality.of(context) as String,
+                  WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
+                );
+              });
+            },
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              child: ExcludeSemantics(
+                excluding: !_closeSemanticsEnabled,
+                child: const Icon(Icons.close),
               ),
             ),
-          ],
+          ),
         ),
         body: SafeArea(
           child: ListView(

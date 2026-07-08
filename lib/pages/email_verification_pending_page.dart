@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/auth_flags.dart';
 import '../services/auth_email_alias_service.dart';
@@ -25,6 +25,7 @@ class EmailVerificationPendingPage extends StatefulWidget {
 class _EmailVerificationPendingPageState
     extends State<EmailVerificationPendingPage> {
   static const int _resendCooldownSeconds = 60;
+  SupabaseClient get _supabase => Supabase.instance.client;
   Timer? _pollTimer;
   Timer? _cooldownTimer;
   int _cooldown = _resendCooldownSeconds;
@@ -71,7 +72,7 @@ class _EmailVerificationPendingPageState
 
   Future<void> _navigateToLogin() async {
     if (!mounted) return;
-    await FirebaseAuth.instance.signOut();
+    await _supabase.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: widget.loginPageBuilder),
@@ -83,12 +84,13 @@ class _EmailVerificationPendingPageState
     if (_busy) return;
     _busy = true;
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final auth = _supabase.auth;
+      final user = auth.currentUser;
       if (user == null) return;
-      await user.reload();
-      final refreshed = FirebaseAuth.instance.currentUser;
-      if (refreshed?.emailVerified == true) {
-        final uid = refreshed?.uid;
+      await auth.refreshSession();
+      final refreshed = auth.currentUser;
+      if (refreshed?.emailConfirmedAt != null) {
+        final uid = refreshed?.id;
         final authEmail = refreshed?.email;
         if (uid != null && (authEmail ?? '').isNotEmpty) {
           await AuthEmailAliasService.saveAliasMapping(
@@ -122,9 +124,9 @@ class _EmailVerificationPendingPageState
   Future<void> _resendVerificationEmail() async {
     if (_cooldown > 0) return;
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      await user.sendEmailVerification();
+      final email = (_supabase.auth.currentUser?.email ?? '').trim();
+      if (email.isEmpty) return;
+      await _supabase.auth.resend(type: OtpType.signup, email: email);
       _startCooldown();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
