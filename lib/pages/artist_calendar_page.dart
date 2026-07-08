@@ -12,7 +12,7 @@ import '../utlis/responsive_text.dart';
 import 'artist_profile_page.dart';
 import 'notifications_page.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 
 class ArtistCalendarPage extends StatefulWidget {
   const ArtistCalendarPage({
@@ -25,6 +25,8 @@ class ArtistCalendarPage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
+    this.onOpenEarnings,
     this.onSignOut,
     this.showExtendedAvatarMenu = false,
     this.hideHistoryMenuItem = false,
@@ -32,6 +34,7 @@ class ArtistCalendarPage extends StatefulWidget {
     this.showBottomNav = false,
     this.bottomNavIndex = 3,
     this.onNavTap,
+    this.enableSupabaseAutoload = true,
   });
 
   final List<ClientRequest> requests;
@@ -42,6 +45,8 @@ class ArtistCalendarPage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
+  final VoidCallback? onOpenEarnings;
   final VoidCallback? onSignOut;
   final bool showExtendedAvatarMenu;
   final bool hideHistoryMenuItem;
@@ -49,6 +54,7 @@ class ArtistCalendarPage extends StatefulWidget {
   final bool showBottomNav;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
+  final bool enableSupabaseAutoload;
 
   @override
   State<ArtistCalendarPage> createState() => _ArtistCalendarPageState();
@@ -61,19 +67,22 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   DateTime _focusedMonth = _startOfMonth(DateTime.now());
   DateTime _selectedDay = _dateOnly(DateTime.now());
   List<ClientRequest> _supabaseRequests = const <ClientRequest>[];
-  RealtimeChannel? _calendarChannel;
-  bool _streamLoaded = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _calendarSub;
+  bool _loadingSupabaseRequests = false;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
-    _listenCalendarRequestsFromSupabase();
+    if (widget.enableSupabaseAutoload) {
+      unawaited(_loadCalendarRequestsFromSupabase());
+      _listenCalendarRequestsFromSupabase();
+    }
   }
 
   @override
   void dispose() {
-    _calendarChannel?.unsubscribe();
+    _calendarSub?.cancel();
     _tabCtrl.dispose();
     super.dispose();
   }
@@ -92,55 +101,97 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return byId.values.toList(growable: false);
   }
 
+  Future<void> _loadCalendarRequestsFromSupabase() async {
+    if (_loadingSupabaseRequests) return;
+    _loadingSupabaseRequests = true;
+    try {
+      final rows = await _fetchCalendarRequestRowsFromSupabase();
+      final mapped = rows
+          .map(_requestFromSupabaseRow)
+          .whereType<ClientRequest>()
+          .toList(growable: false);
+
+      if (!mounted) return;
+      setState(() => _supabaseRequests = mapped);
+    } catch (e) {
+      debugPrint('ARTIST CALENDAR LOAD FAILED: $e');
+    } finally {
+      _loadingSupabaseRequests = false;
+    }
+  }
+
   void _listenCalendarRequestsFromSupabase() {
     final user = Supabase.instance.client.auth.currentUser;
     final email = (user?.email ?? '').trim().toLowerCase();
     if (email.isEmpty) return;
 
-    unawaited(_refetch(email));
+    try {
+      _calendarSub = Supabase.instance.client
+          .from('client_custom_requests')
+          .stream(primaryKey: ['id'])
+          .order('updated_at', ascending: false)
+          .listen((rows) {
+            final mapped = rows
+                .whereType<Map>()
+                .map(
+                  (row) =>
+                      _requestFromSupabaseRow(Map<String, dynamic>.from(row)),
+                )
+                .whereType<ClientRequest>()
+                .toList(growable: false);
 
-    _calendarChannel?.unsubscribe();
-    _calendarChannel = Supabase.instance.client
-        .channel('artist_calendar_$email')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'client_custom_requests',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'accepted_by_artist_email',
-            value: email,
-          ),
-          callback: (_) => unawaited(_refetch(email)),
-        )
-        .subscribe((status, [error]) {
-          if (error != null) {
-            debugPrint('ARTIST CALENDAR REALTIME ERROR: $error');
-          }
-        });
+            if (!mounted) return;
+            setState(() => _supabaseRequests = mapped);
+          });
+    } catch (e) {
+      debugPrint('ARTIST CALENDAR STREAM FAILED: $e');
+    }
   }
 
-  Future<void> _refetch(String email) async {
+  Future<List<Map<String, dynamic>>>
+  _fetchCalendarRequestRowsFromSupabase() async {
+    final supabase = Supabase.instance.client;
+    final now = DateTime.now();
+    final minDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 30));
+    final maxDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 120));
+
     try {
-      final rows = await Supabase.instance.client
+      final rows = await supabase
           .from('client_custom_requests')
-          .select('id, status, order_number, summary, details, accepted_by_artist_email, client_name, artist_status, inspiration_photos, photo_count, created_at, updated_at')
-          .eq('accepted_by_artist_email', email)
-          .order('updated_at', ascending: false);
+          .select()
+          .order('created_at', ascending: false)
+          .limit(250);
 
-      final mapped = (rows as List<dynamic>)
+      return rows
           .whereType<Map>()
-          .map((row) => _requestFromSupabaseRow(Map<String, dynamic>.from(row)))
-          .whereType<ClientRequest>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .where((row) {
+            final data = _flattenCalendarRow(row);
+            final neededBy = _dateFromAny(
+              _firstNonEmptyCalendar([
+                data['needBy'],
+                data['neededBy'],
+                data['dueDate'],
+                data['createdAt'],
+                data['created_at'],
+              ]),
+            );
+            if (neededBy == null) return true;
+            final d = _dateOnly(neededBy);
+            return !d.isBefore(minDate) && !d.isAfter(maxDate);
+          })
           .toList(growable: false);
-
-      if (!mounted) return;
-      setState(() {
-        _supabaseRequests = mapped;
-        _streamLoaded = true;
-      });
     } catch (e) {
-      debugPrint('ARTIST CALENDAR REFETCH FAILED: $e');
+      debugPrint('ARTIST CALENDAR FETCH FAILED: $e');
+      return const <Map<String, dynamic>>[];
     }
   }
 
@@ -423,37 +474,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(85),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  NotificationBellButton(
-                    onTap: _openNotifications,
-                    iconSize: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Center(
-                      child: Image.asset(
-                        'assets/images/jnt_logo_black.png',
-                        height: 50,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _avatarMenu(),
-                ],
-              ),
-            ),
-          ),
-        ),
+      appBar: JntStandardAppBar(
+        onNotifications: _openNotifications,
+        trailing: _avatarMenu(),
       ),
       body: Column(
         children: [
@@ -647,6 +670,10 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     widget.onOpenArtist?.call();
   }
 
+  void _openReviewsFromMenu() {
+    widget.onOpenReviews?.call();
+  }
+
   Widget _avatarMenu() {
     return PopupMenuButton<_HeaderAvatarAction>(
       tooltip: '',
@@ -659,6 +686,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           case _HeaderAvatarAction.profile:
             _openManageProfile();
             break;
+          case _HeaderAvatarAction.earnings:
+            widget.onOpenEarnings?.call();
+            break;
           case _HeaderAvatarAction.history:
             _openHistoryFromMenu();
             break;
@@ -668,17 +698,20 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           case _HeaderAvatarAction.artist:
             _openArtistFromMenu();
             break;
+          case _HeaderAvatarAction.reviews:
+            _openReviewsFromMenu();
+            break;
           case _HeaderAvatarAction.signOut:
             _signOut();
             break;
         }
       },
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: 36),
+          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
         ),
       ),
       itemBuilder: (_) {
@@ -698,6 +731,14 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             value: _HeaderAvatarAction.profile,
             child: _HeaderMenuRow(icon: Icons.person_outline, label: 'Profile'),
           ),
+          if (widget.onOpenEarnings != null)
+            const PopupMenuItem(
+              value: _HeaderAvatarAction.earnings,
+              child: _HeaderMenuRow(
+                icon: Icons.attach_money_outlined,
+                label: 'Earnings',
+              ),
+            ),
           if (!widget.hideHistoryMenuItem)
             const PopupMenuItem(
               value: _HeaderAvatarAction.history,
@@ -715,6 +756,11 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             value: _HeaderAvatarAction.artist,
             child: _HeaderMenuRow(icon: Icons.brush_outlined, label: 'Artist'),
           ),
+          if (widget.onOpenReviews != null)
+            const PopupMenuItem(
+              value: _HeaderAvatarAction.reviews,
+              child: _HeaderMenuRow(icon: Icons.star_border, label: 'Reviews'),
+            ),
           const PopupMenuDivider(),
           const PopupMenuItem(
             value: _HeaderAvatarAction.signOut,
@@ -862,35 +908,19 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                 ),
               ),
               const SizedBox(height: 10),
-              if (!_streamLoaded && widget.requests.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.blackCat,
-                      ),
+              ..._agendaForDate(_selectedDay).map(_agendaTile),
+              if (_agendaForDate(_selectedDay).isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'No due requests for this day',
+                    style: TextStyle(
+                      color: AppColors.blackCat,
+                      fontWeight: FontWeight.w400,
+                      fontSize: 11.5,
                     ),
                   ),
-                )
-              else ...[
-                ..._agendaForDate(_selectedDay).map(_agendaTile),
-                if (_agendaForDate(_selectedDay).isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text(
-                      'No due requests for this day',
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontWeight: FontWeight.w400,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
-              ],
+                ),
             ],
           ),
         ),
@@ -1018,19 +1048,6 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   }
 
   Widget _scheduleView() {
-    if (!_streamLoaded && widget.requests.isEmpty) {
-      return const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: AppColors.blackCat,
-          ),
-        ),
-      );
-    }
-
     final upcoming = _upcomingRequestsSorted();
 
     return ListView(
@@ -1340,7 +1357,15 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   }
 }
 
-enum _HeaderAvatarAction { profile, history, calendar, artist, signOut }
+enum _HeaderAvatarAction {
+  profile,
+  earnings,
+  history,
+  calendar,
+  artist,
+  reviews,
+  signOut,
+}
 
 class _HeaderMenuRow extends StatelessWidget {
   const _HeaderMenuRow({required this.icon, required this.label, this.color});

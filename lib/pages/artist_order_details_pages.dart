@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 /// =======================================================
 /// Artist Order Model (artist-facing statuses + actions)
@@ -116,12 +117,6 @@ class ArtistOrder {
   }
 }
 
-/// =======================================================
-/// Pages (match your client pattern: one page per status)
-/// Each page takes:
-///  - order
-///  - onUpdate: push updated order back to Orders page / Firestore
-/// =======================================================
 
 class NewArtistOrderDetailsPage extends StatelessWidget {
   const NewArtistOrderDetailsPage({
@@ -1103,12 +1098,10 @@ class _OrderDetailsShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.of(context).pop(),
+        closeTooltip: 'Close artist order details',
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-        centerTitle: true,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),

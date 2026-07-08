@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 ThemeData _checkoutFormTheme(BuildContext context) {
   return Theme.of(context).copyWith(
@@ -236,12 +237,6 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   }
 
   void _completePurchase() {
-    // ✅ sample: purchase success
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Purchase completed ✅ Returning to registration...'),
-      ),
-    );
     Navigator.pop(context, true); // ✅ go back to ArtistRegistrationPage
   }
 
@@ -311,20 +306,10 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _checkoutBg,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context, null),
-        ),
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 50,
-          fit: BoxFit.contain,
-        ),
-        centerTitle: true,
+      appBar: JntModalAppBar(
+        onClose: () => Navigator.pop(context, null),
+        closeTooltip: 'Close checkout',
+        closeIcon: const Icon(Icons.close),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
