@@ -9,6 +9,8 @@ import 'package:flutter/semantics.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_modal_app_bar.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 
 import 'notifications_page.dart';
@@ -750,40 +752,23 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       label: 'Client profile',
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          toolbarHeight: 85,
-          automaticallyImplyLeading: false,
-          leadingWidth: 58,
+        appBar: JntModalAppBar(
+          onClose: _closeProfilePage,
+          closeTooltip: 'Close profile',
           leading: NotificationBellButton(
             onTap: _openNotifications,
             focusNode: _notificationsFocusNode,
-            iconSize: 22,
+            iconSize: JntHeaderMetrics.notificationIconSize,
           ),
           title: ExcludeSemantics(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 50,
+              height: JntModalHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              tooltip: 'Close profile',
-              icon: const Icon(Icons.close_rounded),
-              onPressed: _closeProfilePage,
-              style: IconButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                padding: const EdgeInsets.all(12),
-                shape: const RoundedRectangleBorder(),
-              ),
-            ),
-          ],
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),

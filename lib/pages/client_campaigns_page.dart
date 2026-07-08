@@ -2,20 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/notifications_service.dart';
-import '../services/storage_url_resolver.dart';
+import '../services/storage_url_resolver.dart' as storage_resolver;
 import '../theme/app_colors.dart';
 import '../utils/scenario_4_1.dart';
 import '../widgets/company_client_request_card.dart';
 import '../widgets/client_profile_avatar_icon.dart';
-import '../widgets/notification_bell_button.dart';
-import 'client_request_details_page.dart';
+import '../widgets/jnt_standard_app_bar.dart';
+import 'artist_requests_page_redesign.dart' show AcceptRequestDialogV2;
+import 'client_campaign_details_page.dart';
 import 'notifications_page.dart';
 
 bool shouldShowScenario31ToDirectClient({
@@ -34,54 +34,62 @@ bool shouldShowScenario31ToDirectClient({
   );
 }
 
-class ClientRequestsPage extends StatefulWidget {
-  const ClientRequestsPage({
+class ClientCampaignsPage extends StatefulWidget {
+  const ClientCampaignsPage({
     super.key,
     this.onOpenNotifications,
     this.onOpenProfile,
+    this.onOpenEarnings,
     this.onLogout,
     this.showProfileMenuItem = true,
+    this.showBrandRequests = true,
+    this.showClientRequests = true,
+    this.splitArtistVisibleRequestsBySource = false,
+    this.useCampaignNaming = false,
   });
 
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenEarnings;
   final VoidCallback? onLogout;
   final bool showProfileMenuItem;
+  final bool showBrandRequests;
+  final bool showClientRequests;
+  final bool splitArtistVisibleRequestsBySource;
+  final bool useCampaignNaming;
 
   @override
-  State<ClientRequestsPage> createState() => _ClientRequestsPageState();
+  State<ClientCampaignsPage> createState() => _ClientCampaignsPageState();
 }
 
-class _ClientRequestsPageState extends State<ClientRequestsPage> {
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _companySub;
+class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
+  RealtimeChannel? _companyChannel;
   bool _loading = true;
   List<ClientRequestV2> _items = const <ClientRequestV2>[];
+  List<ClientRequestV2> _brandRequests = const <ClientRequestV2>[];
+  List<ClientRequestV2> _clientRequests = const <ClientRequestV2>[];
   final Set<String> _hiddenRequestIds = <String>{};
   String _headerAvatarUrl = '';
   String _headerDisplayName = '';
   bool _currentClientIsBrandPartner = false;
+  bool _currentClientNfcEligible = false;
+  final Map<String, Set<String>> _tableColumnsCache = <String, Set<String>>{};
 
   bool _isBrandPartnerClient(Map<String, dynamic> data) {
     String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
-    final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-    final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-    final client = (data['client'] as Map<String, dynamic>?) ?? const {};
-    final ascension = (data['ascension'] as Map<String, dynamic>?) ?? const {};
-    final profileAscension =
-        (profile['ascension'] as Map<String, dynamic>?) ?? const {};
-    final basicAscension =
-        (basic['ascension'] as Map<String, dynamic>?) ?? const {};
-    final clientAscension =
-        (client['ascension'] as Map<String, dynamic>?) ?? const {};
+    final profile = _asMap(data['profile']);
+    final basic = _asMap(data['basic']);
+    final client = _asMap(data['client']);
+    final ascension = _asMap(data['ascension']);
+    final profileAscension = _asMap(profile['ascension']);
+    final basicAscension = _asMap(basic['ascension']);
+    final clientAscension = _asMap(client['ascension']);
 
     bool hasTag(Object? raw) {
       if (raw is! List) return false;
       for (final item in raw) {
         final value = norm(item).replaceAll('_', ' ');
-        if (value == 'brand partner' ||
-            value == 'ambassador' ||
-            value == '1m followers' ||
-            value == '1m+ followers') {
+        if (value == 'ambassador' || value.contains('ambassador')) {
           return true;
         }
       }
@@ -105,89 +113,141 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     ];
     for (final status in statuses) {
       final normalized = status.replaceAll('_', ' ');
-      if (normalized == 'brand partner' ||
-          normalized.contains('brand partner') ||
-          normalized == 'ambassador' ||
-          normalized.contains('ambassador')) {
+      if (normalized == 'ambassador' ||
+          (normalized.contains('ambassador') &&
+              !normalized.contains('not ambassador'))) {
         return true;
       }
     }
 
-    final boolFlags = <Object?>[
-      data['brandPartner'],
-      data['isBrandPartner'],
-      data['panel_brandPartner'],
-      profile['brandPartner'],
-      profile['isBrandPartner'],
-      basic['brandPartner'],
-      basic['isBrandPartner'],
-      client['brandPartner'],
-      client['isBrandPartner'],
-    ];
-    for (final raw in boolFlags) {
-      if (raw is bool && raw) return true;
-      final text = norm(raw);
-      if (text == 'true' || text == '1' || text == 'yes') return true;
-    }
-
-    bool followersAtLeast1M(Map<String, dynamic> map) {
-      final possibleCounts = <Object?>[
-        map['followers'],
-        map['followerCount'],
-        map['followersCount'],
-        map['socialFollowers'],
-        map['socialFollowerCount'],
-      ];
-      for (final value in possibleCounts) {
-        if (value is num && value >= 1000000) return true;
-        final parsed = num.tryParse((value ?? '').toString());
-        if (parsed != null && parsed >= 1000000) return true;
-      }
-      final label = norm(
-        map['followersLabel'] ??
-            map['followerMilestone'] ??
-            map['followersTier'],
-      );
-      return label.contains('1m');
-    }
-
-    final approvalSignals = <String>[
-      norm(data['brandPartnerStatus']),
-      norm(data['brandPartnerApproval']),
-      norm(data['adminOverride']),
-      norm(data['override']),
-      norm(profile['brandPartnerStatus']),
-      norm(profile['brandPartnerApproval']),
-      norm(profile['adminOverride']),
-      norm(profile['override']),
-      norm(basic['brandPartnerStatus']),
-      norm(basic['brandPartnerApproval']),
-      norm(basic['adminOverride']),
-      norm(basic['override']),
-      norm(client['brandPartnerStatus']),
-      norm(client['brandPartnerApproval']),
-      norm(client['adminOverride']),
-      norm(client['override']),
-    ];
-    final hasAdminOverride = approvalSignals.any(
-      (v) => v == 'approved' || v == 'true' || v == '1' || v == 'yes',
-    );
-
-    final hasFollowers1M =
-        followersAtLeast1M(data) ||
-        followersAtLeast1M(profile) ||
-        followersAtLeast1M(basic) ||
-        followersAtLeast1M(client) ||
-        followersAtLeast1M(ascension) ||
-        followersAtLeast1M(profileAscension) ||
-        followersAtLeast1M(basicAscension) ||
-        followersAtLeast1M(clientAscension);
-    if (hasAdminOverride || hasFollowers1M) return true;
-
     return hasTag(data['accountTags']) ||
         hasTag(profile['accountTags']) ||
         hasTag(basic['accountTags']) ||
-        hasTag(client['accountTags']);
+        hasTag(client['accountTags']) ||
+        hasTag(ascension['tags']) ||
+        hasTag(profileAscension['tags']) ||
+        hasTag(basicAscension['tags']) ||
+        hasTag(clientAscension['tags']);
+  }
+
+
+  bool _isNfcEligibleClient(Map<String, dynamic> data) {
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        return value.map((key, val) => MapEntry(key.toString(), val));
+      }
+      return const <String, dynamic>{};
+    }
+
+    double? mmValue(Object? raw) {
+      if (raw is num) return raw.toDouble();
+      final text = (raw ?? '').toString().trim().replaceAll(
+        RegExp(r'[^0-9.]'),
+        '',
+      );
+      if (text.isEmpty) return null;
+      return double.tryParse(text);
+    }
+
+    bool hasEligibleDimension(Map<String, dynamic> dims) {
+      const keys = <String>[
+        'lThumb',
+        'lIndex',
+        'lMiddle',
+        'lRing',
+        'lPinky',
+        'rThumb',
+        'rIndex',
+        'rMiddle',
+        'rRing',
+        'rPinky',
+        'thumb',
+        'index',
+        'middle',
+        'ring',
+        'pinky',
+      ];
+      for (final key in keys) {
+        final value = mmValue(dims[key]);
+        if (value != null && value >= 8) return true;
+      }
+      return false;
+    }
+
+    final profile = asMap(data['profile']);
+    final basic = asMap(data['basic']);
+    final client = asMap(data['client']);
+    final nailPreferences = asMap(data['nailPreferences']);
+    final profileNailPreferences = asMap(profile['nailPreferences']);
+    final basicNailPreferences = asMap(basic['nailPreferences']);
+    final clientNailPreferences = asMap(client['nailPreferences']);
+    final apiNailMeasurements = asMap(data['apiNailMeasurements']);
+
+    final dimensionMaps = <Map<String, dynamic>>[
+      asMap(nailPreferences['dimensions']),
+      asMap(profileNailPreferences['dimensions']),
+      asMap(basicNailPreferences['dimensions']),
+      asMap(clientNailPreferences['dimensions']),
+      asMap(data['dimensions']),
+      asMap(profile['dimensions']),
+      asMap(basic['dimensions']),
+      asMap(client['dimensions']),
+      apiNailMeasurements,
+    ];
+
+    for (final dims in dimensionMaps) {
+      if (hasEligibleDimension(dims)) return true;
+    }
+
+    bool truthy(Object? raw) {
+      if (raw is bool) return raw;
+      if (raw is num) return raw != 0;
+      final text = (raw ?? '').toString().trim().toLowerCase();
+      return text == 'true' || text == '1' || text == 'yes';
+    }
+
+    return truthy(data['nfcEligible']) ||
+        truthy(profile['nfcEligible']) ||
+        truthy(basic['nfcEligible']) ||
+        truthy(client['nfcEligible']);
+  }
+
+  Future<bool> _isCurrentClientNfcEligible(String clientEmail) async {
+    final normalized = clientEmail.trim().toLowerCase();
+    final uid = (_supabase.auth.currentUser?.id ?? '').trim();
+    if (normalized.isEmpty && uid.isEmpty) return false;
+    for (final collection in const <String>[
+      'client',
+      'client_artist',
+      'clients',
+    ]) {
+      try {
+        if (uid.isNotEmpty) {
+          final rows = await _supabase
+              .from(collection)
+              .select()
+              .eq('id', uid)
+              .limit(20);
+          for (final row in rows) {
+            final data = _asMap(row);
+            if (_isNfcEligibleClient(data)) return true;
+          }
+        }
+        if (normalized.isNotEmpty) {
+          final rows = await _supabase
+              .from(collection)
+              .select()
+              .eq('email', normalized)
+              .limit(50);
+          for (final row in rows) {
+            final data = _asMap(row);
+            if (_isNfcEligibleClient(data)) return true;
+          }
+        }
+      } catch (_) {}
+    }
+    return false;
   }
 
   @override
@@ -199,13 +259,246 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
 
   @override
   void dispose() {
-    _companySub?.cancel();
+    if (_companyChannel != null) {
+      Supabase.instance.client.removeChannel(_companyChannel!);
+      _companyChannel = null;
+    }
     super.dispose();
   }
 
+  SupabaseClient get _supabase => Supabase.instance.client;
+
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString(), val));
+    }
+    return <String, dynamic>{};
+  }
+
+  List<dynamic> _asList(Object? value) {
+    if (value is List) return List<dynamic>.from(value);
+    return <dynamic>[];
+  }
+
+  Set<String> _asEmailSet(Object? value) {
+    return _asList(value)
+        .map((e) => e.toString().trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+  }
+
+  String _tableNameForCollection(String collection) {
+    final lower = collection.trim();
+    if (lower == 'Company_Custom_Requests') return 'company_custom_requests';
+    if (lower == 'Client_Custom_Requests') return 'client_custom_requests';
+    if (lower == 'company_custom_requests') return 'company_custom_requests';
+    if (lower == 'client_custom_requests') return 'client_custom_requests';
+    return collection;
+  }
+
+  String _detailsTableForCollection(String collection) {
+    return _tableNameForCollection(collection) == 'company_custom_requests'
+        ? 'company_custom_requests_details'
+        : 'client_custom_requests_details';
+  }
+
+  bool _isCompanyCustomRequestSource(String collection) {
+    final normalized = _tableNameForCollection(collection).trim().toLowerCase();
+    return normalized == 'company_custom_requests';
+  }
+
+  Future<Map<String, dynamic>?> _readRow(
+    String table, {
+    String? id,
+    String? email,
+  }) async {
+    if (id != null && id.trim().isNotEmpty) {
+      final rows = await _supabase.from(table).select().eq('id', id.trim()).limit(1);
+      if (rows.isNotEmpty) return _asMap(rows.first);
+    }
+    if (email != null && email.trim().isNotEmpty) {
+      final rows = await _supabase
+          .from(table)
+          .select()
+          .eq('email', email.trim().toLowerCase())
+          .limit(1);
+      if (rows.isNotEmpty) return _asMap(rows.first);
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> _readRequestRoot(ClientRequestV2 request) async {
+    final rows = await _supabase
+        .from(_tableNameForCollection(request.sourceCollection))
+        .select()
+        .eq('id', request.id)
+        .limit(1);
+    return rows.isEmpty ? const <String, dynamic>{} : _asMap(rows.first);
+  }
+
+  Future<Map<String, dynamic>> _readRequestDetails(ClientRequestV2 request) async {
+    final table = _detailsTableForCollection(request.sourceCollection);
+    try {
+      final rows = await _supabase
+          .from(table)
+          .select()
+          .eq('request_id', request.id)
+          .limit(1);
+      if (rows.isNotEmpty) {
+        return _asMap(rows.first);
+      }
+      final fallback = await _supabase
+          .from(table)
+          .select()
+          .eq('id', request.id)
+          .limit(1);
+      if (fallback.isNotEmpty) {
+        return _asMap(fallback.first);
+      }
+    } catch (_) {
+      // Some environments do not keep a separate *_details row for brand
+      // requests. In that case, the JSON lives in the root details column.
+    }
+
+    final root = await _readRequestRoot(request);
+    final rootDetails = root['details'];
+    return _asMap(rootDetails);
+  }
+
+  Map<String, dynamic> _deepMergeMaps(
+    Map<String, dynamic> base,
+    Map<String, dynamic> patch,
+  ) {
+    final result = Map<String, dynamic>.from(base);
+    patch.forEach((key, value) {
+      final current = result[key];
+      if (current is Map && value is Map) {
+        result[key] = _deepMergeMaps(
+          current.map((k, v) => MapEntry(k.toString(), v)),
+          value.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
+  }
+
+  Future<Set<String>> _tableColumns(String table) async {
+    final cached = _tableColumnsCache[table];
+    if (cached != null) return cached;
+    final rows = await _supabase
+        .from(table)
+        .select()
+        .limit(1);
+    final cols = <String>{};
+    if (rows.isNotEmpty) {
+      cols.addAll(_asMap(rows.first).keys.map((key) => key.toString()));
+    }
+    if (cols.isEmpty) {
+      // Safe minimum for the current request tables. This prevents PostgREST
+      // errors caused by sending camelCase JSON keys as DB columns.
+      cols.addAll(const <String>[
+        'id',
+        'status',
+        'details',
+        'updated_at',
+        'accepted_by_client_email',
+        'declined_by_client_emails',
+        'open_to_client_pool',
+        'client_response_status',
+        'artist_status',
+        'brand_status',
+        'client_status',
+      ]);
+    }
+    _tableColumnsCache[table] = cols;
+    return cols;
+  }
+
+  Future<void> _upsertRequestPayload(
+    String collection,
+    String requestId,
+    Map<String, dynamic> summaryPayload,
+    Map<String, dynamic> detailsPayload,
+  ) async {
+    final table = _tableNameForCollection(collection);
+    final nowIso = DateTime.now().toIso8601String();
+    final existingRows = await _supabase
+        .from(table)
+        .select()
+        .eq('id', requestId)
+        .limit(1);
+    final root = existingRows.isEmpty
+        ? const <String, dynamic>{}
+        : _asMap(existingRows.first);
+    final existingDetails = _asMap(root['details']);
+    final mergedDetails = _deepMergeMaps(
+      existingDetails,
+      _deepMergeMaps(
+        detailsPayload,
+        <String, dynamic>{
+          'status': summaryPayload['status'] ?? detailsPayload['status'],
+          'acceptedByClientEmail': summaryPayload['acceptedByClientEmail'],
+          'acceptedByClientAt': summaryPayload['acceptedByClientAt'],
+          'declinedByClientEmails': summaryPayload['declinedByClientEmails'],
+          'acceptedGroupClientEmails': summaryPayload['acceptedGroupClientEmails'],
+          'groupClientsAllResponded': summaryPayload['groupClientsAllResponded'],
+          'brandStatus': summaryPayload['brandStatus'],
+          'clientStatus': summaryPayload['clientStatus'],
+          'artistStatus': summaryPayload['artistStatus'],
+          'directArtistStatus': summaryPayload['directArtistStatus'],
+          'clientResponseStatus': summaryPayload['clientResponseStatus'],
+          'openToClientPool': summaryPayload['openToClientPool'],
+        }..removeWhere((_, value) => value == null),
+      ),
+    );
+
+    final update = <String, dynamic>{
+      'id': requestId,
+      'status': summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
+      'details': mergedDetails,
+      'updated_at': nowIso,
+      'accepted_by_client_email': summaryPayload['acceptedByClientEmail'],
+      'declined_by_client_emails': summaryPayload['declinedByClientEmails'],
+      'open_to_client_pool': summaryPayload['openToClientPool'],
+      'client_response_status': summaryPayload['clientResponseStatus'],
+      'artist_status': summaryPayload['artistStatus'],
+      'brand_status': summaryPayload['brandStatus'],
+      'client_status': summaryPayload['clientStatus'],
+    }..removeWhere((_, value) => value == null);
+
+    final columns = await _tableColumns(table);
+    update.removeWhere((key, _) => !columns.contains(key));
+
+    update.remove('id');
+    await _supabase.from(table).update(update).eq('id', requestId);
+
+    // Keep the optional details table in sync only when it exists and accepts
+    // these columns. The root details JSON is the source of truth.
+    try {
+      final detailsTable = _detailsTableForCollection(collection);
+      final detailColumns = await _tableColumns(detailsTable);
+      final detailsUpdate = <String, dynamic>{
+        'request_id': requestId,
+        'id': requestId,
+        'details': mergedDetails,
+        'payload': mergedDetails,
+        'status': summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
+        'updated_at': nowIso,
+      };
+      detailsUpdate.removeWhere((key, _) => !detailColumns.contains(key));
+      if (detailsUpdate.containsKey('request_id') || detailsUpdate.containsKey('id')) {
+        await _supabase.from(detailsTable).upsert(detailsUpdate);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadHeaderIdentity() async {
-    final auth = FirebaseAuth.instance.currentUser;
-    final uid = (auth?.uid ?? '').trim();
+    final auth = _supabase.auth.currentUser;
+    final uid = (auth?.id ?? '').trim();
     final email = (auth?.email ?? '').trim().toLowerCase();
     String pick(Map<String, dynamic> data, List<String> keys) {
       for (final key in keys) {
@@ -216,29 +509,14 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     }
 
     Future<Map<String, dynamic>?> readFrom(String collection) async {
-      if (uid.isNotEmpty) {
-        final byId = await FirebaseFirestore.instance
-            .collection(collection)
-            .doc(uid)
-            .get();
-        if (byId.exists) return byId.data();
-      }
-      if (email.isNotEmpty) {
-        final byEmail = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('email', isEqualTo: email)
-            .limit(1)
-            .get();
-        if (byEmail.docs.isNotEmpty) return byEmail.docs.first.data();
-      }
-      return null;
+      return _readRow(collection, id: uid, email: email);
     }
 
     for (final c in const <String>['client', 'client_artist']) {
       final data = await readFrom(c);
       if (data == null) continue;
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
+      final profile = _asMap(data['profile']);
+      final basic = _asMap(data['basic']);
       final avatar =
           pick(data, const ['profileImageUrl', 'avatarUrl']).isNotEmpty
           ? pick(data, const ['profileImageUrl', 'avatarUrl'])
@@ -272,63 +550,102 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
   }
 
   void _listenRequests() {
-    _companySub?.cancel();
-    _companySub = FirebaseFirestore.instance
-        .collection('Company_Custom_Requests')
-        .snapshots()
-        .listen((_) {
-          unawaited(_reload());
-        });
+    if (_companyChannel != null) {
+      _supabase.removeChannel(_companyChannel!);
+    }
+    _companyChannel = _supabase
+        .channel('client-requests-company-custom-requests')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'company_custom_requests',
+          callback: (_) => unawaited(_reload()),
+        )
+        .subscribe();
     unawaited(_reload());
   }
 
   Future<void> _reload() async {
     try {
-      final currentClientEmail =
-          (FirebaseAuth.instance.currentUser?.email ?? '').trim().toLowerCase();
-      if (currentClientEmail.isEmpty) {
+      final currentEmail =
+          (_supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+      if (currentEmail.isEmpty) {
         if (!mounted) return;
         setState(() {
           _items = const <ClientRequestV2>[];
-          _loading = false;
-        });
-        return;
-      }
-      _currentClientIsBrandPartner = await _isCurrentClientBrandPartner(
-        currentClientEmail,
-      );
-      if (!_currentClientIsBrandPartner) {
-        if (!mounted) return;
-        setState(() {
-          _items = const <ClientRequestV2>[];
+          _brandRequests = const <ClientRequestV2>[];
+          _clientRequests = const <ClientRequestV2>[];
           _loading = false;
         });
         return;
       }
 
+      _currentClientIsBrandPartner = await _isCurrentClientBrandPartner(
+        currentEmail,
+      );
+      _currentClientNfcEligible = await _isCurrentClientNfcEligible(
+        currentEmail,
+      );
+
       final all = await ArtistRequestsRepository.fetchAllRequests();
-      final filtered =
-          all
-              .where((r) => r.sourceCollection == 'Company_Custom_Requests')
-              .where((r) => !_hiddenRequestIds.contains(r.id))
-              .where(
-                (r) => _isVisibleForClient(
-                  request: r,
-                  clientEmail: currentClientEmail,
-                ),
-              )
-              .toList(growable: false)
-            ..sort((a, b) => a.neededBy.compareTo(b.neededBy));
+      final brandVisible = <ClientRequestV2>[];
+      final clientVisible = <ClientRequestV2>[];
+
+      for (final request in all) {
+        if (_hiddenRequestIds.contains(request.id)) continue;
+
+        final isBrandSource = _isCompanyCustomRequestSource(
+          request.sourceCollection,
+        );
+
+        if (isBrandSource) {
+          final visibleAsClient = _isVisibleForClient(
+            request: request,
+            clientEmail: currentEmail,
+          );
+          if (visibleAsClient) {
+            final requiresNfc = await _requestRequiresNfc(request);
+            if (!requiresNfc ||
+                (_currentClientIsBrandPartner && _currentClientNfcEligible)) {
+              brandVisible.add(request);
+              continue;
+            }
+          }
+
+          // After a Brand Request is accepted by a client, eligible artists can
+          // see it as an artist-side Client Request. This keeps the
+          // client-artist workflow separate: first accept as client, then handle
+          // the artist work only after the client acceptance stage is complete.
+          if (_isVisibleForArtist(
+            request: request,
+            artistEmail: currentEmail,
+          )) {
+            clientVisible.add(request);
+          }
+          continue;
+        }
+
+        if (_isVisibleForArtist(request: request, artistEmail: currentEmail)) {
+          clientVisible.add(request);
+        }
+      }
+
+      brandVisible.sort((a, b) => a.neededBy.compareTo(b.neededBy));
+      clientVisible.sort((a, b) => a.neededBy.compareTo(b.neededBy));
 
       if (!mounted) return;
       setState(() {
-        _items = filtered;
+        _brandRequests = brandVisible;
+        _clientRequests = clientVisible;
+        _items = <ClientRequestV2>[...brandVisible, ...clientVisible];
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _items = const <ClientRequestV2>[];
+        _brandRequests = const <ClientRequestV2>[];
+        _clientRequests = const <ClientRequestV2>[];
         _loading = false;
       });
     }
@@ -336,17 +653,36 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
 
   Future<bool> _isCurrentClientBrandPartner(String clientEmail) async {
     final normalized = clientEmail.trim().toLowerCase();
-    if (normalized.isEmpty) return false;
-    for (final collection in const <String>['client', 'client_artist']) {
+    final uid = (_supabase.auth.currentUser?.id ?? '').trim();
+    if (normalized.isEmpty && uid.isEmpty) return false;
+
+    for (final collection in const <String>[
+      'client',
+      'client_artist',
+      'clients',
+    ]) {
       try {
-        final byEmail = await FirebaseFirestore.instance
-            .collection(collection)
-            .where('email', isEqualTo: normalized)
-            .limit(1)
-            .get();
-        if (byEmail.docs.isNotEmpty &&
-            _isBrandPartnerClient(byEmail.docs.first.data())) {
-          return true;
+        if (uid.isNotEmpty) {
+          final rows = await _supabase
+              .from(collection)
+              .select()
+              .eq('id', uid)
+              .limit(20);
+          for (final row in rows) {
+            final data = _asMap(row);
+            if (_isBrandPartnerClient(data)) return true;
+          }
+        }
+        if (normalized.isNotEmpty) {
+          final rows = await _supabase
+              .from(collection)
+              .select()
+              .eq('email', normalized)
+              .limit(50);
+          for (final row in rows) {
+            final data = _asMap(row);
+            if (_isBrandPartnerClient(data)) return true;
+          }
         }
       } catch (_) {}
     }
@@ -360,21 +696,29 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     final viewerEmail = clientEmail.trim().toLowerCase();
     if (viewerEmail.isEmpty) return false;
 
+    final acceptedByClient = request.acceptedByClientEmail.trim().toLowerCase();
+    final rawStatus = request.status.name.trim().toLowerCase();
     final isOpenForClientReview =
         request.status == RequestStatusV2.inReview ||
-        request.status == RequestStatusV2.accepted;
+        request.status == RequestStatusV2.accepted ||
+        rawStatus == 'pending' ||
+        rawStatus == 'inreview' ||
+        rawStatus == 'in_review' ||
+        rawStatus == 'accepted';
     if (!isOpenForClientReview) return false;
 
     final clientResponseStatus = request.clientResponseStatus
         .trim()
         .toLowerCase();
-    if (request.orderType == RequestOrderTypeV2.single &&
+    if (!request.openToClientPool &&
+        request.orderType == RequestOrderTypeV2.single &&
         (clientResponseStatus == 'accepted' ||
             clientResponseStatus == 'declined')) {
       return false;
     }
-
-    final acceptedByClient = request.acceptedByClientEmail.trim().toLowerCase();
+    if (request.openToClientPool && acceptedByClient.isNotEmpty) {
+      return false;
+    }
 
     final isGroupOrder = request.orderType == RequestOrderTypeV2.group;
     final acceptedGroupClients = request.acceptedGroupClientEmails
@@ -401,6 +745,8 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     final creatorEmail = request.clientEmail.trim().toLowerCase();
     if (creatorEmail.isNotEmpty && creatorEmail == viewerEmail) return false;
 
+    if (request.openToClientPool) return true;
+
     return shouldShowScenario41ToDirectClient(
       openToClientPool: request.openToClientPool,
       orderType: request.orderType,
@@ -410,18 +756,60 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     );
   }
 
+  bool _isVisibleForArtist({
+    required ClientRequestV2 request,
+    required String artistEmail,
+  }) {
+    final viewerEmail = artistEmail.trim().toLowerCase();
+    if (viewerEmail.isEmpty) return false;
+
+    final creatorEmail = request.clientEmail.trim().toLowerCase();
+    if (creatorEmail.isNotEmpty && creatorEmail == viewerEmail) return false;
+
+    final acceptedByArtist = request.acceptedByArtistEmail.trim().toLowerCase();
+    if (acceptedByArtist.isNotEmpty && acceptedByArtist != viewerEmail) {
+      return false;
+    }
+
+    final declinedArtists = request.declinedByArtistEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    if (declinedArtists.contains(viewerEmail)) return false;
+
+    final rawStatus = request.status.name.trim().toLowerCase();
+    final terminal = rawStatus == 'declined' ||
+        rawStatus == 'cancelled' ||
+        rawStatus == 'canceled' ||
+        rawStatus == 'expired' ||
+        rawStatus == 'delivered' ||
+        rawStatus == 'shipped';
+    if (terminal) return false;
+
+    final isBrandSource = _isCompanyCustomRequestSource(request.sourceCollection);
+    if (isBrandSource) {
+      final acceptedClient = request.acceptedByClientEmail.trim().toLowerCase();
+      final acceptedGroup = request.acceptedGroupClientEmails
+          .map((e) => e.trim().toLowerCase())
+          .where((e) => e.isNotEmpty)
+          .toSet();
+      final clientAccepted = acceptedClient.isNotEmpty || acceptedGroup.isNotEmpty;
+      if (!clientAccepted) return false;
+    }
+
+    if (request.isDirectRequest) {
+      final selected = request.selectedArtistEmail.trim().toLowerCase();
+      if (selected.isEmpty) return true;
+      return selected == viewerEmail;
+    }
+
+    return true;
+  }
+
   Future<bool> _requestRequiresNfc(ClientRequestV2 request) async {
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection(request.sourceCollection)
-          .doc(request.id);
-      final rootSnap = await docRef.get();
-      final root = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef
-          .collection('details')
-          .doc('payload')
-          .get();
-      final details = detailsSnap.data() ?? const <String, dynamic>{};
+      final root = await _readRequestRoot(request);
+      final details = await _readRequestDetails(request);
       return _requestRequiresNfcFromMaps(root, details);
     } catch (_) {
       return false;
@@ -589,21 +977,37 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
   }
 
   Future<void> _openDetails(ClientRequestV2 request) async {
+    final artistStyleRequestView =
+        widget.splitArtistVisibleRequestsBySource &&
+        widget.showClientRequests &&
+        !widget.showBrandRequests;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return ClientRequestDetailsPage(
+        return ClientCampaignDetailsPage(
           request: request,
+          headerTitleOverride:
+              widget.useCampaignNaming &&
+                  widget.showBrandRequests &&
+                  !widget.showClientRequests
+              ? 'Client Campaign Details'
+              : null,
           onDecline: () async {
-            await _respondToBrandRequest(request: request, accept: false);
+            if (artistStyleRequestView) {
+              await _persistArtistDecline(request);
+            } else {
+              await _respondToBrandRequest(request: request, accept: false);
+            }
 
             if (mounted) {
               setState(() {
                 _hiddenRequestIds.add(request.id);
-                _items = _items.where((item) => item.id != request.id).toList();
+                _items =
+                    _items.where((item) => item.id != request.id).toList();
               });
             }
 
@@ -612,13 +1016,52 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
             if (sheetContext.mounted) Navigator.of(sheetContext).pop();
           },
           onAccept: () async {
-            await _respondToBrandRequest(request: request, accept: true);
+            if (artistStyleRequestView) {
+              final accepted = await showModalBottomSheet<dynamic>(
+                context: context,
+                isScrollControlled: true,
+                useSafeArea: false,
+                useRootNavigator: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => AcceptRequestDialogV2(
+                  budgetMin: request.budgetMin,
+                  budgetMax: request.budgetMax,
+                ),
+              );
 
-            if (mounted) {
-              setState(() {
-                _hiddenRequestIds.add(request.id);
-                _items = _items.where((item) => item.id != request.id).toList();
-              });
+              if (accepted == null) return;
+
+              final acceptedTotal = _acceptedArtistTotal(accepted);
+              final optimistic = request.copyWith(
+                status: RequestStatusV2.designing,
+                artistFinalAmount: double.parse(
+                  acceptedTotal.toStringAsFixed(2),
+                ),
+              );
+
+              if (mounted) {
+                setState(() {
+                  _replaceById(request.id, optimistic);
+                });
+              }
+
+              final persisted = await _persistArtistAcceptance(
+                request,
+                acceptedTotal,
+              );
+              if (!persisted) {
+                throw Exception('Could not update request in database.');
+              }
+            } else {
+              await _respondToBrandRequest(request: request, accept: true);
+
+              if (mounted) {
+                setState(() {
+                  _hiddenRequestIds.add(request.id);
+                  _items =
+                      _items.where((item) => item.id != request.id).toList();
+                });
+              }
             }
 
             await _reload();
@@ -630,11 +1073,118 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     );
   }
 
+  void _replaceById(String id, ClientRequestV2 replacement) {
+    List<ClientRequestV2> replaceIn(List<ClientRequestV2> source) {
+      return source
+          .map((item) => item.id == id ? replacement : item)
+          .toList(growable: false);
+    }
+
+    _items = replaceIn(_items);
+    _brandRequests = replaceIn(_brandRequests);
+    _clientRequests = replaceIn(_clientRequests);
+  }
+
+  double _acceptedArtistTotal(dynamic accepted) {
+    double readNum(Object? raw) => raw is num ? raw.toDouble() : 0;
+
+    try {
+      final dynamic value = accepted;
+      final yourPrice = readNum(value.yourPrice);
+      final shipping = readNum(value.shipping);
+      final extra = readNum(value.extra);
+      return yourPrice + shipping + extra;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<bool> _persistArtistAcceptance(
+    ClientRequestV2 request,
+    double acceptedTotal,
+  ) async {
+    final normalizedTotal = double.parse(acceptedTotal.toStringAsFixed(2));
+
+    try {
+      await _supabase.rpc(
+        'artist_accept_request',
+        params: <String, dynamic>{
+          'p_request_id': request.id,
+          'p_order_number': request.orderNumber.trim().isEmpty
+              ? null
+              : request.orderNumber.trim(),
+          'p_artist_amount': normalizedTotal,
+        },
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[ClientCampaignsPage] artist_accept_request failed: $e');
+      return false;
+    }
+  }
+
+  Future<void> _persistArtistDecline(ClientRequestV2 request) async {
+    final artistEmail = (_supabase.auth.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    if (artistEmail.isEmpty) {
+      throw Exception('Missing signed-in artist email.');
+    }
+
+    try {
+      await _supabase.rpc(
+        'artist_decline_request_for_history',
+        params: <String, dynamic>{
+          'p_request_id': request.id,
+          'p_source_collection': request.sourceCollection,
+          'p_artist_email': artistEmail,
+        },
+      );
+      return;
+    } catch (rpcError) {
+      debugPrint(
+        '[ClientCampaignsPage] artist_decline_request_for_history failed: $rpcError',
+      );
+    }
+
+    final table = _tableForRequestCollection(request.sourceCollection);
+    final declinedAtIso = DateTime.now().toUtc().toIso8601String();
+    const reason = 'Artist declined the request';
+
+    await _supabase.from(table).update(<String, dynamic>{
+      'status': 'declined',
+      'artist_status': 'declined',
+      'direct_artist_status': 'declined',
+      'declined_by_artist_email': artistEmail,
+      'artist_declined_at': declinedAtIso,
+      'completion_decline_reason': reason,
+      'completion_decline_description': reason,
+      'updated_at': declinedAtIso,
+    }).eq('id', request.id);
+  }
+
+  String _tableForRequestCollection(String name) {
+    switch (name) {
+      case 'Client_Custom_Requests':
+        return 'client_custom_requests';
+      case 'Company_Custom_Requests':
+        return 'company_custom_requests';
+      default:
+        return name
+            .replaceAllMapped(
+              RegExp(r'([a-z0-9])([A-Z])'),
+              (match) => '${match.group(1)}_${match.group(2)}',
+            )
+            .replaceAll(' ', '_')
+            .toLowerCase();
+    }
+  }
+
   Future<void> _respondToBrandRequest({
     required ClientRequestV2 request,
     required bool accept,
   }) async {
-    final clientEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final clientEmail = (_supabase.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
     if (clientEmail.isEmpty) {
@@ -659,28 +1209,11 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
 
     final isGroupOrder = request.orderType == RequestOrderTypeV2.group;
 
-    Set<String> normList(Object? raw) {
-      if (raw is! List) return <String>{};
-      return raw
-          .whereType<String>()
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty)
-          .toSet();
-    }
+    Set<String> normList(Object? raw) => _asEmailSet(raw);
 
-    final rootSnap = await FirebaseFirestore.instance
-        .collection(request.sourceCollection)
-        .doc(request.id)
-        .get();
-    final rootData = rootSnap.data() ?? const <String, dynamic>{};
-    final detailsSnap = await rootSnap.reference
-        .collection('details')
-        .doc('payload')
-        .get();
-    final detailsData = detailsSnap.data() ?? const <String, dynamic>{};
-    final orderData =
-        (detailsData['order'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
+    final rootData = await _readRequestRoot(request);
+    final detailsData = await _readRequestDetails(request);
+    final orderData = _asMap(detailsData['order']);
     final brandRecipientEmails =
         await NotificationsService.resolveBrandRecipientEmails(
           rootData: rootData,
@@ -689,8 +1222,8 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
           excludeEmails: <String>[clientEmail],
         );
     DateTime? requestAcceptByDate(Object? value) {
-      if (value is Timestamp) return value.toDate();
       if (value is DateTime) return value;
+      if (value is String) return DateTime.tryParse(value);
       return null;
     }
 
@@ -704,7 +1237,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
           request.neededBy.day,
         ).subtract(const Duration(days: 5));
     final brandRequestTimedOut =
-        request.sourceCollection == 'Company_Custom_Requests' &&
+        _isCompanyCustomRequestSource(request.sourceCollection) &&
         DateTime.now().isAfter(
           DateTime(
             brandRequestAcceptBy.year,
@@ -715,7 +1248,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         request.acceptedByClientEmail.trim().isEmpty &&
         request.declinedByClientEmails.isEmpty;
 
-    if (brandRequestTimedOut) {
+    if (brandRequestTimedOut && !accept) {
       final acceptByLabel = _firstNonEmpty(<Object?>[
         rootData['requestAcceptByDisplay'],
         detailsData['requestAcceptByDisplay'],
@@ -728,11 +1261,11 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         status: 'cancelled',
         summaryExtra: <String, dynamic>{
           'cancelReason': cancellationReason,
-          'cancelledAt': FieldValue.serverTimestamp(),
+          'cancelledAt': DateTime.now().toIso8601String(),
         },
         detailsExtra: <String, dynamic>{
           'cancelReason': cancellationReason,
-          'cancelledAt': FieldValue.serverTimestamp(),
+          'cancelledAt': DateTime.now().toIso8601String(),
         },
       );
       return;
@@ -807,18 +1340,20 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
           summaryExtra: <String, dynamic>{
             'acceptedByClientEmail': '',
             if (!isGroupOrder) 'clientResponseStatus': 'declined',
-            'declinedByClientEmails': FieldValue.arrayUnion(<String>[
+            'declinedByClientEmails': <String>[
+              ...request.declinedByClientEmails,
               clientEmail,
-            ]),
-            'updatedAt': FieldValue.serverTimestamp(),
+            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
+            'updatedAt': DateTime.now().toIso8601String(),
           },
           detailsExtra: <String, dynamic>{
-            'declinedByClientEmails': FieldValue.arrayUnion(<String>[
+            'declinedByClientEmails': <String>[
+              ...request.declinedByClientEmails,
               clientEmail,
-            ]),
+            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
             if (!isGroupOrder) 'clientResponseStatus': 'declined',
             'acceptance': const <String, dynamic>{'acceptedByClientEmail': ''},
-            'lastClientDeclinedAt': FieldValue.serverTimestamp(),
+            'lastClientDeclinedAt': DateTime.now().toIso8601String(),
           },
         );
       } else {
@@ -833,15 +1368,17 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
             'artistStatus': 'pending',
             'directClientStatus': 'declined',
             'clientPoolStatus': 'pending',
-            'declinedByClientEmails': FieldValue.arrayUnion(<String>[
+            'declinedByClientEmails': <String>[
+              ...request.declinedByClientEmails,
               clientEmail,
-            ]),
+            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
           },
           detailsExtra: <String, dynamic>{
             'openToClientPool': true,
-            'declinedByClientEmails': FieldValue.arrayUnion(<String>[
+            'declinedByClientEmails': <String>[
+              ...request.declinedByClientEmails,
               clientEmail,
-            ]),
+            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
             'acceptance': const <String, dynamic>{'acceptedByClientEmail': ''},
             'roleStatuses': const <String, dynamic>{
               'brand': 'pending',
@@ -851,7 +1388,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
             'routing': <String, dynamic>{
               'directClientStatus': 'declined',
               'clientPoolStatus': 'pending',
-              'releasedToClientPoolAt': FieldValue.serverTimestamp(),
+              'releasedToClientPoolAt': DateTime.now().toIso8601String(),
             },
           },
         );
@@ -865,9 +1402,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         .trim();
     final nailShape = (clientData['nailShape'] as String? ?? '').trim();
     final nailLength = (clientData['nailLength'] as String? ?? '').trim();
-    final nailDimensions =
-        (clientData['nailDimensions'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
+    final nailDimensions = _asMap(clientData['nailDimensions']);
     accepted = <String>{...accepted, clientEmail};
     declined = <String>{...declined}..remove(clientEmail);
     final responded = <String>{...accepted, ...declined};
@@ -880,11 +1415,8 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     final artistStatus = allResponded ? 'in_review' : 'pending';
     List<dynamic>? updatedGroupClients;
     if (isGroupOrder) {
-      final groupOrderMap =
-          (detailsData['groupOrder'] as Map<String, dynamic>?) ??
-          const <String, dynamic>{};
-      final rawClients =
-          (groupOrderMap['clients'] as List<dynamic>?) ?? const <dynamic>[];
+      final groupOrderMap = _asMap(detailsData['groupOrder']);
+      final rawClients = _asList(groupOrderMap['clients']);
       updatedGroupClients = rawClients
           .map((raw) {
             if (raw is! Map) return raw;
@@ -895,7 +1427,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
                 .toLowerCase();
             if (itemEmail != clientEmail) return item;
             item['responseStatus'] = 'accepted';
-            item['acceptedAt'] = Timestamp.now();
+            item['acceptedAt'] = DateTime.now().toIso8601String();
             item['clientName'] = clientName.isNotEmpty
                 ? clientName
                 : item['clientName'];
@@ -917,7 +1449,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         if (!isGroupOrder) 'clientResponseStatus': 'accepted',
         if (!isGroupOrder) 'openToClientPool': false,
         if (!isGroupOrder) 'clientPoolStatus': 'accepted',
-        'acceptedByClientAt': FieldValue.serverTimestamp(),
+        'acceptedByClientAt': DateTime.now().toIso8601String(),
         'acceptedGroupClientEmails': accepted.toList(growable: false),
         'declinedByClientEmails': declined.toList(growable: false),
         'groupClientsAllResponded': allResponded,
@@ -936,7 +1468,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
       detailsExtra: <String, dynamic>{
         'acceptance': <String, dynamic>{
           'acceptedByClientEmail': clientEmail,
-          'acceptedByClientAt': FieldValue.serverTimestamp(),
+          'acceptedByClientAt': DateTime.now().toIso8601String(),
           if (!isGroupOrder) 'clientResponseStatus': 'accepted',
         },
         if (!isGroupOrder) 'openToClientPool': false,
@@ -984,65 +1516,70 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         ? request.orderNumber.trim()
         : request.id;
 
-    for (final brandCompanyEmail in brandRecipientEmails) {
-      await NotificationsService.createUserNotification(
-        receiverEmail: brandCompanyEmail,
+    // Notifications are non-blocking for the accept flow. The DB update above is
+    // the source of truth; notification failures should not keep the modal open
+    // or prevent the request from moving to Orders.
+    try {
+      for (final brandCompanyEmail in brandRecipientEmails) {
+        await NotificationsService.createUserNotification(
+          receiverEmail: brandCompanyEmail,
+          title: 'Brand Request Accepted',
+          body:
+              '$acceptedClientName has accepted your $campaignName brand request $normalizedOrderNumber',
+          type: 'brand_request_accepted_by_client',
+          orderId: request.id,
+          orderNumber: request.orderNumber,
+          sourceCollection: request.sourceCollection,
+        );
+      }
+
+      await NotificationsService.notifyAdmins(
         title: 'Brand Request Accepted',
         body:
-            '$acceptedClientName has accepted your $campaignName brand request $normalizedOrderNumber',
-        type: 'brand_request_accepted_by_client',
+            '$acceptedClientName has accepted the $brandName $campaignName brand request $normalizedOrderNumber',
+        type: 'admin_brand_request_accepted_by_client',
         orderId: request.id,
         orderNumber: request.orderNumber,
         sourceCollection: request.sourceCollection,
       );
-    }
 
-    await NotificationsService.notifyAdmins(
-      title: 'Brand Request Accepted',
-      body:
-          '$acceptedClientName has accepted the $brandName $campaignName brand request $normalizedOrderNumber',
-      type: 'admin_brand_request_accepted_by_client',
-      orderId: request.id,
-      orderNumber: request.orderNumber,
-      sourceCollection: request.sourceCollection,
-    );
-
-    if (allResponded && allAccepted) {
-      final summaryNames = <String>[];
-      if (isGroupOrder) {
-        final groupDetails =
-            (detailsData['groupOrder'] as Map<String, dynamic>?) ??
-            const <String, dynamic>{};
-        final rawClients =
-            (groupDetails['clients'] as List<dynamic>?) ?? const <dynamic>[];
-        for (final raw in rawClients) {
-          if (raw is! Map) continue;
-          final email = (raw['clientEmail'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-          final name = (raw['clientName'] ?? '').toString().trim();
-          if (email.isEmpty || name.isEmpty) continue;
-          if (accepted.contains(email) && !summaryNames.contains(name)) {
-            summaryNames.add(name);
+      if (allResponded && allAccepted) {
+        final summaryNames = <String>[];
+        if (isGroupOrder) {
+          final groupDetails = _asMap(detailsData['groupOrder']);
+          final rawClients = _asList(groupDetails['clients']);
+          for (final raw in rawClients) {
+            final item = _asMap(raw);
+            if (item.isEmpty) continue;
+            final email = (item['clientEmail'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
+            final name = (item['clientName'] ?? '').toString().trim();
+            if (email.isEmpty || name.isEmpty) continue;
+            if (accepted.contains(email) && !summaryNames.contains(name)) {
+              summaryNames.add(name);
+            }
           }
         }
+        final groupClientSummary = summaryNames.isNotEmpty
+            ? summaryNames.join(', ')
+            : acceptedClientName;
+        await NotificationsService.notifyArtistsForBrandClientAcceptedRequest(
+          clientName: groupClientSummary,
+          brandName: brandName,
+          campaignName: campaignName,
+          isDirectRequest: request.isDirectRequest,
+          selectedArtistEmail: request.selectedArtistEmail.trim().toLowerCase(),
+          selectedArtistName: request.selectedArtist.trim(),
+          orderId: request.id,
+          sourceCollection: request.sourceCollection,
+          orderNumber: request.orderNumber,
+          allowNonLicensed: request.allowNonLicensed,
+        );
       }
-      final groupClientSummary = summaryNames.isNotEmpty
-          ? summaryNames.join(', ')
-          : acceptedClientName;
-      await NotificationsService.notifyArtistsForBrandClientAcceptedRequest(
-        clientName: groupClientSummary,
-        brandName: brandName,
-        campaignName: campaignName,
-        isDirectRequest: request.isDirectRequest,
-        selectedArtistEmail: request.selectedArtistEmail.trim().toLowerCase(),
-        selectedArtistName: request.selectedArtist.trim(),
-        orderId: request.id,
-        sourceCollection: request.sourceCollection,
-        orderNumber: request.orderNumber,
-        allowNonLicensed: request.allowNonLicensed,
-      );
+    } catch (_) {
+      // Ignore notification failures. Request acceptance already succeeded.
     }
   }
 
@@ -1058,22 +1595,14 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     Map<String, dynamic> summaryExtra = const <String, dynamic>{},
     Map<String, dynamic> detailsExtra = const <String, dynamic>{},
   }) async {
-    final requestRef = FirebaseFirestore.instance
-        .collection(request.sourceCollection)
-        .doc(request.id);
-
-    final batch = FirebaseFirestore.instance.batch();
-    batch.set(requestRef, <String, dynamic>{
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-      ...summaryExtra,
-    }, SetOptions(merge: true));
-    batch.set(
-      requestRef.collection('details').doc('payload'),
-      <String, dynamic>{'status': status, ...detailsExtra},
-      SetOptions(merge: true),
+    final root = await _readRequestRoot(request);
+    final details = await _readRequestDetails(request);
+    await _upsertRequestPayload(
+      request.sourceCollection,
+      request.id,
+      <String, dynamic>{...root, 'status': status, ...summaryExtra},
+      <String, dynamic>{...details, 'status': status, ...detailsExtra},
     );
-    await batch.commit();
   }
 
   Future<Map<String, dynamic>> _loadAcceptingClientData(String email) async {
@@ -1089,23 +1618,19 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     }
 
     Future<Map<String, dynamic>> readFrom(String collection) async {
-      final snap = await FirebaseFirestore.instance
-          .collection(collection)
-          .where('email', isEqualTo: normalizedEmail)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) return const <String, dynamic>{};
-      final data = snap.docs.first.data();
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-      final nail =
-          (data['nailPreferences'] as Map<String, dynamic>?) ?? const {};
-      final profileNail =
-          (profile['nailPreferences'] as Map<String, dynamic>?) ?? const {};
-      final dimensions =
-          (nail['dimensions'] as Map<String, dynamic>?) ?? const {};
-      final profileDimensions =
-          (profileNail['dimensions'] as Map<String, dynamic>?) ?? const {};
+      final rows = await _supabase
+          .from(collection)
+          .select()
+          .eq('email', normalizedEmail)
+          .limit(1);
+      if (rows.isEmpty) return const <String, dynamic>{};
+      final data = _asMap(rows.first);
+      final profile = _asMap(data['profile']);
+      final basic = _asMap(data['basic']);
+      final nail = _asMap(data['nailPreferences']);
+      final profileNail = _asMap(profile['nailPreferences']);
+      final dimensions = _asMap(nail['dimensions']);
+      final profileDimensions = _asMap(profileNail['dimensions']);
 
       return <String, dynamic>{
         'name': first(data, const ['displayName', 'name']).isNotEmpty
@@ -1175,28 +1700,20 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     Widget content;
     if (_loading) {
       content = const Center(child: CircularProgressIndicator());
-    } else if (_items.isEmpty) {
-      content = Center(
-        child: Text(
-          'No brand requests available',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.blackCat.withValues(alpha: 0.6),
-          ),
-        ),
-      );
     } else {
-      final directRequests = _items
+      final brandRequests = _brandRequests;
+      final clientRequests = _clientRequests;
+      final artistVisibleBrandRequests = clientRequests
           .where(
-            (r) =>
-                !r.openToClientPool &&
-                (r.selectedClientEmail.trim().isNotEmpty ||
-                    r.selectedGroupClientEmails.isNotEmpty),
+            (request) =>
+                _isCompanyCustomRequestSource(request.sourceCollection),
           )
           .toList(growable: false);
-      final openRequests = _items
-          .where((r) => r.openToClientPool)
+      final artistVisibleClientRequests = clientRequests
+          .where(
+            (request) =>
+                !_isCompanyCustomRequestSource(request.sourceCollection),
+          )
           .toList(growable: false);
 
       Widget requestCard(ClientRequestV2 request) {
@@ -1215,7 +1732,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
                 request.submittedAt ?? request.neededBy,
               ),
               acceptByLabel:
-                  request.sourceCollection == 'Company_Custom_Requests'
+                  _isCompanyCustomRequestSource(request.sourceCollection)
                       ? _acceptByLabel(
                           DateTime(
                             request.neededBy.year,
@@ -1226,10 +1743,6 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
                       : '',
               avatar: _avatarWidget(request),
               previewImage: _previewWidget(request),
-              showDirectChip:
-                  request.isDirectRequest &&
-                  !request.openToClientPool &&
-                  request.orderType == RequestOrderTypeV2.single,
               onTap: () => _openDetails(request),
             ),
           ),
@@ -1261,6 +1774,17 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         );
       }
 
+      Widget sectionHelper(String text) {
+        return Text(
+          text,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: AppColors.blackCat.withValues(alpha: 0.62),
+          ),
+        );
+      }
+
       Widget emptyText(String text) {
         return Text(
           text,
@@ -1275,25 +1799,90 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
       content = ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         children: [
-          sectionTitle('Direct Request'),
-          const SizedBox(height: 8),
-          if (directRequests.isEmpty)
-            emptyText('No direct requests available.')
-          else ...[
-            for (var i = 0; i < directRequests.length; i++) ...[
-              if (i > 0) const SizedBox(height: 10),
-              requestCard(directRequests[i]),
+          if (widget.splitArtistVisibleRequestsBySource &&
+              widget.showClientRequests &&
+              !widget.showBrandRequests) ...[
+            sectionTitle('Brand Requests'),
+            const SizedBox(height: 4),
+            sectionHelper(
+              'These are brand requests available for you as an artist.',
+            ),
+            const SizedBox(height: 10),
+            if (artistVisibleBrandRequests.isEmpty)
+              emptyText('No brand requests available.')
+            else ...[
+              for (var i = 0; i < artistVisibleBrandRequests.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                requestCard(artistVisibleBrandRequests[i]),
+              ],
             ],
-          ],
-          const SizedBox(height: 18),
-          sectionTitle('Open Request'),
-          const SizedBox(height: 8),
-          if (openRequests.isEmpty)
-            emptyText('No open requests available.')
-          else ...[
-            for (var i = 0; i < openRequests.length; i++) ...[
-              if (i > 0) const SizedBox(height: 10),
-              requestCard(openRequests[i]),
+            const SizedBox(height: 22),
+            sectionTitle('Client Requests'),
+            const SizedBox(height: 4),
+            sectionHelper(
+              'These are client requests available for you as an artist.',
+            ),
+            const SizedBox(height: 10),
+            if (artistVisibleClientRequests.isEmpty)
+              emptyText('No client requests available.')
+            else ...[
+              for (var i = 0; i < artistVisibleClientRequests.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                requestCard(artistVisibleClientRequests[i]),
+              ],
+            ],
+          ] else ...[
+            if (widget.showBrandRequests) ...[
+              sectionTitle(
+                widget.useCampaignNaming &&
+                        widget.showBrandRequests &&
+                        !widget.showClientRequests
+                    ? 'Client Campaigns'
+                    : 'Brand Requests',
+              ),
+              const SizedBox(height: 4),
+              sectionHelper(
+                widget.showClientRequests
+                    ? 'Accept a Brand Request first. After client acceptance, eligible Artist Requests appear in Client Requests.'
+                    : widget.useCampaignNaming &&
+                            widget.showBrandRequests &&
+                            !widget.showClientRequests
+                        ? 'These are campaigns available to you.'
+                        : 'These are brand campaigns available to you.',
+              ),
+              const SizedBox(height: 10),
+              if (brandRequests.isEmpty)
+                emptyText(
+                  widget.useCampaignNaming &&
+                          widget.showBrandRequests &&
+                          !widget.showClientRequests
+                      ? 'No campaigns available.'
+                      : 'No brand requests available.',
+                )
+              else ...[
+                for (var i = 0; i < brandRequests.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 10),
+                  requestCard(brandRequests[i]),
+                ],
+              ],
+            ],
+            if (widget.showBrandRequests && widget.showClientRequests)
+              const SizedBox(height: 22),
+            if (widget.showClientRequests) ...[
+              sectionTitle('Client Requests'),
+              const SizedBox(height: 4),
+              sectionHelper(
+                'These are requests available for you as an artist.',
+              ),
+              const SizedBox(height: 10),
+              if (clientRequests.isEmpty)
+                emptyText('No client requests available.')
+              else ...[
+                for (var i = 0; i < clientRequests.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 10),
+                  requestCard(clientRequests[i]),
+                ],
+              ],
             ],
           ],
         ],
@@ -1302,43 +1891,26 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
 
     return Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        centerTitle: true,
-        toolbarHeight: 85,
-        leadingWidth: 58,
-        leading: NotificationBellButton(
-          onTap: () {
-            if (widget.onOpenNotifications != null) {
-              widget.onOpenNotifications!.call();
-            } else {
-              NotificationsPage.showAsModal(context);
-            }
-          },
-          iconSize: 24,
+      appBar: JntStandardAppBar(
+        onNotifications: () {
+          if (widget.onOpenNotifications != null) {
+            widget.onOpenNotifications!.call();
+          } else {
+            NotificationsPage.showAsModal(context);
+          }
+        },
+        trailing: _AvatarMenu(
+          onSelected: _onAvatarMenuSelected,
+          displayName: _headerDisplayName.isNotEmpty
+              ? _headerDisplayName
+              : (_supabase.auth.currentUser?.userMetadata?['displayName'] ??
+                      _supabase.auth.currentUser?.email ??
+                      '')
+                  .toString()
+                  .trim(),
+          avatarUrl: _headerAvatarUrl,
+          showEarnings: widget.onOpenEarnings != null,
         ),
-        title: Image.asset(
-          'assets/images/jnt_logo_black.png',
-          height: 52,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: _AvatarMenu(
-              onSelected: _onAvatarMenuSelected,
-              displayName: _headerDisplayName.isNotEmpty
-                  ? _headerDisplayName
-                  : (FirebaseAuth.instance.currentUser?.displayName ?? '')
-                        .trim(),
-              avatarUrl: _headerAvatarUrl,
-            ),
-          ),
-        ],
       ),
       body: content,
     );
@@ -1349,12 +1921,16 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
       widget.onOpenProfile?.call();
       return;
     }
+    if (choice == 'earnings') {
+      widget.onOpenEarnings?.call();
+      return;
+    }
     if (choice == 'logout') {
       if (widget.onLogout != null) {
         widget.onLogout!.call();
         return;
       }
-      await FirebaseAuth.instance.signOut();
+      await _supabase.auth.signOut();
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
@@ -1459,16 +2035,8 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     }
 
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection(request.sourceCollection)
-          .doc(request.id);
-      final rootSnap = await docRef.get();
-      final root = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef
-          .collection('details')
-          .doc('payload')
-          .get();
-      final details = detailsSnap.data() ?? const <String, dynamic>{};
+      final root = await _readRequestRoot(request);
+      final details = await _readRequestDetails(request);
       final payload = asMap(details['payload']).isNotEmpty
           ? asMap(details['payload'])
           : details;
@@ -1552,7 +2120,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
     }
     if (path.startsWith('gs://')) {
       return FutureBuilder<String>(
-        future: StorageUrlResolver.resolve(path).then((v) => v ?? ''),
+        future: storage_resolver.StorageUrlResolver.resolve(path).then((v) => v ?? ''),
         builder: (_, snap) {
           final url = snap.data?.trim() ?? '';
           if (url.isEmpty) return fallback;
@@ -1579,7 +2147,7 @@ class _ClientRequestsPageState extends State<ClientRequestsPage> {
         !path.startsWith('content://') &&
         (path.contains('/') || path.contains('\\'))) {
       return FutureBuilder<String>(
-        future: StorageUrlResolver.resolve(path).then((v) => v ?? ''),
+        future: storage_resolver.StorageUrlResolver.resolve(path).then((v) => v ?? ''),
         builder: (_, snap) {
           final url = snap.data?.trim() ?? '';
           if (url.isEmpty) return fallback;
@@ -1608,11 +2176,13 @@ class _AvatarMenu extends StatelessWidget {
     required this.onSelected,
     this.avatarUrl = '',
     this.displayName = '',
+    this.showEarnings = false,
   });
 
   final ValueChanged<String> onSelected;
   final String avatarUrl;
   final String displayName;
+  final bool showEarnings;
 
   @override
   Widget build(BuildContext context) {
@@ -1623,8 +2193,8 @@ class _AvatarMenu extends StatelessWidget {
       color: AppColors.snow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       onSelected: onSelected,
-      itemBuilder: (context) => const [
-        PopupMenuItem<String>(
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
           value: 'profile',
           child: Row(
             children: [
@@ -1637,8 +2207,22 @@ class _AvatarMenu extends StatelessWidget {
             ],
           ),
         ),
-        PopupMenuDivider(),
-        PopupMenuItem<String>(
+        if (showEarnings)
+          const PopupMenuItem<String>(
+            value: 'earnings',
+            child: Row(
+              children: [
+                Icon(Icons.attach_money_outlined, size: 22),
+                SizedBox(width: 14),
+                Text(
+                  'Earnings',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
           value: 'logout',
           child: Row(
             children: [
@@ -1657,14 +2241,14 @@ class _AvatarMenu extends StatelessWidget {
         ),
       ],
       child: SizedBox(
-        height: 36,
-        width: 36,
+        height: JntHeaderMetrics.avatarSize,
+        width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ClientProfileAvatarIcon(
             imageUrl: avatarUrl,
             displayName: displayName,
-            size: 36,
+            size: JntHeaderMetrics.avatarSize,
           ),
         ),
       ),

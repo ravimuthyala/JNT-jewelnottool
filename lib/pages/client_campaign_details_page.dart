@@ -5,17 +5,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/client_request_v2.dart';
-import '../services/supabase_firebase_compat.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
-class ClientRequestDetailsPage extends StatefulWidget {
-  const ClientRequestDetailsPage({
+class ClientCampaignDetailsPage extends StatefulWidget {
+  const ClientCampaignDetailsPage({
     super.key,
     required this.request,
     required this.onDecline,
     required this.onAccept,
     this.declineLabel = 'Decline',
     this.acceptLabel = 'Accept',
+    this.headerTitleOverride,
   });
 
   final ClientRequestV2 request;
@@ -23,13 +25,14 @@ class ClientRequestDetailsPage extends StatefulWidget {
   final Future<void> Function() onAccept;
   final String declineLabel;
   final String acceptLabel;
+  final String? headerTitleOverride;
 
   @override
-  State<ClientRequestDetailsPage> createState() =>
-      _ClientRequestDetailsPageState();
+  State<ClientCampaignDetailsPage> createState() =>
+      _ClientCampaignDetailsPageState();
 }
 
-class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
+class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   late final Future<_RequestDetailsVm> _vmFuture;
 
   @override
@@ -60,38 +63,19 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Brand Request Details',
-                              style: TextStyle(
+                              widget.headerTitleOverride ??
+                                  (vm.isBrandRequest
+                                      ? 'Brand Request Details'
+                                      : 'Client Request Details'),
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.blackCat,
                               ),
                             ),
                           ),
-                          if (_showDirectChip(vm))
-                            Container(
-                              margin: const EdgeInsets.only(right: 10),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: const Color(0xFFB89A66),
-                                ),
-                                color: const Color(0xFFFFF7EA),
-                              ),
-                              child: const Text(
-                                'Direct',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.blackCat,
-                                ),
-                              ),
-                            ),
                           Text(
                             vm.statusLabel,
                             style: const TextStyle(
@@ -109,23 +93,38 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
                         _nfcRequiredNotice(),
                       ],
                       const SizedBox(height: 16),
-                      _plainSection(title: 'Company Bio', body: vm.companyBio),
-                      _separator(),
-                      _plainSection(
-                        title: 'Custom Request Description',
-                        body: vm.customDescription,
+                      _sectionContainer(
+                        child: _plainSection(
+                          title: vm.isBrandRequest ? 'Company Bio' : 'Client Bio',
+                          body: vm.bioSectionBody,
+                        ),
                       ),
-                      _separator(),
-                      _orderDetailsSection(vm),
-                      _separator(),
-                      _nailDimensionsSection(vm),
-                      _separator(),
-                      _numberOfSetsSection(vm.numberOfSets),
-                      _separator(),
-                      const SizedBox(height: 16),
-                      _sectionHeader(text: 'Inspiration Photos'),
-                      const SizedBox(height: 10),
-                      _photosStrip(vm.photos),
+                      const SizedBox(height: 12),
+                      _sectionContainer(
+                        child: _plainSection(
+                          title: 'Custom Request Description',
+                          body: vm.customDescription,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _sectionContainer(child: _orderDetailsSection(vm)),
+                      const SizedBox(height: 12),
+                      _sectionContainer(child: _nailDimensionsSection(vm)),
+                      const SizedBox(height: 12),
+                      _sectionContainer(
+                        child: _numberOfSetsSection(vm.numberOfSets),
+                      ),
+                      const SizedBox(height: 12),
+                      _sectionContainer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _sectionHeader(text: 'Inspiration Photos'),
+                            const SizedBox(height: 10),
+                            _photosStrip(vm.photos),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -227,16 +226,10 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
     );
   }
 
-  bool _showDirectChip(_RequestDetailsVm vm) {
-    return widget.request.isDirectRequest &&
-        !vm.openToClientPool &&
-        vm.orderTypeRaw == 'single';
-  }
-
   Widget _headerBar(BuildContext context) {
     return Container(
       color: AppColors.alabaster,
-      height: 86,
+      height: JntModalHeaderMetrics.toolbarHeight,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Stack(
         alignment: Alignment.center,
@@ -244,7 +237,7 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
           Center(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 52,
+              height: JntModalHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
@@ -252,7 +245,7 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
           Align(
             alignment: Alignment.centerRight,
             child: IconButton(
-              icon: const Icon(Icons.close_rounded, size: 34),
+              icon: const Icon(Icons.close_rounded, size: 28),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -282,27 +275,7 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            vm.campaignName,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Request Type: ${vm.requestType}  |  Order Type: ${vm.orderType}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w400,
-              color: AppColors.blackCat,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Divider(color: AppColors.blackCat.withValues(alpha: 0.14)),
+          _requestTypeOrderRow(vm),
         ],
       ),
     );
@@ -321,23 +294,8 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
           ),
         ),
         const SizedBox(height: 8),
-        Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(
-                text: 'Need By: ',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              TextSpan(text: vm.needByLabel),
-            ],
-          ),
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.blackCat,
-          ),
-        ),
-        const SizedBox(height: 6),
+        _needBudgetRow(vm),
+        const SizedBox(height: 8),
         Text.rich(
           TextSpan(
             children: [
@@ -346,23 +304,6 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               TextSpan(text: vm.requestAcceptByLabel),
-            ],
-          ),
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.blackCat,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(
-                text: 'Client Budget Range: ',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              TextSpan(text: vm.clientBudgetLabel),
             ],
           ),
           style: const TextStyle(
@@ -408,7 +349,54 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _summaryBox('Shape', _valueOrDash(vm.nailShape)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _summaryBox('Length', _valueOrDash(vm.nailLength)),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _summaryBox(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -671,80 +659,185 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
     );
   }
 
-  Widget _plainSection({required String title, required String body}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
+  Widget _requestTypeOrderRow(_RequestDetailsVm vm) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          vm.requestType.toLowerCase().contains('direct')
+              ? Icons.arrow_outward_rounded
+              : Icons.arrow_forward_rounded,
+          size: 16,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            vm.requestType,
+            textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
               color: AppColors.blackCat,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: TextStyle(
+        ),
+        const SizedBox(width: 12),
+        Container(width: 1, height: 16, color: AppColors.blackCatBorderLight),
+        const SizedBox(width: 12),
+        Icon(
+          vm.orderType.toLowerCase().contains('group')
+              ? Icons.groups_2_outlined
+              : Icons.person_outline_rounded,
+          size: 16,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            vm.orderType,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.blackCat.withValues(alpha: 0.88),
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _needBudgetRow(_RequestDetailsVm vm) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 16,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Need By: ${vm.needByLabel}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.attach_money_rounded,
+                size: 16,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Budget: ${vm.clientBudgetLabel}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _plainSection({required String title, required String body}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          body,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.blackCat.withValues(alpha: 0.88),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _numberOfSetsSection(String numberOfSets) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Number of Sets',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Number of Sets',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.blackCat,
           ),
-          const SizedBox(height: 8),
-          Text(
-            numberOfSets,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.blackCat.withValues(alpha: 0.88),
-            ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          numberOfSets,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.blackCat.withValues(alpha: 0.88),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Each set includes 10 press on nails (5 per hand)',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.blackCat.withValues(alpha: 0.88),
-            ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Each set includes 10 press on nails (5 per hand)',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.blackCat.withValues(alpha: 0.88),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _separator() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Divider(
-        height: 1,
-        thickness: 1,
-        color: AppColors.blackCat.withValues(alpha: 0.14),
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCatBorderLight),
       ),
+      child: child,
     );
+  }
+
+  String _valueOrDash(String value) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? '-' : trimmed;
   }
 
   Widget _photosStrip(List<String> photos) {
@@ -926,6 +1019,7 @@ class _ClientRequestDetailsPageState extends State<ClientRequestDetailsPage> {
 
 class _RequestDetailsVm {
   const _RequestDetailsVm({
+    required this.isBrandRequest,
     required this.brandName,
     required this.campaignName,
     required this.profileImage,
@@ -936,16 +1030,20 @@ class _RequestDetailsVm {
     required this.orderType,
     required this.openToClientPool,
     required this.orderTypeRaw,
+    required this.bioSectionBody,
     required this.companyBio,
     required this.customDescription,
     required this.numberOfSets,
     required this.photos,
     required this.leftHand,
     required this.rightHand,
+    required this.nailShape,
+    required this.nailLength,
     required this.requiresNfc,
     required this.requestAcceptByLabel,
   });
 
+  final bool isBrandRequest;
   final String brandName;
   final String campaignName;
   final String profileImage;
@@ -956,12 +1054,15 @@ class _RequestDetailsVm {
   final String orderType;
   final bool openToClientPool;
   final String orderTypeRaw;
+  final String bioSectionBody;
   final String companyBio;
   final String customDescription;
   final String numberOfSets;
   final List<String> photos;
   final NailDimensionsV2 leftHand;
   final NailDimensionsV2 rightHand;
+  final String nailShape;
+  final String nailLength;
   final bool requiresNfc;
   final String requestAcceptByLabel;
 
@@ -969,12 +1070,15 @@ class _RequestDetailsVm {
     final initialBrand = request.brandName.trim().isNotEmpty
         ? request.brandName.trim()
         : request.clientName.trim();
+    final isBrandRequest =
+        _tableForSource(request.sourceCollection) == 'company_custom_requests';
     final acceptByDate = DateTime(
       request.neededBy.year,
       request.neededBy.month,
       request.neededBy.day,
     ).subtract(const Duration(days: 5));
     return _RequestDetailsVm(
+      isBrandRequest: isBrandRequest,
       brandName: initialBrand.isEmpty ? 'Brand Company' : initialBrand,
       campaignName: request.title.trim().isEmpty
           ? 'Untitled Campaign'
@@ -985,13 +1089,14 @@ class _RequestDetailsVm {
       clientBudgetLabel:
           '\$${request.clientBudgetMin ?? request.budgetMin} - \$${request.clientBudgetMax ?? request.budgetMax}',
       requestType: _requestTypeFromRouting(
+        isBrandRequest: isBrandRequest,
+        hasSpecificArtist:
+            request.selectedArtist.trim().isNotEmpty ||
+            request.selectedArtistEmail.trim().isNotEmpty,
         openToClientPool: request.openToClientPool,
         openToArtistPool:
             request.selectedArtist.trim().isEmpty &&
             request.selectedArtistEmail.trim().isEmpty,
-        orderTypeRaw: request.orderType == RequestOrderTypeV2.group
-            ? 'group'
-            : 'single',
       ),
       orderType: request.orderType == RequestOrderTypeV2.group
           ? 'Group'
@@ -1000,12 +1105,15 @@ class _RequestDetailsVm {
       orderTypeRaw: request.orderType == RequestOrderTypeV2.group
           ? 'group'
           : 'single',
+      bioSectionBody: request.bio.trim().isEmpty ? '-' : request.bio.trim(),
       companyBio: 'No company bio available.',
       customDescription: request.bio.trim().isEmpty ? '-' : request.bio.trim(),
       numberOfSets: '1',
       photos: request.clientImages,
       leftHand: request.leftHand,
       rightHand: request.rightHand,
+      nailShape: request.nailShape.trim(),
+      nailLength: request.nailLength.trim(),
       requiresNfc: _requestRequiresNfcFromMaps(
         const <String, dynamic>{},
         const <String, dynamic>{},
@@ -1015,22 +1123,144 @@ class _RequestDetailsVm {
     );
   }
 
-  static Future<_RequestDetailsVm> load(ClientRequestV2 request) async {
-    final docRef = FirebaseFirestore.instance
-        .collection(request.sourceCollection)
-        .doc(request.id);
-    final results = await Future.wait([
-      docRef.get(),
-      docRef.collection('details').doc('payload').get(),
-    ]);
-    final root = (results[0] as dynamic).data() ?? const <String, dynamic>{};
-    final details = (results[1] as dynamic).data() ?? const <String, dynamic>{};
 
-    Map<String, dynamic> asMap(dynamic v) {
-      if (v is Map<String, dynamic>) return v;
-      if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
-      return const <String, dynamic>{};
+  static Map<String, dynamic> asMap(dynamic v) {
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
+    if (v is String) {
+      final text = v.trim();
+      if (text.isEmpty) return const <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((k, val) => MapEntry(k.toString(), val));
+        }
+      } catch (_) {}
     }
+    return const <String, dynamic>{};
+  }
+
+  static String _tableForSource(String source) {
+    final normalized = source.trim().toLowerCase();
+    if (normalized == 'company_custom_requests' ||
+        normalized == 'companycustomrequests' ||
+        normalized == 'brand_custom_requests' ||
+        normalized == 'brandcustomrequests' ||
+        normalized == 'company_custom_requests') {
+      return 'company_custom_requests';
+    }
+    return 'client_custom_requests';
+  }
+
+  static Map<String, dynamic> _requestFallbackMap(ClientRequestV2 request) {
+    return <String, dynamic>{
+      'id': request.id,
+      'source_collection': request.sourceCollection,
+      'order_number': request.id,
+      'request_number': request.id,
+      'client_request_number': request.id,
+      'title': request.title,
+      'campaignName': request.title,
+      'client_name': request.clientName,
+      'clientName': request.clientName,
+      'client_email': '',
+      'clientEmail': '',
+      'description': request.bio,
+      'descriptionPreview': request.bio,
+      'need_by': request.neededBy.toIso8601String(),
+      'needBy': request.neededBy.toIso8601String(),
+      'status': request.status.name,
+      'order_type': request.orderType == RequestOrderTypeV2.group ? 'group' : 'single',
+      'orderType': request.orderType == RequestOrderTypeV2.group ? 'group' : 'single',
+      'is_direct_request': request.isDirectRequest,
+      'isDirectRequest': request.isDirectRequest,
+      'openToClientPool': request.openToClientPool,
+      'selected_artist': request.selectedArtist,
+      'selectedArtist': request.selectedArtist,
+      'selected_artist_email': request.selectedArtistEmail,
+      'selectedArtistEmail': request.selectedArtistEmail,
+      'clientBudgetMin': request.clientBudgetMin ?? request.budgetMin,
+      'clientBudgetMax': request.clientBudgetMax ?? request.budgetMax,
+      'inspiration_photos': request.clientImages,
+      'inspirationPhotos': request.clientImages,
+      'clientImages': request.clientImages,
+      'nailPreferences': <String, dynamic>{
+        'leftHandDimensions': <String, dynamic>{
+          'thumb': request.leftHand.thumb,
+          'index': request.leftHand.index,
+          'middle': request.leftHand.middle,
+          'ring': request.leftHand.ring,
+          'pinky': request.leftHand.pinky,
+        },
+        'rightHandDimensions': <String, dynamic>{
+          'thumb': request.rightHand.thumb,
+          'index': request.rightHand.index,
+          'middle': request.rightHand.middle,
+          'ring': request.rightHand.ring,
+          'pinky': request.rightHand.pinky,
+        },
+      },
+    };
+  }
+
+  static Future<_RequestDetailsVm> load(ClientRequestV2 request) async {
+    final supabase = Supabase.instance.client;
+    final table = _tableForSource(request.sourceCollection);
+    final isBrandRequest = table == 'company_custom_requests';
+
+    Map<String, dynamic> row = const <String, dynamic>{};
+    try {
+      final response = await supabase
+          .from(table)
+          .select()
+          .eq('id', request.id)
+          .maybeSingle();
+      row = asMap(response);
+    } catch (_) {
+      row = const <String, dynamic>{};
+    }
+
+    if (row.isEmpty && table != 'client_custom_requests') {
+      try {
+        final response = await supabase
+            .from('client_custom_requests')
+            .select()
+            .eq('id', request.id)
+            .maybeSingle();
+        row = asMap(response);
+      } catch (_) {}
+    }
+
+    final root = row.isNotEmpty ? row : _requestFallbackMap(request);
+    final rowSummary = asMap(root['summary']);
+    final rowDetails = asMap(root['details']);
+    final rowPayload = asMap(root['payload']);
+    final rowRequestDetails = asMap(root['request_details']).isNotEmpty
+        ? asMap(root['request_details'])
+        : asMap(root['requestDetails']);
+    final details = <String, dynamic>{
+      ...rowSummary,
+      ...rowDetails,
+      ...rowPayload,
+      ...rowRequestDetails,
+      'payload': rowPayload.isNotEmpty ? rowPayload : rowSummary,
+      'requestDetails': rowRequestDetails.isNotEmpty
+          ? rowRequestDetails
+          : (rowPayload['requestDetails'] is Map
+                ? asMap(rowPayload['requestDetails'])
+                : rowSummary),
+      'order': asMap(root['order']).isNotEmpty
+          ? asMap(root['order'])
+          : (asMap(rowPayload['order']).isNotEmpty
+                ? asMap(rowPayload['order'])
+                : asMap(rowSummary['order'])),
+      'clientBudget': asMap(root['client_budget']).isNotEmpty
+          ? asMap(root['client_budget'])
+          : (asMap(rowPayload['clientBudget']).isNotEmpty
+                ? asMap(rowPayload['clientBudget'])
+                : asMap(rowSummary['clientBudget'])),
+    };
 
     String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
       for (final value in values) {
@@ -1040,6 +1270,29 @@ class _RequestDetailsVm {
       return fallback;
     }
 
+    List<String> asStringList(Object? value) {
+      if (value is List) {
+        return value
+            .map((item) => item?.toString().trim() ?? '')
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false);
+      }
+      if (value is String) {
+        final text = value.trim();
+        if (text.isEmpty) return const <String>[];
+        try {
+          final decoded = jsonDecode(text);
+          if (decoded is List) {
+            return decoded
+                .map((item) => item?.toString().trim() ?? '')
+                .where((item) => item.isNotEmpty)
+                .toList(growable: false);
+          }
+        } catch (_) {}
+      }
+      return const <String>[];
+    }
+
     int asInt(dynamic v) {
       if (v is int) return v;
       if (v is num) return v.round();
@@ -1047,7 +1300,6 @@ class _RequestDetailsVm {
     }
 
     DateTime? asDate(dynamic v) {
-      if (v is Timestamp) return v.toDate();
       if (v is DateTime) return v;
       if (v is String) return DateTime.tryParse(v);
       if (v != null) return DateTime.tryParse(v.toString());
@@ -1247,27 +1499,153 @@ class _RequestDetailsVm {
       });
     }
 
-    Future<Map<String, dynamic>> loadCurrentClientDimensions() async {
-      final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-          .trim()
-          .toLowerCase();
-      if (email.isEmpty) return const <String, dynamic>{};
-      for (final collection in const <String>['client', 'client_artist']) {
+    String first(Map<String, dynamic> source, List<String> keys) {
+      for (final key in keys) {
+        final value = (source[key] ?? '').toString().trim();
+        if (value.isNotEmpty) return value;
+      }
+      return '';
+    }
+
+    Future<Map<String, dynamic>> readClientRecord({
+      required String tableName,
+      String normalizedEmail = '',
+      String normalizedClientId = '',
+    }) async {
+      List<Map<String, dynamic>> rows = const <Map<String, dynamic>>[];
+
+      Future<void> tryEmailLookup() async {
+        if (normalizedEmail.isEmpty || rows.isNotEmpty) return;
+        final response = await supabase
+            .from(tableName)
+            .select()
+            .ilike('email', normalizedEmail)
+            .limit(1);
+        rows = response
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+      }
+
+      Future<void> tryColumnLookup(String column) async {
+        if (normalizedClientId.isEmpty || rows.isNotEmpty) return;
         try {
-          final snap = await FirebaseFirestore.instance
-              .collection(collection)
-              .where('email', isEqualTo: email)
-              .limit(1)
-              .get();
-          if (snap.docs.isEmpty) continue;
-          final data = snap.docs.first.data();
-          final profile = asMap(data['profile']);
-          final nail = asMap(data['nailPreferences']);
-          final profileNail = asMap(profile['nailPreferences']);
-          final dims = asMap(nail['dimensions']).isNotEmpty
-              ? asMap(nail['dimensions'])
-              : asMap(profileNail['dimensions']);
-          if (dims.isNotEmpty) return dims;
+          final response = await supabase
+              .from(tableName)
+              .select()
+              .eq(column, normalizedClientId)
+              .limit(1);
+          rows = response
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false);
+        } catch (_) {}
+      }
+
+      await tryEmailLookup();
+      await tryColumnLookup('client_id');
+      await tryColumnLookup('clientId');
+      await tryColumnLookup('id');
+
+      if (rows.isEmpty) return const <String, dynamic>{};
+      final data = asMap(rows.first);
+      final profile = asMap(data['profile']);
+      final basic = asMap(data['basic']);
+      final nail = asMap(data['nail_preferences']).isNotEmpty
+          ? asMap(data['nail_preferences'])
+          : asMap(data['nailPreferences']);
+      final profileNail = asMap(profile['nailPreferences']).isNotEmpty
+          ? asMap(profile['nailPreferences'])
+          : asMap(profile['nail_preferences']);
+      final dimensions = asMap(nail['dimensions']).isNotEmpty
+          ? asMap(nail['dimensions'])
+          : asMap(profileNail['dimensions']);
+      final profileDimensions = asMap(profileNail['dimensions']);
+
+      return <String, dynamic>{
+        'name': first(data, const ['displayName', 'name']).isNotEmpty
+            ? first(data, const ['displayName', 'name'])
+            : (first(profile, const ['name', 'displayName']).isNotEmpty
+                  ? first(profile, const ['name', 'displayName'])
+                  : first(basic, const ['name', 'displayName'])),
+        'bio': first(data, const ['bio', 'about']).isNotEmpty
+            ? first(data, const ['bio', 'about'])
+            : (first(profile, const ['bio', 'about']).isNotEmpty
+                  ? first(profile, const ['bio', 'about'])
+                  : first(basic, const ['bio', 'about'])),
+        'nailShape': first(nail, const ['shape']).isNotEmpty
+            ? first(nail, const ['shape'])
+            : first(profileNail, const ['shape']),
+        'nailLength': first(nail, const ['length']).isNotEmpty
+            ? first(nail, const ['length'])
+            : first(profileNail, const ['length']),
+        'nailDimensions': <String, dynamic>{
+          'lThumb': dimensions['lThumb'] ?? profileDimensions['lThumb'],
+          'lIndex': dimensions['lIndex'] ?? profileDimensions['lIndex'],
+          'lMiddle': dimensions['lMiddle'] ?? profileDimensions['lMiddle'],
+          'lRing': dimensions['lRing'] ?? profileDimensions['lRing'],
+          'lPinky': dimensions['lPinky'] ?? profileDimensions['lPinky'],
+          'rThumb': dimensions['rThumb'] ?? profileDimensions['rThumb'],
+          'rIndex': dimensions['rIndex'] ?? profileDimensions['rIndex'],
+          'rMiddle': dimensions['rMiddle'] ?? profileDimensions['rMiddle'],
+          'rRing': dimensions['rRing'] ?? profileDimensions['rRing'],
+          'rPinky': dimensions['rPinky'] ?? profileDimensions['rPinky'],
+        },
+      };
+    }
+
+    Future<Map<String, dynamic>> loadRequestClientData() async {
+      final authUser = Supabase.instance.client.auth.currentUser;
+      final authEmail = (authUser?.email ?? '').trim().toLowerCase();
+      final authUid = (authUser?.id ?? '').trim();
+
+      // Brand open-pool requests do not have selected/accepted client data yet.
+      // In that case, use the signed-in viewer's client/client_artist profile so
+      // the detail modal renders the current client's saved nail measurements.
+      final normalizedEmail = firstNonEmpty([
+        root['selectedClientEmail'],
+        details['selectedClientEmail'],
+        requestDetails['selectedClientEmail'],
+        payload['selectedClientEmail'],
+        root['acceptedByClientEmail'],
+        details['acceptedByClientEmail'],
+        requestDetails['acceptedByClientEmail'],
+        payload['acceptedByClientEmail'],
+        root['clientEmail'],
+        details['clientEmail'],
+        requestDetails['clientEmail'],
+        payload['clientEmail'],
+        authEmail,
+      ]).trim().toLowerCase();
+
+      final normalizedClientId = firstNonEmpty([
+        root['selectedClientId'],
+        details['selectedClientId'],
+        requestDetails['selectedClientId'],
+        payload['selectedClientId'],
+        root['acceptedClientId'],
+        details['acceptedClientId'],
+        requestDetails['acceptedClientId'],
+        payload['acceptedClientId'],
+        root['clientId'],
+        root['client_id'],
+        details['clientId'],
+        details['client_id'],
+        requestDetails['clientId'],
+        requestDetails['client_id'],
+        payload['clientId'],
+        payload['client_id'],
+        authUid,
+      ]).trim();
+
+      for (final tableName in const <String>['client', 'client_artist']) {
+        try {
+          final result = await readClientRecord(
+            tableName: tableName,
+            normalizedEmail: normalizedEmail,
+            normalizedClientId: normalizedClientId,
+          );
+          if (result.isNotEmpty) return result;
         } catch (_) {}
       }
       return const <String, dynamic>{};
@@ -1450,21 +1828,107 @@ class _RequestDetailsVm {
       details['orderType'],
     ], fallback: 'single').toLowerCase();
     final orderType = orderTypeRaw == 'group' ? 'Group' : 'Single';
+    final selectedArtist = firstNonEmpty([
+      root['selectedArtist'],
+      root['selected_artist'],
+      order['selectedArtist'],
+      order['selected_artist'],
+      details['selectedArtist'],
+      details['selected_artist'],
+      requestDetails['selectedArtist'],
+      requestDetails['selected_artist'],
+      payload['selectedArtist'],
+      payload['selected_artist'],
+      request.selectedArtist,
+    ]);
+    final selectedArtistEmail = firstNonEmpty([
+      root['selectedArtistEmail'],
+      root['selected_artist_email'],
+      order['selectedArtistEmail'],
+      order['selected_artist_email'],
+      details['selectedArtistEmail'],
+      details['selected_artist_email'],
+      requestDetails['selectedArtistEmail'],
+      requestDetails['selected_artist_email'],
+      payload['selectedArtistEmail'],
+      payload['selected_artist_email'],
+      request.selectedArtistEmail,
+    ]).toLowerCase();
+    final hasSpecificArtist =
+        selectedArtist.isNotEmpty || selectedArtistEmail.isNotEmpty;
+    final selectedClient = firstNonEmpty([
+      root['selectedClient'],
+      root['selected_client'],
+      order['selectedClient'],
+      order['selected_client'],
+      details['selectedClient'],
+      details['selected_client'],
+      requestDetails['selectedClient'],
+      requestDetails['selected_client'],
+      payload['selectedClient'],
+      payload['selected_client'],
+      request.selectedClient,
+    ]);
+    final selectedClientEmail = firstNonEmpty([
+      root['selectedClientEmail'],
+      root['selected_client_email'],
+      order['selectedClientEmail'],
+      order['selected_client_email'],
+      details['selectedClientEmail'],
+      details['selected_client_email'],
+      requestDetails['selectedClientEmail'],
+      requestDetails['selected_client_email'],
+      payload['selectedClientEmail'],
+      payload['selected_client_email'],
+      request.selectedClientEmail,
+    ]).toLowerCase();
+    final selectedClientId = firstNonEmpty([
+      root['selectedClientId'],
+      root['selected_client_id'],
+      order['selectedClientId'],
+      order['selected_client_id'],
+      details['selectedClientId'],
+      details['selected_client_id'],
+      requestDetails['selectedClientId'],
+      requestDetails['selected_client_id'],
+      payload['selectedClientId'],
+      payload['selected_client_id'],
+    ]);
+    final selectedGroupClientEmails = <String>{
+      ...asStringList(root['selectedGroupClientEmails']),
+      ...asStringList(root['selected_group_client_emails']),
+      ...asStringList(order['selectedGroupClientEmails']),
+      ...asStringList(order['selected_group_client_emails']),
+      ...asStringList(details['selectedGroupClientEmails']),
+      ...asStringList(details['selected_group_client_emails']),
+      ...asStringList(requestDetails['selectedGroupClientEmails']),
+      ...asStringList(requestDetails['selected_group_client_emails']),
+      ...asStringList(payload['selectedGroupClientEmails']),
+      ...asStringList(payload['selected_group_client_emails']),
+      ...request.selectedGroupClientEmails
+          .map((item) => item.trim().toLowerCase())
+          .where((item) => item.isNotEmpty),
+    };
+    final hasSpecificClientTargets =
+        selectedClient.isNotEmpty ||
+        selectedClientEmail.isNotEmpty ||
+        selectedClientId.isNotEmpty ||
+        selectedGroupClientEmails.isNotEmpty;
     final openToClientPool =
         asNullableBool(root['openToClientPool']) ??
         asNullableBool(order['openToClientPool']) ??
         asNullableBool(details['openToClientPool']) ??
-        ((root['selectedClient'] ?? '').toString().trim().isEmpty &&
-            orderTypeRaw != 'group');
+        !hasSpecificClientTargets;
     final openToArtistPool =
         asNullableBool(root['openToArtistPool']) ??
         asNullableBool(order['openToArtistPool']) ??
         asNullableBool(details['openToArtistPool']) ??
-        (root['selectedArtist'] ?? '').toString().trim().isEmpty;
+        !hasSpecificArtist;
     final computedRequestType = _requestTypeFromRouting(
+      isBrandRequest: isBrandRequest,
+      hasSpecificArtist: hasSpecificArtist,
       openToClientPool: openToClientPool,
       openToArtistPool: openToArtistPool,
-      orderTypeRaw: orderTypeRaw,
     );
     final requestType = computedRequestType;
     final customDescription = firstNonEmpty([
@@ -1492,73 +1956,386 @@ class _RequestDetailsVm {
                           ? asInt(root['quantity']).toString()
                           : '1')));
 
+    String cleanCompanyBio(String raw) {
+      String normalize(String value) =>
+          value.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+      final value = raw.trim();
+      if (value.isEmpty) return '';
+
+      // Brand request submit can store the custom request description inside
+      // companyProfileSnapshot.bio. Do not show that as the brand/company bio.
+      final description = customDescription.trim();
+      if (description.isNotEmpty &&
+          normalize(value) == normalize(description)) {
+        return '';
+      }
+      return value;
+    }
+
+    String extractCompanyBio(
+      Map<String, dynamic> source, {
+      bool allowSnapshotDescriptionFallback = false,
+    }) {
+      if (source.isEmpty) return '';
+      final nestedCompany = asMap(source['company']);
+      final nestedProfile = asMap(source['profile']);
+      final nestedBasic = asMap(source['basic']);
+      final candidates = <Object?>[
+        source['panel_companyBio'],
+        source['panel_company_bio'],
+        source['panel_company_bio_text'],
+        source['companyBio'],
+        source['company_bio'],
+        source['about'],
+        source['aboutBrand'],
+        nestedCompany['bio'],
+        nestedCompany['companyBio'],
+        nestedCompany['company_bio'],
+        nestedCompany['about'],
+        nestedProfile['companyBio'],
+        nestedProfile['company_bio'],
+        nestedBasic['companyBio'],
+        nestedBasic['company_bio'],
+        // Keep generic bio last so the real company bio wins when available.
+        source['bio'],
+        nestedProfile['bio'],
+        nestedBasic['bio'],
+      ];
+
+      for (final candidate in candidates) {
+        final value = (candidate ?? '').toString().trim();
+        if (value.isEmpty) continue;
+        if (allowSnapshotDescriptionFallback) return value;
+        final cleaned = cleanCompanyBio(value);
+        if (cleaned.isNotEmpty) return cleaned;
+      }
+      return '';
+    }
+
     String companyBio = '';
     final companySnapshot = asMap(details['companyProfileSnapshot']).isNotEmpty
         ? asMap(details['companyProfileSnapshot'])
         : asMap(root['companyProfileSnapshot']);
-    final companyUid = firstNonEmpty([root['companyUid']]);
+    final companySnapshotBasic = asMap(companySnapshot['basic']);
+    final detailClientBasicForCompany = detailClientBasic;
+    final rootClientProfile = asMap(root['clientProfileSnapshot']);
+    final rootClientBasicForCompany = asMap(rootClientProfile['basic']);
+
+    String extractUuidFromText(Object? raw) {
+      final text = (raw ?? '').toString();
+      if (text.trim().isEmpty) return '';
+      final matches = RegExp(
+        r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+      ).allMatches(text).map((m) => m.group(0) ?? '').where((v) => v.isNotEmpty).toList();
+      if (matches.isEmpty) return '';
+      return matches.first.toLowerCase();
+    }
+
+    final companyUid = firstNonEmpty([
+      root['companyUid'],
+      root['company_uid'],
+      details['companyUid'],
+      details['company_uid'],
+      requestDetails['companyUid'],
+      requestDetails['company_uid'],
+      payload['companyUid'],
+      payload['company_uid'],
+      root['brandId'],
+      root['brand_id'],
+      details['brandId'],
+      details['brand_id'],
+      requestDetails['brandId'],
+      requestDetails['brand_id'],
+      payload['brandId'],
+      payload['brand_id'],
+      extractUuidFromText(profileImage),
+      extractUuidFromText(root['previewImage']),
+      extractUuidFromText(root['previewImageAsset']),
+      extractUuidFromText(details['previewImage']),
+      extractUuidFromText(details['previewImageAsset']),
+      if (photos.isNotEmpty) extractUuidFromText(photos.first),
+    ]);
     final companyEmail = firstNonEmpty([
       root['companyEmail'],
-      root['clientEmail'],
+      root['company_email'],
+      details['companyEmail'],
+      details['company_email'],
+      requestDetails['companyEmail'],
+      requestDetails['company_email'],
+      payload['companyEmail'],
+      payload['company_email'],
+      root['brandEmail'],
+      root['brand_email'],
+      details['brandEmail'],
+      details['brand_email'],
+      requestDetails['brandEmail'],
+      requestDetails['brand_email'],
+      payload['brandEmail'],
+      payload['brand_email'],
+      companySnapshot['email'],
+      companySnapshot['companyEmail'],
+      companySnapshot['company_email'],
+      companySnapshot['brandEmail'],
+      companySnapshot['brand_email'],
+      companySnapshotBasic['email'],
+      if (!isBrandRequest) detailClientBasicForCompany['email'],
+      if (!isBrandRequest) rootClientBasicForCompany['email'],
+      if (!isBrandRequest) root['clientEmail'],
+      if (!isBrandRequest) root['client_email'],
     ]).toLowerCase();
-    if (companyUid.isNotEmpty) {
-      final companySnap = await FirebaseFirestore.instance
-          .collection('company')
-          .doc(companyUid)
-          .get();
-      final company = companySnap.data() ?? const <String, dynamic>{};
-      companyBio = firstNonEmpty([
-        company['panel_companyBio'],
-        company['companyBio'],
-        company['bio'],
-        company['panel_notes'],
-        company['description'],
-        company['about'],
-        company['aboutBrand'],
-      ]);
-    }
-    if (companyBio.isEmpty && companyEmail.isNotEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection('company')
-          .where('email', isEqualTo: companyEmail)
-          .limit(1)
-          .get();
-      if (query.docs.isNotEmpty) {
-        final company = query.docs.first.data();
-        companyBio = firstNonEmpty([
-          company['panel_companyBio'],
-          company['companyBio'],
-          company['bio'],
-          company['panel_notes'],
-          company['description'],
-          company['about'],
-          company['aboutBrand'],
-        ]);
+    final companyNameLookup = firstNonEmpty([
+      root['companyName'],
+      root['company_name'],
+      details['companyName'],
+      details['company_name'],
+      requestDetails['companyName'],
+      requestDetails['company_name'],
+      payload['companyName'],
+      payload['company_name'],
+      root['brandName'],
+      root['brand_name'],
+      details['brandName'],
+      details['brand_name'],
+      requestDetails['brandName'],
+      requestDetails['brand_name'],
+      payload['brandName'],
+      payload['brand_name'],
+      companySnapshot['name'],
+      companySnapshot['displayName'],
+      companySnapshot['companyName'],
+      companySnapshot['company_name'],
+      companySnapshot['brandName'],
+      companySnapshot['brand_name'],
+      companySnapshotBasic['name'],
+      companySnapshotBasic['displayName'],
+      if (!isBrandRequest) detailClientBasicForCompany['name'],
+      if (!isBrandRequest) rootClientBasicForCompany['name'],
+      if (!isBrandRequest) request.clientName,
+    ]);
+
+    Future<Map<String, dynamic>> readCompanyRow({
+      String uid = '',
+      String email = '',
+      String companyName = '',
+    }) async {
+      Future<Map<String, dynamic>> byColumn(
+        String column,
+        String value, {
+        bool exact = true,
+      }) async {
+        if (value.trim().isEmpty) return const <String, dynamic>{};
+        try {
+          final rows = exact
+              ? await supabase.from('company').select().eq(column, value.trim()).limit(1)
+              : await supabase.from('company').select().ilike(column, value.trim()).limit(1);
+          if (rows.isNotEmpty) return asMap(rows.first);
+        } catch (_) {}
+        return const <String, dynamic>{};
       }
+
+      for (final column in const <String>[
+        'id',
+        'uid',
+        'company_id',
+        'companyId',
+        'brand_id',
+        'brandId',
+      ]) {
+        final row = await byColumn(column, uid);
+        if (row.isNotEmpty) return row;
+      }
+
+      for (final column in const <String>[
+        'email',
+        'company_email',
+        'contact_email',
+        'panel_company_email',
+        'panel_companyEmail',
+        'panel_contact_email',
+        'panel_contactEmail',
+        'companyEmail',
+        'contactEmail',
+      ]) {
+        final row = await byColumn(column, email.toLowerCase());
+        if (row.isNotEmpty) return row;
+      }
+
+      for (final column in const <String>[
+        'panel_company_name',
+        'panel_companyName',
+        'company_name',
+        'companyName',
+        'name',
+        'brand_name',
+        'brandName',
+        'panel_name',
+        'panelName',
+      ]) {
+        final row = await byColumn(column, companyName, exact: false);
+        if (row.isNotEmpty) return row;
+      }
+
+      // Last-resort scan for legacy rows where brand name/email only exists
+      // inside the jsonb `company` object and not as a top-level column.
+      try {
+        final rows = await supabase.from('company').select().limit(1000);
+        final emailNeedle = email.trim().toLowerCase();
+        final nameNeedle = companyName.trim().toLowerCase();
+        for (final raw in rows) {
+          final row = asMap(raw);
+          final company = asMap(row['company']);
+          final basic = asMap(row['basic']);
+          final profile = asMap(row['profile']);
+          final rowEmails = <String>[
+            (row['email'] ?? '').toString(),
+            (row['panel_contact_email'] ?? '').toString(),
+            (row['panel_company_email'] ?? '').toString(),
+            (company['contactEmail'] ?? '').toString(),
+            (company['email'] ?? '').toString(),
+            (basic['email'] ?? '').toString(),
+            (profile['email'] ?? '').toString(),
+          ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+          final rowNames = <String>[
+            (row['panel_company_name'] ?? '').toString(),
+            (row['company_name'] ?? '').toString(),
+            (row['brand_name'] ?? '').toString(),
+            (company['name'] ?? '').toString(),
+            (basic['name'] ?? '').toString(),
+            (profile['name'] ?? '').toString(),
+          ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+          if ((emailNeedle.isNotEmpty && rowEmails.contains(emailNeedle)) ||
+              (nameNeedle.isNotEmpty && rowNames.contains(nameNeedle))) {
+            return row;
+          }
+        }
+            } catch (_) {}
+
+      return const <String, dynamic>{};
+    }
+
+    final companyRow = await readCompanyRow(
+      uid: companyUid,
+      email: companyEmail,
+      companyName: companyNameLookup,
+    );
+    final requestClientData = await loadRequestClientData();
+    final requestClientDims = asMap(requestClientData['nailDimensions']);
+    final clientBio = cleanCompanyBio(firstNonEmpty([
+      requestClientData['bio'],
+      detailClientBasicForCompany['bio'],
+      rootClientBasicForCompany['bio'],
+      root['clientBio'],
+      root['client_bio'],
+      details['clientBio'],
+      details['client_bio'],
+    ]));
+    companyBio = extractCompanyBio(
+      companyRow,
+      allowSnapshotDescriptionFallback: false,
+    );
+    if (companyBio.isEmpty) {
+      companyBio = extractCompanyBio(
+        companySnapshot,
+        allowSnapshotDescriptionFallback: false,
+      );
     }
     if (companyBio.isEmpty) {
-      companyBio = firstNonEmpty([
-        companySnapshot['panel_companyBio'],
-        companySnapshot['companyBio'],
-        companySnapshot['bio'],
-        companySnapshot['description'],
-        root['companyBio'],
+      companyBio = cleanCompanyBio(firstNonEmpty([
         root['panel_companyBio'],
-        root['panel_notes'],
-      ]);
+        root['panel_company_bio'],
+        root['companyBio'],
+        root['company_bio'],
+      ]));
     }
-    if (companyBio.isEmpty) companyBio = 'No company bio available.';
+    if (!isBrandRequest && clientBio.isNotEmpty) {
+      companyBio = clientBio;
+    }
+    if (companyBio.isEmpty) {
+      companyBio = isBrandRequest
+          ? 'No company bio available.'
+          : 'No client bio available.';
+    }
+    final bioSectionBody = companyBio;
 
-    var leftHand = mapHand(left: true);
-    var rightHand = mapHand(left: false);
-    if (handIsEmpty(leftHand) && handIsEmpty(rightHand)) {
-      final currentClientDims = await loadCurrentClientDimensions();
-      if (currentClientDims.isNotEmpty) {
+    NailDimensionsV2 profileHand({required bool left}) {
+      String pick(String key) {
+        final cap = key[0].toUpperCase() + key.substring(1);
+        return dimValue(
+          requestClientDims[left ? 'l$cap' : 'r$cap'] ?? requestClientDims[key],
+        );
+      }
+
+      return NailDimensionsV2(
+        thumb: pick('thumb'),
+        index: pick('index'),
+        middle: pick('middle'),
+        ring: pick('ring'),
+        pinky: pick('pinky'),
+      );
+    }
+
+    var leftHand = isBrandRequest && requestClientDims.isNotEmpty
+        ? profileHand(left: true)
+        : mapHand(left: true);
+    var rightHand = isBrandRequest && requestClientDims.isNotEmpty
+        ? profileHand(left: false)
+        : mapHand(left: false);
+    final nailShape = isBrandRequest
+        ? firstNonEmpty([
+            requestClientData['nailShape'],
+            requestClientData['shape'],
+            asMap(root['nailPreferences'])['shape'],
+            asMap(details['nailPreferences'])['shape'],
+            requestDetails['nailShape'],
+            root['nailShape'],
+            root['nail_shape'],
+            request.nailShape,
+          ], fallback: '-')
+        : firstNonEmpty([
+            asMap(requestDetails['nailPreferences'])['shape'],
+            requestDetails['nailShape'],
+            requestDetails['nail_shape'],
+            asMap(details['nailPreferences'])['shape'],
+            asMap(root['nailPreferences'])['shape'],
+            root['nailShape'],
+            root['nail_shape'],
+            request.nailShape,
+            requestClientData['nailShape'],
+            requestClientData['shape'],
+          ], fallback: '-');
+    final nailLength = isBrandRequest
+        ? firstNonEmpty([
+            requestClientData['nailLength'],
+            requestClientData['length'],
+            asMap(root['nailPreferences'])['length'],
+            asMap(details['nailPreferences'])['length'],
+            requestDetails['nailLength'],
+            root['nailLength'],
+            root['nail_length'],
+            request.nailLength,
+          ], fallback: '-')
+        : firstNonEmpty([
+            asMap(requestDetails['nailPreferences'])['length'],
+            requestDetails['nailLength'],
+            requestDetails['nail_length'],
+            asMap(details['nailPreferences'])['length'],
+            asMap(root['nailPreferences'])['length'],
+            root['nailLength'],
+            root['nail_length'],
+            request.nailLength,
+            requestClientData['nailLength'],
+            requestClientData['length'],
+          ], fallback: '-');
+    if (!isBrandRequest && handIsEmpty(leftHand) && handIsEmpty(rightHand)) {
+      final fallbackDims = requestClientDims.isNotEmpty
+          ? requestClientDims
+          : const <String, dynamic>{};
+      if (fallbackDims.isNotEmpty) {
         String pickCurrent({required bool left, required String key}) {
           final cap = key[0].toUpperCase() + key.substring(1);
           final prefixed = left ? 'l$cap' : 'r$cap';
           return dimValue(
-            currentClientDims[prefixed] ?? currentClientDims[key],
+            fallbackDims[prefixed] ?? fallbackDims[key],
           );
         }
 
@@ -1580,6 +2357,7 @@ class _RequestDetailsVm {
     }
 
     return _RequestDetailsVm(
+      isBrandRequest: isBrandRequest,
       brandName: brandName,
       campaignName: campaignName,
       profileImage: profileImage,
@@ -1591,12 +2369,15 @@ class _RequestDetailsVm {
       orderType: orderType,
       openToClientPool: openToClientPool,
       orderTypeRaw: orderTypeRaw,
+      bioSectionBody: bioSectionBody,
       companyBio: companyBio,
       customDescription: customDescription,
       numberOfSets: numberOfSets,
       photos: photos,
       leftHand: leftHand,
       rightHand: rightHand,
+      nailShape: nailShape,
+      nailLength: nailLength,
       requiresNfc: _requestRequiresNfcFromMaps(root, details, payload),
       requestAcceptByLabel: _dateLabel(requestAcceptBy),
     );
@@ -1704,17 +2485,101 @@ class _RequestDetailsVm {
   }
 
   static String _requestTypeFromRouting({
+    required bool isBrandRequest,
+    required bool hasSpecificArtist,
     required bool openToClientPool,
     required bool openToArtistPool,
-    required String orderTypeRaw,
   }) {
-    final isGroup = orderTypeRaw == 'group';
+    if (!isBrandRequest) {
+      return hasSpecificArtist || !openToArtistPool ? 'Direct' : 'Standard';
+    }
     if (openToClientPool) {
-      return openToArtistPool ? 'Standard' : 'Direct to Artist';
+      return hasSpecificArtist || !openToArtistPool
+          ? 'Direct to Artist'
+          : 'Standard';
     }
-    if (isGroup) {
-      return openToArtistPool ? 'Direct to Client' : 'Direct';
-    }
-    return openToArtistPool ? 'Direct to Client' : 'Direct';
+    return hasSpecificArtist || !openToArtistPool ? 'Direct' : 'Direct to Client';
   }
+}
+
+
+class StorageUrlResolver {
+  static final Map<String, Future<String?>> _cache = <String, Future<String?>>{};
+
+  static Future<String?> resolve(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return Future<String?>.value(null);
+    return _cache.putIfAbsent(value, () => _resolveUncached(value));
+  }
+
+  static Future<String?> _resolveUncached(String raw) async {
+    var p = raw.trim();
+    for (var i = 0; i < 3; i++) {
+      final decoded = Uri.decodeFull(p);
+      if (decoded == p) break;
+      p = decoded.trim();
+    }
+    if (p.isEmpty) return null;
+    if (p.startsWith('http://') ||
+        p.startsWith('https://') ||
+        p.startsWith('data:') ||
+        p.startsWith('blob:') ||
+        p.startsWith('content://') ||
+        p.startsWith('file://') ||
+        p.startsWith('assets/')) {
+      return p;
+    }
+
+    String? bucket;
+    String objectPath = p;
+
+    if (p.startsWith('gs://')) {
+      final withoutScheme = p.substring(5);
+      final slash = withoutScheme.indexOf('/');
+      if (slash >= 0) {
+        bucket = withoutScheme.substring(0, slash);
+        objectPath = withoutScheme.substring(slash + 1);
+      }
+    } else {
+      final parts = p.split('/').where((e) => e.trim().isNotEmpty).toList();
+      if (parts.length > 1 && _knownBuckets.contains(parts.first)) {
+        bucket = parts.first;
+        objectPath = parts.skip(1).join('/');
+      }
+    }
+
+    final supabase = Supabase.instance.client;
+    final buckets = <String>[
+      if (bucket != null && bucket.isNotEmpty) bucket,
+      'request-inspiration-photos',
+      'client-request-photos',
+      'client-custom-requests',
+      'client_custom_requests',
+      'company-custom-requests',
+      'company_custom_requests',
+      'jnt-uploads',
+      'uploads',
+      'public',
+    ];
+
+    for (final b in buckets.toSet()) {
+      try {
+        final publicUrl = supabase.storage.from(b).getPublicUrl(objectPath);
+        if (publicUrl.trim().isNotEmpty) return publicUrl.trim();
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static const Set<String> _knownBuckets = <String>{
+    'request-inspiration-photos',
+    'client-request-photos',
+    'client-custom-requests',
+    'client_custom_requests',
+    'company-custom-requests',
+    'company_custom_requests',
+    'jnt-uploads',
+    'uploads',
+    'public',
+  };
 }

@@ -12,6 +12,7 @@ import '../config/auth_flags.dart';
 import '../models/client_profile_models.dart';
 import '../services/notifications_service.dart';
 import '../utils/registration_input_utils.dart';
+import '../widgets/jnt_modal_app_bar.dart';
 
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
@@ -1769,27 +1770,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       data: themed,
       child: Scaffold(
         backgroundColor: _clientRegBodyBg,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: Image.asset(
-            'assets/images/jnt_logo_black.png',
-            height: 50,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(
-                context,
-                rootNavigator: true,
-              ).pushNamedAndRemoveUntil('/register', (route) => false),
-            ),
-          ],
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.of(
+            context,
+            rootNavigator: true,
+          ).pushNamedAndRemoveUntil('/register', (route) => false),
+          closeTooltip: 'Close client registration',
+          closeIcon: const Icon(Icons.close),
         ),
         body: SafeArea(
           child: ListView(

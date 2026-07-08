@@ -11,6 +11,7 @@ import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import '../widgets/nail_preferences_inline_editor.dart';
 import 'notifications_page.dart';
@@ -374,21 +375,12 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
       );
     }
 
-    final typeName = value.runtimeType.toString();
-
-    if (typeName.contains('Timestamp')) {
-      try {
-        final dynamic dynamicValue = value;
-        final DateTime date = dynamicValue.toDate() as DateTime;
-        return date.toIso8601String();
-      } catch (_) {
-        return value.toString();
+    try {
+      final maybeDate = (value as dynamic).toDate();
+      if (maybeDate is DateTime) {
+        return maybeDate.toIso8601String();
       }
-    }
-
-    if (typeName.contains('FieldValue')) {
-      return DateTime.now().toIso8601String();
-    }
+    } catch (_) {}
 
     return value;
   }
@@ -419,15 +411,41 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
     final cleanSummary = _supabaseJsonMap(summary);
     final cleanDetails = _supabaseJsonMap(details);
     final submissionFingerprint = <String>[
-      _firstNonEmpty([cleanSummary['clientEmail'], widget.profile.basic.email, user?.email]),
+      _firstNonEmpty([
+        cleanSummary['clientEmail'],
+        widget.profile.basic.email,
+        user?.email,
+      ]),
       _firstNonEmpty([cleanSummary['clientName'], widget.profile.basic.name]),
-      _firstNonEmpty([cleanSummary['selectedArtist'], cleanDetails['selectedArtist'], _asMap(cleanDetails['order'])['selectedArtist']]),
-      _firstNonEmpty([cleanSummary['needBy'], _asMap(cleanDetails['requestDetails'])['needBy']]),
-      _firstNonEmpty([cleanSummary['budgetMin'], _asMap(cleanDetails['budget'])['min']]),
-      _firstNonEmpty([cleanSummary['budgetMax'], _asMap(cleanDetails['budget'])['max']]),
-      _firstNonEmpty([cleanSummary['nailShape'], _asMap(cleanDetails['nailPreferences'])['shape']]),
-      _firstNonEmpty([cleanSummary['nailLength'], _asMap(cleanDetails['nailPreferences'])['length']]),
-      _firstNonEmpty([cleanSummary['descriptionPreview'], _asMap(cleanDetails['requestDetails'])['description']]),
+      _firstNonEmpty([
+        cleanSummary['selectedArtist'],
+        cleanDetails['selectedArtist'],
+        _asMap(cleanDetails['order'])['selectedArtist'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['needBy'],
+        _asMap(cleanDetails['requestDetails'])['needBy'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['budgetMin'],
+        _asMap(cleanDetails['budget'])['min'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['budgetMax'],
+        _asMap(cleanDetails['budget'])['max'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['nailShape'],
+        _asMap(cleanDetails['nailPreferences'])['shape'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['nailLength'],
+        _asMap(cleanDetails['nailPreferences'])['length'],
+      ]),
+      _firstNonEmpty([
+        cleanSummary['descriptionPreview'],
+        _asMap(cleanDetails['requestDetails'])['description'],
+      ]),
     ].map((value) => value.trim().toLowerCase()).join('|');
 
     cleanSummary['submissionFingerprint'] = submissionFingerprint;
@@ -447,7 +465,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
         'CR-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
 
     final row = <String, dynamic>{
-      'client_id': (user?.id ?? '').trim().isEmpty ? null : (user?.id ?? '').trim(),
+      'client_id': (user?.id ?? '').trim().isEmpty
+          ? null
+          : (user?.id ?? '').trim(),
       'client_email': _firstNonEmpty([
         cleanSummary['clientEmail'],
         widget.profile.basic.email,
@@ -466,16 +486,62 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
         cleanSummary['selectedArtistEmail'],
         _asMap(cleanDetails['order'])['selectedArtistEmail'],
       ]).toLowerCase(),
+      'is_direct_request': _asBool(cleanSummary['isDirectRequest']) ||
+          _firstNonEmpty([
+            cleanSummary['selectedArtistEmail'],
+            _asMap(cleanDetails['order'])['selectedArtistEmail'],
+            cleanSummary['selectedArtist'],
+            cleanDetails['selectedArtist'],
+            _asMap(cleanDetails['order'])['selectedArtist'],
+          ]).trim().isNotEmpty,
+      'fallback_to_pool': _asBool(cleanSummary['fallbackToPool']),
+      'open_to_artist_pool': !(_asBool(cleanSummary['isDirectRequest']) ||
+          _firstNonEmpty([
+            cleanSummary['selectedArtistEmail'],
+            _asMap(cleanDetails['order'])['selectedArtistEmail'],
+            cleanSummary['selectedArtist'],
+            cleanDetails['selectedArtist'],
+            _asMap(cleanDetails['order'])['selectedArtist'],
+          ]).trim().isNotEmpty),
+      'direct_artist_status': (_asBool(cleanSummary['isDirectRequest']) ||
+              _firstNonEmpty([
+                cleanSummary['selectedArtistEmail'],
+                _asMap(cleanDetails['order'])['selectedArtistEmail'],
+                cleanSummary['selectedArtist'],
+                cleanDetails['selectedArtist'],
+                _asMap(cleanDetails['order'])['selectedArtist'],
+              ]).trim().isNotEmpty)
+          ? 'in_review'
+          : '',
+      'artist_pool_status': (_asBool(cleanSummary['isDirectRequest']) ||
+              _firstNonEmpty([
+                cleanSummary['selectedArtistEmail'],
+                _asMap(cleanDetails['order'])['selectedArtistEmail'],
+                cleanSummary['selectedArtist'],
+                cleanDetails['selectedArtist'],
+                _asMap(cleanDetails['order'])['selectedArtist'],
+              ]).trim().isNotEmpty)
+          ? 'locked'
+          : 'in_review',
       'status': _firstNonEmpty([cleanSummary['status'], 'pending']),
-      'client_status': _firstNonEmpty([cleanSummary['clientStatus'], 'pending']),
+      'client_status': _firstNonEmpty([
+        cleanSummary['clientStatus'],
+        'pending',
+      ]),
       'artist_status': _firstNonEmpty([cleanSummary['artistStatus'], 'review']),
-      'order_number': _firstNonEmpty([cleanSummary['orderNumber'], generatedOrderNumber]),
+      'order_number': _firstNonEmpty([
+        cleanSummary['orderNumber'],
+        generatedOrderNumber,
+      ]),
       'summary': cleanSummary,
       'details': cleanDetails,
-      'inspiration_photos': cleanSummary['inspirationPhotos'] ?? const <String>[],
+      'inspiration_photos':
+          cleanSummary['inspirationPhotos'] ?? const <String>[],
       'photo_count': cleanSummary['photoCount'] ?? 0,
       'has_inspiration_photos': cleanSummary['hasInspirationPhotos'] ?? false,
-      'photo_upload_status': cleanSummary['hasInspirationPhotos'] == true ? 'pending' : 'none',
+      'photo_upload_status': cleanSummary['hasInspirationPhotos'] == true
+          ? 'pending'
+          : 'none',
       'photo_upload_attempt': 0,
       'created_at': nowIso,
       'updated_at': nowIso,
@@ -501,12 +567,13 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
     Map<String, dynamic> values,
   ) async {
     final clean = _supabaseJsonMap(values);
+    clean.remove('photo_upload_worker_started_at');
+    clean.remove('photo_upload_completed_at');
+    clean.remove('photo_upload_failed_at');
     final supabase = Supabase.instance.client;
     final nowIso = DateTime.now().toIso8601String();
 
-    final payload = <String, dynamic>{
-      'updated_at': nowIso,
-    };
+    final payload = <String, dynamic>{'updated_at': nowIso};
 
     void putIfPresent(String key) {
       if (clean.containsKey(key)) {
@@ -520,6 +587,11 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
       'client_name',
       'selected_artist',
       'selected_artist_email',
+      'is_direct_request',
+      'fallback_to_pool',
+      'open_to_artist_pool',
+      'direct_artist_status',
+      'artist_pool_status',
       'status',
       'client_status',
       'artist_status',
@@ -563,8 +635,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           .maybeSingle();
 
       final existingMap = existing == null
-        ? <String, dynamic>{}
-        : Map<String, dynamic>.from(existing as Map);
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(existing as Map);
 
       if (clean.containsKey('summary')) {
         payload['summary'] = {
@@ -644,8 +716,10 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                 .map((row) => Map<String, dynamic>.from(row))
                 .toList(growable: false),
           );
-                } catch (e) {
-          debugPrint('CLIENT CUSTOM REQUEST V2 client load failed [$table]: $e');
+        } catch (e) {
+          debugPrint(
+            'CLIENT CUSTOM REQUEST V2 client load failed [$table]: $e',
+          );
         }
       }
 
@@ -860,8 +934,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
     );
   }
 
-  Future<void> _saveBudgetToDb(RangeValues v) async {
-  }
+  Future<void> _saveBudgetToDb(RangeValues v) async {}
 
   // -----------------------
   // Group helpers (kept)
@@ -1256,7 +1329,10 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
       }
     }
 
-    return urls.where((e) => e.trim().isNotEmpty).take(10).toList(growable: false);
+    return urls
+        .where((e) => e.trim().isNotEmpty)
+        .take(10)
+        .toList(growable: false);
   }
 
   String _fileNameFromPath(String path) {
@@ -1643,6 +1719,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           selectedArtistEmail: selectedArtistEmail,
           selectedArtistName: selectedArtist,
           orderId: requestId,
+          orderNumber: _firstNonEmpty([requestSummary['orderNumber']]),
           sourceCollection: 'Client_Custom_Requests',
           allowNonLicensed: _allowNonLicensed,
         );
@@ -1701,7 +1778,6 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
     try {
       await _updateSupabaseClientCustomRequest(requestId, {
         'photo_upload_status': 'uploading',
-        'photo_upload_worker_started_at': DateTime.now().toIso8601String(),
         'photo_upload_updated_at': DateTime.now().toIso8601String(),
       });
 
@@ -1725,7 +1801,6 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           await _updateSupabaseClientCustomRequest(requestId, {
             'photo_upload_status': 'completed',
             'photo_upload_error': null,
-            'photo_upload_completed_at': DateTime.now().toIso8601String(),
             'photo_upload_updated_at': DateTime.now().toIso8601String(),
           });
           return;
@@ -1742,7 +1817,6 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
         'photo_upload_status': 'failed',
         'photo_upload_error':
             'Photo upload failed after retries: ${lastError ?? 'unknown error'}',
-        'photo_upload_failed_at': DateTime.now().toIso8601String(),
         'photo_upload_updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
@@ -1916,19 +1990,19 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           backgroundColor: AppColors.snow,
           surfaceTintColor: AppColors.alabaster,
           elevation: 0,
-          toolbarHeight: 76,
+          toolbarHeight: JntHeaderMetrics.toolbarHeight,
           automaticallyImplyLeading: false,
-          leadingWidth: 58,
+          leadingWidth: JntHeaderMetrics.leadingWidth,
           leading: NotificationBellButton(
             onTap: () => NotificationsPage.showAsModal(context),
             focusNode: _notificationsFocusNode,
-            iconSize: 22,
+            iconSize: JntHeaderMetrics.notificationIconSize,
           ),
           centerTitle: true,
           title: ExcludeSemantics(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 50,
+              height: JntHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
@@ -1936,7 +2010,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           ),
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: JntHeaderMetrics.rightPadding),
               child: _AvatarMenu(
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
@@ -2199,11 +2273,13 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              backgroundColor: AppColors.blackCat.withValues(alpha:
-                                0.08,
+                              backgroundColor: AppColors.blackCat.withValues(
+                                alpha: 0.08,
                               ),
                               side: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.18),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.18,
+                                ),
                               ),
                               deleteIcon: const Icon(
                                 Icons.close_rounded,
@@ -2368,7 +2444,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                             Text(
                               'Loading clients from database...',
                               style: TextStyle(
-                                color: AppColors.blackCat.withValues(alpha: 0.65),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.65,
+                                ),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 11.5,
                               ),
@@ -2442,7 +2520,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                 icon: Icon(
                                   Icons.keyboard_arrow_down_rounded,
                                   size: 16,
-                                  color: AppColors.blackCat.withValues(alpha: 0.45),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.45,
+                                  ),
                                 ),
                                 decoration: _ddDeco('Select Client'),
                                 items: <DropdownMenuItem<String>>[
@@ -2480,7 +2560,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                                 Text(
                                   'Select a client to view nail dimensions and edit preferences.',
                                   style: TextStyle(
-                                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.60,
+                                    ),
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                   ),
@@ -2586,7 +2668,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               ? AppColors.snow
                               : AppColors.blackCat,
                         ),
-                        side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.08)),
+                        side: BorderSide(
+                          color: AppColors.blackCat.withValues(alpha: 0.08),
+                        ),
                         visualDensity: const VisualDensity(
                           horizontal: -2,
                           vertical: -2,
@@ -2606,7 +2690,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               ? AppColors.snow
                               : AppColors.blackCat,
                         ),
-                        side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.08)),
+                        side: BorderSide(
+                          color: AppColors.blackCat.withValues(alpha: 0.08),
+                        ),
                         visualDensity: const VisualDensity(
                           horizontal: -2,
                           vertical: -2,
@@ -2724,7 +2810,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                               'Shipping address different from profile address?',
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.blackCat.withValues(alpha: 0.75),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.75,
+                                ),
                                 height: 1.2,
                                 fontSize: 14,
                               ),
@@ -2786,7 +2874,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.12),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.12,
+                                ),
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.zero,
@@ -2875,7 +2965,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.inbox_outlined),
-                    label: 'Requests',
+                    label: 'Campaigns',
                   ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.calendar_month_outlined),
@@ -2982,7 +3072,10 @@ class _ModalShell extends StatelessWidget {
 class _DividerLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(height: 1, color: AppColors.blackCat.withValues(alpha: 0.06));
+    return Container(
+      height: 1,
+      color: AppColors.blackCat.withValues(alpha: 0.06),
+    );
   }
 }
 
@@ -3094,7 +3187,11 @@ class _PillInfo extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.85)),
+          Icon(
+            icon,
+            size: 18,
+            color: AppColors.blackCat.withValues(alpha: 0.85),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -3665,7 +3762,11 @@ class _SoftButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.9)),
+            Icon(
+              icon,
+              size: 18,
+              color: AppColors.blackCat.withValues(alpha: 0.9),
+            ),
             const SizedBox(width: 8),
             Text(
               label,
@@ -3703,7 +3804,11 @@ class _SoftButtonWide extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: AppColors.blackCat.withValues(alpha: 0.95)),
+            Icon(
+              icon,
+              size: 18,
+              color: AppColors.blackCat.withValues(alpha: 0.95),
+            ),
             const SizedBox(width: 8),
             Text(
               label,
@@ -3799,7 +3904,9 @@ class _RadioPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : AppColors.snow;
+    final bg = selected
+        ? AppColors.blackCat.withValues(alpha: 0.10)
+        : AppColors.snow;
     final border = selected
         ? AppColors.blackCat
         : Colors.black.withValues(alpha: 0.08);
@@ -4023,7 +4130,9 @@ class _ShapeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : Colors.white;
+    final bg = selected
+        ? AppColors.blackCat.withValues(alpha: 0.10)
+        : Colors.white;
     final border = selected
         ? AppColors.blackCat
         : Colors.black.withValues(alpha: 0.10);
@@ -4094,7 +4203,9 @@ class _LengthImageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : Colors.white;
+    final bg = selected
+        ? AppColors.blackCat.withValues(alpha: 0.10)
+        : Colors.white;
     final border = selected
         ? AppColors.blackCat
         : Colors.black.withValues(alpha: 0.10);

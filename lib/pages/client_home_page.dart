@@ -8,7 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
+import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
 
 class ClientHomePage extends StatefulWidget {
@@ -23,8 +25,11 @@ class ClientHomePage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenEarnings,
+    this.onOpenReviews,
     this.onRequestArtist,
     this.showExtendedAvatarMenu = false,
+    this.tapArtistTileOpensImageOnly = false,
   });
 
   final String clientName;
@@ -33,11 +38,14 @@ class ClientHomePage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenEarnings;
+  final VoidCallback? onOpenReviews;
   final Future<void> Function() onLogout;
   final String profileImageUrl;
   final Widget? headerBottom;
   final ValueChanged<String>? onRequestArtist;
   final bool showExtendedAvatarMenu;
+  final bool tapArtistTileOpensImageOnly;
 
   @override
   State<ClientHomePage> createState() => _ClientHomePageState();
@@ -507,7 +515,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
       return true;
     }
 
-    // Do not render old Firebase/Supabase storage paths directly.
+    // Do not render old storage paths directly.
     // Only public URLs or data URLs are displayable on this Supabase-only page.
     return false;
   }
@@ -604,6 +612,17 @@ class _ClientHomePageState extends State<ClientHomePage> {
               ],
             ),
           ),
+        if (widget.showExtendedAvatarMenu && widget.onOpenEarnings != null)
+          const PopupMenuItem<String>(
+            value: 'earnings',
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.attach_money_outlined, size: 20),
+                SizedBox(width: 10),
+                Text('Earnings', style: TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
         if (widget.showExtendedAvatarMenu)
           const PopupMenuItem<String>(
             value: 'history',
@@ -637,6 +656,17 @@ class _ClientHomePageState extends State<ClientHomePage> {
               ],
             ),
           ),
+        if (widget.showExtendedAvatarMenu)
+          const PopupMenuItem<String>(
+            value: 'reviews',
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.star_border, size: 20),
+                SizedBox(width: 10),
+                Text('Reviews', style: TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
         if (widget.showExtendedAvatarMenu) const PopupMenuDivider(),
         const PopupMenuItem<String>(
           value: 'logout',
@@ -662,6 +692,10 @@ class _ClientHomePageState extends State<ClientHomePage> {
       widget.onOpenProfile?.call();
       return;
     }
+    if (choice == 'earnings') {
+      widget.onOpenEarnings?.call();
+      return;
+    }
     if (choice == 'history') {
       widget.onOpenHistory?.call();
       return;
@@ -674,9 +708,77 @@ class _ClientHomePageState extends State<ClientHomePage> {
       widget.onOpenArtist?.call();
       return;
     }
+    if (choice == 'reviews') {
+      if (widget.onOpenReviews != null) {
+        widget.onOpenReviews?.call();
+      } else {
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
+        );
+      }
+      return;
+    }
     if (choice == 'logout') {
       await widget.onLogout();
     }
+  }
+
+  void _openProductImagePreview(String imageSrc) {
+    showDialog<void>(
+      context: context,
+      builder: (_) {
+        return Semantics(
+          scopesRoute: true,
+          namesRoute: true,
+          label: 'Artist photo preview',
+          explicitChildNodes: true,
+          child: Dialog(
+            backgroundColor: Colors.black,
+            insetPadding: const EdgeInsets.all(16),
+            child: Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Center(
+                      child: _buildAnyImage(
+                        imageSrc,
+                        fit: BoxFit.contain,
+                        fallback: Container(
+                          color: AppColors.snow,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.image_not_supported_outlined,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: IconButton(
+                    tooltip: 'Close photo preview',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.blackCat,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -690,15 +792,8 @@ class _ClientHomePageState extends State<ClientHomePage> {
       explicitChildNodes: true,
       child: Scaffold(
         backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          toolbarHeight: 64,
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          titleSpacing: 0,
-          leadingWidth: 56,
+        appBar: JntStandardAppBar(
+          onNotifications: () => _openNotifications(context),
           leading: _CustomSemanticAction(
             label: 'Notifications',
             value: _unreadAnnouncementText,
@@ -709,49 +804,44 @@ class _ClientHomePageState extends State<ClientHomePage> {
             sortKey: const OrdinalSortKey(0),
             child: NotificationBellButton(
               onTap: () => _openNotifications(context),
-              iconSize: 22,
+              iconSize: JntHeaderMetrics.notificationIconSize,
             ),
           ),
           title: ExcludeSemantics(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
-              height: 42,
+              height: JntHeaderMetrics.logoHeight,
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: _CustomSemanticAction(
-                label: 'Open profile menu',
+          trailing: _CustomSemanticAction(
+            label: 'Open profile menu',
+            onTap: () => _openProfileMenu(context, profileKey),
+            focusRingColor: _focusRing,
+            focusNode: _profileMenuFocusNode,
+            sortKey: const OrdinalSortKey(20),
+            child: ExcludeSemantics(
+              excluding: !_allowAvatarFocus,
+              child: InkWell(
+                key: profileKey,
+                borderRadius: BorderRadius.zero,
                 onTap: () => _openProfileMenu(context, profileKey),
-                focusRingColor: _focusRing,
-                focusNode: _profileMenuFocusNode,
-                sortKey: const OrdinalSortKey(20),
-                child: ExcludeSemantics(
-                  excluding: !_allowAvatarFocus,
-                  child: InkWell(
-                    key: profileKey,
+                child: SizedBox.square(
+                  dimension: JntHeaderMetrics.avatarSize,
+                  child: ClipRRect(
                     borderRadius: BorderRadius.zero,
-                    onTap: () => _openProfileMenu(context, profileKey),
-                    child: SizedBox.square(
-                      dimension: 34,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.zero,
-                        child: ClientProfileAvatarIcon(
-                          imageUrl: _resolvedHeaderAvatarUrl,
-                          displayName: widget.clientName,
-                          size: 34,
-                        ),
-                      ),
+                    child: ClientProfileAvatarIcon(
+                      imageUrl: _resolvedHeaderAvatarUrl,
+                      displayName: widget.clientName,
+                      size: JntHeaderMetrics.avatarSize,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
         body: Column(
           children: <Widget>[
@@ -805,7 +895,9 @@ class _ClientHomePageState extends State<ClientHomePage> {
                           final p = _products[index];
                           return _ProductTile(
                             product: p,
-                            onTap: () => _openArtistDetails(p),
+                            onTap: () => widget.tapArtistTileOpensImageOnly
+                                ? _openProductImagePreview(p.imageUrl)
+                                : _openArtistDetails(p),
                             focusRingColor: _focusRing,
                           );
                         },
