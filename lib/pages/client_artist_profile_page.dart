@@ -3,15 +3,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/ambassador_role_service.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/jnt_modal_app_bar.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 
 import 'notifications_page.dart';
@@ -35,6 +36,7 @@ class ClientArtistProfilePage extends StatefulWidget {
 }
 
 class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
+  final SupabaseClient _supabase = Supabase.instance.client;
   bool _directRequestsOn = true;
   bool _savingDirectRequestPref = false;
   bool _nfcRequestsOn = false;
@@ -46,13 +48,116 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   late ClientProfileDraft _profile;
   Map<String, dynamic> _profileData = const <String, dynamic>{};
   final int _index = 0;
+  bool _showCampaignsTab = false;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.initialProfile ?? ClientProfileDraft.mock();
-    _loadProfileFromFirestore();
+    unawaited(_loadCampaignVisibility());
+    _loadProfileFromSupabase();
     _loadCommunicationPreferences();
+  }
+
+  Future<void> _loadCampaignVisibility() async {
+    final show = await AmbassadorRoleService.currentUserIsAmbassador(
+      fallbackEmail: _profile.basic.email,
+    );
+    if (!mounted) return;
+    setState(() => _showCampaignsTab = show);
+  }
+
+  User? get _currentUser => _supabase.auth.currentUser;
+
+  Future<({String uid, String email})> _resolveIdentity() async {
+    final user = _currentUser;
+    return (
+      uid: (user?.id ?? '').trim(),
+      email: (user?.email ?? '').trim().toLowerCase(),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _readProfileRow({
+    required String table,
+    required String uid,
+    required String email,
+  }) async {
+    Future<Map<String, dynamic>?> firstRow(
+      PostgrestTransformBuilder<PostgrestList> query,
+    ) async {
+      try {
+        final rows = await query.limit(1);
+        if (rows.isNotEmpty) {
+          return Map<String, dynamic>.from(rows.first as Map);
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    if (uid.isNotEmpty) {
+      final byId = await firstRow(_supabase.from(table).select().eq('id', uid));
+      if (byId != null) return byId;
+      final byUid = await firstRow(
+        _supabase.from(table).select().eq('uid', uid),
+      );
+      if (byUid != null) return byUid;
+    }
+
+    if (email.isNotEmpty) {
+      final byEmail = await firstRow(
+        _supabase.from(table).select().eq('email', email),
+      );
+      if (byEmail != null) return byEmail;
+    }
+
+    return null;
+  }
+
+  Future<({String table, String id, Map<String, dynamic> data})?>
+  _resolveArtistRow() async {
+    final identity = await _resolveIdentity();
+    for (final table in const <String>['client_artist', 'artist']) {
+      final row = await _readProfileRow(
+        table: table,
+        uid: identity.uid,
+        email: identity.email,
+      );
+      if (row == null) continue;
+      final id = _firstNonEmpty([row['id'], row['uid'], identity.uid]);
+      if (id.isEmpty) continue;
+      return (table: table, id: id, data: row);
+    }
+    return null;
+  }
+
+  Future<void> _upsertArtistRow(
+    String table,
+    String id,
+    Map<String, dynamic> payload, {
+    String? email,
+  }) async {
+    final row = <String, dynamic>{
+      'id': id,
+      ...payload,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    final normalizedEmail = (email ?? _currentUser?.email ?? '').trim().toLowerCase();
+    if (normalizedEmail.isNotEmpty && !row.containsKey('email')) {
+      row['email'] = normalizedEmail;
+    }
+    await _supabase.from(table).upsert(row);
+  }
+
+  Future<void> _updateRequestDetails(
+    String table,
+    String requestId,
+    Map<String, dynamic> payload,
+  ) async {
+    await _supabase.from(table).upsert({
+      'request_id': requestId,
+      ...payload,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
   }
 
   PaymentMethod _parsePaymentMethod(String? value) {
@@ -88,7 +193,31 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   double? _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
-    return double.tryParse((value ?? '').toString());
+    return double.tryParse((value ?? '').toString().replaceAll(RegExp(r'[^0-9.]'), ''));
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {}
+    }
+    return const <String, dynamic>{};
+  }
+
+  Map<String, dynamic> _firstMap(List<dynamic> values) {
+    for (final value in values) {
+      final map = _asMap(value);
+      if (map.isNotEmpty) return map;
+    }
+    return const <String, dynamic>{};
   }
 
   String _normalizeString(Object? raw) {
@@ -236,27 +365,32 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   ClientProfileDraft _draftFromFirestore(Map<String, dynamic> data) {
-    final client = (data['client'] as Map<String, dynamic>?) ?? const {};
-    final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-    final profileFromClient =
-        (client['profile'] as Map<String, dynamic>?) ?? const {};
-    final address = (data['address'] as Map<String, dynamic>?) ?? const {};
-    final addressFromClient =
-        (client['address'] as Map<String, dynamic>?) ?? const {};
-    final paymentFromTop =
-        (data['payment'] as Map<String, dynamic>?) ?? const {};
-    final paymentFromClient =
-        (client['payment'] as Map<String, dynamic>?) ?? const {};
-    final payment = paymentFromTop.isNotEmpty
-        ? paymentFromTop
-        : paymentFromClient;
-    final nailFromTop =
-        (data['nailPreferences'] as Map<String, dynamic>?) ?? const {};
-    final nailFromClient =
-        (client['nailPreferences'] as Map<String, dynamic>?) ?? const {};
-    final nail = nailFromTop.isNotEmpty ? nailFromTop : nailFromClient;
-    final dimensions =
-        (nail['dimensions'] as Map<String, dynamic>?) ?? const {};
+    final client = _asMap(data['client']);
+    final profile = _asMap(data['profile']);
+    final profileFromClient = _asMap(client['profile']);
+    final address = _asMap(data['address']);
+    final addressFromClient = _asMap(client['address']);
+    final payment = _firstMap([
+      data['payment'],
+      client['payment'],
+    ]);
+    final nail = _firstMap([
+      data['nailPreferences'],
+      data['nail_preferences'],
+      data['measurements'],
+      client['nailPreferences'],
+      client['nail_preferences'],
+      client['measurements'],
+    ]);
+    final dimensions = _firstMap([
+      nail['dimensions'],
+      nail['nail_dimensions'],
+      data['dimensions'],
+      data['nail_dimensions'],
+      data['measurements'],
+      client['dimensions'],
+      client['nail_dimensions'],
+    ]);
 
     final name = (profile['name'] ?? '').toString().trim().isNotEmpty
         ? (profile['name'] ?? '').toString().trim()
@@ -287,7 +421,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             ((profile['profileImageUrl'] ?? '').toString().trim().isNotEmpty
                     ? profile['profileImageUrl']
                     : profile['photoUrl'] ??
+                          profile['avatarUrl'] ??
                           data['panel_profileImageUrl'] ??
+                          data['profileImageUrl'] ??
+                          data['photoUrl'] ??
+                          data['avatarUrl'] ??
                           '')
                 .toString(),
       ),
@@ -350,15 +488,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     );
   }
 
-  Future<void> _loadProfileFromFirestore() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+  Future<void> _loadProfileFromSupabase() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('client_artist')
-          .doc(uid)
-          .get();
-      final data = doc.data();
+      final resolved = await _resolveArtistRow();
+      final data = resolved?.data;
       if (!mounted || data == null) return;
       final availability =
           (data['availability'] as Map<String, dynamic>?) ?? const {};
@@ -385,19 +518,18 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       _directRequestsOn = value;
       _savingDirectRequestPref = true;
     });
-    final ref = await _resolveArtistDocRef();
+    final ref = await _resolveArtistRow();
     if (!mounted) return;
     if (ref == null) {
       setState(() => _savingDirectRequestPref = false);
       return;
     }
     try {
-      await ref.set({
+      await _upsertArtistRow(ref.table, ref.id, {
         'panel_directRequestsEnabled': value,
         'availability': {'directRequestsEnabled': value},
         'profile': {'directRequestsEnabled': value},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -415,19 +547,18 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       _nfcRequestsOn = value;
       _savingNfcRequestPref = true;
     });
-    final ref = await _resolveArtistDocRef();
+    final ref = await _resolveArtistRow();
     if (!mounted) return;
     if (ref == null) {
       setState(() => _savingNfcRequestPref = false);
       return;
     }
     try {
-      await ref.set({
+      await _upsertArtistRow(ref.table, ref.id, {
         'panel_nfcRequestEnabled': value,
         'availability': {'nfcRequestEnabled': value},
         'profile': {'nfcRequestEnabled': value},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -499,16 +630,14 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     required BasicInfo previous,
     required BasicInfo next,
   }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    final identity = await _resolveIdentity();
+    final uid = identity.uid;
+    if (uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
-
-    final db = FirebaseFirestore.instance;
-    final targetRef = db.collection('client_artist').doc(uid);
     final profileImage = next.profileImageUrl.trim();
 
-    await targetRef.set({
+    await _upsertArtistRow('client_artist', uid, {
       'email': next.email.trim(),
       'profile': {
         'name': next.name.trim(),
@@ -541,8 +670,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       'profileImageUrl': profileImage,
       'photoUrl': profileImage,
       'avatarUrl': profileImage,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, email: next.email.trim());
 
     final profileChanged =
         previous.name.trim() != next.name.trim() ||
@@ -558,26 +686,28 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     required BasicInfo previous,
     required BasicInfo next,
   }) async {
-    final db = FirebaseFirestore.instance;
     final profileImage = next.profileImageUrl.trim();
     final previousEmail = previous.email.trim().toLowerCase();
     if (previousEmail.isEmpty) return;
 
-    final requests = await db
-        .collection('Client_Custom_Requests')
-        .where('clientEmail', isEqualTo: previousEmail)
-        .get();
+    final requests = await _supabase
+        .from('client_custom_requests')
+        .select()
+        .eq('client_email', previousEmail);
 
-    for (final doc in requests.docs) {
-      await doc.reference.set({
+    for (final raw in requests) {
+      final doc = Map<String, dynamic>.from(raw as Map);
+      final requestId = (doc['id'] ?? '').toString().trim();
+      if (requestId.isEmpty) continue;
+      await _supabase.from('client_custom_requests').update({
         'clientName': next.name.trim(),
         'clientEmail': next.email.trim(),
         'clientProfileImage': profileImage,
         'clientProfilePic': profileImage,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', requestId);
 
-      await doc.reference.collection('details').doc('payload').set({
+      await _updateRequestDetails('client_custom_requests_details', requestId, {
         'clientProfileSnapshot': {
           'basic': {
             'name': next.name.trim(),
@@ -588,8 +718,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             'avatarUrl': profileImage,
           },
         },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     }
   }
 
@@ -615,8 +744,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _persistPaymentInfo(PaymentInfo payment) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    final identity = await _resolveIdentity();
+    final uid = identity.uid;
+    if (uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
 
@@ -632,11 +762,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       'paypalEmail': payment.paypalEmail.trim(),
     };
 
-    await FirebaseFirestore.instance.collection('client_artist').doc(uid).set({
+    await _upsertArtistRow('client_artist', uid, {
       'payment': payload,
       'client': {'payment': payload},
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, email: identity.email);
   }
 
   Future<void> _editShipping() async {
@@ -674,8 +803,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _persistNailPreferences(NailPreferences nail) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
+    final identity = await _resolveIdentity();
+    final uid = identity.uid;
+    if (uid.isEmpty) {
       throw Exception('Missing signed-in user.');
     }
 
@@ -697,21 +827,15 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       },
     };
 
-    await FirebaseFirestore.instance.collection('client_artist').doc(uid).set({
+    await _upsertArtistRow('client_artist', uid, {
       'nailPreferences': payload,
       'client': {'nailPreferences': payload},
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, email: identity.email);
   }
 
   Future<void> _loadCommunicationPreferences() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
     try {
-      final db = FirebaseFirestore.instance;
-      final rootPrefs = await db.collection('client_artist').doc(uid).get();
-      final data = rootPrefs.data();
+      final data = (await _resolveArtistRow())?.data;
       if (!mounted || data == null) return;
 
       final topPrefs =
@@ -735,14 +859,14 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   Future<void> _saveCommunicationPreferences(
     ClientArtistCommunicationPreferences preferences,
   ) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final identity = await _resolveIdentity();
+    final uid = identity.uid;
+    if (uid.isEmpty) return;
 
-    await FirebaseFirestore.instance.collection('client_artist').doc(uid).set({
+    await _upsertArtistRow('client_artist', uid, {
       'communicationPreferences': preferences.toMap(),
       'client': {'communicationPreferences': preferences.toMap()},
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, email: identity.email);
   }
 
   Future<void> _editCommunicationPreference() async {
@@ -773,6 +897,26 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       if (text.isNotEmpty) return text;
     }
     return '';
+  }
+
+  List<String> _asStringList(Object? raw) {
+    if (raw is! List) return const <String>[];
+    return raw
+        .map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<Map<String, dynamic>> _asMapList(Object? raw) {
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw
+        .whereType<Map>()
+        .map(
+          (value) => value.map(
+            (key, item) => MapEntry(key.toString(), item),
+          ),
+        )
+        .toList(growable: false);
   }
 
   List<ArtistPortfolioItem> _portfolioItemsFromData(Map<String, dynamic> data) {
@@ -853,49 +997,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     return items;
   }
 
-  Future<DocumentReference<Map<String, dynamic>>?>
-  _resolveArtistDocRef() async {
-    final db = FirebaseFirestore.instance;
-    final uid = (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
-
-    if (uid.isNotEmpty) {
-      final clientArtistRef = db.collection('client_artist').doc(uid);
-      final clientArtistDoc = await clientArtistRef.get();
-      if (clientArtistDoc.exists) return clientArtistRef;
-
-      final artistRef = db.collection('artist').doc(uid);
-      final artistDoc = await artistRef.get();
-      if (artistDoc.exists) return artistRef;
-    }
-
-    if (email.isNotEmpty) {
-      final clientArtistQuery = await db
-          .collection('client_artist')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (clientArtistQuery.docs.isNotEmpty) {
-        return clientArtistQuery.docs.first.reference;
-      }
-
-      final artistQuery = await db
-          .collection('artist')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (artistQuery.docs.isNotEmpty) {
-        return artistQuery.docs.first.reference;
-      }
-    }
-
-    return null;
-  }
-
   Future<void> _openPortfolioModal() async {
-    final ref = await _resolveArtistDocRef();
+    final ref = await _resolveArtistRow();
     if (!mounted) return;
     if (ref == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -923,7 +1026,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistPortfolioModal(
-            supabaseTable: ref.parent.id,
+            supabaseTable: ref.table,
             supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
             initialItems: initialItems,
             onUploadTap:
@@ -943,14 +1046,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _backfillCompletedRequestPhotosToPortfolio(
-    DocumentReference<Map<String, dynamic>> ref,
+    ({String table, String id, Map<String, dynamic> data}) ref,
   ) async {
-    final email = (FirebaseAuth.instance.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final email = (_currentUser?.email ?? '').trim().toLowerCase();
     if (email.isEmpty) return;
-
-    final db = FirebaseFirestore.instance;
     final urls = <String>{};
 
     List<String> readPhotos(Map<String, dynamic> data) {
@@ -975,13 +1074,17 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       required String ownerField,
     }) async {
       try {
-        final snap = await db
-            .collection(collection)
-            .where(ownerField, isEqualTo: email)
-            .limit(200)
-            .get();
-        for (final doc in snap.docs) {
-          final data = Map<String, dynamic>.from(doc.data());
+        final snap = await _supabase
+            .from(collection == 'Client_Custom_Requests'
+                ? 'client_custom_requests'
+                : 'company_custom_requests')
+            .select()
+            .eq(ownerField == 'acceptedByArtistEmail'
+                ? 'accepted_by_artist_email'
+                : 'artist_email', email)
+            .limit(200);
+        for (final raw in snap) {
+          final data = Map<String, dynamic>.from(raw as Map);
           final status = (data['status'] ?? '').toString().trim().toLowerCase();
           final fromRoot = readPhotos(data);
           final hasCompletedStatus =
@@ -993,13 +1096,19 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
           }
 
           try {
-            final payloadDoc = await doc.reference
-                .collection('details')
-                .doc('payload')
-                .get();
-            final payload = payloadDoc.data();
-            if (payload != null) {
-              final payloadMap = Map<String, dynamic>.from(payload);
+            final requestId = (data['id'] ?? '').toString().trim();
+            if (requestId.isEmpty) continue;
+            final detailRows = await _supabase
+                .from(collection == 'Client_Custom_Requests'
+                    ? 'client_custom_requests_details'
+                    : 'company_custom_requests_details')
+                .select()
+                .eq('request_id', requestId)
+                .limit(1);
+            if (detailRows.isNotEmpty) {
+              final payloadMap = Map<String, dynamic>.from(
+                detailRows.first as Map,
+              );
               final fromPayload = readPhotos(payloadMap);
               if (hasCompletedStatus || fromPayload.isNotEmpty) {
                 urls.addAll(fromPayload);
@@ -1012,13 +1121,15 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
     Future<void> collectWithFallbackScan(String collection) async {
       try {
-        final snap = await db
-            .collection(collection)
-            .orderBy('updatedAt', descending: true)
-            .limit(200)
-            .get();
-        for (final doc in snap.docs) {
-          final data = Map<String, dynamic>.from(doc.data());
+        final snap = await _supabase
+            .from(collection == 'Client_Custom_Requests'
+                ? 'client_custom_requests'
+                : 'company_custom_requests')
+            .select()
+            .order('updated_at', ascending: false)
+            .limit(200);
+        for (final raw in snap) {
+          final data = Map<String, dynamic>.from(raw as Map);
           final owners = <String>{
             (data['acceptedByArtistEmail'] ?? '')
                 .toString()
@@ -1068,7 +1179,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     if (urls.isEmpty) return;
 
     final list = urls.toList(growable: false);
-    final now = Timestamp.now();
+    final now = DateTime.now().toIso8601String();
     final itemMaps = list
         .map(
           (u) => <String, dynamic>{
@@ -1083,30 +1194,38 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         .toList(growable: false);
 
     try {
-      await ref.set({
-        'portfolioImages': FieldValue.arrayUnion(list),
-        'panel_portfolioImages': FieldValue.arrayUnion(list),
-        'panel_artist_portfolioImages': FieldValue.arrayUnion(list),
-        'portfolioItems': FieldValue.arrayUnion(itemMaps),
+      final existingImages = <String>{
+        ..._asStringList(ref.data['portfolioImages']),
+        ..._asStringList(ref.data['panel_portfolioImages']),
+        ..._asStringList(ref.data['panel_artist_portfolioImages']),
+      }..addAll(list);
+      final existingItems = <Map<String, dynamic>>[
+        ..._asMapList(ref.data['portfolioItems']),
+        ...itemMaps,
+      ];
+      await _upsertArtistRow(ref.table, ref.id, {
+        'portfolioImages': existingImages.toList(growable: false),
+        'panel_portfolioImages': existingImages.toList(growable: false),
+        'panel_artist_portfolioImages': existingImages.toList(growable: false),
+        'portfolioItems': existingItems,
         'portfolio': {
-          'images': FieldValue.arrayUnion(list),
-          'items': FieldValue.arrayUnion(itemMaps),
+          'images': existingImages.toList(growable: false),
+          'items': existingItems,
         },
         'artist': {
-          'portfolioImages': FieldValue.arrayUnion(list),
-          'portfolioItems': FieldValue.arrayUnion(itemMaps),
+          'portfolioImages': existingImages.toList(growable: false),
+          'portfolioItems': existingItems,
           'portfolio': {
-            'images': FieldValue.arrayUnion(list),
-            'items': FieldValue.arrayUnion(itemMaps),
+            'images': existingImages.toList(growable: false),
+            'items': existingItems,
           },
         },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     } catch (_) {}
   }
 
   Future<List<ArtistPortfolioItem>> _loadPortfolioInitialItems(
-    DocumentReference<Map<String, dynamic>> ref,
+    ({String table, String id, Map<String, dynamic> data}) ref,
   ) async {
     final merged = <ArtistPortfolioItem>[];
     final seen = <String>{};
@@ -1120,8 +1239,14 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     }
 
     try {
-      final doc = await ref.get().timeout(const Duration(seconds: 4));
-      final data = doc.data() ?? const <String, dynamic>{};
+      final row =
+          await _readProfileRow(
+            table: ref.table,
+            uid: ref.id,
+            email: '',
+          ).timeout(const Duration(seconds: 4)) ??
+          ref.data;
+      final data = row;
       for (final item in _portfolioItemsFromData(data)) {
         addItem(item);
       }
@@ -1130,46 +1255,18 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     if (merged.isNotEmpty) return merged;
 
     try {
-      QuerySnapshot<Map<String, dynamic>> snap;
-      try {
-        snap = await ref
-            .collection('portfolio_items')
-            .orderBy('createdAt', descending: true)
-            .limit(48)
-            .get()
-            .timeout(const Duration(seconds: 4));
-      } catch (_) {
-        snap = await ref
-            .collection('portfolio_items')
-            .limit(48)
-            .get()
-            .timeout(const Duration(seconds: 4));
-      }
-      for (final d in snap.docs) {
-        final map = d.data();
-        final image = _firstNonEmpty([
-          map['imageUrl'],
-          map['downloadUrl'],
-          map['url'],
-          map['image'],
-          map['storagePath'],
-          map['path'],
-        ]);
-        if (image.isEmpty) continue;
-        final style = _firstNonEmpty([map['style'], map['category'], 'All']);
-        addItem(ArtistPortfolioItem(image: image, style: style));
-      }
+      // Portfolio now reads from root row arrays only.
     } catch (_) {}
 
     return merged;
   }
 
   Future<List<ArtistPortfolioItem>> _recoverPortfolioFromStorageAndPersist(
-    DocumentReference<Map<String, dynamic>> ref,
+    ({String table, String id, Map<String, dynamic> data}) ref,
   ) async {
     final ownerIds = <String>{
       ref.id.trim(),
-      (FirebaseAuth.instance.currentUser?.uid ?? '').trim(),
+      (_currentUser?.id ?? '').trim(),
     }..removeWhere((e) => e.isEmpty);
 
     final urls = <String>[];
@@ -1186,19 +1283,21 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     for (final owner in ownerIds) {
       for (final base in const <String>['client_artists', 'artists']) {
         try {
-          final listed = await FirebaseStorage.instance
-              .ref('$base/$owner/portfolio')
-              .listAll()
+          final listed = await _supabase.storage
+              .from(base)
+              .list(path: '$owner/portfolio')
               .timeout(const Duration(seconds: 4));
-          for (final item in listed.items) {
-            if (!isImageName(item.name)) continue;
+          for (final item in listed) {
+            final itemName = (item.name).trim();
+            if (!isImageName(itemName)) continue;
             String resolved = '';
             try {
-              resolved = await item.getDownloadURL().timeout(
-                const Duration(seconds: 4),
-              );
+              resolved = _supabase.storage
+                  .from(base)
+                  .getPublicUrl('$owner/portfolio/$itemName')
+                  .trim();
             } catch (_) {
-              resolved = item.fullPath.trim();
+              resolved = '$base/$owner/portfolio/$itemName';
             }
             final value = resolved.trim();
             if (value.isEmpty || !seen.add(value)) continue;
@@ -1218,38 +1317,25 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         .toList(growable: false);
 
     try {
-      await ref.set({
-        'portfolioImages': FieldValue.arrayUnion(urls),
-        'panel_portfolioImages': FieldValue.arrayUnion(urls),
-        'panel_artist_portfolioImages': FieldValue.arrayUnion(urls),
-        'portfolioItems': FieldValue.arrayUnion(itemMaps),
+      await _upsertArtistRow(ref.table, ref.id, {
+        'portfolioImages': urls,
+        'panel_portfolioImages': urls,
+        'panel_artist_portfolioImages': urls,
+        'portfolioItems': itemMaps,
         'portfolio': {
-          'images': FieldValue.arrayUnion(urls),
-          'items': FieldValue.arrayUnion(itemMaps),
+          'images': urls,
+          'items': itemMaps,
         },
         'artist': {
-          'portfolioImages': FieldValue.arrayUnion(urls),
-          'portfolioItems': FieldValue.arrayUnion(itemMaps),
+          'portfolioImages': urls,
+          'portfolioItems': itemMaps,
           'portfolio': {
-            'images': FieldValue.arrayUnion(urls),
-            'items': FieldValue.arrayUnion(itemMaps),
+            'images': urls,
+            'items': itemMaps,
           },
         },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     } catch (_) {}
-
-    for (final u in urls) {
-      try {
-        await ref.collection('portfolio_items').add({
-          'imageUrl': u,
-          'storagePath': '',
-          'style': 'All',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } catch (_) {}
-    }
 
     return urls
         .map((u) => ArtistPortfolioItem(image: u, style: 'All'))
@@ -1290,7 +1376,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     List<XFile>? selectedFiles,
     void Function(int completed, int total)? onProgress,
   }) async {
-    final ref = await _resolveArtistDocRef();
+    final ref = await _resolveArtistRow();
     if (ref == null) return const <ArtistPortfolioItem>[];
 
     final picked =
@@ -1302,11 +1388,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         );
     if (picked.isEmpty) return const <ArtistPortfolioItem>[];
 
-    final isClientArtistDoc = ref.path.startsWith('client_artist/');
+    final isClientArtistDoc = ref.table == 'client_artist';
     final storageBases = isClientArtistDoc
         ? const <String>['client_artists', 'artists']
         : const <String>['artists', 'client_artists'];
-    final ownerId = (FirebaseAuth.instance.currentUser?.uid ?? ref.id).trim();
+    final ownerId = (_currentUser?.id ?? ref.id).trim();
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final uploaded = <String>[];
@@ -1319,20 +1405,17 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       required int attempt,
     }) async {
       try {
-        final storageRef = FirebaseStorage.instance.ref(
-          '$base/$ownerId/portfolio/${now}_${index + 1}_a$attempt.jpg',
-        );
-        final uploadTask = storageRef.putData(
+        final objectPath =
+            '$ownerId/portfolio/${now}_${index + 1}_a$attempt.jpg';
+        await _supabase.storage.from(base).uploadBinary(
+          objectPath,
           bytes,
-          SettableMetadata(contentType: 'image/jpeg'),
+          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
         );
-        final snap = await uploadTask.timeout(const Duration(seconds: 12));
-        final url = await snap.ref.getDownloadURL().timeout(
-          const Duration(seconds: 20),
-        );
+        final url = _supabase.storage.from(base).getPublicUrl(objectPath).trim();
         final trimmed = url.trim();
         if (trimmed.isEmpty) return null;
-        return <String, String>{'url': trimmed, 'path': storageRef.fullPath};
+        return <String, String>{'url': trimmed, 'path': '$base/$objectPath'};
       } catch (_) {
         return null;
       }
@@ -1378,16 +1461,6 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         final url = (uploadedData['url'] ?? '').trim();
         if (url.isEmpty) continue;
         uploaded.add(url);
-
-        try {
-          await ref.collection('portfolio_items').add({
-            'imageUrl': url,
-            'storagePath': (uploadedData['path'] ?? '').trim(),
-            'style': 'All',
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        } catch (_) {}
       } catch (_) {
       } finally {
         completed += 1;
@@ -1402,25 +1475,34 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         .toList(growable: false);
 
     try {
-      await ref.set({
-        'portfolioImages': FieldValue.arrayUnion(uploaded),
-        'panel_portfolioImages': FieldValue.arrayUnion(uploaded),
-        'panel_artist_portfolioImages': FieldValue.arrayUnion(uploaded),
-        'portfolioItems': FieldValue.arrayUnion(itemMaps),
+      final existingImages = <String>{
+        ..._asStringList(ref.data['portfolioImages']),
+        ..._asStringList(ref.data['panel_portfolioImages']),
+        ..._asStringList(ref.data['panel_artist_portfolioImages']),
+        ...uploaded,
+      }.toList(growable: false);
+      final existingItems = <Map<String, dynamic>>[
+        ..._asMapList(ref.data['portfolioItems']),
+        ...itemMaps,
+      ];
+      await _upsertArtistRow(ref.table, ref.id, {
+        'portfolioImages': existingImages,
+        'panel_portfolioImages': existingImages,
+        'panel_artist_portfolioImages': existingImages,
+        'portfolioItems': existingItems,
         'portfolio': {
-          'images': FieldValue.arrayUnion(uploaded),
-          'items': FieldValue.arrayUnion(itemMaps),
+          'images': existingImages,
+          'items': existingItems,
         },
         'artist': {
-          'portfolioImages': FieldValue.arrayUnion(uploaded),
-          'portfolioItems': FieldValue.arrayUnion(itemMaps),
+          'portfolioImages': existingImages,
+          'portfolioItems': existingItems,
           'portfolio': {
-            'images': FieldValue.arrayUnion(uploaded),
-            'items': FieldValue.arrayUnion(itemMaps),
+            'images': existingImages,
+            'items': existingItems,
           },
         },
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     } catch (_) {}
 
     return uploaded
@@ -1429,7 +1511,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _openPayoutSettings() async {
-    final ref = await _resolveArtistDocRef();
+    final ref = await _resolveArtistRow();
     if (!mounted) return;
     if (ref == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1440,8 +1522,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
     Map<String, dynamic> initialData = const <String, dynamic>{};
     try {
-      final doc = await ref.get();
-      initialData = doc.data() ?? const <String, dynamic>{};
+      initialData = ref.data;
     } catch (_) {}
 
     await showModalBottomSheet<void>(
@@ -1453,7 +1534,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistPayoutSettingsPage(
-            supabaseTable: ref.parent.id,
+            supabaseTable: ref.table,
             supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
             initialData: initialData,
           ),
@@ -1508,7 +1589,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _openAvailability() async {
-    final ref = await _resolveArtistDocRef();
+    final ref = await _resolveArtistRow();
     if (!mounted) return;
     if (ref == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1519,8 +1600,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
     Map<String, dynamic> initialData = const <String, dynamic>{};
     try {
-      final doc = await ref.get();
-      initialData = doc.data() ?? const <String, dynamic>{};
+      initialData = ref.data;
     } catch (_) {}
 
     final states = _availabilityDayStatesFromData(initialData);
@@ -1539,16 +1619,15 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
           child: ArtistAvailabilityModal(
-            supabaseTable: ref.parent.id,
+            supabaseTable: ref.table,
             supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
             initialDirectRequestsEnabled: initialDirect,
             initialDayStates: states,
             onDirectRequestChanged: (value) async {
-              await ref.set({
+              await _upsertArtistRow(ref.table, ref.id, {
                 'panel_directRequestsEnabled': value,
                 'availability': {'directRequestsEnabled': value},
-                'updatedAt': FieldValue.serverTimestamp(),
-              }, SetOptions(merge: true));
+              });
               if (mounted) {
                 setState(() => _directRequestsOn = value);
               }
@@ -1564,6 +1643,14 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       context,
       MaterialPageRoute(builder: (_) => const JntAscensionPage()),
     );
+  }
+
+  void _closeProfilePage() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _onBottomNavTap(0);
   }
 
   void _onBottomNavTap(int i) {
@@ -1582,95 +1669,30 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.of(context).padding.top;
-    final headerHeight = topInset + 90;
-
     return Scaffold(
       backgroundColor: AppColors.snow,
 
       // ✅ Your custom header
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(headerHeight),
-        child: Container(
-          color: AppColors.alabaster,
-          child: SizedBox(
-            height: headerHeight,
-            child: Stack(
-              children: [
-                Positioned(
-                  left: 12,
-                  top: topInset + 4,
-                  child: NotificationBellButton(
-                    onTap: _openNotifications,
-                    iconSize: 24,
-                  ),
-                ),
-                Positioned.fill(
-                  child: Center(
-                    child: Image.asset(
-                      'assets/images/jnt_logo_black.png',
-                      height: 50,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 12,
-                  top: topInset + 4,
-                  child: InkWell(
-                    onTap: () {},
-                    borderRadius: BorderRadius.zero,
-                    child: Container(
-                      width: 74,
-                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.alabaster,
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(color: AppColors.blackCatLight),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            height: 42,
-                            width: 42,
-                            decoration: BoxDecoration(
-                              color: AppColors.blackCat.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.qr_code_rounded, size: 24),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Member ID',
-                            textScaler: TextScaler.noScaling,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 10,
-                              height: 1,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.blackCat.withValues(alpha: 0.70),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      appBar: JntModalAppBar(
+        onClose: _closeProfilePage,
+        closeTooltip: 'Close profile',
+        leading: NotificationBellButton(
+          onTap: _openNotifications,
+          iconSize: JntHeaderMetrics.notificationIconSize,
+        ),
+        title: ExcludeSemantics(
+          child: Image.asset(
+            'assets/images/jnt_logo_black.png',
+            height: JntModalHeaderMetrics.logoHeight,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
         ),
       ),
 
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
           children: [
             _headerGradientCard(
               child: Column(
@@ -1942,32 +1964,39 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
         type: BottomNavigationBarType.fixed,
         onTap: _onBottomNavTap,
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
             activeIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),
             activeIcon: Icon(Icons.add_circle),
             label: 'Design',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.inbox_outlined),
             activeIcon: Icon(Icons.inbox),
             label: 'Requests',
           ),
-          BottomNavigationBarItem(
+          if (_showCampaignsTab)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.campaign_outlined),
+              activeIcon: Icon(Icons.campaign),
+              label: 'Campaigns',
+            ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
             activeIcon: Icon(Icons.receipt_long),
             label: 'Orders',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.attach_money_outlined),
-            activeIcon: Icon(Icons.attach_money),
-            label: 'Earnings',
-          ),
+          if (!_showCampaignsTab)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.attach_money_outlined),
+              activeIcon: Icon(Icons.attach_money),
+              label: 'Earnings',
+            ),
         ],
       ),
     );

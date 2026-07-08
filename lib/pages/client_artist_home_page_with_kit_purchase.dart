@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../widgets/jnt_standard_app_bar.dart';
 import 'notifications_page.dart';
 import '../widgets/notification_bell_button.dart';
 
@@ -26,7 +27,7 @@ class ClientArtistHomePageWithKitPurchase extends StatelessWidget {
         elevation: 0,
         leading: NotificationBellButton(
           onTap: () => NotificationsPage.showAsModal(context),
-          iconSize: 24,
+          iconSize: JntHeaderMetrics.notificationIconSize,
         ),
         titleSpacing: 16,
         title: Row(

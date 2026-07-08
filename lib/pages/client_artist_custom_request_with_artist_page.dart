@@ -25,6 +25,7 @@ class ClientArtistCustomRequestWithArtistPage extends StatelessWidget {
       artistNames: artistNames,
       showClientBottomNav: true,
       onClientNavTap: onClientNavTap,
+      excludeCurrentUserFromArtistDropdown: true,
       onSubmitted: (ctx) async {
         if (Navigator.of(ctx).canPop()) {
           Navigator.of(ctx).pop();

@@ -91,6 +91,7 @@ class _ClientArtistHomePageClientState
         clientName: displayName,
         profileImageUrl: _profile.basic.profileImageUrl,
         profileComplete: true,
+        tapArtistTileOpensImageOnly: true,
         showExtendedAvatarMenu: true,
         onLogout: _logoutToHomePage,
         onRequestArtist: (artistName) {

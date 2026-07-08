@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_profile_models.dart';
 import 'client_artist_custom_request_with_artist_page.dart';
@@ -44,8 +44,17 @@ class ClientArtistClientViewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final draft = profile ?? _fallbackProfile();
+    final user = Supabase.instance.client.auth.currentUser;
+    final metadata = user?.userMetadata ?? const <String, dynamic>{};
     final authDisplayName =
-        (FirebaseAuth.instance.currentUser?.displayName ?? '').trim();
+        (metadata['displayName'] ??
+                metadata['display_name'] ??
+                metadata['fullName'] ??
+                metadata['full_name'] ??
+                metadata['name'] ??
+                '')
+            .toString()
+            .trim();
     final profileName = draft.basic.name.trim();
     final displayName = profileName.isNotEmpty
         ? profileName

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
+import 'client_artist_earnings_page.dart';
 import 'client_artist_home_page.dart';
 import 'client_artists_page.dart';
 
@@ -11,6 +12,7 @@ class ClientArtistArtistPage extends StatelessWidget {
     required this.profile,
     required this.showContinueProfileCard,
     required this.enableAllTabs,
+    required this.showCampaignsTab,
     this.onOpenProfile,
     this.onOpenHistory,
     this.onOpenCalendar,
@@ -20,6 +22,7 @@ class ClientArtistArtistPage extends StatelessWidget {
   final ClientProfileDraft profile;
   final bool showContinueProfileCard;
   final bool enableAllTabs;
+  final bool showCampaignsTab;
   final VoidCallback? onOpenProfile;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
@@ -41,6 +44,38 @@ class ClientArtistArtistPage extends StatelessWidget {
     );
   }
 
+  void _openReviews(BuildContext context) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientArtistReviewsPage(
+          profile: profile,
+          showContinueProfileCard: showContinueProfileCard,
+          enableAllTabs: enableAllTabs,
+          showCampaignsTab: showCampaignsTab,
+          onOpenProfile: onOpenProfile,
+          onLogout: onLogout,
+        ),
+      ),
+    );
+  }
+
+  void _openEarnings(BuildContext context) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientArtistEarningsPage(
+          profile: profile,
+          showContinueProfileCard: showContinueProfileCard,
+          enableAllTabs: enableAllTabs,
+          showCampaignsTab: showCampaignsTab,
+          onOpenProfile: onOpenProfile,
+          onLogout: onLogout,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -48,14 +83,17 @@ class ClientArtistArtistPage extends StatelessWidget {
       body: ClientArtistsPage(
         profile: profile,
         onOpenProfile: onOpenProfile,
+        onOpenEarnings: showCampaignsTab ? () => _openEarnings(context) : null,
         onOpenHistory: onOpenHistory,
         onOpenCalendar: onOpenCalendar,
         onOpenArtist: () {},
+        onOpenReviews: () => _openReviews(context),
         onLogout: onLogout,
         showProfileMenu: true,
         showHistoryMenu: true,
         showCalendarMenu: true,
         showArtistMenu: false,
+        showReviewsMenu: true,
       ),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: AppColors.balletSlippers,
@@ -64,32 +102,39 @@ class ClientArtistArtistPage extends StatelessWidget {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.blackCat,
         unselectedItemColor: Colors.black.withValues(alpha: 0.55),
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
+        items: <BottomNavigationBarItem>[
+          const BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
             activeIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),
             activeIcon: Icon(Icons.add_circle),
             label: 'Design',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.inbox_outlined),
             activeIcon: Icon(Icons.inbox),
             label: 'Requests',
           ),
-          BottomNavigationBarItem(
+          if (showCampaignsTab)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.campaign_outlined),
+              activeIcon: Icon(Icons.campaign),
+              label: 'Campaigns',
+            ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.receipt_long_outlined),
             activeIcon: Icon(Icons.receipt_long),
             label: 'Orders',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.attach_money_outlined),
-            activeIcon: Icon(Icons.attach_money),
-            label: 'Earnings',
-          ),
+          if (!showCampaignsTab)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.attach_money_outlined),
+              activeIcon: Icon(Icons.attach_money),
+              label: 'Earnings',
+            ),
         ],
       ),
     );
