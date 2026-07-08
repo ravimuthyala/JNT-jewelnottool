@@ -290,17 +290,18 @@ class _NailPreferencesInlineEditorState
 
   String _normalizeShape(String raw) {
     final normalized = raw.trim();
+    if (normalized.isEmpty) return '';
     for (final shape in nailShapes) {
       if (shape.toLowerCase() == normalized.toLowerCase()) {
         return shape;
       }
     }
-    return nailShapes.first;
+    return '';
   }
 
   NailLength _normalizeLength(NailLength length) {
     if (_supportedLengths.contains(length)) return length;
-    return NailLength.short;
+    return NailLength.none;
   }
 
   InputDecoration _miniDec() => InputDecoration(
@@ -385,7 +386,7 @@ class _NailPreferencesInlineEditorState
 
           if (widget.showNfcOptions) ...[
             Text(
-              'NFC Eligible â€“ Designs marked with this checkbox can be upgraded with an NFC chip',
+              'NFC Eligible Designs marked with this checkbox can be upgraded with an NFC chip',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,

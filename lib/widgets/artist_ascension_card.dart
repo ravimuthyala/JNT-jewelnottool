@@ -67,7 +67,7 @@ class ArtistAscensionCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Current points: ${ascension.points}',
+            'Current points: ${ascension.points.toStringAsFixed(2)}',
             style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
           ),
           const SizedBox(height: 10),
@@ -101,14 +101,12 @@ class ArtistAscensionCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${progressMeta.pointsNeeded} points needed for next tier',
+              '${progressMeta.pointsNeeded.toStringAsFixed(2)} points needed for next tier',
               style: TextStyle(color: Colors.black.withValues(alpha: 0.70)),
             ),
           ],
           const SizedBox(height: 12),
           _metricRow('Lifetime orders', '${ascension.lifetimeOrders}'),
-          _metricRow('Artist GMV', _money(ascension.artistGMV)),
-          _metricRow('JNT revenue', _money(ascension.jntRevenue)),
           const SizedBox(height: 12),
           const Text(
             'Unlocked perks',
@@ -178,28 +176,27 @@ class ArtistAscensionCard extends StatelessWidget {
     }
   }
 
-  String _money(double value) => '\$${value.toStringAsFixed(0)}';
 
   _ProgressMeta _progressMeta() {
     switch (ascension.tier) {
       case ArtistAscensionTier.maker:
         return _ProgressMeta(
           progress: ascension.points / 1000,
-          pointsNeeded: (1000 - ascension.points).clamp(0, 1000),
+          pointsNeeded: (1000 - ascension.points).clamp(0.0, 1000.0).toDouble(),
           nextTierLabel: 'Goldsmith',
           isMaxTier: false,
         );
       case ArtistAscensionTier.goldsmith:
         return _ProgressMeta(
           progress: ascension.points / 9750,
-          pointsNeeded: (9750 - ascension.points).clamp(0, 9750),
+          pointsNeeded: (9750 - ascension.points).clamp(0.0, 9750.0).toDouble(),
           nextTierLabel: 'Crowned',
           isMaxTier: false,
         );
       case ArtistAscensionTier.crowned:
         return const _ProgressMeta(
           progress: 1,
-          pointsNeeded: 0,
+          pointsNeeded: 0.0,
           nextTierLabel: '',
           isMaxTier: true,
         );
@@ -252,7 +249,7 @@ class _ProgressMeta {
   });
 
   final double progress;
-  final int pointsNeeded;
+  final double pointsNeeded;
   final String nextTierLabel;
   final bool isMaxTier;
 }

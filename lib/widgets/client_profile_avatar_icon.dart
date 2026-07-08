@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 
 class ClientProfileAvatarIcon extends StatelessWidget {
@@ -47,19 +48,36 @@ class ClientProfileAvatarIcon extends StatelessWidget {
     }
 
     if (src.startsWith('http://') || src.startsWith('https://')) {
-      return SizedBox.square(
-        dimension: size,
-        child: Image.network(
-          src,
-          fit: BoxFit.cover,
-          cacheWidth: cacheSize,
-          cacheHeight: cacheSize,
-          errorBuilder: (context, error, stackTrace) => _fallback(),
-        ),
+      return _networkImage(src, cacheSize);
+    }
+
+    if (_looksLikeStorageReference(src)) {
+      return FutureBuilder<String?>(
+        future: StorageUrlResolver.resolve(src),
+        builder: (context, snapshot) {
+          final resolved = (snapshot.data ?? '').trim();
+          if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
+            return _networkImage(resolved, cacheSize);
+          }
+          return SizedBox.square(dimension: size, child: _fallback());
+        },
       );
     }
 
     return SizedBox.square(dimension: size, child: _fallback());
+  }
+
+  Widget _networkImage(String url, int cacheSize) {
+    return SizedBox.square(
+      dimension: size,
+      child: Image.network(
+        url,
+        fit: BoxFit.cover,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
+        errorBuilder: (context, error, stackTrace) => _fallback(),
+      ),
+    );
   }
 
   Widget _fallback() {
@@ -103,14 +121,19 @@ class ClientProfileAvatarIcon extends StatelessWidget {
 
     final lower = text.toLowerCase();
     if (lower.startsWith('assets/')) return '';
-    if (lower.startsWith('gs://')) return '';
-    if (lower.startsWith('clients/')) return '';
-    if (lower.startsWith('artists/')) return '';
-    if (lower.startsWith('client_artists/')) return '';
     if (lower.startsWith('company/')) return '';
     if (lower.contains('profile_placeholder')) return '';
     if (lower.contains('avatar_placeholder')) return '';
 
     return text;
+  }
+
+  bool _looksLikeStorageReference(String value) {
+    final lower = value.trim().toLowerCase();
+    return lower.startsWith('gs://') ||
+        lower.startsWith('profile-pictures/') ||
+        lower.startsWith('clients/') ||
+        lower.startsWith('artists/') ||
+        lower.startsWith('client_artists/');
   }
 }

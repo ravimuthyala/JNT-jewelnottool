@@ -1,6 +1,6 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/notifications_service.dart';
+import '../services/supabase_bootstrap.dart';
 import '../theme/app_colors.dart';
 
 class NotificationBellButton extends StatefulWidget {
@@ -40,7 +40,7 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
 
   @override
   Widget build(BuildContext context) {
-    final userEmail = (FirebaseAuth.instance.currentUser?.email ?? '')
+    final userEmail = (SupabaseBootstrap.client.auth.currentUser?.email ?? '')
         .trim()
         .toLowerCase();
 
