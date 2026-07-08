@@ -14,15 +14,12 @@ import 'pages/reset_password_success_page.dart';
 
 import 'theme/app_colors.dart';
 import 'utlis/responsive_text.dart';
-import 'services/firebase_bootstrap.dart';
 import 'services/supabase_bootstrap.dart';
 import 'services/startup_frame_gate.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'pages/phone_verification_page.dart';
-import 'pages/artist_registration/artist_registration_flow.dart';
 import 'models/client_profile_models.dart';
+import 'pages/artist_registration/artist_registration_flow.dart';
 import 'pages/review_artist_page.dart';
 import 'pages/tip_artist_page.dart';
 
@@ -316,14 +313,6 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
   }
 
   Future<void> _initializeApp() async {
-    final firebaseOk = await FirebaseBootstrap.ensureInitialized();
-
-    if (!firebaseOk) {
-      debugPrint(
-        'Firebase initialization failed: ${FirebaseBootstrap.lastError}',
-      );
-    }
-
     await _initializeDeepLinks();
   }
 
@@ -348,11 +337,40 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
   Future<void> _handleDeepLink(Uri uri) async {
     debugPrint('Received deep link: $uri');
 
-    final extractedUri = _extractFirebaseDynamicLink(uri);
+    final extractedUri = _extractDeepLink(uri);
 
     final mode = extractedUri.queryParameters['mode'];
     final oobCode = extractedUri.queryParameters['oobCode'];
     final email = extractedUri.queryParameters['email'];
+    final isSupabaseResetLink =
+        extractedUri.path.contains('reset-password') ||
+        extractedUri.queryParameters['type'] == 'recovery' ||
+        extractedUri.queryParameters.containsKey('code') ||
+        extractedUri.queryParameters.containsKey('token_hash') ||
+        extractedUri.fragment.contains('access_token=');
+
+    if (isSupabaseResetLink) {
+      try {
+        await Supabase.instance.client.auth.getSessionFromUrl(extractedUri);
+      } catch (_) {}
+
+      final navigator = JntApp.navigatorKey.currentState;
+      if (navigator == null) return;
+
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => ResetPasswordPage(
+            oobCode: extractedUri.queryParameters['code'] ??
+                extractedUri.queryParameters['token_hash'] ??
+                oobCode ??
+                '',
+            email: email,
+          ),
+        ),
+      );
+
+      return;
+    }
 
     if (mode == 'resetPassword' && oobCode != null && oobCode.isNotEmpty) {
       final navigator = JntApp.navigatorKey.currentState;
@@ -413,77 +431,21 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
     }
 
     final type = extractedUri.queryParameters['type'];
-    final role = extractedUri.queryParameters['role'];
 
     if (type == 'account-verified') {
       final navigator = JntApp.navigatorKey.currentState;
       if (navigator == null) return;
-
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user == null) {
-        navigator.pushNamedAndRemoveUntil(
-          '/login',
-          (route) => false,
-        );
-        return;
-      }
-
-      final uid = user.uid;
-
-      String collectionName = 'client';
-      String accountType = role ?? 'client';
-
-      switch (accountType) {
-        case 'artist':
-          collectionName = 'artist';
-          break;
-        case 'client+artist':
-          collectionName = 'client_artist';
-          break;
-        case 'company':
-          collectionName = 'company';
-          break;
-        default:
-          collectionName = 'client';
-      }
-
-      final doc = await FirebaseFirestore.instance
-          .collection(collectionName)
-          .doc(uid)
-          .get();
-
-      final data = doc.data();
-
-      if (data == null) {
-        navigator.pushNamedAndRemoveUntil(
-          '/login',
-          (route) => false,
-        );
-        return;
-      }
-
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => PhoneVerificationPage(
-            phoneNumber: data['phoneNumber'] ?? '',
-            userEmail: data['email'] ?? '',
-            userName: data['fullName'] ?? '',
-            accountType: accountType,
-            collectionName: collectionName,
-            uid: uid,
-          ),
-        ),
+      navigator.pushNamedAndRemoveUntil(
+        '/login',
         (route) => false,
       );
-
       return;
     }
 
     debugPrint('Deep link ignored: $extractedUri');
   }
 
-  Uri _extractFirebaseDynamicLink(Uri uri) {
+  Uri _extractDeepLink(Uri uri) {
     for (final key in [
       'link',
       'continueUrl',
