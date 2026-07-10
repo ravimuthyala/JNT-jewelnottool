@@ -29,6 +29,7 @@ class _OrderSafe {
   final String cancelReason;
   final List<String> inspirationPhotos;
   final String needByDisplay;
+  final String jntRevealDateDisplay;
   final String nailShape;
   final String nailLength;
   final int? budgetMin;
@@ -82,6 +83,7 @@ class _OrderSafe {
     required this.cancelReason,
     required this.inspirationPhotos,
     required this.needByDisplay,
+    required this.jntRevealDateDisplay,
     required this.nailShape,
     required this.nailLength,
     required this.budgetMin,
@@ -318,6 +320,7 @@ class _OrderSafe {
         orderMap?['previewImageAsset'],
       ]),
       needByDisplay: s(o?.needByDisplay, ''),
+      jntRevealDateDisplay: s(o?.jntRevealDateDisplay, ''),
       nailShape: s(o?.nailShape, ''),
       nailLength: s(o?.nailLength, ''),
       budgetMin: o?.budgetMin is int ? o.budgetMin as int : null,
@@ -2530,6 +2533,7 @@ class _BaseOrderDetails extends StatelessWidget {
           _bullet('Campaign Name', _valueOrDash(order.title)),
           _bullet('Description', _valueOrDash(order.clientDescription)),
           _bullet('Need by', _valueOrDash(order.needByDisplay)),
+          _bullet('JNT Reveal Date', _valueOrDash(order.jntRevealDateDisplay)),
           _bullet('Requested Client', _requestedClientDisplay()),
           _bullet('Requested Artist', _requestArtistDisplay()),
           _bullet('Accepted Clients', _acceptedClientsDisplay()),
@@ -3365,10 +3369,24 @@ class _SubmittedPhotosStrip extends StatelessWidget {
           (!p.contains('://') && p.contains('/'));
       if (looksStoragePath) {
         final resolved = await StorageUrlResolver.resolve(p);
-        if ((resolved ?? '').trim().isNotEmpty) return resolved!.trim();
+        final text = (resolved ?? '').trim();
+        if (text.startsWith('http://') ||
+            text.startsWith('https://') ||
+            text.startsWith('assets/') ||
+            text.startsWith('data:image/') ||
+            text.startsWith('file://')) {
+          return text;
+        }
       }
       final resolved = await StorageUrlResolver.resolve(p);
-      if ((resolved ?? '').trim().isNotEmpty) return resolved!.trim();
+      final text = (resolved ?? '').trim();
+      if (text.startsWith('http://') ||
+          text.startsWith('https://') ||
+          text.startsWith('assets/') ||
+          text.startsWith('data:image/') ||
+          text.startsWith('file://')) {
+        return text;
+      }
       return '';
     }
 
@@ -3383,7 +3401,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
             future: precacheImage(provider, context),
             builder: (context, imageSnap) {
               if (imageSnap.connectionState != ConnectionState.done) {
-                return SizedBox(width: size, height: size);
+                return const SizedBox.shrink();
               }
               if (imageSnap.hasError) return const SizedBox.shrink();
               return ClipRRect(

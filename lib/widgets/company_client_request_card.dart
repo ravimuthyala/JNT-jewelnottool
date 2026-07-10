@@ -12,6 +12,7 @@ class CompanyClientRequestCard extends StatelessWidget {
     required this.needByLabel,
     required this.submittedLabel,
     this.acceptByLabel = '',
+    this.jntRevealDateLabel = '',
     required this.avatar,
     required this.previewImage,
     required this.onTap,
@@ -24,6 +25,7 @@ class CompanyClientRequestCard extends StatelessWidget {
   final String needByLabel;
   final String submittedLabel;
   final String acceptByLabel;
+  final String jntRevealDateLabel;
   final Widget avatar;
   final Widget previewImage;
   final VoidCallback onTap;
@@ -104,6 +106,8 @@ class CompanyClientRequestCard extends StatelessWidget {
                     italic: true,
                   ),
                   _field('Needed By', needByLabel),
+                  if (jntRevealDateLabel.trim().isNotEmpty)
+                    _field('JNT Reveal Date', jntRevealDateLabel),
                   const SizedBox(height: 10),
                   _field(
                     'Submitted Date',

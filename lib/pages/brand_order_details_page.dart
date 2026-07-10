@@ -3516,6 +3516,13 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     final resolved = await StorageUrlResolver.resolve(p);
     final text = (resolved ?? '').trim();
     if (!_isAllowedForDisplay(text)) return '';
+    if (!(text.startsWith('http://') ||
+        text.startsWith('https://') ||
+        text.startsWith('assets/') ||
+        text.startsWith('data:image/') ||
+        text.startsWith('file://'))) {
+      return '';
+    }
     final parsedStorage = _parseStorageReference(text);
     if (parsedStorage != null && !await _storageObjectExists(text)) {
       return '';

@@ -12,6 +12,36 @@ import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
+dynamic _decodeJsonLike(dynamic value) {
+  if (value is! String) return value;
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return value;
+  final startsJson =
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'));
+  if (!startsJson) return value;
+  try {
+    return jsonDecode(trimmed);
+  } catch (_) {
+    return value;
+  }
+}
+
+Map<String, dynamic> _mapFromDynamic(dynamic value) {
+  final decoded = _decodeJsonLike(value);
+  if (decoded is Map<String, dynamic>)
+    return Map<String, dynamic>.from(decoded);
+  if (decoded is Map) {
+    return decoded.map((key, value) => MapEntry(key.toString(), value));
+  }
+  return <String, dynamic>{};
+}
+
+List<dynamic> _listFromDynamic(dynamic value) {
+  final decoded = _decodeJsonLike(value);
+  if (decoded is List) return List<dynamic>.from(decoded);
+  return const <dynamic>[];
+}
 
 // -----------------------------------------------------------------------------
 // Supabase compatibility helpers for this migrated order details page.
@@ -38,7 +68,8 @@ class AppUser {
   String? get email => _user.email;
   String? get displayName {
     final meta = _user.userMetadata ?? const <String, dynamic>{};
-    final raw = meta['displayName'] ??
+    final raw =
+        meta['displayName'] ??
         meta['display_name'] ??
         meta['fullName'] ??
         meta['full_name'] ??
@@ -58,7 +89,11 @@ class AppDatabase {
   final SupabaseClient _client = Supabase.instance.client;
 
   CollectionReference<Map<String, dynamic>> collection(String name) {
-    return CollectionReference<Map<String, dynamic>>._(this, _tableFor(name), name);
+    return CollectionReference<Map<String, dynamic>>._(
+      this,
+      _tableFor(name),
+      name,
+    );
   }
 
   Future<T> runTransaction<T>(Future<T> Function(Transaction tx) action) async {
@@ -90,11 +125,18 @@ class UpdateValue {
   final List<dynamic> values;
 
   static UpdateValue now() => const UpdateValue._('now');
-  static UpdateValue arrayUnion(List<dynamic> values) => UpdateValue._('arrayUnion', values);
+  static UpdateValue arrayUnion(List<dynamic> values) =>
+      UpdateValue._('arrayUnion', values);
 }
 
 class CollectionReference<T extends Map<String, dynamic>> {
-  CollectionReference._(this._db, this.table, this.firestoreName, {this.parent, this.subcollection});
+  CollectionReference._(
+    this._db,
+    this.table,
+    this.firestoreName, {
+    this.parent,
+    this.subcollection,
+  });
 
   final AppDatabase _db;
   final String table;
@@ -117,17 +159,33 @@ class CollectionReference<T extends Map<String, dynamic>> {
   }
 
   Query<T> where(String field, {Object? isEqualTo}) {
-    return Query<T>._(_db, table, firestoreName, parent: parent, subcollection: subcollection)
-        .where(field, isEqualTo: isEqualTo);
+    return Query<T>._(
+      _db,
+      table,
+      firestoreName,
+      parent: parent,
+      subcollection: subcollection,
+    ).where(field, isEqualTo: isEqualTo);
   }
 
   Query<T> limit(int count) {
-    return Query<T>._(_db, table, firestoreName, parent: parent, subcollection: subcollection).limit(count);
+    return Query<T>._(
+      _db,
+      table,
+      firestoreName,
+      parent: parent,
+      subcollection: subcollection,
+    ).limit(count);
   }
 
   Query<T> orderBy(String field, {bool descending = false}) {
-    return Query<T>._(_db, table, firestoreName, parent: parent, subcollection: subcollection)
-        .orderBy(field, descending: descending);
+    return Query<T>._(
+      _db,
+      table,
+      firestoreName,
+      parent: parent,
+      subcollection: subcollection,
+    ).orderBy(field, descending: descending);
   }
 
   Future<DocumentReference<T>> add(Map<String, dynamic> data) async {
@@ -138,7 +196,13 @@ class CollectionReference<T extends Map<String, dynamic>> {
 }
 
 class Query<T extends Map<String, dynamic>> {
-  Query._(this._db, this.table, this.firestoreName, {this.parent, this.subcollection});
+  Query._(
+    this._db,
+    this.table,
+    this.firestoreName, {
+    this.parent,
+    this.subcollection,
+  });
 
   final AppDatabase _db;
   final String table;
@@ -170,18 +234,20 @@ class Query<T extends Map<String, dynamic>> {
     if (subcollection == 'details' && parent != null) {
       final rows = await _fetchDetailsRows(_db._client, parent!, null);
       final docs = rows
-          .map((row) => DocumentSnapshot<T>._(
-                DocumentReference<T>._(
-                  _db,
-                  table,
-                  firestoreName,
-                  (row['detail_key'] ?? row['id'] ?? 'payload').toString(),
-                  parent: parent,
-                  subcollection: subcollection,
-                ),
-                _normalizeSupabaseRow(row).cast<String, dynamic>() as T,
-                true,
-              ))
+          .map(
+            (row) => DocumentSnapshot<T>._(
+              DocumentReference<T>._(
+                _db,
+                table,
+                firestoreName,
+                (row['detail_key'] ?? row['id'] ?? 'payload').toString(),
+                parent: parent,
+                subcollection: subcollection,
+              ),
+              _normalizeSupabaseRow(row).cast<String, dynamic>() as T,
+              true,
+            ),
+          )
           .toList(growable: false);
       return QuerySnapshot<T>(docs);
     }
@@ -200,11 +266,18 @@ class Query<T extends Map<String, dynamic>> {
     final docs = <DocumentSnapshot<T>>[];
     for (final raw in (rows as List)) {
       final map = _normalizeSupabaseRow(Map<String, dynamic>.from(raw as Map));
-      docs.add(DocumentSnapshot<T>._(
-        DocumentReference<T>._(_db, table, firestoreName, (map['id'] ?? '').toString()),
-        map.cast<String, dynamic>() as T,
-        true,
-      ));
+      docs.add(
+        DocumentSnapshot<T>._(
+          DocumentReference<T>._(
+            _db,
+            table,
+            firestoreName,
+            (map['id'] ?? '').toString(),
+          ),
+          map.cast<String, dynamic>() as T,
+          true,
+        ),
+      );
     }
     return QuerySnapshot<T>(docs);
   }
@@ -241,8 +314,8 @@ class DocumentReference<T extends Map<String, dynamic>> {
     DocumentReference<Map<String, dynamic>>? parent,
     this.subcollection,
     CollectionReference<T>? parentCollection,
-  })  : parentDoc = parent,
-        _parentCollection = parentCollection;
+  }) : parentDoc = parent,
+       _parentCollection = parentCollection;
 
   final AppDatabase _db;
   final String table;
@@ -253,7 +326,8 @@ class DocumentReference<T extends Map<String, dynamic>> {
   final CollectionReference<T>? _parentCollection;
 
   CollectionReference<T> get parentCollection =>
-      _parentCollection ?? CollectionReference<T>._(_db, table, firestoreCollection);
+      _parentCollection ??
+      CollectionReference<T>._(_db, table, firestoreCollection);
 
   CollectionReference<T> get parentRef => parentCollection;
   CollectionReference<T> get parentCollectionRef => parentCollection;
@@ -264,19 +338,28 @@ class DocumentReference<T extends Map<String, dynamic>> {
   CollectionReference<T> get parentCollectionCompat => parentCollection;
 
   CollectionReference<Map<String, dynamic>> get parentCollectionUntyped =>
-      CollectionReference<Map<String, dynamic>>._(_db, table, firestoreCollection);
+      CollectionReference<Map<String, dynamic>>._(
+        _db,
+        table,
+        firestoreCollection,
+      );
 
-  CollectionReference<Map<String, dynamic>> get parentCollectionCompatAlias => parentCollectionUntyped;
+  CollectionReference<Map<String, dynamic>> get parentCollectionCompatAlias =>
+      parentCollectionUntyped;
 
   CollectionReference<Map<String, dynamic>> get parent =>
-      CollectionReference<Map<String, dynamic>>._(_db, table, firestoreCollection);
+      CollectionReference<Map<String, dynamic>>._(
+        _db,
+        table,
+        firestoreCollection,
+      );
 
   CollectionReference<Map<String, dynamic>> collection(String name) {
     return CollectionReference<Map<String, dynamic>>._(
       _db,
       _detailsTableFor(firestoreCollection),
       name,
-      parent: this as DocumentReference<Map<String, dynamic>>, 
+      parent: this as DocumentReference<Map<String, dynamic>>,
       subcollection: name,
     );
   }
@@ -287,12 +370,20 @@ class DocumentReference<T extends Map<String, dynamic>> {
       if (row == null) {
         return DocumentSnapshot<T>._(this, null, false);
       }
-      return DocumentSnapshot<T>._(this, _normalizeSupabaseRow(row).cast<String, dynamic>() as T, true);
+      return DocumentSnapshot<T>._(
+        this,
+        _normalizeSupabaseRow(row).cast<String, dynamic>() as T,
+        true,
+      );
     }
 
     final row = await _fetchById(_db._client, table, id);
     if (row == null) return DocumentSnapshot<T>._(this, null, false);
-    return DocumentSnapshot<T>._(this, _normalizeSupabaseRow(row).cast<String, dynamic>() as T, true);
+    return DocumentSnapshot<T>._(
+      this,
+      _normalizeSupabaseRow(row).cast<String, dynamic>() as T,
+      true,
+    );
   }
 
   Future<void> set(Map<String, dynamic> data, [SetOptions? options]) async {
@@ -312,8 +403,12 @@ class DocumentReference<T extends Map<String, dynamic>> {
 
     Map<String, dynamic> finalData = normalized;
     if (merge) {
-      final current = await _fetchById(_db._client, table, id) ?? <String, dynamic>{};
-      finalData = _applyUpdateValues(_normalizeSupabaseRow(current), normalized);
+      final current =
+          await _fetchById(_db._client, table, id) ?? <String, dynamic>{};
+      finalData = _applyUpdateValues(
+        _normalizeSupabaseRow(current),
+        normalized,
+      );
     } else {
       finalData = _applyUpdateValues(<String, dynamic>{}, normalized);
     }
@@ -323,9 +418,16 @@ class DocumentReference<T extends Map<String, dynamic>> {
   }
 
   Future<void> update(Map<String, dynamic> data) async {
-    final current = await _fetchById(_db._client, table, id) ?? <String, dynamic>{};
-    final finalData = _applyUpdateValues(_normalizeSupabaseRow(current), _toSupabaseWrite(data));
-    await _db._client.from(table).update(_toDbColumns(finalData)..remove('id')).eq('id', id);
+    final current =
+        await _fetchById(_db._client, table, id) ?? <String, dynamic>{};
+    final finalData = _applyUpdateValues(
+      _normalizeSupabaseRow(current),
+      _toSupabaseWrite(data),
+    );
+    await _db._client
+        .from(table)
+        .update(_toDbColumns(finalData)..remove('id'))
+        .eq('id', id);
   }
 }
 
@@ -333,7 +435,9 @@ class StorageUrlResolver {
   static Future<String?> resolve(String? value) async {
     final raw = (value ?? '').trim();
     if (raw.isEmpty) return null;
-    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:image/')) {
+    if (raw.startsWith('http://') ||
+        raw.startsWith('https://') ||
+        raw.startsWith('data:image/')) {
       return raw;
     }
     final normalized = raw.replaceFirst(RegExp(r'^/+'), '');
@@ -352,7 +456,9 @@ class StorageUrlResolver {
       'profile-images',
     ]) {
       try {
-        final url = Supabase.instance.client.storage.from(bucket).getPublicUrl(normalized);
+        final url = Supabase.instance.client.storage
+            .from(bucket)
+            .getPublicUrl(normalized);
         if (url.isNotEmpty) return url;
       } catch (_) {}
     }
@@ -455,14 +561,18 @@ String _columnFor(String field) {
 }
 
 String _camelToSnake(String value) => value.replaceAllMapped(
-      RegExp(r'[A-Z]'),
-      (m) => '_${m.group(0)!.toLowerCase()}',
-    );
+  RegExp(r'[A-Z]'),
+  (m) => '_${m.group(0)!.toLowerCase()}',
+);
 
 String _snakeToCamel(String value) {
   final parts = value.split('_');
   if (parts.isEmpty) return value;
-  return parts.first + parts.skip(1).map((p) => p.isEmpty ? '' : p[0].toUpperCase() + p.substring(1)).join();
+  return parts.first +
+      parts
+          .skip(1)
+          .map((p) => p.isEmpty ? '' : p[0].toUpperCase() + p.substring(1))
+          .join();
 }
 
 Object? _toSupabaseValue(Object? value) {
@@ -476,7 +586,9 @@ Map<String, dynamic> _normalizeSupabaseRow(Map<String, dynamic> row) {
     if (entry.key.contains('_')) out[_snakeToCamel(entry.key)] = entry.value;
   }
   if (!out.containsKey('sourceCollection')) {
-    out['sourceCollection'] = _firestoreCollectionForTable((row['source_collection'] ?? '').toString());
+    out['sourceCollection'] = _firestoreCollectionForTable(
+      (row['source_collection'] ?? '').toString(),
+    );
   }
   if (row['data'] is Map) {
     final data = Map<String, dynamic>.from(row['data'] as Map);
@@ -504,7 +616,8 @@ Map<String, dynamic> _toDbColumns(Map<String, dynamic> data) {
       out[key] = _encodeValue(value);
     }
   });
-  if (!out.containsKey('updated_at')) out['updated_at'] = DateTime.now().toIso8601String();
+  if (!out.containsKey('updated_at'))
+    out['updated_at'] = DateTime.now().toIso8601String();
   return out;
 }
 
@@ -529,7 +642,10 @@ Object? _encodeValue(Object? value) {
   return value;
 }
 
-Map<String, dynamic> _applyUpdateValues(Map<String, dynamic> current, Map<String, dynamic> update) {
+Map<String, dynamic> _applyUpdateValues(
+  Map<String, dynamic> current,
+  Map<String, dynamic> update,
+) {
   final out = <String, dynamic>{...current};
   update.forEach((key, value) {
     final column = key.contains(RegExp(r'[A-Z]')) ? _columnFor(key) : key;
@@ -538,7 +654,9 @@ Map<String, dynamic> _applyUpdateValues(Map<String, dynamic> current, Map<String
         out[column] = DateTime.now().toIso8601String();
         out[_snakeToCamel(column)] = out[column];
       } else if (value.kind == 'arrayUnion') {
-        final existing = out[column] is List ? List<dynamic>.from(out[column] as List) : <dynamic>[];
+        final existing = out[column] is List
+            ? List<dynamic>.from(out[column] as List)
+            : <dynamic>[];
         for (final item in value.values) {
           final encodedItem = _encodeValue(item);
           if (!existing.contains(encodedItem)) existing.add(encodedItem);
@@ -555,16 +673,30 @@ Map<String, dynamic> _applyUpdateValues(Map<String, dynamic> current, Map<String
   return out;
 }
 
-Future<Map<String, dynamic>?> _fetchById(SupabaseClient client, String table, String id) async {
+Future<Map<String, dynamic>?> _fetchById(
+  SupabaseClient client,
+  String table,
+  String id,
+) async {
   try {
     final row = await client.from(table).select().eq('id', id).maybeSingle();
     if (row != null) return Map<String, dynamic>.from(row as Map);
   } catch (_) {}
 
   if (table == 'client_custom_requests' || table == 'company_custom_requests') {
-    for (final column in const ['order_number', 'request_number', 'client_request_number', 'brand_request_number']) {
+    for (final column in const [
+      'order_number',
+      'request_number',
+      'client_request_number',
+      'brand_request_number',
+    ]) {
       try {
-        final row = await client.from(table).select().eq(column, id).limit(1).maybeSingle();
+        final row = await client
+            .from(table)
+            .select()
+            .eq(column, id)
+            .limit(1)
+            .maybeSingle();
         if (row != null) return Map<String, dynamic>.from(row as Map);
       } catch (_) {}
     }
@@ -590,7 +722,8 @@ Future<Map<String, dynamic>?> _fetchDetailsRow(
 
   final parentRow = await _fetchById(client, parent.table, parent.id);
   if (parentRow == null) return null;
-  final json = parentRow[detailKey] ?? parentRow['details'] ?? parentRow['payload'];
+  final json =
+      parentRow[detailKey] ?? parentRow['details'] ?? parentRow['payload'];
   if (json is Map) {
     return <String, dynamic>{
       'id': '${parent.id}_$detailKey',
@@ -613,7 +746,9 @@ Future<List<Map<String, dynamic>>> _fetchDetailsRows(
     dynamic query = client.from(table).select().eq('request_id', parent.id);
     if (detailKey != null) query = query.eq('detail_key', detailKey);
     final rows = await query;
-    return (rows as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    return (rows as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
   } catch (_) {
     final row = await _fetchDetailsRow(client, parent, detailKey ?? 'payload');
     return row == null ? <Map<String, dynamic>>[] : <Map<String, dynamic>>[row];
@@ -647,7 +782,10 @@ Future<void> _upsertDetailsRow(
 
   final existingRow = await _fetchDetailsRow(client, parent, detailKey);
   if (existingRow != null && (existingRow['id'] ?? '').toString().isNotEmpty) {
-    await client.from(table).update(payload).eq('id', existingRow['id'].toString());
+    await client
+        .from(table)
+        .update(payload)
+        .eq('id', existingRow['id'].toString());
   } else {
     await client.from(table).insert(payload);
   }
@@ -667,8 +805,6 @@ Future<void> _upsertDetailsRow(
     await client.from(parentTable).update(update).eq('id', parent.id);
   } catch (_) {}
 }
-
-
 
 /// If you already have this model elsewhere, you can delete this class
 /// and import the correct model file instead.
@@ -695,6 +831,10 @@ class _OrderSafe {
   final String nailLength;
   final int? budgetMin;
   final int? budgetMax;
+  final int? clientBudgetMin;
+  final int? clientBudgetMax;
+  final int? artistBudgetMin;
+  final int? artistBudgetMax;
   final Map<String, String> leftHandDimensions;
   final Map<String, String> rightHandDimensions;
   final String imageAsset;
@@ -749,6 +889,10 @@ class _OrderSafe {
     required this.nailLength,
     required this.budgetMin,
     required this.budgetMax,
+    required this.clientBudgetMin,
+    required this.clientBudgetMax,
+    required this.artistBudgetMin,
+    required this.artistBudgetMax,
     required this.leftHandDimensions,
     required this.rightHandDimensions,
     required this.imageAsset,
@@ -791,6 +935,12 @@ class _OrderSafe {
       return double.tryParse((v ?? '').toString().trim());
     }
 
+    int? i(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.round();
+      return int.tryParse((v ?? '').toString().trim());
+    }
+
     DateTime? dt(dynamic v) {
       if (v == null) return null;
 
@@ -799,7 +949,19 @@ class _OrderSafe {
       }
 
       if (v is String) {
-        return DateTime.tryParse(v);
+        final text = v.trim();
+        final parsed = DateTime.tryParse(text);
+        if (parsed != null) return parsed;
+        final mmddyyyy = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(text);
+        if (mmddyyyy != null) {
+          final month = int.tryParse(mmddyyyy.group(1) ?? '');
+          final day = int.tryParse(mmddyyyy.group(2) ?? '');
+          final year = int.tryParse(mmddyyyy.group(3) ?? '');
+          if (month != null && day != null && year != null) {
+            return DateTime(year, month, day);
+          }
+        }
+        return null;
       }
 
       if (v is int) {
@@ -825,8 +987,18 @@ class _OrderSafe {
       final parsed = dt(value);
       if (parsed != null) {
         const months = <String>[
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
         ];
         return '${months[parsed.month - 1]} ${parsed.day}, ${parsed.year}';
       }
@@ -842,9 +1014,7 @@ class _OrderSafe {
     }
 
     Map<String, dynamic> asMap(dynamic value) {
-      if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
-      if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
-      return <String, dynamic>{};
+      return _mapFromDynamic(value);
     }
 
     final rootMap = o is Map ? asMap(o) : <String, dynamic>{};
@@ -852,18 +1022,18 @@ class _OrderSafe {
     final payloadMap = asMap(detailMap['payload']).isNotEmpty
         ? asMap(detailMap['payload'])
         : asMap(rootMap['payload']).isNotEmpty
-            ? asMap(rootMap['payload'])
-            : detailMap;
+        ? asMap(rootMap['payload'])
+        : detailMap;
     final requestDetailsMap = asMap(payloadMap['requestDetails']).isNotEmpty
         ? asMap(payloadMap['requestDetails'])
         : asMap(detailMap['requestDetails']).isNotEmpty
-            ? asMap(detailMap['requestDetails'])
-            : asMap(rootMap['requestDetails']);
+        ? asMap(detailMap['requestDetails'])
+        : asMap(rootMap['requestDetails']);
     final orderMap = asMap(payloadMap['order']).isNotEmpty
         ? asMap(payloadMap['order'])
         : asMap(detailMap['order']).isNotEmpty
-            ? asMap(detailMap['order'])
-            : asMap(rootMap['order']);
+        ? asMap(detailMap['order'])
+        : asMap(rootMap['order']);
     final designMap = asMap(payloadMap['designApproval']).isNotEmpty
         ? asMap(payloadMap['designApproval'])
         : asMap(detailMap['designApproval']);
@@ -924,7 +1094,8 @@ class _OrderSafe {
     }
 
     List<String> listOrEmpty(dynamic v) {
-      if (v is List) return List<String>.from(v.whereType<String>());
+      final list = _listFromDynamic(v);
+      if (list.isNotEmpty) return List<String>.from(list.whereType<String>());
       return const <String>[];
     }
 
@@ -974,7 +1145,9 @@ class _OrderSafe {
       for (final candidate in candidates) {
         final nailPreferences = asMap(candidate['nailPreferences']).isNotEmpty
             ? asMap(candidate['nailPreferences'])
-            : asMap(asMap(candidate['clientProfileSnapshot'])['nailPreferences']);
+            : asMap(
+                asMap(candidate['clientProfileSnapshot'])['nailPreferences'],
+              );
         final dimensions = asMap(nailPreferences['dimensions']).isNotEmpty
             ? asMap(nailPreferences['dimensions'])
             : asMap(candidate['dimensions']);
@@ -996,6 +1169,33 @@ class _OrderSafe {
       return direct;
     }
 
+    List<_OrderGroupClient> pickGroupClients() {
+      final rootGroupOrder = asMap(rootMap['groupOrder']);
+      final detailGroupOrder = asMap(detailMap['groupOrder']);
+      final payloadGroupOrder = asMap(payloadMap['groupOrder']);
+      final requestGroupOrder = asMap(requestDetailsMap['groupOrder']);
+      final candidates = <dynamic>[
+        o?.groupClients,
+        rootMap['groupClients'],
+        rootMap['group_clients'],
+        rootGroupOrder['clients'],
+        detailMap['groupClients'],
+        detailMap['group_clients'],
+        detailGroupOrder['clients'],
+        payloadMap['groupClients'],
+        payloadMap['group_clients'],
+        payloadGroupOrder['clients'],
+        requestDetailsMap['groupClients'],
+        requestDetailsMap['group_clients'],
+        requestGroupOrder['clients'],
+      ];
+      for (final candidate in candidates) {
+        final clients = _groupClientList(candidate);
+        if (clients.isNotEmpty) return clients;
+      }
+      return const <_OrderGroupClient>[];
+    }
+
     return _OrderSafe(
       sourceCollection: s(o?.sourceCollection, 'Client_Custom_Requests'),
       id: s(o?.id, 'order'),
@@ -1008,7 +1208,7 @@ class _OrderSafe {
           ? (o.hasAssignedArtist as bool)
           : true,
       orderType: s(o?.orderType, 'single'),
-      groupClients: _groupClientList(o?.groupClients),
+      groupClients: pickGroupClients(),
       createdAt: o?.createdAt is DateTime ? o.createdAt as DateTime : null,
       clientDescription: s(o?.clientDescription, ''),
       cancelReason: s(o?.cancelReason, ''),
@@ -1057,6 +1257,7 @@ class _OrderSafe {
         ),
       ),
       jntRevealDateDisplay: dateDisplayFrom([
+        o?.jntRevealDateDisplay,
         rootMap['jnt_reveal_date'],
         rootMap['jntRevealDate'],
         rootMap['jnt_reveal_date_display'],
@@ -1077,7 +1278,7 @@ class _OrderSafe {
 
       nailShape: s(
         o?.nailShape ??
-            o?['nail_shape'] ??
+            rootMap['nail_shape'] ??
             detailMap['nailShape'] ??
             detailMap['nail_shape'] ??
             payloadMap['nailShape'] ??
@@ -1092,8 +1293,8 @@ class _OrderSafe {
 
       nailLength: s(
         o?.nailLength ??
-            o?['nail_length'] ??
-            o?['nail_size'] ??
+            rootMap['nail_length'] ??
+            rootMap['nail_size'] ??
             detailMap['nailLength'] ??
             detailMap['nail_length'] ??
             detailMap['nailSize'] ??
@@ -1114,11 +1315,59 @@ class _OrderSafe {
 
       budgetMin: o?.budgetMin is int
           ? o.budgetMin as int
-          : int.tryParse((o?['budget_min'] ?? '').toString()),
+          : int.tryParse((rootMap['budget_min'] ?? '').toString()),
 
       budgetMax: o?.budgetMax is int
           ? o.budgetMax as int
-          : int.tryParse((o?['budget_max'] ?? '').toString()),
+          : int.tryParse((rootMap['budget_max'] ?? '').toString()),
+
+      clientBudgetMin: i(
+        o?.clientBudgetMin ??
+            rootMap['clientBudgetMin'] ??
+            rootMap['client_budget_min'] ??
+            detailMap['clientBudgetMin'] ??
+            payloadMap['clientBudgetMin'] ??
+            requestDetailsMap['clientBudgetMin'] ??
+            asMap(detailMap['clientBudget'])['min'] ??
+            asMap(payloadMap['clientBudget'])['min'] ??
+            asMap(requestDetailsMap['clientBudget'])['min'],
+      ),
+
+      clientBudgetMax: i(
+        o?.clientBudgetMax ??
+            rootMap['clientBudgetMax'] ??
+            rootMap['client_budget_max'] ??
+            detailMap['clientBudgetMax'] ??
+            payloadMap['clientBudgetMax'] ??
+            requestDetailsMap['clientBudgetMax'] ??
+            asMap(detailMap['clientBudget'])['max'] ??
+            asMap(payloadMap['clientBudget'])['max'] ??
+            asMap(requestDetailsMap['clientBudget'])['max'],
+      ),
+
+      artistBudgetMin: i(
+        o?.artistBudgetMin ??
+            rootMap['artistBudgetMin'] ??
+            rootMap['artist_budget_min'] ??
+            detailMap['artistBudgetMin'] ??
+            payloadMap['artistBudgetMin'] ??
+            requestDetailsMap['artistBudgetMin'] ??
+            asMap(detailMap['artistBudget'])['min'] ??
+            asMap(payloadMap['artistBudget'])['min'] ??
+            asMap(requestDetailsMap['artistBudget'])['min'],
+      ),
+
+      artistBudgetMax: i(
+        o?.artistBudgetMax ??
+            rootMap['artistBudgetMax'] ??
+            rootMap['artist_budget_max'] ??
+            detailMap['artistBudgetMax'] ??
+            payloadMap['artistBudgetMax'] ??
+            requestDetailsMap['artistBudgetMax'] ??
+            asMap(detailMap['artistBudget'])['max'] ??
+            asMap(payloadMap['artistBudget'])['max'] ??
+            asMap(requestDetailsMap['artistBudget'])['max'],
+      ),
 
       leftHandDimensions: pickHandDimensions(true),
       rightHandDimensions: pickHandDimensions(false),
@@ -1162,12 +1411,12 @@ class _OrderSafe {
       acceptedByArtistEmail: s(o?.acceptedByArtistEmail, ''),
       declinedByClientEmails: normalizedEmailList(
         o?.declinedByClientEmails ??
-            o?['declinedByClientEmails'] ??
+            rootMap['declinedByClientEmails'] ??
             (payloadMap['declinedByClientEmails']),
       ),
       declinedByArtistEmails: normalizedEmailList(
         o?.declinedByArtistEmails ??
-            o?['declinedByArtistEmails'] ??
+            rootMap['declinedByArtistEmails'] ??
             (payloadMap['declinedByArtistEmails']),
       ),
       artistName: s(o?.artistName, ''),
@@ -1183,10 +1432,11 @@ class _OrderSafe {
   }
 
   static Map<String, String> _dimsMap(dynamic value) {
-    if (value is! Map) return const <String, String>{};
+    final map = _mapFromDynamic(value);
+    if (map.isEmpty) return const <String, String>{};
     String readAny(List<String> keys) {
       for (final key in keys) {
-        final raw = value[key];
+        final raw = map[key];
         final text = (raw ?? '').toString().trim();
         if (text.isNotEmpty) return text;
       }
@@ -1211,15 +1461,28 @@ class _OrderSafe {
   }
 
   static List<_OrderGroupClient> _groupClientList(dynamic value) {
-    if (value is! List) return const <_OrderGroupClient>[];
+    final list = _listFromDynamic(value);
+    if (list.isEmpty) return const <_OrderGroupClient>[];
     final items = <_OrderGroupClient>[];
     String s(dynamic v) => (v ?? '').toString().trim();
     Map<String, dynamic> asMap(dynamic value) {
-      if (value is Map<String, dynamic>) return value;
-      if (value is Map) {
-        return value.map((key, val) => MapEntry(key.toString(), val));
+      return _mapFromDynamic(value);
+    }
+
+    int slotIndexOf(dynamic entry) {
+      if (entry is _OrderGroupClient) return entry.slotIndex;
+      if (entry is Map) {
+        final map = asMap(entry);
+        return _RequestNfcDetails._intValue(
+              map['slotIndex'] ?? map['slot_index'] ?? map['index'],
+            ) ??
+            0;
       }
-      return const <String, dynamic>{};
+      try {
+        return _RequestNfcDetails._intValue((entry as dynamic).slotIndex) ?? 0;
+      } catch (_) {
+        return 0;
+      }
     }
 
     String dimText(dynamic value) {
@@ -1231,12 +1494,15 @@ class _OrderSafe {
       return (value ?? '').toString().trim();
     }
 
-    Map<String, String> handFromNailMap(Map<String, dynamic> source, bool isLeft) {
+    Map<String, String> handFromNailMap(
+      Map<String, dynamic> source,
+      bool isLeft,
+    ) {
       final nailPreferences = asMap(source['savedNails']).isNotEmpty
           ? asMap(source['savedNails'])
           : (asMap(source['draftNails']).isNotEmpty
-              ? asMap(source['draftNails'])
-              : asMap(source['nailPreferences']));
+                ? asMap(source['draftNails'])
+                : asMap(source['nailPreferences']));
       final dimensions = asMap(nailPreferences['dimensions']).isNotEmpty
           ? asMap(nailPreferences['dimensions'])
           : asMap(source['dimensions']);
@@ -1251,7 +1517,7 @@ class _OrderSafe {
       };
     }
 
-    for (final entry in value) {
+    for (final entry in list) {
       if (entry is _OrderGroupClient) {
         items.add(entry);
         continue;
@@ -1260,14 +1526,17 @@ class _OrderSafe {
         final map = asMap(entry);
         final savedNails = asMap(map['savedNails']);
         final draftNails = asMap(map['draftNails']);
-        final nailPreferences = savedNails.isNotEmpty
-            ? savedNails
-            : draftNails;
+        final nailPreferences = savedNails.isNotEmpty ? savedNails : draftNails;
         items.add(
           _OrderGroupClient(
             clientId: s(map['clientId']),
             clientName: s(map['clientName']),
             clientEmail: s(map['clientEmail']),
+            slotIndex:
+                _RequestNfcDetails._intValue(
+                  map['slotIndex'] ?? map['slot_index'] ?? map['index'],
+                ) ??
+                0,
             nailShape: s(map['nailShape']).isNotEmpty
                 ? s(map['nailShape'])
                 : s(nailPreferences['shape']),
@@ -1289,6 +1558,7 @@ class _OrderSafe {
           clientId: s(entry?.clientId),
           clientName: s(entry?.clientName),
           clientEmail: s(entry?.clientEmail),
+          slotIndex: slotIndexOf(entry),
           nailShape: s(entry?.nailShape),
           nailLength: s(entry?.nailLength),
           leftHandDimensions: _dimsMap(entry?.leftHandDimensions),
@@ -1305,6 +1575,7 @@ class _OrderGroupClient {
     this.clientId = '',
     this.clientName = '',
     this.clientEmail = '',
+    this.slotIndex = 0,
     this.nailShape = '',
     this.nailLength = '',
     this.leftHandDimensions = const <String, String>{},
@@ -1314,10 +1585,18 @@ class _OrderGroupClient {
   final String clientId;
   final String clientName;
   final String clientEmail;
+  final int slotIndex;
   final String nailShape;
   final String nailLength;
   final Map<String, String> leftHandDimensions;
   final Map<String, String> rightHandDimensions;
+}
+
+enum OrderBudgetViewMode {
+  singleRange,
+  clientOnly,
+  artistOnly,
+  clientAndArtist,
 }
 
 /// ------------------------
@@ -1328,9 +1607,11 @@ class ShippedOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1344,6 +1625,7 @@ class ShippedOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: AppColors.blackCat,
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       showRightPanel: false,
       rightPanel: const SizedBox.shrink(),
     );
@@ -1358,9 +1640,11 @@ class InProgressOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1374,6 +1658,7 @@ class InProgressOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: const Color(0xFFD36B77),
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       rightPanel: const _ProgressCard(
         steps: [
           _StepItem('Accepted', true),
@@ -1394,9 +1679,11 @@ class InReviewOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1410,6 +1697,7 @@ class InReviewOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: Colors.black.withValues(alpha: 0.65),
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       rightPanel: const _InfoCard(
         title: 'Waiting for artist',
         lines: [
@@ -1429,9 +1717,11 @@ class NewOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1445,6 +1735,7 @@ class NewOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: Colors.black.withValues(alpha: 0.65),
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       rightPanel: const SizedBox.shrink(),
     );
   }
@@ -1462,6 +1753,7 @@ class _BaseOrderDetails extends StatelessWidget {
     required this.statusPillIconColor,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
     required this.rightPanel,
     this.showRightPanel = true,
     this.onCancelledChat,
@@ -1478,6 +1770,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
   final _OrderSafe order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
   final Widget rightPanel;
   final bool showRightPanel;
   final VoidCallback? onCancelledChat;
@@ -1496,6 +1789,49 @@ class _BaseOrderDetails extends StatelessWidget {
   static double? _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse((value ?? '').toString().trim());
+  }
+
+  bool get _isBrandRequest {
+    final source = order.sourceCollection.trim().toLowerCase();
+    return source == 'company_custom_requests';
+  }
+
+  String _rangeText(int? min, int? max) {
+    if (min == null && max == null) return '-';
+    if (min != null && max != null) return '\$$min - \$$max';
+    if (min != null) return '\$$min';
+    return '\$${max!}';
+  }
+
+  List<({String label, String value})> _budgetRows() {
+    if (!_isBrandRequest) {
+      return <({String label, String value})>[
+        (label: 'Range:', value: _budgetText()),
+      ];
+    }
+
+    final clientText = _rangeText(order.clientBudgetMin, order.clientBudgetMax);
+    final artistText = _rangeText(order.artistBudgetMin, order.artistBudgetMax);
+
+    switch (budgetViewMode) {
+      case OrderBudgetViewMode.clientOnly:
+        return <({String label, String value})>[
+          (label: 'Client Budget Range:', value: clientText),
+        ];
+      case OrderBudgetViewMode.artistOnly:
+        return <({String label, String value})>[
+          (label: 'Artist Budget Range:', value: artistText),
+        ];
+      case OrderBudgetViewMode.clientAndArtist:
+        return <({String label, String value})>[
+          (label: 'Client Range:', value: clientText),
+          (label: 'Budget Range:', value: artistText),
+        ];
+      case OrderBudgetViewMode.singleRange:
+        return <({String label, String value})>[
+          (label: 'Range:', value: _budgetText()),
+        ];
+    }
   }
 
   static Future<_AcceptedArtistMeta> _loadAcceptedArtistMeta(
@@ -1915,8 +2251,8 @@ class _BaseOrderDetails extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400,
-                                        color: AppColors.blackCat.withValues(alpha:
-                                          0.85,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.85,
                                         ),
                                       ),
                                     ),
@@ -1933,8 +2269,8 @@ class _BaseOrderDetails extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
-                                          color: AppColors.blackCat.withValues(alpha:
-                                            0.55,
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.55,
                                           ),
                                         ),
                                       ),
@@ -2534,8 +2870,11 @@ class _BaseOrderDetails extends StatelessWidget {
         (order.artistAcceptedAmount ?? order.budgetMax ?? order.budgetMin);
     final hasArtistFinalAmount =
         order.artistAcceptedAmount != null && order.artistAcceptedAmount! > 0;
-    final rangeText = _budgetText();
-    final amountText = amount == null ? rangeText : '\$$amount';
+    final budgetRows = _budgetRows();
+    final primaryRangeText = budgetRows.isEmpty
+        ? _budgetText()
+        : budgetRows.first.value;
+    final amountText = amount == null ? primaryRangeText : '\$$amount';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2545,27 +2884,30 @@ class _BaseOrderDetails extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
+        for (var i = 0; i < budgetRows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          Row(
+            children: [
               Text(
-                'Range:',
+                budgetRows[i].label,
                 style: TextStyle(
                   color: AppColors.blackCat,
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
                 ),
               ),
-            const Spacer(),
-            Text(
-              rangeText,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
+              const Spacer(),
+              Text(
+                budgetRows[i].value,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         if ((isPending || isPaid) && hasArtistFinalAmount) ...[
           const SizedBox(height: 8),
           Row(
@@ -2679,7 +3021,7 @@ class _BaseOrderDetails extends StatelessWidget {
   Widget _finalAcceptedAmountSection() {
     final amount = order.artistAcceptedAmount;
     final text = amount == null ? '-' : '\$$amount';
-    final clientBudgetRange = _budgetText();
+    final budgetRows = _budgetRows();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2693,27 +3035,30 @@ class _BaseOrderDetails extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Text(
-              'Client Budget Range:',
-              style: TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+        for (var i = 0; i < budgetRows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                budgetRows[i].label,
+                style: TextStyle(
+                  color: AppColors.blackCat,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const Spacer(),
-            Text(
-              clientBudgetRange,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
+              const Spacer(),
+              Text(
+                budgetRows[i].value,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         const SizedBox(height: 8),
         Row(
           children: [
@@ -2991,8 +3336,6 @@ class _BaseOrderDetails extends StatelessWidget {
     }
   }
 
-
-
   Widget _artistProfileImage(String raw) {
     final src = raw.trim();
     if (src.isEmpty) {
@@ -3022,7 +3365,10 @@ class _BaseOrderDetails extends StatelessWidget {
       width: 56,
       color: AppColors.balletSlippers,
       alignment: Alignment.center,
-      child: Icon(Icons.person_outline, color: Colors.black.withValues(alpha: 0.5)),
+      child: Icon(
+        Icons.person_outline,
+        color: Colors.black.withValues(alpha: 0.5),
+      ),
     );
   }
 
@@ -3190,20 +3536,11 @@ class _BaseOrderDetails extends StatelessWidget {
         : order.sourceCollection.trim();
 
     Map<String, dynamic> asMap(dynamic value) {
-      if (value is Map<String, dynamic>) {
-        return Map<String, dynamic>.from(value);
-      }
-      if (value is Map) {
-        return value.map((key, value) => MapEntry(key.toString(), value));
-      }
-      return <String, dynamic>{};
+      return _mapFromDynamic(value);
     }
 
     try {
-      var doc = await AppDatabase.instance
-          .collection(collection)
-          .doc(id)
-          .get();
+      var doc = await AppDatabase.instance.collection(collection).doc(id).get();
       if (!doc.exists && collection != 'Client_Custom_Requests') {
         doc = await AppDatabase.instance
             .collection('Client_Custom_Requests')
@@ -3226,10 +3563,16 @@ class _BaseOrderDetails extends StatelessWidget {
             .get();
         details = detailsSnap.data() ?? const <String, dynamic>{};
       }
+      final rootDetails = asMap(root['details']);
       final payload = asMap(details['payload']).isNotEmpty
           ? asMap(details['payload'])
+          : asMap(rootDetails['payload']).isNotEmpty
+          ? asMap(rootDetails['payload'])
           : details;
-      return _RequestNfcDetails.fromMaps(root: root, details: payload);
+      return _RequestNfcDetails.fromMaps(
+        root: <String, dynamic>{...root, ...rootDetails},
+        details: payload,
+      );
     } catch (_) {
       return _RequestNfcDetails.empty();
     }
@@ -3254,7 +3597,7 @@ class _BaseOrderDetails extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
           const SizedBox(height: 10),
-          if (order.sourceCollection.trim() == 'Company_Custom_Requests') ...[
+          if (_isBrandRequest) ...[
             _bullet('Brand Name', _valueOrDash(order.brandName ?? '')),
             _bullet('Campaign Name', _valueOrDash(order.campaignName ?? '')),
             if (order.clientDescription.trim().isNotEmpty) ...[
@@ -3262,12 +3605,10 @@ class _BaseOrderDetails extends StatelessWidget {
             ],
           ],
           _bullet('Need by', _valueOrDash(order.needByDisplay)),
-          if (order.sourceCollection.trim() == 'Company_Custom_Requests' &&
-              order.jntRevealDateDisplay.trim().isNotEmpty) ...[
+          if (_isBrandRequest && order.jntRevealDateDisplay.trim().isNotEmpty) ...[
             _bullet('JNT Reveal Date', order.jntRevealDateDisplay.trim()),
           ],
-          if (order.sourceCollection.trim() != 'Company_Custom_Requests' &&
-              order.clientDescription.trim().isNotEmpty) ...[
+          if (!_isBrandRequest && order.clientDescription.trim().isNotEmpty) ...[
             _bullet('Description', order.clientDescription.trim()),
           ],
           _bullet('Request Artist', _requestArtistDisplay()),
@@ -3326,9 +3667,7 @@ class _BaseOrderDetails extends StatelessWidget {
     );
   }
 
-  Widget _groupClientMeasurementsSection({
-    bool showOuterBorder = true,
-  }) {
+  Widget _groupClientMeasurementsSection({bool showOuterBorder = true}) {
     return FutureBuilder<_RequestNfcDetails>(
       future: _loadRequestNfcDetails(),
       builder: (context, snapshot) {
@@ -3343,8 +3682,7 @@ class _BaseOrderDetails extends StatelessWidget {
             const SizedBox(height: 8),
             _LocalGroupClientMeasurementsTabs(
               clients: _groupClientTabsData(nfc),
-              currentViewerEmail:
-                  AppAuth.instance.currentUser?.email ?? '',
+              currentViewerEmail: AppAuth.instance.currentUser?.email ?? '',
               showOuterBorder: showOuterBorder,
             ),
           ],
@@ -3400,6 +3738,7 @@ class _BaseOrderDetails extends StatelessWidget {
     // Remaining tabs are the selected group clients.
     for (var i = 0; i < order.groupClients.length; i++) {
       final client = order.groupClients[i];
+      final slotIndex = client.slotIndex > 0 ? client.slotIndex : (i + 1);
       addTab(
         name: client.clientName,
         email: client.clientEmail,
@@ -3407,7 +3746,8 @@ class _BaseOrderDetails extends StatelessWidget {
         nailLength: client.nailLength,
         leftHand: client.leftHandDimensions,
         rightHand: client.rightHandDimensions,
-        nfcValue: nfc.groupBySlotIndex[i + 1] ?? _FingerNfcSelection.empty(),
+        nfcValue:
+            nfc.groupBySlotIndex[slotIndex] ?? _FingerNfcSelection.empty(),
       );
 
       if (tabs.length >= 16) break;
@@ -3520,7 +3860,17 @@ class _BaseOrderDetails extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(child: _measurementSummaryItem('Shape', nailShape)),
-        const SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: SizedBox(
+            height: 42,
+            child: VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: AppColors.blackCatBorderLight,
+            ),
+          ),
+        ),
         Expanded(child: _measurementSummaryItem('Length', nailLength)),
       ],
     );
@@ -3582,9 +3932,7 @@ class _BaseOrderDetails extends StatelessWidget {
     }
 
     bool showNfc(String key) {
-      final raw = (map[key] ?? '').trim();
-      final valueMm = double.tryParse(raw.replaceAll(RegExp(r'[^0-9.]'), ''));
-      return nfc[key] == true && valueMm != null && valueMm >= 8;
+      return nfc[key] == true;
     }
 
     Widget row(String label, String key) {
@@ -3807,13 +4155,7 @@ class _RequestNfcDetails {
     required Map<String, dynamic> details,
   }) {
     Map<String, dynamic> asMap(dynamic value) {
-      if (value is Map<String, dynamic>) {
-        return Map<String, dynamic>.from(value);
-      }
-      if (value is Map) {
-        return value.map((key, value) => MapEntry(key.toString(), value));
-      }
-      return <String, dynamic>{};
+      return _mapFromDynamic(value);
     }
 
     final rootNailPrefs = asMap(root['nailPreferences']);
@@ -3919,13 +4261,21 @@ class _RequestNfcDetails {
       ...asMap(root['groupOrder']),
       ...asMap(details['groupOrder']),
     };
-    final rawClients = groupOrder['clients'] is List
-        ? groupOrder['clients'] as List
-        : (details['groupClients'] is List
-              ? details['groupClients'] as List
-              : (root['groupClients'] is List
-                    ? root['groupClients'] as List
-                    : const []));
+    List<dynamic> firstNonEmptyList(List<dynamic> values) {
+      for (final value in values) {
+        final list = _listFromDynamic(value);
+        if (list.isNotEmpty) return list;
+      }
+      return const <dynamic>[];
+    }
+
+    final rawClients = firstNonEmptyList([
+      groupOrder['clients'],
+      details['groupClients'],
+      details['group_clients'],
+      root['groupClients'],
+      root['group_clients'],
+    ]);
 
     for (var i = 0; i < rawClients.length; i++) {
       final client = asMap(rawClients[i]);
@@ -3939,15 +4289,23 @@ class _RequestNfcDetails {
         ...asMap(client['dimensions']),
       };
       final slotIndex = _intValue(client['slotIndex']) ?? (i + 1);
+      final parsed = _FingerNfcSelection.fromDimensions(dimensions);
+      if (parsed.anySelected) {
+        groupBySlot[slotIndex] = parsed;
+        continue;
+      }
       groupBySlot[slotIndex] = requestNfcSelected(client)
-          ? _FingerNfcSelection.fromDimensions(dimensions)
+          ? _FingerNfcSelection.fromEligibleDimensions(dimensions)
           : _FingerNfcSelection.emptyConst;
     }
 
+    final parsedMain = _FingerNfcSelection.fromDimensions(mainDimensions);
     return _RequestNfcDetails(
-      main: mainNfcSelected
-          ? _FingerNfcSelection.fromDimensions(mainDimensions)
-          : _FingerNfcSelection.emptyConst,
+      main: parsedMain.anySelected
+          ? parsedMain
+          : (mainNfcSelected
+                ? _FingerNfcSelection.fromEligibleDimensions(mainDimensions)
+                : _FingerNfcSelection.emptyConst),
       groupBySlotIndex: groupBySlot,
     );
   }
@@ -3970,25 +4328,30 @@ class _FingerNfcSelection {
   final Map<String, bool> left;
   final Map<String, bool> right;
 
+  bool get anySelected =>
+      left.values.any((value) => value) || right.values.any((value) => value);
+
   factory _FingerNfcSelection.empty() => emptyConst;
 
   factory _FingerNfcSelection.fromDimensions(Map<String, dynamic> dimensions) {
     bool truthy(dynamic value) {
       if (value == true) return true;
-      if (value is num) return value != 0;
+      if (value is num) return value == 1;
       final text = (value ?? '').toString().trim().toLowerCase();
       return text == 'true' ||
           text == 'yes' ||
           text == '1' ||
-          text == 'selected';
+          text == 'selected' ||
+          text == 'requested' ||
+          text == 'enabled';
     }
 
     dynamic nfcValue(String key) {
-      final nfc = dimensions['nfc'];
-      if (nfc is Map) {
+      final nfc = _mapFromDynamic(dimensions['nfc']);
+      if (nfc.isNotEmpty) {
         return dimensions['${key}Nfc'] ?? nfc[key] ?? nfc['${key}Nfc'];
       }
-      return dimensions['${key}Nfc'] ?? dimensions[key];
+      return dimensions['${key}Nfc'];
     }
 
     return _FingerNfcSelection(
@@ -4005,6 +4368,40 @@ class _FingerNfcSelection {
         'middle': truthy(nfcValue('rMiddle')),
         'ring': truthy(nfcValue('rRing')),
         'pinky': truthy(nfcValue('rPinky')),
+      },
+    );
+  }
+
+  factory _FingerNfcSelection.fromEligibleDimensions(Map<String, dynamic> map) {
+    Map<String, dynamic> dimensions = map;
+    final nested = _mapFromDynamic(map['dimensions']);
+    if (nested.isNotEmpty) {
+      dimensions = nested;
+    }
+
+    bool eligible(String key) {
+      final raw = dimensions[key];
+      final text = (raw ?? '').toString().trim();
+      if (text.isEmpty || text.toLowerCase() == 'null') return false;
+      final cleaned = text.replaceAll(RegExp(r'[^0-9.]'), '');
+      final parsed = double.tryParse(cleaned);
+      return parsed != null && parsed.isFinite && parsed >= 8;
+    }
+
+    return _FingerNfcSelection(
+      left: <String, bool>{
+        'thumb': eligible('lThumb'),
+        'index': eligible('lIndex'),
+        'middle': eligible('lMiddle'),
+        'ring': eligible('lRing'),
+        'pinky': eligible('lPinky'),
+      },
+      right: <String, bool>{
+        'thumb': eligible('rThumb'),
+        'index': eligible('rIndex'),
+        'middle': eligible('rMiddle'),
+        'ring': eligible('rRing'),
+        'pinky': eligible('rPinky'),
       },
     );
   }
@@ -4215,46 +4612,41 @@ class _LocalMeasurementsBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.snow,
-            borderRadius: BorderRadius.zero,
-            border: Border.all(color: AppColors.blackCatBorderLight),
-          ),
-          child: Column(
+        IntrinsicHeight(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final left = _handCard(
-                    'Left Hand',
-                    client.leftHand,
-                    client.nfc.left,
-                  );
-                  final right = _handCard(
-                    'Right Hand',
-                    client.rightHand,
-                    client.nfc.right,
-                  );
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: left),
-                      const SizedBox(width: 10),
-                      Expanded(child: right),
-                    ],
-                  );
-                },
+              Expanded(
+                child: _plainHandColumn(
+                  'Left Hand',
+                  client.leftHand,
+                  client.nfc.left,
+                ),
               ),
-              const SizedBox(height: 10),
-              _summaryRow(
-                nailShape: _valueOrDash(client.nailShape),
-                nailLength: _valueOrDash(_prettyLength(client.nailLength)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
+              Expanded(
+                child: _plainHandColumn(
+                  'Right Hand',
+                  client.rightHand,
+                  client.nfc.right,
+                ),
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 10),
+        Divider(height: 1, thickness: 1, color: AppColors.blackCatBorderLight),
+        const SizedBox(height: 10),
+        _summaryRow(
+          nailShape: _valueOrDash(client.nailShape),
+          nailLength: _valueOrDash(_prettyLength(client.nailLength)),
         ),
       ],
     );
@@ -4264,60 +4656,54 @@ class _LocalMeasurementsBody extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: _summaryItem('Shape', nailShape)),
-        const SizedBox(width: 10),
-        Expanded(child: _summaryItem('Length', nailLength)),
+        Expanded(child: _plainSummaryItem('Shape', nailShape)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: SizedBox(
+            height: 24,
+            child: VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: AppColors.blackCatBorderLight,
+            ),
+          ),
+        ),
+        Expanded(child: _plainSummaryItem('Length', nailLength)),
       ],
     );
   }
 
-  Widget _summaryItem(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Flexible(
-            flex: 0,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-              ),
+  Widget _plainSummaryItem(String label, String value) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.blackCat.withValues(alpha: 0.78),
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.blackCat,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'ArialBold',
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'ArialBold',
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-
-  Widget _handCard(
+  Widget _plainHandColumn(
     String title,
     Map<String, String> map,
     Map<String, bool> nfc,
@@ -4328,46 +4714,47 @@ class _LocalMeasurementsBody extends StatelessWidget {
     }
 
     bool showNfc(String key) {
-      final raw = (map[key] ?? '').trim();
-      final valueMm = double.tryParse(raw.replaceAll(RegExp(r'[^0-9.]'), ''));
-      return nfc[key] == true && valueMm != null && valueMm >= 8;
+      return nfc[key] == true;
     }
 
     Widget row(String label, String key) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Arial',
-                      ),
-                    ),
-                  ),
-                  if (showNfc(key)) ...[const SizedBox(width: 6), _nfcChip()],
-                ],
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.blackCat,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Arial',
+                ),
               ),
             ),
-            const SizedBox(width: 10),
-            Text(
-              value(key),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'ArialBold',
-                color: AppColors.blackCat,
+            SizedBox(
+              width: 34,
+              child: showNfc(key)
+                  ? Center(child: _nfcChip())
+                  : const SizedBox.shrink(),
+            ),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  value(key),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'ArialBold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
           ],
@@ -4375,17 +4762,12 @@ class _LocalMeasurementsBody extends StatelessWidget {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Center(
+          child: Text(
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -4395,14 +4777,14 @@ class _LocalMeasurementsBody extends StatelessWidget {
               color: AppColors.blackCat,
             ),
           ),
-          const SizedBox(height: 8),
-          row('Thumb', 'thumb'),
-          row('Index', 'index'),
-          row('Middle', 'middle'),
-          row('Ring', 'ring'),
-          row('Pinky', 'pinky'),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        row('Thumb', 'thumb'),
+        row('Index', 'index'),
+        row('Middle', 'middle'),
+        row('Ring', 'ring'),
+        row('Pinky', 'pinky'),
+      ],
     );
   }
 
@@ -4430,7 +4812,6 @@ class _LocalMeasurementsBody extends StatelessWidget {
 /// ------------------------
 /// Right panels
 /// ------------------------
-
 
 class _ProgressCard extends StatelessWidget {
   const _ProgressCard({required this.steps});
@@ -4626,15 +5007,17 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                   setState(() => _selected = value);
                 },
                 child: Column(
-                  children: _reasons.map(
-                    (r) => RadioListTile<String>(
-                      value: r,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      activeColor: AppColors.blackCat,
-                      title: Text(r, style: const TextStyle(fontSize: 13)),
-                    ),
-                  ).toList(),
+                  children: _reasons
+                      .map(
+                        (r) => RadioListTile<String>(
+                          value: r,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          activeColor: AppColors.blackCat,
+                          title: Text(r, style: const TextStyle(fontSize: 13)),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
               TextField(
@@ -5575,7 +5958,9 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       final comment = _commentCtrl.text.trim();
       final tipAmount = _calculatedTip;
       final tipPercent = _selectedTipPercent;
-      final customTipAmount = _selectedTipPercent == null ? _customTipAmount : 0;
+      final customTipAmount = _selectedTipPercent == null
+          ? _customTipAmount
+          : 0;
       final nowIso = DateTime.now().toIso8601String();
 
       final table = _orderCollection == 'Company_Custom_Requests'
@@ -5586,8 +5971,9 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           ? 'company_custom_requests_details'
           : 'client_custom_requests_details';
 
-      final artistEmail =
-          widget.order.acceptedByArtistEmail.trim().toLowerCase();
+      final artistEmail = widget.order.acceptedByArtistEmail
+          .trim()
+          .toLowerCase();
 
       double? previousRatingValue;
 
@@ -5618,11 +6004,11 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
       final currentDetails =
           (orderData['details'] as Map?)?.cast<String, dynamic>() ??
-              <String, dynamic>{};
+          <String, dynamic>{};
 
       final currentPayload =
           (orderData['payload'] as Map?)?.cast<String, dynamic>() ??
-              <String, dynamic>{};
+          <String, dynamic>{};
 
       final clientReview = <String, dynamic>{
         'rating': _rating,
@@ -5638,40 +6024,43 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         'submittedAt': tipAmount > 0 ? nowIso : null,
       };
 
-      await supabase.from(table).update({
-        'client_rating': _rating,
-        'client_review_text': comment,
-        'client_review_submitted_at': nowIso,
-        'client_tip_amount': tipAmount,
-        'client_tip_percent': tipPercent,
-        'client_tip_custom_amount': customTipAmount,
-        'client_tip_submitted_at': tipAmount > 0 ? nowIso : null,
-        'updated_at': nowIso,
-        'details': {
-          ...currentDetails,
-          'clientRating': _rating,
-          'clientReviewText': comment,
-          'clientReviewSubmittedAt': nowIso,
-          'clientTipAmount': tipAmount,
-          'clientTipPercent': tipPercent,
-          'clientTipCustomAmount': customTipAmount,
-          'clientTipSubmittedAt': tipAmount > 0 ? nowIso : null,
-          'clientReview': clientReview,
-          'clientTip': clientTip,
-        },
-        'payload': {
-          ...currentPayload,
-          'clientRating': _rating,
-          'clientReviewText': comment,
-          'clientReviewSubmittedAt': nowIso,
-          'clientTipAmount': tipAmount,
-          'clientTipPercent': tipPercent,
-          'clientTipCustomAmount': customTipAmount,
-          'clientTipSubmittedAt': tipAmount > 0 ? nowIso : null,
-          'clientReview': clientReview,
-          'clientTip': clientTip,
-        },
-      }).eq('id', widget.order.id);
+      await supabase
+          .from(table)
+          .update({
+            'client_rating': _rating,
+            'client_review_text': comment,
+            'client_review_submitted_at': nowIso,
+            'client_tip_amount': tipAmount,
+            'client_tip_percent': tipPercent,
+            'client_tip_custom_amount': customTipAmount,
+            'client_tip_submitted_at': tipAmount > 0 ? nowIso : null,
+            'updated_at': nowIso,
+            'details': {
+              ...currentDetails,
+              'clientRating': _rating,
+              'clientReviewText': comment,
+              'clientReviewSubmittedAt': nowIso,
+              'clientTipAmount': tipAmount,
+              'clientTipPercent': tipPercent,
+              'clientTipCustomAmount': customTipAmount,
+              'clientTipSubmittedAt': tipAmount > 0 ? nowIso : null,
+              'clientReview': clientReview,
+              'clientTip': clientTip,
+            },
+            'payload': {
+              ...currentPayload,
+              'clientRating': _rating,
+              'clientReviewText': comment,
+              'clientReviewSubmittedAt': nowIso,
+              'clientTipAmount': tipAmount,
+              'clientTipPercent': tipPercent,
+              'clientTipCustomAmount': customTipAmount,
+              'clientTipSubmittedAt': tipAmount > 0 ? nowIso : null,
+              'clientReview': clientReview,
+              'clientTip': clientTip,
+            },
+          })
+          .eq('id', widget.order.id);
 
       await bestEffort(() async {
         final existingDetail = await supabase
@@ -5683,7 +6072,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
         final existingData =
             (existingDetail?['data'] as Map?)?.cast<String, dynamic>() ??
-                <String, dynamic>{};
+            <String, dynamic>{};
 
         final detailPayload = {
           ...existingData,
@@ -5703,10 +6092,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         } else {
           await supabase
               .from(detailsTable)
-              .update({
-                'data': detailPayload,
-                'updated_at': nowIso,
-              })
+              .update({'data': detailPayload, 'updated_at': nowIso})
               .eq('id', existingDetail['id']);
         }
       });
@@ -5734,7 +6120,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
             final stats =
                 (artistRow['stats'] as Map?)?.cast<String, dynamic>() ??
-                    <String, dynamic>{};
+                <String, dynamic>{};
 
             final currentCount = _asNonNegativeInt(
               stats['reviewCount'] ??
@@ -5747,36 +6133,43 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
             final currentRating =
                 _asDouble(
-                      stats['rating'] ??
-                          stats['averageRating'] ??
-                          artistRow['rating'] ??
-                          artistRow['average_rating'] ??
-                          artistRow['averageRating'] ??
-                          artistRow['panel_rating'],
-                    ) ??
-                    0.0;
+                  stats['rating'] ??
+                      stats['averageRating'] ??
+                      artistRow['rating'] ??
+                      artistRow['average_rating'] ??
+                      artistRow['averageRating'] ??
+                      artistRow['panel_rating'],
+                ) ??
+                0.0;
 
             final hadPrevious = (previousRatingValue ?? 0) > 0;
-            final safeCount = currentCount <= 0 ? (hadPrevious ? 1 : 0) : currentCount;
+            final safeCount = currentCount <= 0
+                ? (hadPrevious ? 1 : 0)
+                : currentCount;
             final nextCount = hadPrevious ? safeCount : (safeCount + 1);
-            final nextRating = currentRating >= _rating ? currentRating : _rating;
+            final nextRating = currentRating >= _rating
+                ? currentRating
+                : _rating;
 
-            await supabase.from(artistTable).update({
-              'stats': {
-                ...stats,
-                'rating': nextRating,
-                'averageRating': nextRating,
-                'reviewCount': nextCount,
-                'reviews': nextCount,
-              },
-              'rating': nextRating,
-              'average_rating': nextRating,
-              'review_count': nextCount,
-              'reviews': nextCount,
-              'panel_rating': nextRating,
-              'panel_reviews': nextCount,
-              'updated_at': nowIso,
-            }).eq('id', artistRow['id']);
+            await supabase
+                .from(artistTable)
+                .update({
+                  'stats': {
+                    ...stats,
+                    'rating': nextRating,
+                    'averageRating': nextRating,
+                    'reviewCount': nextCount,
+                    'reviews': nextCount,
+                  },
+                  'rating': nextRating,
+                  'average_rating': nextRating,
+                  'review_count': nextCount,
+                  'reviews': nextCount,
+                  'panel_rating': nextRating,
+                  'panel_reviews': nextCount,
+                  'updated_at': nowIso,
+                })
+                .eq('id', artistRow['id']);
           }
         });
       }
@@ -5789,8 +6182,9 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
             'source_collection': _orderCollection,
             'artist_email': artistEmail,
             'artist_name': widget.order.artistName,
-            'client_email':
-                (supabase.auth.currentUser?.email ?? '').trim().toLowerCase(),
+            'client_email': (supabase.auth.currentUser?.email ?? '')
+                .trim()
+                .toLowerCase(),
             'tip_amount': tipAmount,
             'tip_percent': tipPercent,
             'custom_tip_amount': customTipAmount,
@@ -5838,15 +6232,13 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           orderId: widget.order.id,
           orderNumber: widget.order.id,
           sourceCollection: _orderCollection,
-          extra: <String, dynamic>{
-            'rating': _rating,
-            'tipAmount': tipAmount,
-          },
+          extra: <String, dynamic>{'rating': _rating, 'tipAmount': tipAmount},
         );
       });
 
-      final clientEmail =
-          (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+      final clientEmail = (supabase.auth.currentUser?.email ?? '')
+          .trim()
+          .toLowerCase();
 
       if (clientEmail.isNotEmpty) {
         await bestEffort(() async {
@@ -5882,6 +6274,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
   Future<void> _loadLatestReviewFromDb() async {
     try {
       final snap = await AppDatabase.instance
@@ -5898,11 +6291,11 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       final submittedAtRaw =
           data['clientReviewSubmittedAt'] ?? review['submittedAt'];
       DateTime? submittedAt;
-        if (submittedAtRaw is DateTime) {
-          submittedAt = submittedAtRaw;
-        } else if (submittedAtRaw is String) {
-          submittedAt = DateTime.tryParse(submittedAtRaw);
-        }
+      if (submittedAtRaw is DateTime) {
+        submittedAt = submittedAtRaw;
+      } else if (submittedAtRaw is String) {
+        submittedAt = DateTime.tryParse(submittedAtRaw);
+      }
 
       final latestRating =
           _asDouble(data['clientRating']) ??
@@ -6055,13 +6448,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(alpha: 0.08),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                             focusedBorder: const OutlineInputBorder(
@@ -6149,13 +6546,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.zero,
                                 borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
                               focusedBorder: const OutlineInputBorder(
@@ -6401,10 +6802,7 @@ class _ClientStatusTabsState extends State<_ClientStatusTabs> {
             ),
           ),
           Container(height: 1, color: AppColors.blackCatBorderLight),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: content,
-          ),
+          Padding(padding: const EdgeInsets.all(12), child: content),
         ],
       ),
     );
@@ -6447,9 +6845,11 @@ class DeliveredOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
 
   @override
   Widget build(BuildContext context) {
@@ -6463,6 +6863,7 @@ class DeliveredOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: const Color(0xFF2E8B57),
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       rightPanel: _DeliveredReviewPanel(order: o),
     );
   }
@@ -6476,11 +6877,13 @@ class ExpiredOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
     this.onChat,
     this.onResubmit,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
   final VoidCallback? onChat;
   final Future<void> Function()? onResubmit;
 
@@ -6496,6 +6899,7 @@ class ExpiredOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: const Color(0xFFB65A1E),
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       showRightPanel: false,
       rightPanel: _InfoCard(
         title: 'Expired',
@@ -6522,11 +6926,13 @@ class CancelledOrderDetailsPage extends StatelessWidget {
     super.key,
     required this.order,
     this.isBrandViewer = false,
+    this.budgetViewMode = OrderBudgetViewMode.singleRange,
     this.onChat,
     this.onResubmit,
   });
   final dynamic order;
   final bool isBrandViewer;
+  final OrderBudgetViewMode budgetViewMode;
   final VoidCallback? onChat;
   final Future<void> Function()? onResubmit;
 
@@ -6542,6 +6948,7 @@ class CancelledOrderDetailsPage extends StatelessWidget {
       statusPillIconColor: const Color(0xFF6B6B6B),
       order: o,
       isBrandViewer: isBrandViewer,
+      budgetViewMode: budgetViewMode,
       showRightPanel: false,
       rightPanel: const SizedBox.shrink(),
       onCancelledChat: onChat,

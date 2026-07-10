@@ -19,7 +19,6 @@ import 'artist_reviews_page.dart';
 
 enum OrdersAudience { client, clientArtist, brand }
 
-
 class SubmittedOrderClientSummary {
   const SubmittedOrderClientSummary({
     this.clientId = '',
@@ -53,17 +52,21 @@ class SubmittedClientRequestSummary {
     this.contactName = '',
     this.campaignName = '',
     this.selectedArtist = '',
+    this.selectedArtistEmail = '',
     this.acceptedByArtistName = '',
     this.acceptedByArtistEmail = '',
     this.acceptedByClientEmail = '',
     this.clientResponseStatus = '',
     this.directClientStatus = '',
+    this.isDirectRequest = false,
+    this.fallbackToPool = true,
     this.status = 'pending',
     this.orderType = 'single',
     this.description = '',
     this.descriptionPreview = '',
     this.cancelReason = '',
     this.needByDisplay = '',
+    this.jntRevealDateDisplay = '',
     this.requestAcceptByDisplay = '',
     this.nailShape = '',
     this.nailLength = '',
@@ -80,6 +83,10 @@ class SubmittedClientRequestSummary {
     this.artistFinalAmount,
     this.budgetMin,
     this.budgetMax,
+    this.clientBudgetMin,
+    this.clientBudgetMax,
+    this.artistBudgetMin,
+    this.artistBudgetMax,
     this.clientSubmittedAt,
     this.needBy,
     this.requestAcceptBy,
@@ -114,17 +121,21 @@ class SubmittedClientRequestSummary {
   final String contactName;
   final String campaignName;
   final String selectedArtist;
+  final String selectedArtistEmail;
   final String acceptedByArtistName;
   final String acceptedByArtistEmail;
   final String acceptedByClientEmail;
   final String clientResponseStatus;
   final String directClientStatus;
+  final bool isDirectRequest;
+  final bool fallbackToPool;
   final String status;
   final String orderType;
   final String description;
   final String descriptionPreview;
   final String cancelReason;
   final String needByDisplay;
+  final String jntRevealDateDisplay;
   final String requestAcceptByDisplay;
   final String nailShape;
   final String nailLength;
@@ -141,6 +152,10 @@ class SubmittedClientRequestSummary {
   final num? artistFinalAmount;
   final int? budgetMin;
   final int? budgetMax;
+  final int? clientBudgetMin;
+  final int? clientBudgetMax;
+  final int? artistBudgetMin;
+  final int? artistBudgetMax;
   final DateTime? clientSubmittedAt;
   final DateTime? needBy;
   final DateTime? requestAcceptBy;
@@ -195,7 +210,10 @@ class _SupabaseOrderService {
 
   static List<String> asStringList(Object? value) {
     if (value is List) {
-      return value.map((e) => (e ?? '').toString()).where((e) => e.trim().isNotEmpty).toList(growable: false);
+      return value
+          .map((e) => (e ?? '').toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList(growable: false);
     }
     final text = (value ?? '').toString().trim();
     return text.isEmpty ? const <String>[] : <String>[text];
@@ -229,7 +247,10 @@ class _SupabaseOrderService {
     return num.tryParse((value ?? '').toString());
   }
 
-  static Future<Map<String, dynamic>> getRequest(String collection, String id) async {
+  static Future<Map<String, dynamic>> getRequest(
+    String collection,
+    String id,
+  ) async {
     final table = tableForCollection(collection);
     final row = await _db.from(table).select().eq('id', id).maybeSingle();
     return asMap(row);
@@ -260,10 +281,7 @@ class _SupabaseOrderService {
           if (data.isEmpty) continue;
           final detailKey = (row['detail_key'] ?? '').toString().trim();
           final existing = result[requestId] ?? <String, dynamic>{};
-          final merged = <String, dynamic>{
-            ...existing,
-            ...data,
-          };
+          final merged = <String, dynamic>{...existing, ...data};
           if (detailKey.isNotEmpty) {
             merged[detailKey] = <String, dynamic>{
               ...asMap(existing[detailKey]),
@@ -323,7 +341,7 @@ class _SupabaseOrderService {
       final summary = asMap(row['summary']);
       final details = asMap(row['details']);
       final payload = asMap(row['payload']);
-      
+
       final requestDetails = asMap(row['request_details']);
       final detailsOrder = asMap(details['order']);
       final payloadOrder = asMap(payload['order']);
@@ -349,32 +367,81 @@ class _SupabaseOrderService {
         (payload['acceptedByClientEmail'] ?? '').toString(),
         (acceptance['acceptedByClientEmail'] ?? '').toString(),
         (requestDetails['clientEmail'] ?? '').toString(),
-      }.map((e) => e.trim().toLowerCase())
-      .where((e) => e.isNotEmpty)
-      .toSet();
+      }.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
 
       if (emails.intersection(allEmailCandidates).isNotEmpty) {
         return true;
       }
       final candidates = <String>{
-        pickText([row['client_email'], summary['clientEmail'], details['clientEmail'], payload['clientEmail'], requestDetails['clientEmail']]).toLowerCase(),
-        pickText([row['selected_client_email'], summary['selectedClientEmail'], details['selectedClientEmail'], payload['selectedClientEmail'], detailsOrder['selectedClientEmail'], payloadOrder['selectedClientEmail']]).toLowerCase(),
-        pickText([row['accepted_by_client_email'], summary['acceptedByClientEmail'], details['acceptedByClientEmail'], payload['acceptedByClientEmail'], acceptance['acceptedByClientEmail']]).toLowerCase(),
+        pickText([
+          row['client_email'],
+          summary['clientEmail'],
+          details['clientEmail'],
+          payload['clientEmail'],
+          requestDetails['clientEmail'],
+        ]).toLowerCase(),
+        pickText([
+          row['selected_client_email'],
+          summary['selectedClientEmail'],
+          details['selectedClientEmail'],
+          payload['selectedClientEmail'],
+          detailsOrder['selectedClientEmail'],
+          payloadOrder['selectedClientEmail'],
+        ]).toLowerCase(),
+        pickText([
+          row['accepted_by_client_email'],
+          summary['acceptedByClientEmail'],
+          details['acceptedByClientEmail'],
+          payload['acceptedByClientEmail'],
+          acceptance['acceptedByClientEmail'],
+        ]).toLowerCase(),
       }..removeWhere((e) => e.isEmpty);
       if (emails.intersection(candidates).isNotEmpty) return true;
       if (uid.isNotEmpty) {
         final ids = <String>{
-          pickText([row['client_id'], row['client_uid'], summary['clientId'], details['clientId'], payload['clientId']]),
-          pickText([summary['clientUid'], details['clientUid'], payload['clientUid']]),
-          pickText([row['accepted_by_client_id'], summary['acceptedByClientId'], details['acceptedByClientId'], payload['acceptedByClientId'], acceptance['acceptedByClientId']]),
-          pickText([row['accepted_by_client_uid'], summary['acceptedByClientUid'], details['acceptedByClientUid'], payload['acceptedByClientUid'], acceptance['acceptedByClientUid']]),
+          pickText([
+            row['client_id'],
+            row['client_uid'],
+            summary['clientId'],
+            details['clientId'],
+            payload['clientId'],
+          ]),
+          pickText([
+            summary['clientUid'],
+            details['clientUid'],
+            payload['clientUid'],
+          ]),
+          pickText([
+            row['accepted_by_client_id'],
+            summary['acceptedByClientId'],
+            details['acceptedByClientId'],
+            payload['acceptedByClientId'],
+            acceptance['acceptedByClientId'],
+          ]),
+          pickText([
+            row['accepted_by_client_uid'],
+            summary['acceptedByClientUid'],
+            details['acceptedByClientUid'],
+            payload['acceptedByClientUid'],
+            acceptance['acceptedByClientUid'],
+          ]),
         }..removeWhere((e) => e.isEmpty);
         if (ids.contains(uid)) return true;
       }
       if (name.isNotEmpty) {
         final names = <String>{
-          pickText([row['client_name'], summary['clientName'], details['clientName'], payload['clientName']]).toLowerCase(),
-          pickText([row['selected_client'], summary['selectedClient'], details['selectedClient'], payload['selectedClient']]).toLowerCase(),
+          pickText([
+            row['client_name'],
+            summary['clientName'],
+            details['clientName'],
+            payload['clientName'],
+          ]).toLowerCase(),
+          pickText([
+            row['selected_client'],
+            summary['selectedClient'],
+            details['selectedClient'],
+            payload['selectedClient'],
+          ]).toLowerCase(),
         }..removeWhere((e) => e.isEmpty);
         if (names.contains(name)) return true;
       }
@@ -393,7 +460,10 @@ class _SupabaseOrderService {
     return out;
   }
 
-  static SubmittedClientRequestSummary fromRow(Map<String, dynamic> row, String table) {
+  static SubmittedClientRequestSummary fromRow(
+    Map<String, dynamic> row,
+    String table,
+  ) {
     final summary = asMap(row['summary']);
     final details = asMap(row['details']);
     final payload = asMap(row['payload']);
@@ -414,7 +484,9 @@ class _SupabaseOrderService {
     final shipping = asMap(row['shipping']);
     final review = asMap(row['review']);
     final clientReview = asMap(row['client_review']);
-    final designApproval = asMap(row['designApproval']).isNotEmpty ? asMap(row['designApproval']) : asMap(row['design_approval']);
+    final designApproval = asMap(row['designApproval']).isNotEmpty
+        ? asMap(row['designApproval'])
+        : asMap(row['design_approval']);
     final completion = asMap(row['completion']);
 
     String text(List<Object?> values) => pickText(values);
@@ -425,6 +497,29 @@ class _SupabaseOrderService {
       }
       return null;
     }
+
+    String displayDate(List<Object?> values) {
+      final explicit = text(values);
+      if (explicit.isNotEmpty) return explicit;
+      final resolved = date(values);
+      if (resolved == null) return '';
+      const months = <String>[
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[resolved.month - 1]} ${resolved.day}, ${resolved.year}';
+    }
+
     int? integer(List<Object?> values) {
       for (final value in values) {
         final i = asInt(value);
@@ -432,6 +527,7 @@ class _SupabaseOrderService {
       }
       return null;
     }
+
     num? number(List<Object?> values) {
       for (final value in values) {
         final n = asNum(value);
@@ -439,21 +535,24 @@ class _SupabaseOrderService {
       }
       return null;
     }
+
     List<String> list(List<Object?> values) {
       for (final value in values) {
         final l = asStringList(value);
         if (l.isNotEmpty) return l;
       }
-    return const <String>[];
-  }
+      return const <String>[];
+    }
 
     Map<String, String> stringMap(List<Object?> values) {
       for (final value in values) {
         final m = asMap(value);
-        if (m.isNotEmpty) return m.map((k, v) => MapEntry(k, (v ?? '').toString()));
+        if (m.isNotEmpty)
+          return m.map((k, v) => MapEntry(k, (v ?? '').toString()));
       }
       return const <String, String>{};
     }
+
     String dimText(Object? value) {
       if (value is num) {
         return value == value.roundToDouble()
@@ -463,6 +562,7 @@ class _SupabaseOrderService {
       final text = (value ?? '').toString().trim();
       return text;
     }
+
     Map<String, String> handDimensionMap(
       bool isLeft,
       List<Object?> directValues,
@@ -523,56 +623,116 @@ class _SupabaseOrderService {
         order['clients'],
       ]);
       if (raw is! List) return const <SubmittedOrderClientSummary>[];
-      return raw.whereType<Object>().map((item) {
-        final m = asMap(item);
-        final savedNails = asMap(m['savedNails']);
-        final draftNails = asMap(m['draftNails']);
-        final nailPreferences = savedNails.isNotEmpty
-            ? savedNails
-            : draftNails;
-        return SubmittedOrderClientSummary(
-          clientId: text([m['clientId'], m['client_id'], m['id']]),
-          clientName: text([m['clientName'], m['client_name'], m['name']]),
-          clientEmail: text([m['clientEmail'], m['client_email'], m['email']]),
-          responseStatus: text([m['responseStatus'], m['response_status'], m['status']]),
-          nailShape: text([
-            m['nailShape'],
-            m['nail_shape'],
-            nailPreferences['shape'],
-          ]),
-          nailLength: text([
-            m['nailLength'],
-            m['nail_length'],
-            nailPreferences['length'],
-          ]),
-          leftHandDimensions: handDimensionMap(
-            true,
-            [m['leftHandDimensions'], m['left_hand_dimensions'], m['leftHand']],
-            [m, draftNails, savedNails, nailPreferences],
-          ),
-          rightHandDimensions: handDimensionMap(
-            false,
-            [m['rightHandDimensions'], m['right_hand_dimensions'], m['rightHand']],
-            [m, draftNails, savedNails, nailPreferences],
-          ),
-        );
-      }).toList(growable: false);
+      return raw
+          .whereType<Object>()
+          .map((item) {
+            final m = asMap(item);
+            final savedNails = asMap(m['savedNails']);
+            final draftNails = asMap(m['draftNails']);
+            final nailPreferences = savedNails.isNotEmpty
+                ? savedNails
+                : draftNails;
+            return SubmittedOrderClientSummary(
+              clientId: text([m['clientId'], m['client_id'], m['id']]),
+              clientName: text([m['clientName'], m['client_name'], m['name']]),
+              clientEmail: text([
+                m['clientEmail'],
+                m['client_email'],
+                m['email'],
+              ]),
+              responseStatus: text([
+                m['responseStatus'],
+                m['response_status'],
+                m['status'],
+              ]),
+              nailShape: text([
+                m['nailShape'],
+                m['nail_shape'],
+                nailPreferences['shape'],
+              ]),
+              nailLength: text([
+                m['nailLength'],
+                m['nail_length'],
+                nailPreferences['length'],
+              ]),
+              leftHandDimensions: handDimensionMap(
+                true,
+                [
+                  m['leftHandDimensions'],
+                  m['left_hand_dimensions'],
+                  m['leftHand'],
+                ],
+                [m, draftNails, savedNails, nailPreferences],
+              ),
+              rightHandDimensions: handDimensionMap(
+                false,
+                [
+                  m['rightHandDimensions'],
+                  m['right_hand_dimensions'],
+                  m['rightHand'],
+                ],
+                [m, draftNails, savedNails, nailPreferences],
+              ),
+            );
+          })
+          .toList(growable: false);
     }
 
     return SubmittedClientRequestSummary(
       id: text([row['id']]),
       sourceCollection: collectionForTable(table),
-      orderNumber: text([row['order_number'], summary['orderNumber'], details['orderNumber'], payload['orderNumber'], row['request_number'], row['client_request_number']]),
-      requestNumber: text([row['request_number'], summary['requestNumber'], details['requestNumber'], payload['requestNumber']]),
-      clientEmail: text([row['client_email'], summary['clientEmail'], details['clientEmail'], payload['clientEmail']]),
-      clientName: text([row['client_name'], summary['clientName'], details['clientName'], payload['clientName']]),
-      contactName: text([row['company_name'], row['brand_name'], summary['companyName'], details['companyName'], payload['companyName']]),
-      campaignName: text([row['campaign_name'], summary['campaignName'], details['campaignName'], payload['campaignName'], row['title']]),
+      orderNumber: text([
+        row['order_number'],
+        summary['orderNumber'],
+        details['orderNumber'],
+        payload['orderNumber'],
+        row['request_number'],
+        row['client_request_number'],
+      ]),
+      requestNumber: text([
+        row['request_number'],
+        summary['requestNumber'],
+        details['requestNumber'],
+        payload['requestNumber'],
+      ]),
+      clientEmail: text([
+        row['client_email'],
+        summary['clientEmail'],
+        details['clientEmail'],
+        payload['clientEmail'],
+      ]),
+      clientName: text([
+        row['client_name'],
+        summary['clientName'],
+        details['clientName'],
+        payload['clientName'],
+      ]),
+      contactName: text([
+        row['company_name'],
+        row['brand_name'],
+        summary['companyName'],
+        details['companyName'],
+        payload['companyName'],
+      ]),
+      campaignName: text([
+        row['campaign_name'],
+        summary['campaignName'],
+        details['campaignName'],
+        payload['campaignName'],
+        row['title'],
+      ]),
       selectedArtist: text([
         row['selected_artist'],
         summary['selectedArtist'],
         details['selectedArtist'],
         payload['selectedArtist'],
+      ]),
+      selectedArtistEmail: text([
+        row['selected_artist_email'],
+        summary['selectedArtistEmail'],
+        details['selectedArtistEmail'],
+        payload['selectedArtistEmail'],
+        order['selectedArtistEmail'],
       ]),
       acceptedByArtistName: text([
         row['accepted_by_artist_name'],
@@ -602,45 +762,340 @@ class _SupabaseOrderService {
         payload['clientResponseStatus'],
         acceptance['clientResponseStatus'],
       ]),
-      directClientStatus: text([row['direct_client_status'], summary['directClientStatus'], details['directClientStatus'], payload['directClientStatus']]),
-      status: text([row['status'], summary['status'], details['status'], payload['status'], 'pending']),
-      orderType: text([row['order_type'], summary['orderType'], details['orderType'], payload['orderType'], order['type'], 'single']),
-      description: text([row['description'], requestDetails['description'], details['description'], payload['description'], summary['description']]),
-      descriptionPreview: text([row['description_preview'], summary['descriptionPreview'], details['descriptionPreview'], payload['descriptionPreview'], row['description']]),
-      cancelReason: text([row['cancel_reason'], row['cancelReason'], summary['cancelReason'], details['cancelReason'], payload['cancelReason']]),
-      needByDisplay: text([row['need_by_display'], summary['needByDisplay'], details['needByDisplay'], payload['needByDisplay'], requestDetails['needByDisplay'], requestDetails['needBy']]),
-      requestAcceptByDisplay: text([row['request_accept_by_display'], summary['requestAcceptByDisplay'], details['requestAcceptByDisplay'], payload['requestAcceptByDisplay']]),
-      nailShape: text([row['nail_shape'], summary['nailShape'], details['nailShape'], payload['nailShape'], requestDetails['nailShape'], asMap(details['nailPreferences'])['shape'], asMap(payload['nailPreferences'])['shape']]),
-      nailLength: text([row['nail_length'], summary['nailLength'], details['nailLength'], payload['nailLength'], requestDetails['nailLength'], asMap(details['nailPreferences'])['length'], asMap(payload['nailPreferences'])['length']]),
-      paymentStatus: text([row['payment_status'], payment['status'], summary['paymentStatus'], details['paymentStatus'], payload['paymentStatus']]),
-      paymentLink: text([row['payment_link'], payment['link'], payment['paymentLink'], details['paymentLink'], payload['paymentLink']]),
-      shippedByCourier: text([row['shipped_by_courier'], row['courier'], shipping['courier'], details['shippedByCourier'], payload['shippedByCourier']]),
-      trackingNumber: text([row['tracking_number'], shipping['trackingNumber'], details['trackingNumber'], payload['trackingNumber']]),
-      completionReviewStatus: text([row['completion_review_status'], completion['reviewStatus'], details['completionReviewStatus'], payload['completionReviewStatus']]),
-      completionDeclineReason: text([row['completion_decline_reason'], completion['declineReason'], details['completionDeclineReason'], payload['completionDeclineReason']]),
-      completionDeclineDescription: text([row['completion_decline_description'], completion['declineDescription'], details['completionDeclineDescription'], payload['completionDeclineDescription']]),
-      designApprovalStatus: text([row['design_approval_status'], designApproval['status'], details['designApprovalStatus'], payload['designApprovalStatus']]),
-      clientReviewText: text([row['client_review_comment'], row['review_comment'], clientReview['comment'], review['comment'], details['clientReviewText'], payload['clientReviewText']]),
-      clientRating: integer([row['client_review_stars'], row['review_stars'], clientReview['stars'], review['stars'], details['clientRating'], payload['clientRating']]),
-      artistFinalAmount: number([row['artist_final_amount'], row['final_amount_by_artist'], payment['artistFinalAmount'], details['artistFinalAmount'], payload['artistFinalAmount']]),
-      budgetMin: integer([row['budget_min'], summary['budgetMin'], details['budgetMin'], payload['budgetMin']]),
-      budgetMax: integer([row['budget_max'], summary['budgetMax'], details['budgetMax'], payload['budgetMax']]),
-      clientSubmittedAt: date([row['created_at'], summary['createdAt'], details['createdAt'], payload['createdAt']]),
-      needBy: date([row['need_by'], summary['needBy'], details['needBy'], payload['needBy'], requestDetails['needBy']]),
-      requestAcceptBy: date([row['request_accept_by'], summary['requestAcceptBy'], details['requestAcceptBy'], payload['requestAcceptBy']]),
-      paidAt: date([row['paid_at'], payment['paidAt'], details['paidAt'], payload['paidAt']]),
-      cancelledAt: date([row['cancelled_at'], row['cancelledAt'], details['cancelledAt'], payload['cancelledAt']]),
-      shippedAt: date([row['shipped_at'], shipping['shippedAt'], details['shippedAt'], payload['shippedAt']]),
-      deliveredAt: date([row['delivered_at'], shipping['deliveredAt'], details['deliveredAt'], payload['deliveredAt']]),
-      designApprovedAt: date([row['design_approved_at'], designApproval['approvedAt'], details['designApprovedAt'], payload['designApprovedAt']]),
-      designSubmittedAt: date([row['design_submitted_at'], designApproval['submittedAt'], details['designSubmittedAt'], payload['designSubmittedAt']]),
-      designApprovalDueAt: date([row['design_approval_due_at'], designApproval['dueAt'], details['designApprovalDueAt'], payload['designApprovalDueAt']]),
-      designReminderSentAt: date([row['design_reminder_sent_at'], designApproval['reminderSentAt'], details['designReminderSentAt'], payload['designReminderSentAt']]),
-      completionDeclinedAt: date([row['completion_declined_at'], completion['declinedAt'], details['completionDeclinedAt'], payload['completionDeclinedAt']]),
-      clientReviewSubmittedAt: date([row['client_review_submitted_at'], row['review_submitted_at'], clientReview['submittedAt'], review['submittedAt'], details['clientReviewSubmittedAt'], payload['clientReviewSubmittedAt']]),
-      inspirationPhotos: list([row['inspiration_photos'], summary['inspirationPhotos'], details['inspirationPhotos'], payload['inspirationPhotos'], requestDetails['inspirationPhotos'], requestDetails['brandInspirationPhotos'], details['brandInspirationPhotos'], payload['brandInspirationPhotos']]),
-      artistCompletedPhotos: list([row['artist_completed_photos'], details['artistCompletedPhotos'], payload['artistCompletedPhotos']]),
-      designPreviewPhotos: list([row['design_preview_photos'], details['designPreviewPhotos'], payload['designPreviewPhotos']]),
+      directClientStatus: text([
+        row['direct_client_status'],
+        summary['directClientStatus'],
+        details['directClientStatus'],
+        payload['directClientStatus'],
+      ]),
+      isDirectRequest:
+          row['is_direct_request'] == true ||
+          summary['isDirectRequest'] == true ||
+          details['isDirectRequest'] == true ||
+          payload['isDirectRequest'] == true ||
+          order['isDirectRequest'] == true ||
+          text([
+            row['selected_artist_email'],
+            summary['selectedArtistEmail'],
+            details['selectedArtistEmail'],
+            payload['selectedArtistEmail'],
+            order['selectedArtistEmail'],
+            row['selected_artist'],
+            summary['selectedArtist'],
+            details['selectedArtist'],
+            payload['selectedArtist'],
+          ]).trim().isNotEmpty,
+      fallbackToPool:
+          row['fallback_to_pool'] == true ||
+          summary['fallbackToPool'] == true ||
+          details['fallbackToPool'] == true ||
+          payload['fallbackToPool'] == true ||
+          order['fallbackToPool'] == true,
+      status: text([
+        row['status'],
+        summary['status'],
+        details['status'],
+        payload['status'],
+        'pending',
+      ]),
+      orderType: text([
+        row['order_type'],
+        summary['orderType'],
+        details['orderType'],
+        payload['orderType'],
+        order['type'],
+        'single',
+      ]),
+      description: text([
+        row['description'],
+        requestDetails['description'],
+        details['description'],
+        payload['description'],
+        summary['description'],
+      ]),
+      descriptionPreview: text([
+        row['description_preview'],
+        summary['descriptionPreview'],
+        details['descriptionPreview'],
+        payload['descriptionPreview'],
+        row['description'],
+      ]),
+      cancelReason: text([
+        row['cancel_reason'],
+        row['cancelReason'],
+        summary['cancelReason'],
+        details['cancelReason'],
+        payload['cancelReason'],
+      ]),
+      needByDisplay: text([
+        row['need_by_display'],
+        summary['needByDisplay'],
+        details['needByDisplay'],
+        payload['needByDisplay'],
+        requestDetails['needByDisplay'],
+        requestDetails['needBy'],
+      ]),
+      jntRevealDateDisplay: displayDate([
+        row['jnt_reveal_date_display'],
+        row['jntRevealDateDisplay'],
+        summary['jntRevealDateDisplay'],
+        details['jntRevealDateDisplay'],
+        payload['jntRevealDateDisplay'],
+        requestDetails['jntRevealDateDisplay'],
+        row['jnt_reveal_date'],
+        row['jntRevealDate'],
+        summary['jntRevealDate'],
+        details['jntRevealDate'],
+        payload['jntRevealDate'],
+        requestDetails['jntRevealDate'],
+      ]),
+      requestAcceptByDisplay: text([
+        row['request_accept_by_display'],
+        summary['requestAcceptByDisplay'],
+        details['requestAcceptByDisplay'],
+        payload['requestAcceptByDisplay'],
+      ]),
+      nailShape: text([
+        row['nail_shape'],
+        summary['nailShape'],
+        details['nailShape'],
+        payload['nailShape'],
+        requestDetails['nailShape'],
+        asMap(details['nailPreferences'])['shape'],
+        asMap(payload['nailPreferences'])['shape'],
+      ]),
+      nailLength: text([
+        row['nail_length'],
+        summary['nailLength'],
+        details['nailLength'],
+        payload['nailLength'],
+        requestDetails['nailLength'],
+        asMap(details['nailPreferences'])['length'],
+        asMap(payload['nailPreferences'])['length'],
+      ]),
+      paymentStatus: text([
+        row['payment_status'],
+        payment['status'],
+        summary['paymentStatus'],
+        details['paymentStatus'],
+        payload['paymentStatus'],
+      ]),
+      paymentLink: text([
+        row['payment_link'],
+        payment['link'],
+        payment['paymentLink'],
+        details['paymentLink'],
+        payload['paymentLink'],
+      ]),
+      shippedByCourier: text([
+        row['shipped_by_courier'],
+        row['courier'],
+        shipping['courier'],
+        details['shippedByCourier'],
+        payload['shippedByCourier'],
+      ]),
+      trackingNumber: text([
+        row['tracking_number'],
+        shipping['trackingNumber'],
+        details['trackingNumber'],
+        payload['trackingNumber'],
+      ]),
+      completionReviewStatus: text([
+        row['completion_review_status'],
+        completion['reviewStatus'],
+        details['completionReviewStatus'],
+        payload['completionReviewStatus'],
+      ]),
+      completionDeclineReason: text([
+        row['completion_decline_reason'],
+        completion['declineReason'],
+        details['completionDeclineReason'],
+        payload['completionDeclineReason'],
+      ]),
+      completionDeclineDescription: text([
+        row['completion_decline_description'],
+        completion['declineDescription'],
+        details['completionDeclineDescription'],
+        payload['completionDeclineDescription'],
+      ]),
+      designApprovalStatus: text([
+        row['design_approval_status'],
+        designApproval['status'],
+        details['designApprovalStatus'],
+        payload['designApprovalStatus'],
+      ]),
+      clientReviewText: text([
+        row['client_review_comment'],
+        row['review_comment'],
+        clientReview['comment'],
+        review['comment'],
+        details['clientReviewText'],
+        payload['clientReviewText'],
+      ]),
+      clientRating: integer([
+        row['client_review_stars'],
+        row['review_stars'],
+        clientReview['stars'],
+        review['stars'],
+        details['clientRating'],
+        payload['clientRating'],
+      ]),
+      artistFinalAmount: number([
+        row['artist_final_amount'],
+        row['final_amount_by_artist'],
+        payment['artistFinalAmount'],
+        details['artistFinalAmount'],
+        payload['artistFinalAmount'],
+      ]),
+      budgetMin: integer([
+        row['budget_min'],
+        summary['budgetMin'],
+        details['budgetMin'],
+        payload['budgetMin'],
+      ]),
+      budgetMax: integer([
+        row['budget_max'],
+        summary['budgetMax'],
+        details['budgetMax'],
+        payload['budgetMax'],
+      ]),
+      clientBudgetMin: integer([
+        row['client_budget_min'],
+        row['clientBudgetMin'],
+        summary['clientBudgetMin'],
+        details['clientBudgetMin'],
+        payload['clientBudgetMin'],
+        asMap(details['clientBudget'])['min'],
+        asMap(payload['clientBudget'])['min'],
+      ]),
+      clientBudgetMax: integer([
+        row['client_budget_max'],
+        row['clientBudgetMax'],
+        summary['clientBudgetMax'],
+        details['clientBudgetMax'],
+        payload['clientBudgetMax'],
+        asMap(details['clientBudget'])['max'],
+        asMap(payload['clientBudget'])['max'],
+      ]),
+      artistBudgetMin: integer([
+        row['artist_budget_min'],
+        row['artistBudgetMin'],
+        summary['artistBudgetMin'],
+        details['artistBudgetMin'],
+        payload['artistBudgetMin'],
+        asMap(details['artistBudget'])['min'],
+        asMap(payload['artistBudget'])['min'],
+      ]),
+      artistBudgetMax: integer([
+        row['artist_budget_max'],
+        row['artistBudgetMax'],
+        summary['artistBudgetMax'],
+        details['artistBudgetMax'],
+        payload['artistBudgetMax'],
+        asMap(details['artistBudget'])['max'],
+        asMap(payload['artistBudget'])['max'],
+      ]),
+      clientSubmittedAt: date([
+        row['created_at'],
+        summary['createdAt'],
+        details['createdAt'],
+        payload['createdAt'],
+      ]),
+      needBy: date([
+        row['need_by'],
+        summary['needBy'],
+        details['needBy'],
+        payload['needBy'],
+        requestDetails['needBy'],
+      ]),
+      requestAcceptBy: date([
+        row['request_accept_by'],
+        summary['requestAcceptBy'],
+        details['requestAcceptBy'],
+        payload['requestAcceptBy'],
+      ]),
+      paidAt: date([
+        row['paid_at'],
+        payment['paidAt'],
+        details['paidAt'],
+        payload['paidAt'],
+      ]),
+      cancelledAt: date([
+        row['cancelled_at'],
+        row['cancelledAt'],
+        details['cancelledAt'],
+        payload['cancelledAt'],
+      ]),
+      shippedAt: date([
+        row['shipped_at'],
+        shipping['shippedAt'],
+        details['shippedAt'],
+        payload['shippedAt'],
+      ]),
+      deliveredAt: date([
+        row['delivered_at'],
+        shipping['deliveredAt'],
+        details['deliveredAt'],
+        payload['deliveredAt'],
+      ]),
+      designApprovedAt: date([
+        row['design_approved_at'],
+        designApproval['approvedAt'],
+        details['designApprovedAt'],
+        payload['designApprovedAt'],
+      ]),
+      designSubmittedAt: date([
+        row['design_submitted_at'],
+        designApproval['submittedAt'],
+        details['designSubmittedAt'],
+        payload['designSubmittedAt'],
+      ]),
+      designApprovalDueAt: date([
+        row['design_approval_due_at'],
+        designApproval['dueAt'],
+        details['designApprovalDueAt'],
+        payload['designApprovalDueAt'],
+      ]),
+      designReminderSentAt: date([
+        row['design_reminder_sent_at'],
+        designApproval['reminderSentAt'],
+        details['designReminderSentAt'],
+        payload['designReminderSentAt'],
+      ]),
+      completionDeclinedAt: date([
+        row['completion_declined_at'],
+        completion['declinedAt'],
+        details['completionDeclinedAt'],
+        payload['completionDeclinedAt'],
+      ]),
+      clientReviewSubmittedAt: date([
+        row['client_review_submitted_at'],
+        row['review_submitted_at'],
+        clientReview['submittedAt'],
+        review['submittedAt'],
+        details['clientReviewSubmittedAt'],
+        payload['clientReviewSubmittedAt'],
+      ]),
+      inspirationPhotos: list([
+        row['inspiration_photos'],
+        summary['inspirationPhotos'],
+        details['inspirationPhotos'],
+        payload['inspirationPhotos'],
+        requestDetails['inspirationPhotos'],
+        requestDetails['brandInspirationPhotos'],
+        details['brandInspirationPhotos'],
+        payload['brandInspirationPhotos'],
+      ]),
+      artistCompletedPhotos: list([
+        row['artist_completed_photos'],
+        details['artistCompletedPhotos'],
+        payload['artistCompletedPhotos'],
+      ]),
+      designPreviewPhotos: list([
+        row['design_preview_photos'],
+        details['designPreviewPhotos'],
+        payload['designPreviewPhotos'],
+      ]),
       leftHandDimensions: handDimensionMap(
         true,
         [
@@ -662,17 +1117,41 @@ class _SupabaseOrderService {
         [row, summary, details, payload, requestDetails, order],
       ),
       groupClients: groupClients(),
-      declinedByClientEmails: list([row['declined_by_client_emails'], summary['declinedByClientEmails'], details['declinedByClientEmails'], payload['declinedByClientEmails']]),
-      declinedByArtistEmails: list([row['declined_by_artist_emails'], summary['declinedByArtistEmails'], details['declinedByArtistEmails'], payload['declinedByArtistEmails']]),
-      clientProfileImage: text([row['client_profile_image'], summary['clientProfileImage'], details['clientProfileImage'], payload['clientProfileImage']]),
-      artistProfileImage: text([row['artist_profile_image'], summary['artistProfileImage'], details['artistProfileImage'], payload['artistProfileImage']]),
+      declinedByClientEmails: list([
+        row['declined_by_client_emails'],
+        summary['declinedByClientEmails'],
+        details['declinedByClientEmails'],
+        payload['declinedByClientEmails'],
+      ]),
+      declinedByArtistEmails: list([
+        row['declined_by_artist_emails'],
+        summary['declinedByArtistEmails'],
+        details['declinedByArtistEmails'],
+        payload['declinedByArtistEmails'],
+      ]),
+      clientProfileImage: text([
+        row['client_profile_image'],
+        summary['clientProfileImage'],
+        details['clientProfileImage'],
+        payload['clientProfileImage'],
+      ]),
+      artistProfileImage: text([
+        row['artist_profile_image'],
+        summary['artistProfileImage'],
+        details['artistProfileImage'],
+        payload['artistProfileImage'],
+      ]),
     );
   }
 
   static Future<String?> resolveStorageUrl(String raw) async {
     final value = raw.trim();
     if (value.isEmpty) return null;
-    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') || value.startsWith('blob:')) return value;
+    if (value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('data:') ||
+        value.startsWith('blob:'))
+      return value;
     if (value.startsWith('gs://')) return null;
     final cleaned = value.startsWith('/') ? value.substring(1) : value;
     final parts = cleaned.split('/');
@@ -691,13 +1170,16 @@ class _SupabaseOrderService {
   }
 }
 
-
 class _CompositeStreamSubscription<T> implements StreamSubscription<T> {
   _CompositeStreamSubscription(this._inner, {required this.onCancelExtra});
   final StreamSubscription<T> _inner;
   final Future<void> Function() onCancelExtra;
   @override
-  Future<void> cancel() async { await _inner.cancel(); await onCancelExtra(); }
+  Future<void> cancel() async {
+    await _inner.cancel();
+    await onCancelExtra();
+  }
+
   @override
   void onData(void Function(T data)? handleData) => _inner.onData(handleData);
   @override
@@ -834,7 +1316,9 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   Future<void> _listenBrandPartnerStatus() async {
     final user = Supabase.instance.client.auth.currentUser;
     final uid = user?.id;
-    final email = (user?.email ?? widget.profile.basic.email).trim().toLowerCase();
+    final email = (user?.email ?? widget.profile.basic.email)
+        .trim()
+        .toLowerCase();
     if ((uid == null || uid.isEmpty) && email.isEmpty) return;
 
     try {
@@ -912,29 +1396,35 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         )
         .subscribe();
 
-    _submittedRequestsSub = controller.stream.listen((items) {
-      final filteredItems = items
-          .where(
-            (req) =>
-                _isVisibleForAudience(req, widget.audience) &&
-                !_shouldHideFromClientArtistOrders(req, currentUserEmail),
-          )
-          .toList(growable: false);
-      unawaited(_syncExpiredRequests(filteredItems));
-      final orders = filteredItems
-          .map((req) => _mapSubmittedRequestToOrder(req, currentUserEmail))
-          .toList()
-        ..sort(
-          (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
-            a.createdAt ?? DateTime(1970),
-          ),
-        );
-      if (!mounted) return;
-      setState(() => _submittedOrders = orders);
-    }, onError: (_) {
-      if (!mounted) return;
-      setState(() => _submittedOrders = const []);
-    });
+    _submittedRequestsSub = controller.stream.listen(
+      (items) {
+        final filteredItems = items
+            .where(
+              (req) =>
+                  _isVisibleForAudience(req, widget.audience) &&
+                  !_shouldHideFromClientArtistOrders(req, currentUserEmail),
+            )
+            .toList(growable: false);
+        unawaited(_syncExpiredRequests(filteredItems));
+        final orders =
+            filteredItems
+                .map(
+                  (req) => _mapSubmittedRequestToOrder(req, currentUserEmail),
+                )
+                .toList()
+              ..sort(
+                (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
+                  a.createdAt ?? DateTime(1970),
+                ),
+              );
+        if (!mounted) return;
+        setState(() => _submittedOrders = orders);
+      },
+      onError: (_) {
+        if (!mounted) return;
+        setState(() => _submittedOrders = const []);
+      },
+    );
 
     _submittedRequestsSub = _CompositeStreamSubscription(
       _submittedRequestsSub!,
@@ -1016,7 +1506,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             ? req.sourceCollection.trim()
             : 'Client_Custom_Requests';
         final table = _SupabaseOrderService.tableForCollection(collection);
-        final current = await _SupabaseOrderService.getRequest(collection, req.id);
+        final current = await _SupabaseOrderService.getRequest(
+          collection,
+          req.id,
+        );
         String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
           for (final value in values) {
             final text = (value ?? '').toString().trim();
@@ -1074,7 +1567,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         payload.addAll(details);
         updatePayload['details'] = details;
         updatePayload['payload'] = payload;
-        await Supabase.instance.client.from(table).update(updatePayload).eq('id', req.id);
+        await Supabase.instance.client
+            .from(table)
+            .update(updatePayload)
+            .eq('id', req.id);
 
         if (!isBrandRequest && (req.clientEmail).trim().isNotEmpty) {
           await NotificationsService.createUserNotification(
@@ -1153,7 +1649,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     }
   }
 
-
   String _profileNailLengthTitle() {
     switch (widget.profile.nail.length) {
       case NailLength.short:
@@ -1173,7 +1668,9 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
 
   String _dimensionText(Object? value) {
     if (value is num) {
-      return value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+      return value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toString();
     }
     final text = (value ?? '').toString().trim();
     return (text == 'null') ? '' : text;
@@ -1298,8 +1795,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     final needByDisplayForOrder = req.needByDisplay.trim().isNotEmpty
         ? req.needByDisplay.trim()
         : (req.needBy == null
-            ? ''
-            : '${_monthShort(req.needBy!.month)} ${req.needBy!.day}, ${req.needBy!.year}');
+              ? ''
+              : '${_monthShort(req.needBy!.month)} ${req.needBy!.day}, ${req.needBy!.year}');
 
     return ClientOrder(
       id: req.id,
@@ -1336,10 +1833,15 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       cancelReason: req.cancelReason,
       inspirationPhotos: req.inspirationPhotos,
       needByDisplay: needByDisplayForOrder,
+      jntRevealDateDisplay: req.jntRevealDateDisplay,
       nailShape: nailShapeForOrder,
       nailLength: nailLengthForOrder,
       budgetMin: req.budgetMin,
       budgetMax: req.budgetMax,
+      clientBudgetMin: req.clientBudgetMin,
+      clientBudgetMax: req.clientBudgetMax,
+      artistBudgetMin: req.artistBudgetMin,
+      artistBudgetMax: req.artistBudgetMax,
       leftHandDimensions: leftHandForOrder,
       rightHandDimensions: rightHandForOrder,
       status: mappedStatus,
@@ -1349,6 +1851,9 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           ? req.acceptedByArtistName
           : req.selectedArtist,
       selectedArtistName: selectedArtistName,
+      selectedArtistEmail: req.selectedArtistEmail,
+      isDirectRequest: req.isDirectRequest,
+      fallbackToPool: req.fallbackToPool,
       artistProfileImage: req.artistProfileImage,
       createdAt: submittedAt,
       artistAcceptedAmount: acceptedAmountInt,
@@ -1650,6 +2155,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       appBar: widget.showCompanyChrome && widget.companyName != null
           ? CompanyHeader(
               companyName: widget.companyName!,
+              imageUrl: widget.profile.basic.profileImageUrl,
               onOpenProfile: widget.onOpenProfile,
               onLogout: widget.onLogout,
             )
@@ -1807,42 +2313,51 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
 
     Widget page;
     final isBrandViewer = widget.audience == OrdersAudience.brand;
+    final budgetViewMode = widget.audience == OrdersAudience.clientArtist
+        ? OrderBudgetViewMode.clientAndArtist
+        : OrderBudgetViewMode.clientOnly;
 
     switch (order.status) {
       case OrderStatus.newOrder:
         page = InReviewOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
         );
         break;
       case OrderStatus.inReview:
         page = InReviewOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
         );
         break;
       case OrderStatus.inProgress:
         page = InProgressOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
         );
         break;
       case OrderStatus.shipped:
         page = ShippedOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
         );
         break;
       case OrderStatus.delivered:
         page = DeliveredOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
         );
         break;
       case OrderStatus.expired:
         page = ExpiredOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
           onResubmit: () => _resubmitCancelledOrder(order),
         );
         break;
@@ -1850,6 +2365,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         page = CancelledOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
           onResubmit: () => _resubmitCancelledOrder(order),
         );
         break;
@@ -1857,6 +2373,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         page = InReviewOrderDetailsPage(
           order: order,
           isBrandViewer: isBrandViewer,
+          budgetViewMode: budgetViewMode,
         );
         break;
     }
@@ -1909,12 +2426,23 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   ) async {
     final req = _toSimpleClientRequest(order);
     final declinedAt = order.cancelledAt ?? order.createdAt ?? DateTime.now();
+    final canResubmit = _isArtistDeclinedDirectRequestWithoutPool(order);
     await showSimpleStatusRequestSheet(
       context: context,
       request: req,
       status: SimpleRequestStatus.declined,
       date: declinedAt,
+      onResubmit: canResubmit ? () => _resubmitCancelledOrder(order) : null,
+      forceDeclinedByArtistReason: canResubmit,
     );
+  }
+
+  bool _isArtistDeclinedDirectRequestWithoutPool(ClientOrder order) {
+    return order.status == OrderStatus.declined &&
+        order.isDirectRequest &&
+        !order.fallbackToPool &&
+        order.selectedArtistName.trim().isNotEmpty &&
+        order.declinedByArtistEmails.isNotEmpty;
   }
 
   ClientRequestV2 _toSimpleClientRequest(ClientOrder order) {
@@ -1939,7 +2467,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       budgetMin: order.budgetMin ?? 0,
       budgetMax: order.budgetMax ?? 0,
       status: RequestStatusV2.declined,
-      isDirectRequest: false,
+      isDirectRequest: order.isDirectRequest,
+      fallbackToPool: order.fallbackToPool,
       hasInspo: order.inspirationPhotos.isNotEmpty,
       clientLocation: '',
       previewImageAsset: order.imageAsset,
@@ -1969,9 +2498,16 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           )
           .toList(growable: false),
       cancelReason: order.cancelReason,
-      declineReason: order.cancelReason.trim().isNotEmpty
+      selectedArtist: order.selectedArtistName,
+      selectedArtistEmail: order.selectedArtistEmail,
+      declineReason: _isArtistDeclinedDirectRequestWithoutPool(order)
+          ? 'Declined by Artist'
+          : order.cancelReason.trim().isNotEmpty
           ? order.cancelReason.trim()
           : 'Declined by client',
+      declinedByArtistEmails: order.declinedByArtistEmails,
+      completionDeclineReason: order.completionDeclineReason,
+      completionDeclineDescription: order.completionDeclineDescription,
     );
   }
 
@@ -2080,6 +2616,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             profile: widget.profile,
             initialRequestData: initialRequestData,
             onBackHome: () => Navigator.of(context).pop(),
+            showBackArrow: false,
             showBottomNav: true,
             bottomNavIndex: 1,
             onNavTap: widget.onNavTap,
@@ -2087,7 +2624,15 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             onOpenHistory: widget.onOpenHistory,
             onOpenCalendar: widget.onOpenCalendar,
             onOpenArtist: widget.onOpenArtist,
+            onOpenReviews: widget.onOpenReviews,
             onLogout: widget.onLogout,
+            showExtendedAvatarMenu: widget.showExtendedAvatarMenu,
+            showProfileMenu: widget.showProfileMenu,
+            bottomNavVariant: widget.audience == OrdersAudience.clientArtist
+                ? ClientRequestBottomNavVariant.clientArtist
+                : widget.showProfileMenu
+                ? ClientRequestBottomNavVariant.clientAmbassador
+                : ClientRequestBottomNavVariant.client,
           ),
         ),
       );
@@ -2251,6 +2796,7 @@ class _AvatarMenu extends StatelessWidget {
             imageUrl: avatarUrl,
             displayName: displayName,
             size: JntHeaderMetrics.avatarSize,
+            resolveCurrentUserFallback: true,
           ),
         ),
       ),
@@ -2834,7 +3380,6 @@ class _OrderNfcChipLine extends StatelessWidget {
     }
     return false;
   }
-
 }
 
 class _NfcChip extends StatelessWidget {
@@ -3025,10 +3570,15 @@ class ClientOrder {
   final String cancelReason;
   final List<String> inspirationPhotos;
   final String needByDisplay;
+  final String jntRevealDateDisplay;
   final String nailShape;
   final String nailLength;
   final int? budgetMin;
   final int? budgetMax;
+  final int? clientBudgetMin;
+  final int? clientBudgetMax;
+  final int? artistBudgetMin;
+  final int? artistBudgetMax;
   final Map<String, String> leftHandDimensions;
   final Map<String, String> rightHandDimensions;
   final OrderStatus status;
@@ -3058,6 +3608,9 @@ class ClientOrder {
   final String directClientStatus;
   final String artistName;
   final String selectedArtistName;
+  final String selectedArtistEmail;
+  final bool isDirectRequest;
+  final bool fallbackToPool;
   final String artistProfileImage;
   final DateTime? cancelledAt;
   final DateTime? needBy;
@@ -3092,10 +3645,15 @@ class ClientOrder {
     this.cancelReason = '',
     this.inspirationPhotos = const [],
     this.needByDisplay = '',
+    this.jntRevealDateDisplay = '',
     this.nailShape = '',
     this.nailLength = '',
     this.budgetMin,
     this.budgetMax,
+    this.clientBudgetMin,
+    this.clientBudgetMax,
+    this.artistBudgetMin,
+    this.artistBudgetMax,
     this.leftHandDimensions = const {},
     this.rightHandDimensions = const {},
     required this.status,
@@ -3126,6 +3684,9 @@ class ClientOrder {
     this.directClientStatus = '',
     this.artistName = '',
     this.selectedArtistName = '',
+    this.selectedArtistEmail = '',
+    this.isDirectRequest = false,
+    this.fallbackToPool = true,
     this.artistProfileImage = '',
     this.cancelledAt,
     this.needBy,

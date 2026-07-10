@@ -616,6 +616,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       cancelReason: req.cancelReason,
       inspirationPhotos: req.inspirationPhotos,
       needByDisplay: req.needByDisplay,
+      jntRevealDateDisplay: req.jntRevealDateDisplay,
       nailShape: req.nailShape,
       nailLength: req.nailLength,
       budgetMin: req.budgetMin,
@@ -912,6 +913,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       appBar: widget.showCompanyChrome
           ? CompanyHeader(
               companyName: widget.companyName,
+              imageUrl: widget.profile.basic.profileImageUrl,
               onOpenProfile: widget.onOpenProfile,
               onLogout: widget.onLogout,
             )
@@ -1576,6 +1578,18 @@ class _OrderCard extends StatelessWidget {
                     fontFamily: 'Arial',
                   ),
                 ),
+                if (order.jntRevealDateDisplay.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'JNT Reveal Date: ${order.jntRevealDateDisplay.trim()}',
+                    style: TextStyle(
+                      color: AppColors.blackCat,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -1821,6 +1835,7 @@ class ClientOrder {
   final String cancelReason;
   final List<String> inspirationPhotos;
   final String needByDisplay;
+  final String jntRevealDateDisplay;
   final String nailShape;
   final String nailLength;
   final int? budgetMin;
@@ -1882,6 +1897,7 @@ class ClientOrder {
     this.cancelReason = '',
     this.inspirationPhotos = const [],
     this.needByDisplay = '',
+    this.jntRevealDateDisplay = '',
     this.nailShape = '',
     this.nailLength = '',
     this.budgetMin,

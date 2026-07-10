@@ -14,6 +14,7 @@ import '../models/client_profile_models.dart'
     show ClientProfileDraft, NailLength, nailShapes;
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/company_shell_chrome.dart';
+import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../utils/scenario_4_1.dart';
@@ -115,7 +116,6 @@ bool hasReachedSponsorshipRequestStatus(Map<String, dynamic> data) {
   }
   return false;
 }
-
 
 bool isEligibleBrandRequestArtist(Map<String, dynamic> data) {
   String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
@@ -251,8 +251,7 @@ class BrandCustomRequestPage extends StatefulWidget {
   final ValueChanged<int>? onNavTap;
 
   @override
-  State<BrandCustomRequestPage> createState() =>
-      _BrandCustomRequestPageState();
+  State<BrandCustomRequestPage> createState() => _BrandCustomRequestPageState();
 }
 
 class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
@@ -291,6 +290,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   final TextEditingController _shipCountryCtrl = TextEditingController(
     text: 'United States',
   );
+  Timer? _shipStreetAutocompleteDebounce;
+  List<AddressSuggestion> _shipStreetSuggestions = const [];
+  bool _shipStreetSuggestionsLoading = false;
 
   // Uploads
   final ImagePicker _picker = ImagePicker();
@@ -348,6 +350,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
 
   @override
   void dispose() {
+    _shipStreetAutocompleteDebounce?.cancel();
     _dateCtrl.dispose();
     _revealDateCtrl.dispose();
     _descCtrl.dispose();
@@ -359,6 +362,45 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     _shipZipCtrl.dispose();
     _shipCountryCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _autofillShippingAddressFromStreet() async {
+    _shipStreetAutocompleteDebounce?.cancel();
+    final query = _shipStreetCtrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _shipStreetSuggestionsLoading = false;
+        _shipStreetSuggestions = const [];
+      });
+      return;
+    }
+    setState(() => _shipStreetSuggestionsLoading = true);
+    _shipStreetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _shipStreetSuggestionsLoading = false;
+          _shipStreetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyShippingStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _shipStreetCtrl.text = selected.street;
+      _shipCityCtrl.text = selected.city;
+      _shipZipCtrl.text = selected.zip;
+      _shipCountryCtrl.text = 'United States';
+      _shipStateCtrl.text =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      _shipStreetSuggestions = const [];
+    });
   }
 
   SupabaseClient get _client => Supabase.instance.client;
@@ -418,10 +460,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   }
 
   String _generateRequestId() {
-    final bytes = List<int>.generate(
-      16,
-      (_) => Random.secure().nextInt(256),
-    );
+    final bytes = List<int>.generate(16, (_) => Random.secure().nextInt(256));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     String hex(int value) => value.toRadixString(16).padLeft(2, '0');
@@ -1504,7 +1543,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         'selectedArtist': isDirectToArtist ? selectedArtist : '',
         'selectedArtistEmail': selectedArtistEmail,
         'eligibleArtistEmails': eligibleArtistEmails,
-        'artistEligibilityRequiredTiers': const <String>['Goldsmith', 'Crowned'],
+        'artistEligibilityRequiredTiers': const <String>[
+          'Goldsmith',
+          'Crowned',
+        ],
         'selectedClient': isOpenToClientPool ? '' : selectedClient,
         'selectedClientEmail': selectedClientEmail,
         'selectedGroupClientEmails': selectedGroupClientEmails,
@@ -1583,7 +1625,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         'nfcMaxChipsPerHand': _nfcRequest ? 1 : 0,
         'eligibleNfcClientEmails': nfcEligibleClientEmails,
         'eligibleArtistEmails': eligibleArtistEmails,
-        'artistEligibilityRequiredTiers': const <String>['Goldsmith', 'Crowned'],
+        'artistEligibilityRequiredTiers': const <String>[
+          'Goldsmith',
+          'Crowned',
+        ],
         'requestType': requestTypeLabel,
         'requestTypeLabel': requestTypeLabel,
         'orderType': orderTypeValue,
@@ -1646,7 +1691,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           'selectedArtist': isDirectToArtist ? selectedArtist : '',
           'selectedArtistEmail': selectedArtistEmail,
           'eligibleArtistEmails': eligibleArtistEmails,
-          'artistEligibilityRequiredTiers': const <String>['Goldsmith', 'Crowned'],
+          'artistEligibilityRequiredTiers': const <String>[
+            'Goldsmith',
+            'Crowned',
+          ],
           'selectedClient': isOpenToClientPool ? '' : selectedClient,
           'selectedClientEmail': selectedClientEmail,
           'selectedGroupClientEmails': selectedGroupClientEmails,
@@ -2056,7 +2104,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       if (creator.isNotEmpty && email == creator) continue;
       await NotificationsService.createUserNotification(
         receiverEmail: email,
-        title: 'Brand Request Received',
+        title: 'New Brand Request',
         body: scenario41ClientReceiveOnSubmit(
           orderRef: orderNumber,
           brandCompany: brand,
@@ -2105,7 +2153,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         : companyName.trim();
     await NotificationsService.createUserNotification(
       receiverEmail: receiverEmail,
-      title: 'Brand Request Received',
+      title: 'New Brand Request',
       body: scenario41ClientReceiveOnSubmit(
         orderRef: orderNumber,
         brandCompany: brand,
@@ -2156,7 +2204,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       if (creator.isNotEmpty && receiverEmail == creator) continue;
       await NotificationsService.createUserNotification(
         receiverEmail: receiverEmail,
-        title: 'Brand Request Received',
+        title: 'New Brand Request',
         body: scenario41ClientReceiveOnSubmit(
           orderRef: orderNumber,
           brandCompany: brand,
@@ -2365,6 +2413,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         appBar: widget.showBottomNav && widget.companyName != null
             ? CompanyHeader(
                 companyName: widget.companyName!,
+                imageUrl: widget.profile.basic.profileImageUrl,
                 onOpenProfile: widget.onOpenProfile,
                 onLogout: widget.onLogout,
               )
@@ -2868,68 +2917,72 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                   : v.trim(),
                             ),
                           ),
-                          const SizedBox(height: 14),
-                          Text(
-                            'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.blackCat.withValues(alpha: 0.75),
-                              height: 1.2,
-                              fontSize: 13,
+                          if ((_requestedArtist ?? '').trim().isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            Text(
+                              'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.75,
+                                ),
+                                height: 1.2,
+                                fontSize: 13,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              ChoiceChip(
-                                label: const Text(
-                                  'Yes',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                selected: _fallbackToPool == true,
-                                selectedColor: AppColors.blackCat,
-                                backgroundColor: _requestSnow,
-                                checkmarkColor: AppColors.snow,
-                                onSelected: (_) =>
-                                    setState(() => _fallbackToPool = true),
-                                labelStyle: TextStyle(
-                                  fontWeight: FontWeight.w400,
-                                  color: _fallbackToPool == true
-                                      ? AppColors.snow
-                                      : AppColors.blackCat,
-                                ),
-                                side: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                ChoiceChip(
+                                  label: const Text(
+                                    'Yes',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  selected: _fallbackToPool == true,
+                                  selectedColor: AppColors.blackCat,
+                                  backgroundColor: _requestSnow,
+                                  checkmarkColor: AppColors.snow,
+                                  onSelected: (_) =>
+                                      setState(() => _fallbackToPool = true),
+                                  labelStyle: TextStyle(
+                                    fontWeight: FontWeight.w400,
+                                    color: _fallbackToPool == true
+                                        ? AppColors.snow
+                                        : AppColors.blackCat,
+                                  ),
+                                  side: BorderSide(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.08,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              ChoiceChip(
-                                label: const Text(
-                                  'No',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                selected: _fallbackToPool == false,
-                                selectedColor: AppColors.blackCat,
-                                backgroundColor: _requestSnow,
-                                checkmarkColor: AppColors.snow,
-                                onSelected: (_) =>
-                                    setState(() => _fallbackToPool = false),
-                                labelStyle: TextStyle(
-                                  fontWeight: FontWeight.w400,
-                                  color: _fallbackToPool == false
-                                      ? AppColors.snow
-                                      : AppColors.blackCat,
-                                ),
-                                side: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
+                                const SizedBox(width: 10),
+                                ChoiceChip(
+                                  label: const Text(
+                                    'No',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  selected: _fallbackToPool == false,
+                                  selectedColor: AppColors.blackCat,
+                                  backgroundColor: _requestSnow,
+                                  checkmarkColor: AppColors.snow,
+                                  onSelected: (_) =>
+                                      setState(() => _fallbackToPool = false),
+                                  labelStyle: TextStyle(
+                                    fontWeight: FontWeight.w400,
+                                    color: _fallbackToPool == false
+                                        ? AppColors.snow
+                                        : AppColors.blackCat,
+                                  ),
+                                  side: BorderSide(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.08,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -3098,7 +3151,58 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                       hint: 'Street',
                       minHeight: 52,
                       verticalPadding: 14,
+                      onChanged: (_) => _autofillShippingAddressFromStreet(),
                     ),
+                    if (_shipStreetSuggestionsLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (_shipStreetSuggestions.isNotEmpty)
+                      Builder(
+                        builder: (context) {
+                          final suggestionCount = _shipStreetSuggestions.length;
+                          final menuHeight =
+                              AutocompleteDropdownSizing.menuHeight(
+                                itemCount: suggestionCount,
+                                itemExtent: 40,
+                              );
+                          return Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            decoration: BoxDecoration(
+                              color: _requestSnow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.20,
+                                ),
+                              ),
+                            ),
+                            constraints: BoxConstraints(maxHeight: menuHeight),
+                            child: ListView.separated(
+                              shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
+                                suggestionCount,
+                              ),
+                              physics: AutocompleteDropdownSizing.scrollPhysics(
+                                suggestionCount,
+                              ),
+                              itemCount: suggestionCount,
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, i) => ListTile(
+                                dense: true,
+                                title: Text(
+                                  _shipStreetSuggestions[i].displayLabel,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                onTap: () => _applyShippingStreetSuggestion(
+                                  _shipStreetSuggestions[i],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     const SizedBox(height: 4),
                     _InputField(
                       controller: _shipCityCtrl,
@@ -3437,6 +3541,15 @@ class _SearchableSelectField extends StatelessWidget {
             return TextField(
               controller: controller,
               focusNode: focusNode,
+              onChanged: (text) {
+                final normalizedText = text.trim();
+                final matchesExisting = normalizedItems.any(
+                  (item) => item.toLowerCase() == normalizedText.toLowerCase(),
+                );
+                if (normalizedText.isEmpty || !matchesExisting) {
+                  onChanged('');
+                }
+              },
               onTap: () {
                 if (controller.text.trim().isEmpty &&
                     normalizedItems.isNotEmpty) {
@@ -3656,16 +3769,19 @@ class _InputField extends StatelessWidget {
     required this.hint,
     required this.minHeight,
     required this.verticalPadding,
+    this.onChanged,
   });
   final TextEditingController controller;
   final String hint;
   final double minHeight;
   final double verticalPadding;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      onChanged: onChanged,
       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
       decoration: InputDecoration(
         hintText: hint,

@@ -79,7 +79,18 @@ String scenario41ClientReceiveOnSubmit({
   required String brandCompany,
   required String campaignName,
 }) {
-  return 'You have received the Brand request $orderRef from $brandCompany $campaignName. Please review and accept.';
+  final brand = brandCompany.trim();
+  final campaign = campaignName.trim();
+  if (brand.isNotEmpty && campaign.isNotEmpty) {
+    return 'Received brand request from $brand, $campaign';
+  }
+  if (brand.isNotEmpty) {
+    return 'Received brand request from $brand';
+  }
+  if (campaign.isNotEmpty) {
+    return 'Received brand request, $campaign';
+  }
+  return 'Received brand request';
 }
 
 String scenario41BrandReceiveOnClientAcceptance({

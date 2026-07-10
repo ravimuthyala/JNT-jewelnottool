@@ -53,7 +53,46 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         child: FutureBuilder<_RequestDetailsVm>(
           future: _vmFuture,
           builder: (context, snap) {
-            final vm = snap.data ?? _RequestDetailsVm.fallback(widget.request);
+            if (snap.connectionState != ConnectionState.done) {
+              return Column(
+                children: [
+                  _headerBar(context),
+                  const Expanded(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            if (snap.hasError || !snap.hasData) {
+              return Column(
+                children: [
+                  _headerBar(context),
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          'Unable to load campaign request details.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final vm = snap.data!;
             return Column(
               children: [
                 _headerBar(context),
@@ -106,8 +145,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                           body: vm.customDescription,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      _sectionContainer(child: _orderDetailsSection(vm)),
                       const SizedBox(height: 12),
                       _sectionContainer(child: _nailDimensionsSection(vm)),
                       const SizedBox(height: 12),
@@ -276,43 +313,10 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           ),
           const SizedBox(height: 8),
           _requestTypeOrderRow(vm),
+          const SizedBox(height: 8),
+          _overviewNeedBudgetAcceptRow(vm),
         ],
       ),
-    );
-  }
-
-  Widget _orderDetailsSection(_RequestDetailsVm vm) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Order Details',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _needBudgetRow(vm),
-        const SizedBox(height: 8),
-        Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(
-                text: 'Accept By: ',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              TextSpan(text: vm.requestAcceptByLabel),
-            ],
-          ),
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.blackCat,
-          ),
-        ),
-      ],
     );
   }
 
@@ -663,40 +667,178 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          vm.requestType.toLowerCase().contains('direct')
-              ? Icons.arrow_outward_rounded
-              : Icons.arrow_forward_rounded,
-          size: 16,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            vm.requestType,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                vm.requestType.toLowerCase().contains('direct')
+                    ? Icons.arrow_outward_rounded
+                    : Icons.arrow_forward_rounded,
+                size: 16,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  vm.requestType,
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(width: 12),
         Container(width: 1, height: 16, color: AppColors.blackCatBorderLight),
         const SizedBox(width: 12),
-        Icon(
-          vm.orderType.toLowerCase().contains('group')
-              ? Icons.groups_2_outlined
-              : Icons.person_outline_rounded,
-          size: 16,
-          color: AppColors.blackCat,
+        Expanded(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                vm.orderType.toLowerCase().contains('group')
+                    ? Icons.groups_2_outlined
+                    : Icons.person_outline_rounded,
+                size: 16,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  vm.orderType,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+      ],
+    );
+  }
+
+  Widget _overviewNeedBudgetAcceptRow(_RequestDetailsVm vm) {
+    if (vm.isBrandRequest) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _overviewMetaItem(
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Need By',
+                  value: vm.needByLabel,
+                  center: true,
+                ),
+              ),
+              if (vm.jntRevealDateLabel.trim().isNotEmpty) ...[
+                const SizedBox(width: 12),
+                _overviewDivider(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _overviewMetaItem(
+                    icon: Icons.auto_awesome_outlined,
+                    label: 'JNT Reveal',
+                    value: vm.jntRevealDateLabel,
+                    center: true,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _overviewMetaItem(
+                  icon: Icons.attach_money_rounded,
+                  label: 'Budget',
+                  value: vm.clientBudgetLabel,
+                  center: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              _overviewDivider(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _overviewMetaItem(
+                  icon: Icons.event_available_outlined,
+                  label: 'Accept By',
+                  value: vm.requestAcceptByLabel,
+                  center: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        _overviewMetaItem(
+          icon: Icons.calendar_today_outlined,
+          label: 'Need By',
+          value: vm.needByLabel,
+        ),
+        if (vm.isBrandRequest && vm.jntRevealDateLabel.trim().isNotEmpty)
+          _overviewMetaItem(
+            icon: Icons.auto_awesome_outlined,
+            label: 'JNT Reveal',
+            value: vm.jntRevealDateLabel,
+          ),
+        _overviewDivider(),
+        _overviewMetaItem(
+          icon: Icons.attach_money_rounded,
+          label: 'Budget',
+          value: vm.clientBudgetLabel,
+        ),
+        _overviewMetaItem(
+          icon: Icons.event_available_outlined,
+          label: 'Accept By',
+          value: vm.requestAcceptByLabel,
+        ),
+      ],
+    );
+  }
+
+  Widget _overviewMetaItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    bool center = false,
+  }) {
+    return Row(
+      mainAxisSize: center ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: center
+          ? MainAxisAlignment.center
+          : MainAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.blackCat),
         const SizedBox(width: 6),
         Flexible(
           child: Text(
-            vm.orderType,
-            textAlign: TextAlign.center,
+            '$label: $value',
+            textAlign: center ? TextAlign.center : TextAlign.start,
+            maxLines: 2,
+            overflow: TextOverflow.visible,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -708,58 +850,11 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
   }
 
-  Widget _needBudgetRow(_RequestDetailsVm vm) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              const Icon(
-                Icons.calendar_today_outlined,
-                size: 16,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Need By: ${vm.needByLabel}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Row(
-            children: [
-              const Icon(
-                Icons.attach_money_rounded,
-                size: 16,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  'Budget: ${vm.clientBudgetLabel}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+  Widget _overviewDivider() {
+    return Container(
+      width: 1,
+      height: 16,
+      color: AppColors.blackCatBorderLight,
     );
   }
 
@@ -1025,6 +1120,7 @@ class _RequestDetailsVm {
     required this.profileImage,
     required this.statusLabel,
     required this.needByLabel,
+    required this.jntRevealDateLabel,
     required this.clientBudgetLabel,
     required this.requestType,
     required this.orderType,
@@ -1049,6 +1145,7 @@ class _RequestDetailsVm {
   final String profileImage;
   final String statusLabel;
   final String needByLabel;
+  final String jntRevealDateLabel;
   final String clientBudgetLabel;
   final String requestType;
   final String orderType;
@@ -1065,64 +1162,6 @@ class _RequestDetailsVm {
   final String nailLength;
   final bool requiresNfc;
   final String requestAcceptByLabel;
-
-  static _RequestDetailsVm fallback(ClientRequestV2 request) {
-    final initialBrand = request.brandName.trim().isNotEmpty
-        ? request.brandName.trim()
-        : request.clientName.trim();
-    final isBrandRequest =
-        _tableForSource(request.sourceCollection) == 'company_custom_requests';
-    final acceptByDate = DateTime(
-      request.neededBy.year,
-      request.neededBy.month,
-      request.neededBy.day,
-    ).subtract(const Duration(days: 5));
-    return _RequestDetailsVm(
-      isBrandRequest: isBrandRequest,
-      brandName: initialBrand.isEmpty ? 'Brand Company' : initialBrand,
-      campaignName: request.title.trim().isEmpty
-          ? 'Untitled Campaign'
-          : request.title.trim(),
-      profileImage: request.clientProfileImage,
-      statusLabel: _statusLabel(request.status),
-      needByLabel: _dateLabel(request.neededBy),
-      clientBudgetLabel:
-          '\$${request.clientBudgetMin ?? request.budgetMin} - \$${request.clientBudgetMax ?? request.budgetMax}',
-      requestType: _requestTypeFromRouting(
-        isBrandRequest: isBrandRequest,
-        hasSpecificArtist:
-            request.selectedArtist.trim().isNotEmpty ||
-            request.selectedArtistEmail.trim().isNotEmpty,
-        openToClientPool: request.openToClientPool,
-        openToArtistPool:
-            request.selectedArtist.trim().isEmpty &&
-            request.selectedArtistEmail.trim().isEmpty,
-      ),
-      orderType: request.orderType == RequestOrderTypeV2.group
-          ? 'Group'
-          : 'Single',
-      openToClientPool: request.openToClientPool,
-      orderTypeRaw: request.orderType == RequestOrderTypeV2.group
-          ? 'group'
-          : 'single',
-      bioSectionBody: request.bio.trim().isEmpty ? '-' : request.bio.trim(),
-      companyBio: 'No company bio available.',
-      customDescription: request.bio.trim().isEmpty ? '-' : request.bio.trim(),
-      numberOfSets: '1',
-      photos: request.clientImages,
-      leftHand: request.leftHand,
-      rightHand: request.rightHand,
-      nailShape: request.nailShape.trim(),
-      nailLength: request.nailLength.trim(),
-      requiresNfc: _requestRequiresNfcFromMaps(
-        const <String, dynamic>{},
-        const <String, dynamic>{},
-        const <String, dynamic>{},
-      ),
-      requestAcceptByLabel: _dateLabel(acceptByDate),
-    );
-  }
-
 
   static Map<String, dynamic> asMap(dynamic v) {
     if (v is Map<String, dynamic>) return v;
@@ -1934,7 +1973,7 @@ class _RequestDetailsVm {
     final customDescription = firstNonEmpty([
       requestDetails['description'],
       root['descriptionPreview'],
-      root['bio'],
+      root['description'],
       request.bio,
     ], fallback: '-');
     final requestAcceptBy =
@@ -1946,6 +1985,28 @@ class _RequestDetailsVm {
                 needBy.month,
                 needBy.day,
               ).subtract(const Duration(days: 5)));
+    final jntRevealDate = firstNonEmpty([
+      _dateLabelOrBlank(root['jntRevealDateDisplay']),
+      _dateLabelOrBlank(root['jnt_reveal_date_display']),
+      _dateLabelOrBlank(requestDetails['jntRevealDateDisplay']),
+      _dateLabelOrBlank(requestDetails['jnt_reveal_date_display']),
+      _dateLabelOrBlank(details['jntRevealDateDisplay']),
+      _dateLabelOrBlank(details['jnt_reveal_date_display']),
+      _dateLabelOrBlank(payload['jntRevealDateDisplay']),
+      _dateLabelOrBlank(payload['jnt_reveal_date_display']),
+      _dateLabelOrBlank(root['jntRevealDate']),
+      _dateLabelOrBlank(root['jnt_reveal_date']),
+      _dateLabelOrBlank(requestDetails['jntRevealDate']),
+      _dateLabelOrBlank(requestDetails['jnt_reveal_date']),
+      _dateLabelOrBlank(details['jntRevealDate']),
+      _dateLabelOrBlank(details['jnt_reveal_date']),
+      _dateLabelOrBlank(payload['jntRevealDate']),
+      _dateLabelOrBlank(payload['jnt_reveal_date']),
+      _dateLabelOrBlank(root['revealDate']),
+      _dateLabelOrBlank(requestDetails['revealDate']),
+      _dateLabelOrBlank(details['revealDate']),
+      _dateLabelOrBlank(payload['revealDate']),
+    ]);
     final numberOfSets = asInt(requestDetails['numberOfSets']) > 0
         ? asInt(requestDetails['numberOfSets']).toString()
         : (asInt(requestDetails['quantity']) > 0
@@ -2250,11 +2311,6 @@ class _RequestDetailsVm {
     if (!isBrandRequest && clientBio.isNotEmpty) {
       companyBio = clientBio;
     }
-    if (companyBio.isEmpty) {
-      companyBio = isBrandRequest
-          ? 'No company bio available.'
-          : 'No client bio available.';
-    }
     final bioSectionBody = companyBio;
 
     NailDimensionsV2 profileHand({required bool left}) {
@@ -2363,6 +2419,7 @@ class _RequestDetailsVm {
       profileImage: profileImage,
       statusLabel: _statusLabel(request.status),
       needByLabel: _dateLabel(needBy),
+      jntRevealDateLabel: jntRevealDate,
       clientBudgetLabel:
           '\$${cMin <= 0 ? 15 : cMin} - \$${cMax <= 0 ? 5000 : cMax}',
       requestType: requestType,
@@ -2473,6 +2530,16 @@ class _RequestDetailsVm {
       'Dec',
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
+
+  static String _dateLabelOrBlank(dynamic value) {
+    if (value == null) return '';
+    if (value is DateTime) return _dateLabel(value);
+    final text = value.toString().trim();
+    if (text.isEmpty) return '';
+    final parsed = DateTime.tryParse(text);
+    if (parsed != null) return _dateLabel(parsed);
+    return text;
   }
 
   static String _statusLabel(RequestStatusV2 status) {

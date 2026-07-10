@@ -130,7 +130,6 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         hasTag(clientAscension['tags']);
   }
 
-
   bool _isNfcEligibleClient(Map<String, dynamic> data) {
     Map<String, dynamic> asMap(Object? value) {
       if (value is Map<String, dynamic>) return value;
@@ -268,7 +267,6 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
-
   Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) {
@@ -315,7 +313,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     String? email,
   }) async {
     if (id != null && id.trim().isNotEmpty) {
-      final rows = await _supabase.from(table).select().eq('id', id.trim()).limit(1);
+      final rows = await _supabase
+          .from(table)
+          .select()
+          .eq('id', id.trim())
+          .limit(1);
       if (rows.isNotEmpty) return _asMap(rows.first);
     }
     if (email != null && email.trim().isNotEmpty) {
@@ -338,7 +340,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     return rows.isEmpty ? const <String, dynamic>{} : _asMap(rows.first);
   }
 
-  Future<Map<String, dynamic>> _readRequestDetails(ClientRequestV2 request) async {
+  Future<Map<String, dynamic>> _readRequestDetails(
+    ClientRequestV2 request,
+  ) async {
     final table = _detailsTableForCollection(request.sourceCollection);
     try {
       final rows = await _supabase
@@ -389,10 +393,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
   Future<Set<String>> _tableColumns(String table) async {
     final cached = _tableColumnsCache[table];
     if (cached != null) return cached;
-    final rows = await _supabase
-        .from(table)
-        .select()
-        .limit(1);
+    final rows = await _supabase.from(table).select().limit(1);
     final cols = <String>{};
     if (rows.isNotEmpty) {
       cols.addAll(_asMap(rows.first).keys.map((key) => key.toString()));
@@ -444,8 +445,10 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           'acceptedByClientEmail': summaryPayload['acceptedByClientEmail'],
           'acceptedByClientAt': summaryPayload['acceptedByClientAt'],
           'declinedByClientEmails': summaryPayload['declinedByClientEmails'],
-          'acceptedGroupClientEmails': summaryPayload['acceptedGroupClientEmails'],
-          'groupClientsAllResponded': summaryPayload['groupClientsAllResponded'],
+          'acceptedGroupClientEmails':
+              summaryPayload['acceptedGroupClientEmails'],
+          'groupClientsAllResponded':
+              summaryPayload['groupClientsAllResponded'],
           'brandStatus': summaryPayload['brandStatus'],
           'clientStatus': summaryPayload['clientStatus'],
           'artistStatus': summaryPayload['artistStatus'],
@@ -458,7 +461,8 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
     final update = <String, dynamic>{
       'id': requestId,
-      'status': summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
+      'status':
+          summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
       'details': mergedDetails,
       'updated_at': nowIso,
       'accepted_by_client_email': summaryPayload['acceptedByClientEmail'],
@@ -486,11 +490,13 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         'id': requestId,
         'details': mergedDetails,
         'payload': mergedDetails,
-        'status': summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
+        'status':
+            summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
         'updated_at': nowIso,
       };
       detailsUpdate.removeWhere((key, _) => !detailColumns.contains(key));
-      if (detailsUpdate.containsKey('request_id') || detailsUpdate.containsKey('id')) {
+      if (detailsUpdate.containsKey('request_id') ||
+          detailsUpdate.containsKey('id')) {
         await _supabase.from(detailsTable).upsert(detailsUpdate);
       }
     } catch (_) {}
@@ -567,8 +573,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
   Future<void> _reload() async {
     try {
-      final currentEmail =
-          (_supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+      final currentEmail = (_supabase.auth.currentUser?.email ?? '')
+          .trim()
+          .toLowerCase();
       if (currentEmail.isEmpty) {
         if (!mounted) return;
         setState(() {
@@ -778,7 +785,8 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     if (declinedArtists.contains(viewerEmail)) return false;
 
     final rawStatus = request.status.name.trim().toLowerCase();
-    final terminal = rawStatus == 'declined' ||
+    final terminal =
+        rawStatus == 'declined' ||
         rawStatus == 'cancelled' ||
         rawStatus == 'canceled' ||
         rawStatus == 'expired' ||
@@ -786,14 +794,17 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         rawStatus == 'shipped';
     if (terminal) return false;
 
-    final isBrandSource = _isCompanyCustomRequestSource(request.sourceCollection);
+    final isBrandSource = _isCompanyCustomRequestSource(
+      request.sourceCollection,
+    );
     if (isBrandSource) {
       final acceptedClient = request.acceptedByClientEmail.trim().toLowerCase();
       final acceptedGroup = request.acceptedGroupClientEmails
           .map((e) => e.trim().toLowerCase())
           .where((e) => e.isNotEmpty)
           .toSet();
-      final clientAccepted = acceptedClient.isNotEmpty || acceptedGroup.isNotEmpty;
+      final clientAccepted =
+          acceptedClient.isNotEmpty || acceptedGroup.isNotEmpty;
       if (!clientAccepted) return false;
     }
 
@@ -814,6 +825,57 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     } catch (_) {
       return false;
     }
+  }
+
+  String _displayDateLabel(dynamic value) {
+    if (value == null) return '';
+    if (value is DateTime) return _needByLabel(value);
+    final text = value.toString().trim();
+    if (text.isEmpty) return '';
+    final parsed = DateTime.tryParse(text);
+    if (parsed != null) return _needByLabel(parsed);
+    return text;
+  }
+
+  Future<String> _loadJntRevealDateLabel(ClientRequestV2 request) async {
+    if (!_isCompanyCustomRequestSource(request.sourceCollection)) return '';
+    try {
+      final root = await _readRequestRoot(request);
+      final details = await _readRequestDetails(request);
+      final payload = _asMap(details['payload']).isNotEmpty
+          ? _asMap(details['payload'])
+          : details;
+      final requestDetails = _asMap(payload['requestDetails']).isNotEmpty
+          ? _asMap(payload['requestDetails'])
+          : _asMap(details['requestDetails']);
+
+      for (final value in <Object?>[
+        root['jntRevealDateDisplay'],
+        root['jnt_reveal_date_display'],
+        details['jntRevealDateDisplay'],
+        details['jnt_reveal_date_display'],
+        payload['jntRevealDateDisplay'],
+        payload['jnt_reveal_date_display'],
+        requestDetails['jntRevealDateDisplay'],
+        requestDetails['jnt_reveal_date_display'],
+        root['jntRevealDate'],
+        root['jnt_reveal_date'],
+        details['jntRevealDate'],
+        details['jnt_reveal_date'],
+        payload['jntRevealDate'],
+        payload['jnt_reveal_date'],
+        requestDetails['jntRevealDate'],
+        requestDetails['jnt_reveal_date'],
+        root['revealDate'],
+        details['revealDate'],
+        payload['revealDate'],
+        requestDetails['revealDate'],
+      ]) {
+        final label = _displayDateLabel(value);
+        if (label.isNotEmpty) return label;
+      }
+    } catch (_) {}
+    return '';
   }
 
   bool _requestRequiresNfcFromMaps(
@@ -994,7 +1056,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
               widget.useCampaignNaming &&
                   widget.showBrandRequests &&
                   !widget.showClientRequests
-              ? 'Client Campaign Details'
+              ? 'Brand Campaign Request'
               : null,
           onDecline: () async {
             if (artistStyleRequestView) {
@@ -1006,8 +1068,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             if (mounted) {
               setState(() {
                 _hiddenRequestIds.add(request.id);
-                _items =
-                    _items.where((item) => item.id != request.id).toList();
+                _items = _items.where((item) => item.id != request.id).toList();
               });
             }
 
@@ -1058,8 +1119,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
               if (mounted) {
                 setState(() {
                   _hiddenRequestIds.add(request.id);
-                  _items =
-                      _items.where((item) => item.id != request.id).toList();
+                  _items = _items
+                      .where((item) => item.id != request.id)
+                      .toList();
                 });
               }
             }
@@ -1151,16 +1213,19 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     final declinedAtIso = DateTime.now().toUtc().toIso8601String();
     const reason = 'Artist declined the request';
 
-    await _supabase.from(table).update(<String, dynamic>{
-      'status': 'declined',
-      'artist_status': 'declined',
-      'direct_artist_status': 'declined',
-      'declined_by_artist_email': artistEmail,
-      'artist_declined_at': declinedAtIso,
-      'completion_decline_reason': reason,
-      'completion_decline_description': reason,
-      'updated_at': declinedAtIso,
-    }).eq('id', request.id);
+    await _supabase
+        .from(table)
+        .update(<String, dynamic>{
+          'status': 'declined',
+          'artist_status': 'declined',
+          'direct_artist_status': 'declined',
+          'declined_by_artist_email': artistEmail,
+          'artist_declined_at': declinedAtIso,
+          'completion_decline_reason': reason,
+          'completion_decline_description': reason,
+          'updated_at': declinedAtIso,
+        })
+        .eq('id', request.id);
   }
 
   String _tableForRequestCollection(String name) {
@@ -1340,17 +1405,21 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           summaryExtra: <String, dynamic>{
             'acceptedByClientEmail': '',
             if (!isGroupOrder) 'clientResponseStatus': 'declined',
-            'declinedByClientEmails': <String>[
-              ...request.declinedByClientEmails,
-              clientEmail,
-            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
+            'declinedByClientEmails':
+                <String>[...request.declinedByClientEmails, clientEmail]
+                    .map((e) => e.trim().toLowerCase())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .toList(),
             'updatedAt': DateTime.now().toIso8601String(),
           },
           detailsExtra: <String, dynamic>{
-            'declinedByClientEmails': <String>[
-              ...request.declinedByClientEmails,
-              clientEmail,
-            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
+            'declinedByClientEmails':
+                <String>[...request.declinedByClientEmails, clientEmail]
+                    .map((e) => e.trim().toLowerCase())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .toList(),
             if (!isGroupOrder) 'clientResponseStatus': 'declined',
             'acceptance': const <String, dynamic>{'acceptedByClientEmail': ''},
             'lastClientDeclinedAt': DateTime.now().toIso8601String(),
@@ -1368,17 +1437,21 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             'artistStatus': 'pending',
             'directClientStatus': 'declined',
             'clientPoolStatus': 'pending',
-            'declinedByClientEmails': <String>[
-              ...request.declinedByClientEmails,
-              clientEmail,
-            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
+            'declinedByClientEmails':
+                <String>[...request.declinedByClientEmails, clientEmail]
+                    .map((e) => e.trim().toLowerCase())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .toList(),
           },
           detailsExtra: <String, dynamic>{
             'openToClientPool': true,
-            'declinedByClientEmails': <String>[
-              ...request.declinedByClientEmails,
-              clientEmail,
-            ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList(),
+            'declinedByClientEmails':
+                <String>[...request.declinedByClientEmails, clientEmail]
+                    .map((e) => e.trim().toLowerCase())
+                    .where((e) => e.isNotEmpty)
+                    .toSet()
+                    .toList(),
             'acceptance': const <String, dynamic>{'acceptedByClientEmail': ''},
             'roleStatuses': const <String, dynamic>{
               'brand': 'pending',
@@ -1717,22 +1790,25 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           .toList(growable: false);
 
       Widget requestCard(ClientRequestV2 request) {
-        final card = Semantics(
-          button: true,
-          label: 'Open request details for ${request.clientName}',
-          child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () => _openDetails(request),
-            child: CompanyClientRequestCard(
-              request: request,
-              scale: 1.0,
-              displayStatus: _statusLabel(request),
-              needByLabel: _needByLabel(request.neededBy),
-              submittedLabel: _submittedLabel(
-                request.submittedAt ?? request.neededBy,
-              ),
-              acceptByLabel:
-                  _isCompanyCustomRequestSource(request.sourceCollection)
+        return FutureBuilder<String>(
+          future: _loadJntRevealDateLabel(request),
+          builder: (context, revealSnap) {
+            final card = Semantics(
+              button: true,
+              label: 'Open request details for ${request.clientName}',
+              child: InkWell(
+                borderRadius: BorderRadius.zero,
+                onTap: () => _openDetails(request),
+                child: CompanyClientRequestCard(
+                  request: request,
+                  scale: 1.0,
+                  displayStatus: _statusLabel(request),
+                  needByLabel: _needByLabel(request.neededBy),
+                  submittedLabel: _submittedLabel(
+                    request.submittedAt ?? request.neededBy,
+                  ),
+                  acceptByLabel:
+                      _isCompanyCustomRequestSource(request.sourceCollection)
                       ? _acceptByLabel(
                           DateTime(
                             request.neededBy.year,
@@ -1741,23 +1817,26 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
                           ).subtract(const Duration(days: 5)),
                         )
                       : '',
-              avatar: _avatarWidget(request),
-              previewImage: _previewWidget(request),
-              onTap: () => _openDetails(request),
-            ),
-          ),
-        );
+                  jntRevealDateLabel: revealSnap.data?.trim() ?? '',
+                  avatar: _avatarWidget(request),
+                  previewImage: _previewWidget(request),
+                  onTap: () => _openDetails(request),
+                ),
+              ),
+            );
 
-        return FutureBuilder<bool>(
-          future: _requestRequiresNfc(request),
-          builder: (context, snap) {
-            final requiresNfc = snap.data ?? false;
-            if (!requiresNfc) return card;
-            return Stack(
-              children: [
-                card,
-                Positioned(top: 10, right: 10, child: _nfcRequiredBadge()),
-              ],
+            return FutureBuilder<bool>(
+              future: _requestRequiresNfc(request),
+              builder: (context, snap) {
+                final requiresNfc = snap.data ?? false;
+                if (!requiresNfc) return card;
+                return Stack(
+                  children: [
+                    card,
+                    Positioned(top: 10, right: 10, child: _nfcRequiredBadge()),
+                  ],
+                );
+              },
             );
           },
         );
@@ -1845,10 +1924,10 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
                 widget.showClientRequests
                     ? 'Accept a Brand Request first. After client acceptance, eligible Artist Requests appear in Client Requests.'
                     : widget.useCampaignNaming &&
-                            widget.showBrandRequests &&
-                            !widget.showClientRequests
-                        ? 'These are campaigns available to you.'
-                        : 'These are brand campaigns available to you.',
+                          widget.showBrandRequests &&
+                          !widget.showClientRequests
+                    ? 'These are campaigns available to you.'
+                    : 'These are brand campaigns available to you.',
               ),
               const SizedBox(height: 10),
               if (brandRequests.isEmpty)
@@ -1904,10 +1983,10 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           displayName: _headerDisplayName.isNotEmpty
               ? _headerDisplayName
               : (_supabase.auth.currentUser?.userMetadata?['displayName'] ??
-                      _supabase.auth.currentUser?.email ??
-                      '')
-                  .toString()
-                  .trim(),
+                        _supabase.auth.currentUser?.email ??
+                        '')
+                    .toString()
+                    .trim(),
           avatarUrl: _headerAvatarUrl,
           showEarnings: widget.onOpenEarnings != null,
         ),
@@ -2120,7 +2199,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     }
     if (path.startsWith('gs://')) {
       return FutureBuilder<String>(
-        future: storage_resolver.StorageUrlResolver.resolve(path).then((v) => v ?? ''),
+        future: storage_resolver.StorageUrlResolver.resolve(
+          path,
+        ).then((v) => v ?? ''),
         builder: (_, snap) {
           final url = snap.data?.trim() ?? '';
           if (url.isEmpty) return fallback;
@@ -2147,7 +2228,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         !path.startsWith('content://') &&
         (path.contains('/') || path.contains('\\'))) {
       return FutureBuilder<String>(
-        future: storage_resolver.StorageUrlResolver.resolve(path).then((v) => v ?? ''),
+        future: storage_resolver.StorageUrlResolver.resolve(
+          path,
+        ).then((v) => v ?? ''),
         builder: (_, snap) {
           final url = snap.data?.trim() ?? '';
           if (url.isEmpty) return fallback;
@@ -2249,6 +2332,7 @@ class _AvatarMenu extends StatelessWidget {
             imageUrl: avatarUrl,
             displayName: displayName,
             size: JntHeaderMetrics.avatarSize,
+            resolveCurrentUserFallback: true,
           ),
         ),
       ),

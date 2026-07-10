@@ -745,6 +745,7 @@ class SubmittedClientRequestSummary {
     required this.status,
     required this.clientSubmittedAt,
     required this.needByDisplay,
+    required this.jntRevealDateDisplay,
     required this.needBy,
     required this.requestAcceptByDisplay,
     required this.requestAcceptBy,
@@ -804,6 +805,7 @@ class SubmittedClientRequestSummary {
   final String status;
   final DateTime? clientSubmittedAt;
   final String needByDisplay;
+  final String jntRevealDateDisplay;
   final DateTime? needBy;
   final String requestAcceptByDisplay;
   final DateTime? requestAcceptBy;
@@ -1143,6 +1145,14 @@ class SubmittedClientRequestSummary {
       requestDetails['needByDisplay'],
       detailData['needByDisplay'],
     ]);
+    final resolvedJntRevealDateDisplay = firstNonEmpty([
+      data['jntRevealDateDisplay'],
+      requestDetails['jntRevealDateDisplay'],
+      detailData['jntRevealDateDisplay'],
+      data['jnt_reveal_date_display'],
+      requestDetails['jnt_reveal_date_display'],
+      detailData['jnt_reveal_date_display'],
+    ]);
     final resolvedRequestAcceptByDisplay = firstNonEmpty([
       data['requestAcceptByDisplay'],
       requestDetails['requestAcceptByDisplay'],
@@ -1375,6 +1385,7 @@ class SubmittedClientRequestSummary {
       needByDisplay: resolvedNeedByDisplay.isNotEmpty
           ? resolvedNeedByDisplay
           : (needByAt == null ? '' : formatDateMmDdYyyy(needByAt)),
+      jntRevealDateDisplay: resolvedJntRevealDateDisplay,
       needBy: needByAt,
       requestAcceptByDisplay: resolvedRequestAcceptByDisplay.isNotEmpty
           ? resolvedRequestAcceptByDisplay
@@ -1749,6 +1760,14 @@ class SubmittedClientRequestSummary {
       requestDetails['needByDisplay'],
       detailData['needByDisplay'],
     ]);
+    final resolvedJntRevealDateDisplay = firstNonEmpty([
+      data['jntRevealDateDisplay'],
+      requestDetails['jntRevealDateDisplay'],
+      detailData['jntRevealDateDisplay'],
+      data['jnt_reveal_date_display'],
+      requestDetails['jnt_reveal_date_display'],
+      detailData['jnt_reveal_date_display'],
+    ]);
     final resolvedRequestAcceptByDisplay = firstNonEmpty([
       data['request_accept_by_display'],
       data['requestAcceptByDisplay'],
@@ -2017,6 +2036,7 @@ class SubmittedClientRequestSummary {
       needByDisplay: resolvedNeedByDisplay.isNotEmpty
           ? resolvedNeedByDisplay
           : (needByAt == null ? '' : formatDateMmDdYyyy(needByAt)),
+      jntRevealDateDisplay: resolvedJntRevealDateDisplay,
       needBy: needByAt,
       requestAcceptByDisplay: resolvedRequestAcceptByDisplay.isNotEmpty
           ? resolvedRequestAcceptByDisplay
