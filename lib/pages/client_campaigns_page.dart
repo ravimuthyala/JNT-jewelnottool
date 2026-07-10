@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../constants/profile_table_columns.dart';
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/notifications_service.dart';
@@ -222,24 +223,19 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       'client_artist',
       'clients',
     ]) {
+      final columns = columnsForProfileTable(collection);
       try {
         if (uid.isNotEmpty) {
-          final rows = await _supabase
-              .from(collection)
-              .select()
-              .eq('id', uid)
-              .limit(20);
+          final query = _supabase.from(collection).select(columns ?? '*');
+          final rows = await query.eq('id', uid).limit(20);
           for (final row in rows) {
             final data = _asMap(row);
             if (_isNfcEligibleClient(data)) return true;
           }
         }
         if (normalized.isNotEmpty) {
-          final rows = await _supabase
-              .from(collection)
-              .select()
-              .eq('email', normalized)
-              .limit(50);
+          final query = _supabase.from(collection).select(columns ?? '*');
+          final rows = await query.eq('email', normalized).limit(50);
           for (final row in rows) {
             final data = _asMap(row);
             if (_isNfcEligibleClient(data)) return true;
@@ -661,24 +657,19 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       'client_artist',
       'clients',
     ]) {
+      final columns = columnsForProfileTable(collection);
       try {
         if (uid.isNotEmpty) {
-          final rows = await _supabase
-              .from(collection)
-              .select()
-              .eq('id', uid)
-              .limit(20);
+          final query = _supabase.from(collection).select(columns ?? '*');
+          final rows = await query.eq('id', uid).limit(20);
           for (final row in rows) {
             final data = _asMap(row);
             if (_isBrandPartnerClient(data)) return true;
           }
         }
         if (normalized.isNotEmpty) {
-          final rows = await _supabase
-              .from(collection)
-              .select()
-              .eq('email', normalized)
-              .limit(50);
+          final query = _supabase.from(collection).select(columns ?? '*');
+          final rows = await query.eq('email', normalized).limit(50);
           for (final row in rows) {
             final data = _asMap(row);
             if (_isBrandPartnerClient(data)) return true;
@@ -1618,9 +1609,10 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     }
 
     Future<Map<String, dynamic>> readFrom(String collection) async {
+      final columns = columnsForProfileTable(collection);
       final rows = await _supabase
           .from(collection)
-          .select()
+          .select(columns ?? '*')
           .eq('email', normalizedEmail)
           .limit(1);
       if (rows.isEmpty) return const <String, dynamic>{};
