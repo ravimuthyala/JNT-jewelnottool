@@ -275,9 +275,10 @@ class ClientCustomRequestRepository {
     final uid = (userUid ?? '').trim();
     final controller = StreamController<List<SubmittedClientRequestSummary>>();
     final supabase = Supabase.instance.client;
-    Timer? timer;
+    final channels = <RealtimeChannel>[];
     var disposed = false;
     var loading = false;
+    var reloadPending = false;
 
     Map<String, dynamic> asMap(dynamic value) => _asMap(value);
 
@@ -524,15 +525,48 @@ class ClientCustomRequestRepository {
         if (!disposed) controller.addError(e, st);
       } finally {
         loading = false;
+        if (reloadPending && !disposed) {
+          reloadPending = false;
+          unawaited(loadAndEmit());
+        }
       }
     }
 
+    void scheduleReload() {
+      if (disposed) return;
+      if (loading) {
+        reloadPending = true;
+        return;
+      }
+      unawaited(loadAndEmit());
+    }
+
     unawaited(loadAndEmit());
-    timer = Timer.periodic(const Duration(seconds: 5), (_) => unawaited(loadAndEmit()));
+
+    for (final table in const <String>[
+      'client_custom_requests',
+      'company_custom_requests',
+      'client_custom_requests_details',
+      'company_custom_requests_details',
+    ]) {
+      channels.add(
+        supabase
+            .channel('client-requests-watch-$table-${identityHashCode(controller)}')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: table,
+              callback: (_) => scheduleReload(),
+            )
+            .subscribe(),
+      );
+    }
 
     controller.onCancel = () async {
       disposed = true;
-      timer?.cancel();
+      for (final channel in channels) {
+        await supabase.removeChannel(channel);
+      }
     };
 
     return controller.stream;
