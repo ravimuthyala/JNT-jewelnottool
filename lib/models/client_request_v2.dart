@@ -87,6 +87,7 @@ class ClientRequestV2 {
   final String selectedClientEmail;
   final List<String> selectedGroupClientEmails;
   final bool hasInspo;
+  final bool nfcRequested;
 
   final RequestStatusV2 status;
 
@@ -184,6 +185,7 @@ class ClientRequestV2 {
     this.selectedClientEmail = '',
     this.selectedGroupClientEmails = const [],
     required this.hasInspo,
+    this.nfcRequested = false,
     required this.clientLocation,
     required this.previewImageAsset,
     this.clientProfileImage = '',
@@ -266,6 +268,7 @@ class ClientRequestV2 {
     String? selectedClient,
     String? selectedClientEmail,
     List<String>? selectedGroupClientEmails,
+    bool? nfcRequested,
     String? sourceCollection,
     String? orderNumber,
     String? clientEmail,
@@ -357,6 +360,7 @@ class ClientRequestV2 {
       selectedGroupClientEmails:
           selectedGroupClientEmails ?? this.selectedGroupClientEmails,
       hasInspo: hasInspo,
+      nfcRequested: nfcRequested ?? this.nfcRequested,
       clientLocation: clientLocation,
       previewImageAsset: previewImageAsset,
       clientProfileImage: clientProfileImage ?? this.clientProfileImage,

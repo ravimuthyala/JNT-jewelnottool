@@ -17,7 +17,6 @@ part 'artist_completed_details_tab.dart';
 part 'artist_completed_photos_tab.dart';
 part 'artist_completed_shipping_tab.dart';
 
-
 Widget completedSectionTitle(String text) {
   return Text(
     text,
@@ -114,23 +113,40 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
   String get _requestTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
-          ? 'company_custom_requests'
-          : 'client_custom_requests';
+      ? 'company_custom_requests'
+      : 'client_custom_requests';
 
   String get _requestDetailsTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
-          ? 'company_custom_requests_details'
-          : 'client_custom_requests_details';
+      ? 'company_custom_requests_details'
+      : 'client_custom_requests_details';
 
   Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
     return <String, dynamic>{};
   }
 
   List<dynamic> _asList(Object? value) {
     if (value is List) return value;
     if (value is Iterable) return value.toList(growable: false);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return const <dynamic>[];
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) return List<dynamic>.from(decoded);
+      } catch (_) {}
+    }
     return const <dynamic>[];
   }
 
@@ -179,34 +195,34 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   String get _shippingQrValue => _firstNonEmpty([
-        _dbShippingQrCode,
-        _dbShippingLabelQrData,
-        widget.request.shippingQrCode,
-        widget.request.shippingLabelQrData,
-      ]);
+    _dbShippingQrCode,
+    _dbShippingLabelQrData,
+    widget.request.shippingQrCode,
+    widget.request.shippingLabelQrData,
+  ]);
 
   String get _shippingPdfValue => _firstNonEmpty([
-        _dbShippingLabelPdfUrl,
-        widget.request.shippingLabelPdfUrl,
-      ]);
+    _dbShippingLabelPdfUrl,
+    widget.request.shippingLabelPdfUrl,
+  ]);
 
   String get _shippingCarrierValue => _firstNonEmpty([
-        _dbShippingLabelCarrier,
-        widget.request.shippingLabelCarrier,
-        _courier ?? '',
-        'USPS',
-      ]);
+    _dbShippingLabelCarrier,
+    widget.request.shippingLabelCarrier,
+    _courier ?? '',
+    'USPS',
+  ]);
 
   String get _shippingTrackingValue => _firstNonEmpty([
-        _dbShippingLabelTrackingNumber,
-        widget.request.shippingLabelTrackingNumber,
-        _trackingCtrl.text,
-      ]);
+    _dbShippingLabelTrackingNumber,
+    widget.request.shippingLabelTrackingNumber,
+    _trackingCtrl.text,
+  ]);
 
   String get _shippingStatusValue => _firstNonEmpty([
-        widget.request.shippingStatus,
-        _dbShippingLabelReady == true ? 'label_ready' : '',
-      ]);
+    widget.request.shippingStatus,
+    _dbShippingLabelReady == true ? 'label_ready' : '',
+  ]);
 
   String _firstNonEmpty(Iterable<Object?> values) {
     for (final raw in values) {
@@ -245,7 +261,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         ..._asMap(payload['shippingLabel']),
         ..._asMap(details['shippingLabel']),
       };
-      final ready = _asBool(data['shipping_label_ready']) ||
+      final ready =
+          _asBool(data['shipping_label_ready']) ||
           _asBool(rootData['shippingLabelReady']) ||
           _asBool(payload['shippingLabelReady']) ||
           _asBool(details['shippingLabelReady']) ||
@@ -457,11 +474,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             color: Color(0xFFDBF4E6),
             shape: BoxShape.circle,
           ),
-          child: const Icon(
-            Icons.check,
-            size: 16,
-            color: Color(0xFF1E8E5A),
-          ),
+          child: const Icon(Icons.check, size: 16, color: Color(0xFF1E8E5A)),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -474,18 +487,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               children: const [
                 TextSpan(
                   text: 'Completed!\n',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
                 TextSpan(
                   text:
                       'Review the order details, photos, then use Shipping when the label is ready.',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
                 ),
               ],
             ),
@@ -526,7 +533,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       ),
     );
   }
-
 
   Widget _topHeroCentered(
     BuildContext context,
@@ -645,7 +651,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                         alignment: Alignment.centerLeft,
                         child: _chipInfo(
                           icon: Icons.attach_money_rounded,
-                          text: 'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
+                          text:
+                              'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
                         ),
                       ),
                     ),
@@ -751,13 +758,16 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     );
   }
 
-
-  Future<String> _resolveCompletedClientProfileImage(ClientRequestV2 request) async {
+  Future<String> _resolveCompletedClientProfileImage(
+    ClientRequestV2 request,
+  ) async {
     final existing = request.clientProfileImage.trim();
-    if (existing.isNotEmpty && existing.toLowerCase() != 'null') return existing;
+    if (existing.isNotEmpty && existing.toLowerCase() != 'null')
+      return existing;
 
     final accepted = request.acceptedClientProfileImage.trim();
-    if (accepted.isNotEmpty && accepted.toLowerCase() != 'null') return accepted;
+    if (accepted.isNotEmpty && accepted.toLowerCase() != 'null')
+      return accepted;
 
     return _lookupCompletedClientProfileImage(
       email: request.clientEmail.trim(),
@@ -860,7 +870,11 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     if (email.trim().isNotEmpty) {
       for (final table in const ['client', 'clients', 'client_artist']) {
         for (final column in const ['email', 'client_email']) {
-          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          final found = await lookupBy(
+            table,
+            column,
+            email.trim().toLowerCase(),
+          );
           if (found.isNotEmpty) return found;
         }
       }
@@ -868,7 +882,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
     if (name.trim().isNotEmpty) {
       for (final table in const ['client', 'clients', 'client_artist']) {
-        for (final column in const ['name', 'full_name', 'display_name', 'client_name']) {
+        for (final column in const [
+          'name',
+          'full_name',
+          'display_name',
+          'client_name',
+        ]) {
           final found = await lookupBy(table, column, name.trim());
           if (found.isNotEmpty) return found;
         }
@@ -922,11 +941,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
           ),
           const SizedBox(width: 10),
-          Container(
-            width: 1,
-            height: 18,
-            color: AppColors.blackCatBorderLight,
-          ),
+          Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
           const SizedBox(width: 10),
           Icon(
             r.orderType == RequestOrderTypeV2.group
@@ -967,7 +982,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       ],
     );
   }
-
 
   static Widget _handCardCentered(
     String title,
@@ -1019,10 +1033,20 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               ),
             ),
           ),
-          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
-          Text(
-            formatMm(v),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          SizedBox(
+            width: 34,
+            child: nfcRequested
+                ? Center(child: _nfcDimensionChip())
+                : const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: Text(
+              formatMm(v),
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
           ),
         ],
       ),
@@ -1095,13 +1119,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 ? '-'
                 : widget.request.clientLocation.trim(),
           ),
-          _kv(
-            'Carrier',
-            _shippingCarrierValue,
-          ),
+          _kv('Carrier', _shippingCarrierValue),
           _kv(
             'Tracking',
-            _shippingTrackingValue.isEmpty ? 'Auto-filled on label' : _shippingTrackingValue,
+            _shippingTrackingValue.isEmpty
+                ? 'Auto-filled on label'
+                : _shippingTrackingValue,
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -1117,9 +1140,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
-                onPressed: () => _openLabelPreview(
-                  _shippingPdfValue,
-                ),
+                onPressed: () => _openLabelPreview(_shippingPdfValue),
                 icon: const Icon(Icons.download_rounded, size: 16),
                 label: const Text('Download Label'),
               ),
@@ -1132,9 +1153,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
-                onPressed: () => _openLabelPreview(
-                  _shippingPdfValue,
-                ),
+                onPressed: () => _openLabelPreview(_shippingPdfValue),
                 icon: const Icon(Icons.print_rounded, size: 16),
                 label: const Text('Print Label'),
               ),
@@ -1207,126 +1226,148 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Center(
-                    child: Text(
-                      'Nail Dimensions',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        fontFamily: 'ArialBold',
-                        color: AppColors.blackCat,
-                      ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: Text(
+                    'Nail Dimensions',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      fontFamily: 'ArialBold',
+                      color: AppColors.blackCat,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _handCardCentered(
-                          'Left Hand',
-                          widget.request.leftHand,
-                          nfc: nfc.main.left,
-                        ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _handCardCentered(
+                        'Left Hand',
+                        widget.request.leftHand,
+                        nfc: nfc.main.left,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _handCardCentered(
-                          'Right Hand',
-                          widget.request.rightHand,
-                          nfc: nfc.main.right,
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _handCardCentered(
+                        'Right Hand',
+                        widget.request.rightHand,
+                        nfc: nfc.main.right,
                       ),
-                    ],
-                  ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _softBox(
-                      Row(
-                        children: [
-                          const Text(
-                            'Shape',
-                            style: TextStyle(
-                              color: AppColors.blackCat,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              widget.request.nailShape.trim().isEmpty ? '-' : widget.request.nailShape,
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _softBox(
+                        Row(
+                          children: [
+                            const Text(
+                              'Shape',
+                              style: TextStyle(
                                 color: AppColors.blackCat,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                fontFamily: 'ArialBold',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                fontFamily: 'Arial',
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _softBox(
-                      Row(
-                        children: [
-                          const Text(
-                            'Length',
-                            style: TextStyle(
-                              color: AppColors.blackCat,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _lengthLabel(widget.request.nailLength).trim().isEmpty
-                                  ? '-'
-                                  : _lengthLabel(widget.request.nailLength),
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                color: AppColors.blackCat,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                fontFamily: 'ArialBold',
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.request.nailShape.trim().isEmpty
+                                    ? '-'
+                                    : widget.request.nailShape,
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                  color: AppColors.blackCat,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  fontFamily: 'ArialBold',
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: SizedBox(
+                        height: 42,
+                        child: VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _softBox(
+                        Row(
+                          children: [
+                            const Text(
+                              'Length',
+                              style: TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _lengthLabel(
+                                      widget.request.nailLength,
+                                    ).trim().isEmpty
+                                    ? '-'
+                                    : _lengthLabel(widget.request.nailLength),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                  color: AppColors.blackCat,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  fontFamily: 'ArialBold',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
           ],
         );
       },
     );
   }
 
-
-  Widget _compactGroupClientMeasurementsTabs(List<GroupClientMeasurementData> clients) {
-    final safeClients = clients.isEmpty ? _buildGroupMeasurementClients() : clients;
+  Widget _compactGroupClientMeasurementsTabs(
+    List<GroupClientMeasurementData> clients,
+  ) {
+    final safeClients = clients.isEmpty
+        ? _buildGroupMeasurementClients()
+        : clients;
     if (safeClients.isEmpty) return const SizedBox.shrink();
-    return _CompactGroupMeasurementsHost(clients: safeClients);
+    return GroupClientMeasurementsTabs(
+      clients: safeClients,
+      compactRequestDetailsLayout: true,
+      tabViewHeight: 312,
+    );
   }
 
-  Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
+  Future<List<GroupClientMeasurementData>>
+  _loadGroupMeasurementClients() async {
     final merged = <GroupClientMeasurementData>[];
     final seen = <String>{};
     final nfcDetails = await loadRequestNfcDetails(
@@ -1414,6 +1455,82 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       return const <String, String>{};
     }
 
+    void updateSubmittedClientFromSource(Map<String, dynamic> source) {
+      if (merged.isEmpty || source.isEmpty) return;
+
+      final payload = _asMap(source['payload']);
+      final details = _asMap(source['details']);
+      final data = _asMap(source['data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
+      final sources = <Map<String, dynamic>>[
+        source,
+        payload,
+        details,
+        data,
+        requestDetails,
+        orderData,
+      ];
+
+      final leftSources = <Object?>[];
+      final rightSources = <Object?>[];
+      for (final item in sources) {
+        final nailPreferences = _asMap(
+          item['nailPreferences'] ?? item['nail_preferences'],
+        );
+        final snapshotNailPreferences = _asMap(
+          _asMap(
+            item['clientProfileSnapshot'] ?? item['client_profile_snapshot'],
+          )['nailPreferences'],
+        );
+        leftSources.addAll(<Object?>[
+          item['leftHandDimensions'],
+          item['left_hand_dimensions'],
+          nailPreferences['leftHandDimensions'],
+          nailPreferences['left_hand_dimensions'],
+          nailPreferences['dimensions'],
+          snapshotNailPreferences['dimensions'],
+          item['dimensions'],
+        ]);
+        rightSources.addAll(<Object?>[
+          item['rightHandDimensions'],
+          item['right_hand_dimensions'],
+          nailPreferences['rightHandDimensions'],
+          nailPreferences['right_hand_dimensions'],
+          nailPreferences['dimensions'],
+          snapshotNailPreferences['dimensions'],
+          item['dimensions'],
+        ]);
+      }
+
+      final left = firstDims(leftSources, left: true);
+      final right = firstDims(rightSources, left: false);
+      if (left.values.every((v) => v.trim().isEmpty) &&
+          right.values.every((v) => v.trim().isEmpty)) {
+        return;
+      }
+
+      final current = merged.first;
+      merged[0] = GroupClientMeasurementData(
+        name: current.name,
+        clientEmail: current.clientEmail,
+        nailShape: current.nailShape,
+        nailLength: current.nailLength,
+        leftHand: left.values.any((v) => v.trim().isNotEmpty)
+            ? left
+            : current.leftHand,
+        rightHand: right.values.any((v) => v.trim().isNotEmpty)
+            ? right
+            : current.rightHand,
+        leftNfc: current.leftNfc,
+        rightNfc: current.rightNfc,
+      );
+    }
+
     void addGroupClientFromMap(Map<String, dynamic> client, int index) {
       if (client.isEmpty) return;
 
@@ -1438,7 +1555,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
       final savedNails = _asMap(client['savedNails'] ?? client['saved_nails']);
       final draftNails = _asMap(client['draftNails'] ?? client['draft_nails']);
-      final nailPreferences = _asMap(client['nailPreferences'] ?? client['nail_preferences']);
+      final nailPreferences = _asMap(
+        client['nailPreferences'] ?? client['nail_preferences'],
+      );
       final nailSource = savedNails.isNotEmpty
           ? savedNails
           : (draftNails.isNotEmpty ? draftNails : nailPreferences);
@@ -1496,11 +1615,17 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     }
 
     void addGroupClientsFromSource(Map<String, dynamic> source) {
+      updateSubmittedClientFromSource(source);
+
       final payload = _asMap(source['payload']);
       final details = _asMap(source['details']);
       final data = _asMap(source['data']);
-      final requestDetails = _asMap(source['requestDetails'] ?? source['request_details']);
-      final orderData = _asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
       final nestedSources = <Map<String, dynamic>>[
         source,
         payload,
@@ -1535,7 +1660,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           .select()
           .eq('id', widget.request.id)
           .maybeSingle();
-      if (root != null) addGroupClientsFromSource(Map<String, dynamic>.from(root));
+      if (root != null)
+        addGroupClientsFromSource(Map<String, dynamic>.from(root));
 
       final detailRows = await _supabase
           .from(_requestDetailsTable)
@@ -1779,7 +1905,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Future<void> _openLabelPreview(String pdfUrl) async {
-    final resolvedPdf = pdfUrl.trim().isNotEmpty ? pdfUrl.trim() : _shippingPdfValue;
+    final resolvedPdf = pdfUrl.trim().isNotEmpty
+        ? pdfUrl.trim()
+        : _shippingPdfValue;
     final link = resolvedPdf.trim().isEmpty
         ? 'jnt://shipping/label?order=${widget.request.id}&download=1'
         : resolvedPdf.trim();
@@ -1847,7 +1975,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 }
 
-
 class _CompactGroupMeasurementsHost extends StatefulWidget {
   const _CompactGroupMeasurementsHost({required this.clients});
 
@@ -1899,8 +2026,9 @@ class _CompactGroupMeasurementsHostState
                     client.name.trim().isEmpty ? 'Client' : client.name.trim(),
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight:
-                          selectedTab ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: selectedTab
+                          ? FontWeight.w800
+                          : FontWeight.w600,
                       color: AppColors.blackCat.withValues(
                         alpha: selectedTab ? 0.95 : 0.70,
                       ),
@@ -1925,24 +2053,39 @@ class _CompactGroupMeasurementsHostState
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _CompactHandCard(
-                      title: 'Left Hand',
-                      values: selected.leftHand,
-                      nfc: selected.leftNfc,
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _CompactHandCard(
+                        title: 'Left Hand',
+                        values: selected.leftHand,
+                        nfc: selected.leftNfc,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _CompactHandCard(
-                      title: 'Right Hand',
-                      values: selected.rightHand,
-                      nfc: selected.rightNfc,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: AppColors.blackCatBorderLight,
+                      ),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: _CompactHandCard(
+                        title: 'Right Hand',
+                        values: selected.rightHand,
+                        nfc: selected.rightNfc,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.blackCatBorderLight,
               ),
               const SizedBox(height: 10),
               Row(
@@ -1953,7 +2096,7 @@ class _CompactGroupMeasurementsHostState
                       value: _cleanText(selected.nailShape),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _CompactInfoBox(
                       label: 'Length',
@@ -1997,32 +2140,24 @@ class _CompactHandCard extends StatelessWidget {
       return '${parsed.toStringAsFixed(parsed % 1 == 0 ? 0 : 2)} mm';
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-              color: AppColors.blackCat,
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            color: AppColors.blackCat,
           ),
-          const SizedBox(height: 10),
-          _row('Thumb', value('thumb'), nfcRequested: nfc['thumb'] == true),
-          _row('Index', value('index'), nfcRequested: nfc['index'] == true),
-          _row('Middle', value('middle'), nfcRequested: nfc['middle'] == true),
-          _row('Ring', value('ring'), nfcRequested: nfc['ring'] == true),
-          _row('Pinky', value('pinky'), nfcRequested: nfc['pinky'] == true),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        _row('Thumb', value('thumb'), nfcRequested: nfc['thumb'] == true),
+        _row('Index', value('index'), nfcRequested: nfc['index'] == true),
+        _row('Middle', value('middle'), nfcRequested: nfc['middle'] == true),
+        _row('Ring', value('ring'), nfcRequested: nfc['ring'] == true),
+        _row('Pinky', value('pinky'), nfcRequested: nfc['pinky'] == true),
+      ],
     );
   }
 
@@ -2030,10 +2165,14 @@ class _CompactHandCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
+          SizedBox(
+            width: 40,
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -2041,13 +2180,30 @@ class _CompactHandCard extends StatelessWidget {
               ),
             ),
           ),
-          if (nfcRequested) ...[_CompletedRequestSheetState._nfcDimensionChip(), const SizedBox(width: 6)],
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (nfcRequested) ...[
+                    _CompletedRequestSheetState._nfcDimensionChip(),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -2064,39 +2220,31 @@ class _CompactInfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Row(
-        children: [
-          Text(
-            label,
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.blackCat.withValues(alpha: 0.78),
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.blackCat,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.blackCat,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

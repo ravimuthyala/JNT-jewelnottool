@@ -14,6 +14,7 @@ import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import 'client_shell_page.dart';
 import 'notifications_page.dart';
+import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
@@ -190,6 +191,9 @@ class _ClientCustomRequestWithArtistPageState
   final _shipStateCtrl = TextEditingController();
   String _shipState = '';
   String _shipCountry = 'United States';
+  Timer? _shipStreetAutocompleteDebounce;
+  List<AddressSuggestion> _shipStreetSuggestions = const [];
+  bool _shipStreetSuggestionsLoading = false;
 
   // -----------------------------
   // GROUP ORDER
@@ -201,10 +205,58 @@ class _ClientCustomRequestWithArtistPageState
   static const int _maxGroupClients = 15;
   bool _isSubmitting = false;
   final List<String> _artistNames = [];
+  final Map<String, bool> _artistAcceptsNfcByNameLower = <String, bool>{};
+  final Map<String, bool> _artistIsProfessionalByNameLower = <String, bool>{};
   final Map<String, String> _fieldErrors = <String, String>{};
 
   bool get _isShipCountryUs =>
       _shipCountry.trim().toLowerCase() == 'united states';
+
+  Future<void> _autofillShippingAddressFromStreet() async {
+    _shipStreetAutocompleteDebounce?.cancel();
+    final query = _shipStreetCtrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _shipStreetSuggestionsLoading = false;
+        _shipStreetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _shipStreetSuggestionsLoading = true);
+    _shipStreetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _shipStreetSuggestionsLoading = false;
+          _shipStreetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyShippingStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _shipStreetCtrl.text = selected.street;
+      _shipCityCtrl.text = selected.city;
+      _shipZipCtrl.text = selected.zip;
+      _shipCountry = 'United States';
+      _shipState =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      _shipStateCtrl.text = _shipState;
+      _shipStreetSuggestions = const [];
+      _fieldErrors.remove('shipStreet');
+      _fieldErrors.remove('shipCity');
+      _fieldErrors.remove('shipState');
+      _fieldErrors.remove('shipZip');
+      _fieldErrors.remove('shipCountry');
+    });
+  }
 
   @override
   void initState() {
@@ -318,6 +370,32 @@ class _ClientCustomRequestWithArtistPageState
           .where((e) => e.isNotEmpty)
           .toList();
       setState(() {
+        _artistAcceptsNfcByNameLower
+          ..clear()
+          ..addEntries(
+            entries
+                .where((e) => e.acceptsDirectRequests)
+                .where((e) => e.name.trim().isNotEmpty)
+                .map(
+                  (e) => MapEntry(
+                    e.name.trim().toLowerCase(),
+                    e.acceptsNfcRequests,
+                  ),
+                ),
+          );
+        _artistIsProfessionalByNameLower
+          ..clear()
+          ..addEntries(
+            entries
+                .where((e) => e.acceptsDirectRequests)
+                .where((e) => e.name.trim().isNotEmpty)
+                .map(
+                  (e) => MapEntry(
+                    e.name.trim().toLowerCase(),
+                    _artistEntryIsProfessional(e),
+                  ),
+                ),
+          );
         _artistNames
           ..clear()
           ..addAll(
@@ -348,10 +426,57 @@ class _ClientCustomRequestWithArtistPageState
               ),
             );
         }
+        _syncSelectedArtistForFilters();
       });
     } catch (_) {}
   }
 
+  bool _artistEntryIsProfessional(ArtistDirectoryEntry entry) {
+    final credential = entry.credential.trim().toLowerCase();
+    return !(credential.contains('student') ||
+        credential.contains('unlicensed') ||
+        credential.contains('non-licensed'));
+  }
+
+  bool _requestNeedsNfcAcceptedArtist() {
+    final selectedNails = NailPreferences(
+      dimensions: _singleNailPrefs.dimensions,
+      shape: _shape,
+      length: _length,
+    );
+    return _requestHasSelectedNfc(mainNails: selectedNails);
+  }
+
+  List<String> _filteredArtistOptions() {
+    final needsNfc = _requestNeedsNfcAcceptedArtist();
+    final names = _artistNames
+        .where((name) {
+          if (!_allowNonLicensed &&
+              _artistIsProfessionalByNameLower[name.trim().toLowerCase()] !=
+                  true) {
+            return false;
+          }
+          if (!needsNfc) return true;
+          return _artistAcceptsNfcByNameLower[name.trim().toLowerCase()] ==
+              true;
+        })
+        .toList(growable: false);
+    return _filterSelfArtistNames(_dedupeArtistNames(names));
+  }
+
+  void _syncSelectedArtistForFilters() {
+    final selected = (_selectedArtist ?? '').trim();
+    if (selected.isEmpty) return;
+    final key = selected.toLowerCase();
+    if (!_allowNonLicensed && _artistIsProfessionalByNameLower[key] != true) {
+      _selectedArtist = null;
+      return;
+    }
+    if (_requestNeedsNfcAcceptedArtist() &&
+        _artistAcceptsNfcByNameLower[key] != true) {
+      _selectedArtist = null;
+    }
+  }
 
   String _currentUserEmailLower() {
     return (Supabase.instance.client.auth.currentUser?.email ?? '')
@@ -367,13 +492,25 @@ class _ClientCustomRequestWithArtistPageState
     final keys = <String>{
       norm(widget.profile.basic.name),
       norm(Supabase.instance.client.auth.currentUser?.userMetadata?['name']),
-      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['displayName']),
-      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['display_name']),
-      norm(Supabase.instance.client.auth.currentUser?.userMetadata?['full_name']),
+      norm(
+        Supabase.instance.client.auth.currentUser?.userMetadata?['displayName'],
+      ),
+      norm(
+        Supabase
+            .instance
+            .client
+            .auth
+            .currentUser
+            ?.userMetadata?['display_name'],
+      ),
+      norm(
+        Supabase.instance.client.auth.currentUser?.userMetadata?['full_name'],
+      ),
     }..removeWhere((e) => e.isEmpty);
 
     final email = _currentUserEmailLower();
-    if (email.contains('@')) keys.add(email.split('@').first.trim().toLowerCase());
+    if (email.contains('@'))
+      keys.add(email.split('@').first.trim().toLowerCase());
 
     return keys;
   }
@@ -387,9 +524,10 @@ class _ClientCustomRequestWithArtistPageState
 
   List<String> _filterSelfArtistNames(List<String> names) {
     if (!widget.excludeCurrentUserFromArtistDropdown) return names;
-    return names.where((name) => !_isSelfArtistName(name)).toList(growable: false);
+    return names
+        .where((name) => !_isSelfArtistName(name))
+        .toList(growable: false);
   }
-
 
   List<String> _dedupeArtistNames(List<String> rawNames) {
     final seen = <String>{};
@@ -415,6 +553,9 @@ class _ClientCustomRequestWithArtistPageState
       );
       for (final artist in artists) {
         if (!artist.acceptsDirectRequests) continue;
+        if (_requestNeedsNfcAcceptedArtist() && !artist.acceptsNfcRequests) {
+          continue;
+        }
         if (artist.name.trim().toLowerCase() != normalizedName) continue;
         final email = artist.email.trim().toLowerCase();
         if (email.isNotEmpty) return email;
@@ -637,8 +778,12 @@ class _ClientCustomRequestWithArtistPageState
       'is_direct_request': _asBool(cleanSummary['isDirectRequest']),
       'fallback_to_pool': _asBool(cleanSummary['fallbackToPool']),
       'open_to_artist_pool': !_asBool(cleanSummary['isDirectRequest']),
-      'direct_artist_status': _asBool(cleanSummary['isDirectRequest']) ? 'in_review' : '',
-      'artist_pool_status': _asBool(cleanSummary['isDirectRequest']) ? 'locked' : 'in_review',
+      'direct_artist_status': _asBool(cleanSummary['isDirectRequest'])
+          ? 'in_review'
+          : '',
+      'artist_pool_status': _asBool(cleanSummary['isDirectRequest'])
+          ? 'locked'
+          : 'in_review',
       'status': _firstNonEmpty([cleanSummary['status'], 'pending']),
       'summary': cleanSummary,
       'details': cleanDetails,
@@ -899,6 +1044,7 @@ class _ClientCustomRequestWithArtistPageState
 
   @override
   void dispose() {
+    _shipStreetAutocompleteDebounce?.cancel();
     _dateCtrl.dispose();
     _descCtrl.dispose();
     _shipStreetCtrl.dispose();
@@ -918,7 +1064,8 @@ class _ClientCustomRequestWithArtistPageState
     if (value == 'profile') {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ClientArtistProfilePage(initialProfile: widget.profile),
+          builder: (_) =>
+              ClientArtistProfilePage(initialProfile: widget.profile),
         ),
       );
       return;
@@ -1842,6 +1989,25 @@ class _ClientCustomRequestWithArtistPageState
     final artistBudgetMin = clientBudgetMin;
     final artistBudgetMax = clientBudgetMax;
     final selectedArtist = (_selectedArtist ?? '').trim();
+    final selectedArtistRequiresNfc =
+        _requestNeedsNfcAcceptedArtist() && selectedArtist.isNotEmpty;
+    if (selectedArtistRequiresNfc &&
+        _artistAcceptsNfcByNameLower[selectedArtist.toLowerCase()] != true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please select an artist who accepts NFC for this request.',
+            ),
+          ),
+        );
+      }
+      setState(() {
+        _selectedArtist = null;
+        _isSubmitting = false;
+      });
+      return;
+    }
     final selectedArtistEmail = await _resolveSelectedArtistEmail(
       selectedArtist,
     );
@@ -1965,6 +2131,9 @@ class _ClientCustomRequestWithArtistPageState
         details: requestDetails,
       );
       try {
+        final excludeArtistEmails = widget.excludeCurrentUserFromArtistDropdown
+            ? <String>[widget.profile.basic.email]
+            : const <String>[];
         await NotificationsService.notifyArtistsForNewClientRequest(
           clientName: widget.profile.basic.name,
           isDirectRequest: isDirectRequest,
@@ -1974,6 +2143,8 @@ class _ClientCustomRequestWithArtistPageState
           orderNumber: _firstNonEmpty([requestSummary['orderNumber']]),
           sourceCollection: 'Client_Custom_Requests',
           allowNonLicensed: _allowNonLicensed,
+          nfcRequested: nfcRequested,
+          excludeArtistEmails: excludeArtistEmails,
         );
       } catch (e) {
         debugPrint('CLIENT CUSTOM REQUEST NOTIFICATION FAILED: $e');
@@ -2188,8 +2359,8 @@ class _ClientCustomRequestWithArtistPageState
     if (oldWidget.artistName != widget.artistName) {
       setState(() {
         _selectedArtist = _isSelfArtistName(widget.artistName)
-        ? null
-        : widget.artistName.trim();
+            ? null
+            : widget.artistName.trim();
       });
       unawaited(_loadArtistNames());
     }
@@ -2251,7 +2422,9 @@ class _ClientCustomRequestWithArtistPageState
           // ✅ Avatar
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: JntHeaderMetrics.rightPadding),
+              padding: const EdgeInsets.only(
+                right: JntHeaderMetrics.rightPadding,
+              ),
               child: _AvatarMenu(
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
@@ -2523,8 +2696,10 @@ class _ClientCustomRequestWithArtistPageState
                   scale: 0.95,
                   child: Checkbox(
                     value: _allowNonLicensed,
-                    onChanged: (v) =>
-                        setState(() => _allowNonLicensed = (v ?? true)),
+                    onChanged: (v) => setState(() {
+                      _allowNonLicensed = (v ?? true);
+                      _syncSelectedArtistForFilters();
+                    }),
                     activeColor: AppColors.blackCat,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
@@ -2876,6 +3051,7 @@ class _ClientCustomRequestWithArtistPageState
                                   oldCount: oldNfcCount,
                                   newCount: newNfcCount,
                                 );
+                                _syncSelectedArtistForFilters();
                               });
                             },
                           ),
@@ -2935,19 +3111,15 @@ class _ClientCustomRequestWithArtistPageState
                   Builder(
                     builder: (context) {
                       final selected = (_selectedArtist ?? '').trim();
-                      final options = _filterSelfArtistNames(
-                        _dedupeArtistNames(<String>[
-                          if (selected.isNotEmpty) selected,
-                          ..._artistNames,
-                        ]),
-                      );
+                      final options = _filteredArtistOptions();
                       return _SearchableSelectField(
                         value: selected,
                         hint: 'Select Artist',
                         items: options,
                         onChanged: (v) => setState(() {
                           final next = v.trim();
-                          _selectedArtist = next.isEmpty || _isSelfArtistName(next)
+                          _selectedArtist =
+                              next.isEmpty || _isSelfArtistName(next)
                               ? null
                               : next;
                         }),
@@ -2955,61 +3127,66 @@ class _ClientCustomRequestWithArtistPageState
                     },
                   ),
 
-                  const SizedBox(height: 14),
-                  Text(
-                    'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.blackCat.withValues(alpha: 0.75),
-                      height: 1.2,
-                      fontSize: 13,
+                  if ((_selectedArtist ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
+                        height: 1.2,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text(
-                          'Yes',
-                          style: TextStyle(fontSize: 12),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text(
+                            'Yes',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          selected: _fallbackToPool == true,
+                          selectedColor: AppColors.blackCat,
+                          backgroundColor: _requestSnow,
+                          checkmarkColor: AppColors.snow,
+                          onSelected: (_) =>
+                              setState(() => _fallbackToPool = true),
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w400,
+                            color: _fallbackToPool == true
+                                ? AppColors.snow
+                                : AppColors.blackCat,
+                          ),
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.08),
+                          ),
                         ),
-                        selected: _fallbackToPool == true,
-                        selectedColor: AppColors.blackCat,
-                        backgroundColor: _requestSnow,
-                        checkmarkColor: AppColors.snow,
-                        onSelected: (_) =>
-                            setState(() => _fallbackToPool = true),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          color: _fallbackToPool == true
-                              ? AppColors.snow
-                              : AppColors.blackCat,
+                        const SizedBox(width: 10),
+                        ChoiceChip(
+                          label: const Text(
+                            'No',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          selected: _fallbackToPool == false,
+                          selectedColor: AppColors.blackCat,
+                          backgroundColor: _requestSnow,
+                          checkmarkColor: AppColors.snow,
+                          onSelected: (_) =>
+                              setState(() => _fallbackToPool = false),
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w400,
+                            color: _fallbackToPool == false
+                                ? AppColors.snow
+                                : AppColors.blackCat,
+                          ),
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.08),
+                          ),
                         ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.08),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ChoiceChip(
-                        label: const Text('No', style: TextStyle(fontSize: 12)),
-                        selected: _fallbackToPool == false,
-                        selectedColor: AppColors.blackCat,
-                        backgroundColor: _requestSnow,
-                        checkmarkColor: AppColors.snow,
-                        onSelected: (_) =>
-                            setState(() => _fallbackToPool = false),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          color: _fallbackToPool == false
-                              ? AppColors.snow
-                              : AppColors.blackCat,
-                        ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.08),
-                        ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -3037,6 +3214,7 @@ class _ClientCustomRequestWithArtistPageState
                     oldCount: oldNfcCount,
                     newCount: newNfcCount,
                   );
+                  _syncSelectedArtistForFilters();
                   _fieldErrors.remove('shape');
                   _fieldErrors.remove('length');
                 });
@@ -3124,8 +3302,59 @@ class _ClientCustomRequestWithArtistPageState
                       verticalPadding: 8,
                       onChanged: (_) => setState(() {
                         _fieldErrors.remove('shipStreet');
+                        _autofillShippingAddressFromStreet();
                       }),
                     ),
+                    if (_shipStreetSuggestionsLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (_shipStreetSuggestions.isNotEmpty)
+                      Builder(
+                        builder: (context) {
+                          final suggestionCount = _shipStreetSuggestions.length;
+                          final menuHeight =
+                              AutocompleteDropdownSizing.menuHeight(
+                                itemCount: suggestionCount,
+                                itemExtent: 40,
+                              );
+                          return Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            decoration: BoxDecoration(
+                              color: _requestSnow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.20,
+                                ),
+                              ),
+                            ),
+                            constraints: BoxConstraints(maxHeight: menuHeight),
+                            child: ListView.separated(
+                              shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
+                                suggestionCount,
+                              ),
+                              physics: AutocompleteDropdownSizing.scrollPhysics(
+                                suggestionCount,
+                              ),
+                              itemCount: suggestionCount,
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, i) => ListTile(
+                                dense: true,
+                                title: Text(
+                                  _shipStreetSuggestions[i].displayLabel,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                onTap: () => _applyShippingStreetSuggestion(
+                                  _shipStreetSuggestions[i],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     _InlineError(text: _fieldErrors['shipStreet']),
                     const SizedBox(height: 4),
                     _InputField(
@@ -3693,6 +3922,7 @@ class _AvatarMenu extends StatelessWidget {
             imageUrl: avatarUrl,
             displayName: displayName,
             size: JntHeaderMetrics.avatarSize,
+            resolveCurrentUserFallback: true,
           ),
         ),
       ),
@@ -3803,6 +4033,15 @@ class _SearchableSelectField extends StatelessWidget {
           controller: controller,
           focusNode: focusNode,
           textAlignVertical: TextAlignVertical.center,
+          onChanged: (text) {
+            final normalizedText = text.trim();
+            final matchesExisting = normalizedItems.any(
+              (item) => item.toLowerCase() == normalizedText.toLowerCase(),
+            );
+            if (normalizedText.isEmpty || !matchesExisting) {
+              onChanged('');
+            }
+          },
           onTap: () {
             if (controller.text.trim().isEmpty && normalizedItems.isNotEmpty) {
               controller.value = const TextEditingValue(text: ' ');

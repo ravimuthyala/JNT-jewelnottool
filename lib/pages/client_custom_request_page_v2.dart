@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'dart:async';
 import 'dart:convert';
 import '../theme/app_colors.dart';
+import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
@@ -98,6 +99,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
   final TextEditingController _shipZipCtrl = TextEditingController();
   String _shipState = '';
   String _shipCountry = 'United States';
+  Timer? _shipStreetAutocompleteDebounce;
+  List<AddressSuggestion> _shipStreetSuggestions = const [];
+  bool _shipStreetSuggestionsLoading = false;
 
   // Group order clients (DB only)
   List<CompletedClient> _completedClients = <CompletedClient>[];
@@ -106,6 +110,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
   static const int _maxGroupClients = 5;
 
   final List<String> _artistNames = [];
+  final Map<String, bool> _artistAcceptsNfcByNameLower = <String, bool>{};
+  final Map<String, bool> _artistIsProfessionalByNameLower = <String, bool>{};
 
   // -----------------------
   // ✅ NEW fields from the “Company Request UI” (adapted for Client)
@@ -233,12 +239,39 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
       if (!mounted) return;
       final names =
           entries
+              .where((e) => e.acceptsDirectRequests)
               .map((e) => e.name.trim())
               .where((e) => e.isNotEmpty)
               .toSet()
               .toList()
             ..sort();
       setState(() {
+        _artistAcceptsNfcByNameLower
+          ..clear()
+          ..addEntries(
+            entries
+                .where((e) => e.acceptsDirectRequests)
+                .where((e) => e.name.trim().isNotEmpty)
+                .map(
+                  (e) => MapEntry(
+                    e.name.trim().toLowerCase(),
+                    e.acceptsNfcRequests,
+                  ),
+                ),
+          );
+        _artistIsProfessionalByNameLower
+          ..clear()
+          ..addEntries(
+            entries
+                .where((e) => e.acceptsDirectRequests)
+                .where((e) => e.name.trim().isNotEmpty)
+                .map(
+                  (e) => MapEntry(
+                    e.name.trim().toLowerCase(),
+                    _artistEntryIsProfessional(e),
+                  ),
+                ),
+          );
         _artistNames
           ..clear()
           ..addAll(names);
@@ -247,8 +280,51 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
             !_artistNames.contains(_selectedArtist)) {
           _selectedArtist = null;
         }
+        _syncSelectedArtistForFilters();
       });
     } catch (_) {}
+  }
+
+  bool _artistEntryIsProfessional(ArtistDirectoryEntry entry) {
+    final credential = entry.credential.trim().toLowerCase();
+    return !(credential.contains('student') ||
+        credential.contains('unlicensed') ||
+        credential.contains('non-licensed'));
+  }
+
+  bool _requestNeedsNfcAcceptedArtist() {
+    return false;
+  }
+
+  List<String> _filteredArtistOptions() {
+    final needsNfc = _requestNeedsNfcAcceptedArtist();
+    return _artistNames
+        .where((name) {
+          final key = name.trim().toLowerCase();
+          if (!_allowNonLicensed &&
+              _artistIsProfessionalByNameLower[key] != true) {
+            return false;
+          }
+          if (needsNfc && _artistAcceptsNfcByNameLower[key] != true) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+  }
+
+  void _syncSelectedArtistForFilters() {
+    final selected = (_selectedArtist ?? '').trim();
+    if (selected.isEmpty) return;
+    final key = selected.toLowerCase();
+    if (!_allowNonLicensed && _artistIsProfessionalByNameLower[key] != true) {
+      _selectedArtist = null;
+      return;
+    }
+    if (_requestNeedsNfcAcceptedArtist() &&
+        _artistAcceptsNfcByNameLower[key] != true) {
+      _selectedArtist = null;
+    }
   }
 
   Future<String> _resolveSelectedArtistEmail(String selectedArtist) async {
@@ -259,6 +335,10 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
         hydrateMediaFallbacks: false,
       );
       for (final artist in artists) {
+        if (!artist.acceptsDirectRequests) continue;
+        if (!_allowNonLicensed && !_artistEntryIsProfessional(artist)) {
+          continue;
+        }
         if (artist.name.trim().toLowerCase() != normalizedName) continue;
         final email = artist.email.trim().toLowerCase();
         if (email.isNotEmpty) return email;
@@ -486,7 +566,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
         cleanSummary['selectedArtistEmail'],
         _asMap(cleanDetails['order'])['selectedArtistEmail'],
       ]).toLowerCase(),
-      'is_direct_request': _asBool(cleanSummary['isDirectRequest']) ||
+      'is_direct_request':
+          _asBool(cleanSummary['isDirectRequest']) ||
           _firstNonEmpty([
             cleanSummary['selectedArtistEmail'],
             _asMap(cleanDetails['order'])['selectedArtistEmail'],
@@ -495,15 +576,17 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
             _asMap(cleanDetails['order'])['selectedArtist'],
           ]).trim().isNotEmpty,
       'fallback_to_pool': _asBool(cleanSummary['fallbackToPool']),
-      'open_to_artist_pool': !(_asBool(cleanSummary['isDirectRequest']) ||
-          _firstNonEmpty([
-            cleanSummary['selectedArtistEmail'],
-            _asMap(cleanDetails['order'])['selectedArtistEmail'],
-            cleanSummary['selectedArtist'],
-            cleanDetails['selectedArtist'],
-            _asMap(cleanDetails['order'])['selectedArtist'],
-          ]).trim().isNotEmpty),
-      'direct_artist_status': (_asBool(cleanSummary['isDirectRequest']) ||
+      'open_to_artist_pool':
+          !(_asBool(cleanSummary['isDirectRequest']) ||
+              _firstNonEmpty([
+                cleanSummary['selectedArtistEmail'],
+                _asMap(cleanDetails['order'])['selectedArtistEmail'],
+                cleanSummary['selectedArtist'],
+                cleanDetails['selectedArtist'],
+                _asMap(cleanDetails['order'])['selectedArtist'],
+              ]).trim().isNotEmpty),
+      'direct_artist_status':
+          (_asBool(cleanSummary['isDirectRequest']) ||
               _firstNonEmpty([
                 cleanSummary['selectedArtistEmail'],
                 _asMap(cleanDetails['order'])['selectedArtistEmail'],
@@ -513,7 +596,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
               ]).trim().isNotEmpty)
           ? 'in_review'
           : '',
-      'artist_pool_status': (_asBool(cleanSummary['isDirectRequest']) ||
+      'artist_pool_status':
+          (_asBool(cleanSummary['isDirectRequest']) ||
               _firstNonEmpty([
                 cleanSummary['selectedArtistEmail'],
                 _asMap(cleanDetails['order'])['selectedArtistEmail'],
@@ -858,6 +942,7 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
 
   @override
   void dispose() {
+    _shipStreetAutocompleteDebounce?.cancel();
     _dateCtrl.dispose();
     _descCtrl.dispose();
     _shipStreetCtrl.dispose();
@@ -869,6 +954,46 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
     _descriptionFocusNode.dispose();
     _notificationsFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _autofillShippingAddressFromStreet() async {
+    _shipStreetAutocompleteDebounce?.cancel();
+    final query = _shipStreetCtrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _shipStreetSuggestionsLoading = false;
+        _shipStreetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _shipStreetSuggestionsLoading = true);
+    _shipStreetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _shipStreetSuggestionsLoading = false;
+          _shipStreetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyShippingStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _shipStreetCtrl.text = selected.street;
+      _shipCityCtrl.text = selected.city;
+      _shipZipCtrl.text = selected.zip;
+      _shipCountry = 'United States';
+      _shipState =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      _shipStreetSuggestions = const [];
+    });
   }
 
   // -----------------------
@@ -2010,7 +2135,9 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
           ),
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: JntHeaderMetrics.rightPadding),
+              padding: const EdgeInsets.only(
+                right: JntHeaderMetrics.rightPadding,
+              ),
               child: _AvatarMenu(
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
@@ -2305,8 +2432,10 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                           scale: 0.95,
                           child: Checkbox(
                             value: _allowNonLicensed,
-                            onChanged: (v) =>
-                                setState(() => _allowNonLicensed = (v ?? true)),
+                            onChanged: (v) => setState(() {
+                              _allowNonLicensed = (v ?? true);
+                              _syncSelectedArtistForFilters();
+                            }),
                             activeColor: AppColors.blackCat,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.zero,
@@ -2635,71 +2764,73 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                   _SearchableSelectField(
                     value: _selectedArtist ?? '',
                     hint: 'Select Artist',
-                    items: _artistNames,
+                    items: _filteredArtistOptions(),
                     onChanged: (v) => setState(
                       () =>
                           _selectedArtist = v.trim().isEmpty ? null : v.trim(),
                     ),
                   ),
 
-                  const SizedBox(height: 12),
-                  Text(
-                    'If the artist cannot complete the request, do you want it to go into the request pool?',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blackCat.withValues(alpha: 0.75),
-                      height: 1.2,
-                      fontSize: 12,
+                  if ((_selectedArtist ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'If the artist cannot complete the request, do you want it to go into the request pool?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
+                        height: 1.2,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Yes'),
-                        selected: _fallbackToPool == true,
-                        selectedColor: AppColors.blackCat,
-                        onSelected: (_) =>
-                            setState(() => _fallbackToPool = true),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          color: _fallbackToPool == true
-                              ? AppColors.snow
-                              : AppColors.blackCat,
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Yes'),
+                          selected: _fallbackToPool == true,
+                          selectedColor: AppColors.blackCat,
+                          onSelected: (_) =>
+                              setState(() => _fallbackToPool = true),
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: _fallbackToPool == true
+                                ? AppColors.snow
+                                : AppColors.blackCat,
+                          ),
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.08),
+                          ),
+                          visualDensity: const VisualDensity(
+                            horizontal: -2,
+                            vertical: -2,
+                          ),
                         ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.08),
+                        const SizedBox(width: 10),
+                        ChoiceChip(
+                          label: const Text('No'),
+                          selected: _fallbackToPool == false,
+                          selectedColor: AppColors.blackCat,
+                          onSelected: (_) =>
+                              setState(() => _fallbackToPool = false),
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: _fallbackToPool == false
+                                ? AppColors.snow
+                                : AppColors.blackCat,
+                          ),
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.08),
+                          ),
+                          visualDensity: const VisualDensity(
+                            horizontal: -2,
+                            vertical: -2,
+                          ),
                         ),
-                        visualDensity: const VisualDensity(
-                          horizontal: -2,
-                          vertical: -2,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ChoiceChip(
-                        label: const Text('No'),
-                        selected: _fallbackToPool == false,
-                        selectedColor: AppColors.blackCat,
-                        onSelected: (_) =>
-                            setState(() => _fallbackToPool = false),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          color: _fallbackToPool == false
-                              ? AppColors.snow
-                              : AppColors.blackCat,
-                        ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.08),
-                        ),
-                        visualDensity: const VisualDensity(
-                          horizontal: -2,
-                          vertical: -2,
-                        ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
                   _DividerLine(),
@@ -2834,7 +2965,65 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
                           _InputField(
                             controller: _shipStreetCtrl,
                             hint: 'Street',
+                            onChanged: (_) =>
+                                _autofillShippingAddressFromStreet(),
                           ),
+                          if (_shipStreetSuggestionsLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: LinearProgressIndicator(minHeight: 2),
+                            ),
+                          if (_shipStreetSuggestions.isNotEmpty)
+                            Builder(
+                              builder: (context) {
+                                final suggestionCount =
+                                    _shipStreetSuggestions.length;
+                                final menuHeight =
+                                    AutocompleteDropdownSizing.menuHeight(
+                                      itemCount: suggestionCount,
+                                      itemExtent: 40,
+                                    );
+                                return Container(
+                                  margin: const EdgeInsets.only(top: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.snow,
+                                    borderRadius: BorderRadius.zero,
+                                    border: Border.all(
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.20,
+                                      ),
+                                    ),
+                                  ),
+                                  constraints: BoxConstraints(
+                                    maxHeight: menuHeight,
+                                  ),
+                                  child: ListView.separated(
+                                    shrinkWrap:
+                                        AutocompleteDropdownSizing.shrinkWrap(
+                                          suggestionCount,
+                                        ),
+                                    physics:
+                                        AutocompleteDropdownSizing.scrollPhysics(
+                                          suggestionCount,
+                                        ),
+                                    itemCount: suggestionCount,
+                                    separatorBuilder: (_, _) =>
+                                        const Divider(height: 1),
+                                    itemBuilder: (_, i) => ListTile(
+                                      dense: true,
+                                      title: Text(
+                                        _shipStreetSuggestions[i].displayLabel,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      onTap: () =>
+                                          _applyShippingStreetSuggestion(
+                                            _shipStreetSuggestions[i],
+                                          ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           const SizedBox(height: 12),
                           _InputField(controller: _shipCityCtrl, hint: 'City'),
                           const SizedBox(height: 12),
@@ -3409,6 +3598,15 @@ class _SearchableSelectField extends StatelessWidget {
         return TextField(
           controller: controller,
           focusNode: focusNode,
+          onChanged: (text) {
+            final normalizedText = text.trim();
+            final matchesExisting = normalizedItems.any(
+              (item) => item.toLowerCase() == normalizedText.toLowerCase(),
+            );
+            if (normalizedText.isEmpty || !matchesExisting) {
+              onChanged('');
+            }
+          },
           onTap: () {
             if (controller.text.trim().isEmpty && normalizedItems.isNotEmpty) {
               controller.value = const TextEditingValue(text: ' ');
@@ -3696,17 +3894,20 @@ class _InputField extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.keyboardType,
+    this.onChanged,
   });
 
   final TextEditingController controller;
   final String hint;
   final TextInputType? keyboardType;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      onChanged: onChanged,
       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         hintText: hint,
@@ -4313,6 +4514,7 @@ class _AvatarMenu extends StatelessWidget {
             imageUrl: avatarUrl,
             displayName: displayName,
             size: 36,
+            resolveCurrentUserFallback: true,
           ),
         ),
       ),

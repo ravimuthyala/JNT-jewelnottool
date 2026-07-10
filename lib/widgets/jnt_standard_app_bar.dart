@@ -6,11 +6,11 @@ import 'notification_bell_button.dart';
 class JntHeaderMetrics {
   const JntHeaderMetrics._();
 
-  static const double toolbarHeight = 90;
+  static const double toolbarHeight = 110;
   static const double leadingWidth = 56;
   static const double logoHeight = 70;
   static const double notificationIconSize = 28;
-  static const double avatarSize = 42;
+  static const double avatarSize = 55;
   static const double rightPadding = 12;
 }
 

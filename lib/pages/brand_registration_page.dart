@@ -35,8 +35,7 @@ class BrandRegistrationPage extends StatefulWidget {
   const BrandRegistrationPage({super.key});
 
   @override
-  State<BrandRegistrationPage> createState() =>
-      _BrandRegistrationPageState();
+  State<BrandRegistrationPage> createState() => _BrandRegistrationPageState();
 }
 
 @Deprecated('Use BrandRegistrationPage instead.')
@@ -54,6 +53,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   bool _billingStreetSuggestionsLoading = false;
   bool _shippingStreetSuggestionsLoading = false;
   bool _submitting = false;
+  bool _showValidationErrors = false;
 
   // -----------------------
   // EXISTING (kept)
@@ -107,7 +107,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   Uint8List? _logoBytes;
   String? _logoPath;
 
-
   // State/Country dropdown values (kept)
   String? _selectedState;
   String _selectedCountry = 'United States';
@@ -123,7 +122,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       TextEditingController(); // "comma separated" or "#HEX"
   final _quantityMinCtrl = TextEditingController(); // optional defaults
   final _quantityMaxCtrl = TextEditingController(); // optional defaults
-
 
   // Shipping toggle + billing method
   bool _shippingSameAsBilling = true;
@@ -674,8 +672,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     return null;
   }
 
-
-
   String? _zipValidator(String? v, {bool enforceUsPattern = true}) {
     if (v == null || v.trim().isEmpty) {
       return enforceUsPattern ? 'Zip Code is required' : null;
@@ -708,8 +704,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     }
     return null;
   }
-
-
 
   String? _billingRequiredIfSelected(
     String? value, {
@@ -981,7 +975,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     }
 
     final optimizedBytes = optimize(bytes);
-    final unique = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+    final unique =
+        '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
     final path = 'companies/$uid/logo/$unique.jpg';
 
     try {
@@ -1047,8 +1042,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_billing_name_on_card': payload['panel_billing_name_on_card'],
       'panel_billingExpiry': payload['panel_billingExpiry'],
       'panel_billing_expiry': payload['panel_billing_expiry'],
-      'panel_billing_apple_pay_email':
-          payload['panel_billing_apple_pay_email'],
+      'panel_billing_apple_pay_email': payload['panel_billing_apple_pay_email'],
       'panel_billing_google_pay_email':
           payload['panel_billing_google_pay_email'],
       'profile': payload['profile'],
@@ -1099,7 +1093,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         return;
       } on PostgrestException catch (e) {
         final missingColumn = _missingColumnFromPostgrest(e.message);
-        final canRetry = e.code == 'PGRST204' &&
+        final canRetry =
+            e.code == 'PGRST204' &&
             missingColumn != null &&
             row.containsKey(missingColumn);
 
@@ -1122,24 +1117,76 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   }
 
   String? _missingColumnFromPostgrest(String message) {
-    final match = RegExp(r"Could not find the '([^']+)' column")
-        .firstMatch(message);
+    final match = RegExp(
+      r"Could not find the '([^']+)' column",
+    ).firstMatch(message);
     return match?.group(1);
   }
 
+  Future<void> _finishBrandRegistrationForUser({
+    required User user,
+    required CompanyBillingDraft billingDraft,
+    required CompanyAddressesDraft addressesDraft,
+  }) async {
+    final uid = user.id.trim();
+    if (uid.isEmpty) {
+      throw const AuthException(
+        'Unable to create or recover the company account user.',
+      );
+    }
+
+    final profilePhotoUrl = await _uploadCompanyLogoIfAny(uid);
+    final payload = _buildCompanyFirestorePayload(
+      uid: uid,
+      billingDraft: billingDraft,
+      addressesDraft: addressesDraft,
+      profilePhotoUrl: profilePhotoUrl,
+    );
+
+    await _upsertBrandCompanyProfile(uid: uid, payload: payload);
+
+    if (!mounted) return;
+
+    if (kRequireEmailVerification) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationPendingPage(
+            email: _emailCtrl.text.trim().toLowerCase(),
+            loginPageBuilder: (_) => const HomePage(),
+          ),
+        ),
+        (route) => false,
+      );
+    } else {
+      final companyName = _companyNameCtrl.text.trim().isEmpty
+          ? 'Brand'
+          : _companyNameCtrl.text.trim();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) =>
+              BrandingCompanyShellPage(companyDisplayName: companyName),
+        ),
+        (route) => false,
+      );
+    }
+  }
+
   Future<void> _onCreateAccount() async {
+    if (!_showValidationErrors) {
+      setState(() => _showValidationErrors = true);
+    }
     if (_formKey.currentState?.validate() != true) return;
 
     if (_isBillingUnitedStates) {
       final billingValidation =
           await AddressValidationService.validateUsAddress(
-        street: _streetCtrl.text.trim(),
-        city: _cityCtrl.text.trim(),
-        state: _isBillingUnitedStates
-            ? (_selectedState ?? '')
-            : _manualStateCtrl.text.trim(),
-        zip: _zipCtrl.text.trim(),
-      );
+            street: _streetCtrl.text.trim(),
+            city: _cityCtrl.text.trim(),
+            state: _isBillingUnitedStates
+                ? (_selectedState ?? '')
+                : _manualStateCtrl.text.trim(),
+            zip: _zipCtrl.text.trim(),
+          );
 
       if (!billingValidation.isValid) {
         if (!mounted) return;
@@ -1157,13 +1204,13 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     if (!_shippingSameAsBilling && _isShippingUnitedStates) {
       final shippingValidation =
           await AddressValidationService.validateUsAddress(
-        street: _shipStreetCtrl.text.trim(),
-        city: _shipCityCtrl.text.trim(),
-        state: _isShippingUnitedStates
-            ? (_shipSelectedState ?? '')
-            : _shipManualStateCtrl.text.trim(),
-        zip: _shipZipCtrl.text.trim(),
-      );
+            street: _shipStreetCtrl.text.trim(),
+            city: _shipCityCtrl.text.trim(),
+            state: _isShippingUnitedStates
+                ? (_shipSelectedState ?? '')
+                : _shipManualStateCtrl.text.trim(),
+            zip: _shipZipCtrl.text.trim(),
+          );
 
       if (!shippingValidation.isValid) {
         if (!mounted) return;
@@ -1207,19 +1254,22 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       shippingStreet: _shippingSameAsBilling
           ? _streetCtrl.text.trim()
           : _shipStreetCtrl.text.trim(),
-      shippingCity:
-          _shippingSameAsBilling ? _cityCtrl.text.trim() : _shipCityCtrl.text.trim(),
+      shippingCity: _shippingSameAsBilling
+          ? _cityCtrl.text.trim()
+          : _shipCityCtrl.text.trim(),
       shippingState: _shippingSameAsBilling
           ? (_isBillingUnitedStates
-              ? (_selectedState ?? '')
-              : _manualStateCtrl.text.trim())
+                ? (_selectedState ?? '')
+                : _manualStateCtrl.text.trim())
           : (_isShippingUnitedStates
-              ? (_shipSelectedState ?? '')
-              : _shipManualStateCtrl.text.trim()),
-      shippingZip:
-          _shippingSameAsBilling ? _zipCtrl.text.trim() : _shipZipCtrl.text.trim(),
-      shippingCountry:
-          _shippingSameAsBilling ? _selectedCountry : _shipSelectedCountry,
+                ? (_shipSelectedState ?? '')
+                : _shipManualStateCtrl.text.trim()),
+      shippingZip: _shippingSameAsBilling
+          ? _zipCtrl.text.trim()
+          : _shipZipCtrl.text.trim(),
+      shippingCountry: _shippingSameAsBilling
+          ? _selectedCountry
+          : _shipSelectedCountry,
     );
 
     try {
@@ -1230,53 +1280,38 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         password: _passCtrl.text.trim(),
       ).timeout(_registrationStepTimeout);
 
-      final uid = supabaseUser?.id;
-      if (uid == null || uid.trim().isEmpty) {
+      if (supabaseUser == null) {
         throw const AuthException(
           'Unable to create user. Check Supabase email confirmation settings.',
         );
       }
-
-      final profilePhotoUrl = await _uploadCompanyLogoIfAny(uid);
-      final payload = _buildCompanyFirestorePayload(
-        uid: uid,
+      await _finishBrandRegistrationForUser(
+        user: supabaseUser,
         billingDraft: billingDraft,
         addressesDraft: addressesDraft,
-        profilePhotoUrl: profilePhotoUrl,
       );
-
-      await _upsertBrandCompanyProfile(
-        uid: uid,
-        payload: payload,
-      );
-
-      if (!mounted) return;
-
-      if (kRequireEmailVerification) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => EmailVerificationPendingPage(
-              email: _emailCtrl.text.trim().toLowerCase(),
-              loginPageBuilder: (_) => const HomePage(),
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        final companyName = _companyNameCtrl.text.trim().isEmpty
-            ? 'Brand'
-            : _companyNameCtrl.text.trim();
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) =>
-                BrandingCompanyShellPage(companyDisplayName: companyName),
-          ),
-          (route) => false,
-        );
-      }
     } on AuthException catch (e) {
+      final isAlreadyRegistered = e.message.toLowerCase().contains('already');
+      if (isAlreadyRegistered) {
+        try {
+          final existingUser = await SupabaseAuthService.login(
+            email: _emailCtrl.text.trim().toLowerCase(),
+            password: _passCtrl.text.trim(),
+          ).timeout(_registrationStepTimeout);
+          if (existingUser != null) {
+            await _finishBrandRegistrationForUser(
+              user: existingUser,
+              billingDraft: billingDraft,
+              addressesDraft: addressesDraft,
+            );
+            return;
+          }
+        } on AuthException {
+          // Fall through to the user-facing sign-in message below.
+        }
+      }
       if (!mounted) return;
-      final message = e.message.toLowerCase().contains('already')
+      final message = isAlreadyRegistered
           ? 'Email already registered. Please sign in.'
           : e.message;
       ScaffoldMessenger.of(
@@ -1419,6 +1454,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
             children: [
               Form(
                 key: _formKey,
+                autovalidateMode: _showValidationErrors
+                    ? AutovalidateMode.always
+                    : AutovalidateMode.disabled,
                 child: Column(
                   children: [
                     // -----------------------
@@ -1561,8 +1599,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                               hintText: 'Enter 10-digit phone',
                                               hintStyle: TextStyle(
                                                 fontSize: _hintFs,
-                                                color: Colors.black.withValues(alpha:
-                                                  0.35,
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.35,
                                                 ),
                                               ),
                                               border: InputBorder.none,
@@ -1822,8 +1860,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                               hintText: 'Enter 10-digit phone',
                                               hintStyle: TextStyle(
                                                 fontSize: _hintFs,
-                                                color: Colors.black.withValues(alpha:
-                                                  0.35,
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.35,
                                                 ),
                                               ),
                                               border: InputBorder.none,
@@ -2125,7 +2163,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
-                                      color: Colors.black.withValues(alpha: 0.75),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.75,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -2502,22 +2542,31 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 final selected = _billingMethod == method;
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    8,
+                                    10,
+                                    10,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.zero,
                                     border: Border.all(
                                       color: selected
                                           ? AppColors.deepPlum
-                                          : Colors.black.withValues(alpha: 0.08),
+                                          : Colors.black.withValues(
+                                              alpha: 0.08,
+                                            ),
                                     ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       InkWell(
-                                        onTap: () =>
-                                            setState(() => _billingMethod = method),
+                                        onTap: () => setState(
+                                          () => _billingMethod = method,
+                                        ),
                                         child: Row(
                                           children: [
                                             Radio<String>(
@@ -2537,220 +2586,228 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                         ),
                                       ),
                                       if (selected) ...[
-                                    const SizedBox(height: 6),
-                                    if (method == 'Credit/Debit Card') ...[
-                                      TextFormField(
-                                        controller: _cardNameCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        decoration: _dec(
-                                          'Name on Card',
-                                          'Enter Name on Card',
-                                        ),
-                                        validator: (v) =>
-                                            _billingRequiredIfSelected(
-                                              v,
-                                              method: method,
-                                              fieldName: 'Name on Card',
+                                        const SizedBox(height: 6),
+                                        if (method == 'Credit/Debit Card') ...[
+                                          TextFormField(
+                                            controller: _cardNameCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
                                             ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextFormField(
-                                        controller: _cardNumberCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType: TextInputType.number,
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter
-                                              .digitsOnly,
-                                          LengthLimitingTextInputFormatter(19),
-                                          CardNumberTextInputFormatter(),
-                                        ],
-                                        decoration: _dec(
-                                          'Card Number',
-                                          'Enter Card Number',
-                                        ),
-                                        validator: (v) =>
-                                            _billingRequiredIfSelected(
-                                              v,
-                                              method: method,
-                                              fieldName: 'Card Number',
+                                            decoration: _dec(
+                                              'Name on Card',
+                                              'Enter Name on Card',
                                             ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextFormField(
-                                              controller: _cardExpiryCtrl,
-                                              style: const TextStyle(
-                                                fontSize: _inputFs,
-                                              ),
-                                              keyboardType:
-                                                  TextInputType.number,
-                                              inputFormatters: [
-                                                FilteringTextInputFormatter
-                                                    .digitsOnly,
-                                                LengthLimitingTextInputFormatter(
-                                                  4,
+                                            validator: (v) =>
+                                                _billingRequiredIfSelected(
+                                                  v,
+                                                  method: method,
+                                                  fieldName: 'Name on Card',
                                                 ),
-                                                ExpiryDateTextInputFormatter(),
-                                              ],
-                                              decoration: _dec(
-                                                'Expiration Date',
-                                                'MM/YY',
+                                          ),
+                                          const SizedBox(height: 6),
+                                          TextFormField(
+                                            controller: _cardNumberCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                              LengthLimitingTextInputFormatter(
+                                                19,
                                               ),
-                                              validator: (v) =>
+                                              CardNumberTextInputFormatter(),
+                                            ],
+                                            decoration: _dec(
+                                              'Card Number',
+                                              'Enter Card Number',
+                                            ),
+                                            validator: (v) =>
+                                                _billingRequiredIfSelected(
+                                                  v,
+                                                  method: method,
+                                                  fieldName: 'Card Number',
+                                                ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: TextFormField(
+                                                  controller: _cardExpiryCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                  ),
+                                                  keyboardType:
+                                                      TextInputType.number,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(
+                                                      4,
+                                                    ),
+                                                    ExpiryDateTextInputFormatter(),
+                                                  ],
+                                                  decoration: _dec(
+                                                    'Expiration Date',
+                                                    'MM/YY',
+                                                  ),
+                                                  validator: (v) =>
+                                                      _billingRequiredIfSelected(
+                                                        v,
+                                                        method: method,
+                                                        fieldName:
+                                                            'Expiration Date',
+                                                      ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: TextFormField(
+                                                  controller: _cardCvvCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                  ),
+                                                  keyboardType:
+                                                      TextInputType.number,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(
+                                                      4,
+                                                    ),
+                                                  ],
+                                                  decoration: _dec(
+                                                    'CVV',
+                                                    'CVV',
+                                                  ),
+                                                  validator: (v) =>
+                                                      _billingRequiredIfSelected(
+                                                        v,
+                                                        method: method,
+                                                        fieldName: 'CVV',
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                        if (method == 'ACH Transfer') ...[
+                                          TextFormField(
+                                            controller: _achAccountNameCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            decoration: _dec(
+                                              'Account Holder Name',
+                                              'Enter Account Holder Name',
+                                            ),
+                                            validator: (v) =>
+                                                _billingRequiredIfSelected(
+                                                  v,
+                                                  method: method,
+                                                  fieldName:
+                                                      'Account Holder Name',
+                                                ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          TextFormField(
+                                            controller: _achRoutingCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            decoration: _dec(
+                                              'Routing Number',
+                                              'Enter Routing Number',
+                                            ),
+                                            validator: (v) =>
+                                                _billingRequiredIfSelected(
+                                                  v,
+                                                  method: method,
+                                                  fieldName: 'Routing Number',
+                                                ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          TextFormField(
+                                            controller: _achAccountCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            decoration: _dec(
+                                              'Account Number',
+                                              'Enter Account Number',
+                                            ),
+                                            validator: (v) =>
+                                                _billingRequiredIfSelected(
+                                                  v,
+                                                  method: method,
+                                                  fieldName: 'Account Number',
+                                                ),
+                                          ),
+                                        ],
+                                        if (method == 'Apple Pay') ...[
+                                          TextFormField(
+                                            controller: _applePayEmailCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType:
+                                                TextInputType.emailAddress,
+                                            decoration: _dec(
+                                              'Apple Pay Email',
+                                              'Enter Apple Pay Email',
+                                            ),
+                                            validator: (v) {
+                                              final requiredErr =
                                                   _billingRequiredIfSelected(
                                                     v,
                                                     method: method,
                                                     fieldName:
-                                                        'Expiration Date',
-                                                  ),
-                                            ),
+                                                        'Apple Pay Email',
+                                                  );
+                                              if (requiredErr != null) {
+                                                return requiredErr;
+                                              }
+                                              if (_billingMethod == method) {
+                                                return _emailValidator(v);
+                                              }
+                                              return null;
+                                            },
                                           ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: TextFormField(
-                                              controller: _cardCvvCtrl,
-                                              style: const TextStyle(
-                                                fontSize: _inputFs,
-                                              ),
-                                              keyboardType:
-                                                  TextInputType.number,
-                                              inputFormatters: [
-                                                FilteringTextInputFormatter
-                                                    .digitsOnly,
-                                                LengthLimitingTextInputFormatter(
-                                                  4,
-                                                ),
-                                              ],
-                                              decoration: _dec('CVV', 'CVV'),
-                                              validator: (v) =>
+                                        ],
+                                        if (method == 'Google Pay') ...[
+                                          TextFormField(
+                                            controller: _googlePayEmailCtrl,
+                                            style: const TextStyle(
+                                              fontSize: _inputFs,
+                                            ),
+                                            keyboardType:
+                                                TextInputType.emailAddress,
+                                            decoration: _dec(
+                                              'Google Pay Email',
+                                              'Enter Google Pay Email',
+                                            ),
+                                            validator: (v) {
+                                              final requiredErr =
                                                   _billingRequiredIfSelected(
                                                     v,
                                                     method: method,
-                                                    fieldName: 'CVV',
-                                                  ),
-                                            ),
+                                                    fieldName:
+                                                        'Google Pay Email',
+                                                  );
+                                              if (requiredErr != null) {
+                                                return requiredErr;
+                                              }
+                                              if (_billingMethod == method) {
+                                                return _emailValidator(v);
+                                              }
+                                              return null;
+                                            },
                                           ),
                                         ],
-                                      ),
-                                    ],
-                                    if (method == 'ACH Transfer') ...[
-                                      TextFormField(
-                                        controller: _achAccountNameCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        decoration: _dec(
-                                          'Account Holder Name',
-                                          'Enter Account Holder Name',
-                                        ),
-                                        validator: (v) =>
-                                            _billingRequiredIfSelected(
-                                              v,
-                                              method: method,
-                                              fieldName: 'Account Holder Name',
-                                            ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextFormField(
-                                        controller: _achRoutingCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType: TextInputType.number,
-                                        decoration: _dec(
-                                          'Routing Number',
-                                          'Enter Routing Number',
-                                        ),
-                                        validator: (v) =>
-                                            _billingRequiredIfSelected(
-                                              v,
-                                              method: method,
-                                              fieldName: 'Routing Number',
-                                            ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextFormField(
-                                        controller: _achAccountCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType: TextInputType.number,
-                                        decoration: _dec(
-                                          'Account Number',
-                                          'Enter Account Number',
-                                        ),
-                                        validator: (v) =>
-                                            _billingRequiredIfSelected(
-                                              v,
-                                              method: method,
-                                              fieldName: 'Account Number',
-                                            ),
-                                      ),
-                                    ],
-                                    if (method == 'Apple Pay') ...[
-                                      TextFormField(
-                                        controller: _applePayEmailCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        decoration: _dec(
-                                          'Apple Pay Email',
-                                          'Enter Apple Pay Email',
-                                        ),
-                                        validator: (v) {
-                                          final requiredErr =
-                                              _billingRequiredIfSelected(
-                                                v,
-                                                method: method,
-                                                fieldName: 'Apple Pay Email',
-                                              );
-                                          if (requiredErr != null) {
-                                            return requiredErr;
-                                          }
-                                          if (_billingMethod == method) {
-                                            return _emailValidator(v);
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                    ],
-                                    if (method == 'Google Pay') ...[
-                                      TextFormField(
-                                        controller: _googlePayEmailCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        decoration: _dec(
-                                          'Google Pay Email',
-                                          'Enter Google Pay Email',
-                                        ),
-                                        validator: (v) {
-                                          final requiredErr =
-                                              _billingRequiredIfSelected(
-                                                v,
-                                                method: method,
-                                                fieldName: 'Google Pay Email',
-                                              );
-                                          if (requiredErr != null) {
-                                            return requiredErr;
-                                          }
-                                          if (_billingMethod == method) {
-                                            return _emailValidator(v);
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                    ],
                                       ],
                                     ],
                                   ),

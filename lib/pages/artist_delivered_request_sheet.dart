@@ -3,8 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
+import '../services/artist_requests_repository.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 import '../utils/request_nfc_details_loader.dart';
@@ -36,6 +38,52 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   int _selectedTab = 2; // Open Delivered tab first for delivered history.
 
   ClientRequestV2 get request => widget.request;
+
+  String get _requestTable =>
+      request.sourceCollection == 'Company_Custom_Requests'
+      ? 'company_custom_requests'
+      : 'client_custom_requests';
+
+  String get _requestDetailsTable =>
+      request.sourceCollection == 'Company_Custom_Requests'
+      ? 'company_custom_requests_details'
+      : 'client_custom_requests_details';
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
+
+  List<Object?> _asList(Object? value) {
+    if (value is Iterable) return value.toList(growable: false);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return const <Object?>[];
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) return List<Object?>.from(decoded);
+      } catch (_) {}
+    }
+    return const <Object?>[];
+  }
+
+  String _firstNonEmpty(Iterable<Object?> values, {String fallback = ''}) {
+    for (final raw in values) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+    }
+    return fallback;
+  }
 
   String _normalizeImagePath(String raw) {
     var p = raw.trim();
@@ -86,12 +134,12 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final path = _normalizeImagePath(raw);
 
     Widget fallback() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.06),
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-          ),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.06),
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: AppColors.blackCat.withValues(alpha: 0.35),
+      ),
+    );
 
     if (path.isEmpty) return fallback();
 
@@ -110,7 +158,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final isNetwork = path.startsWith('http://') || path.startsWith('https://');
     final isAsset = path.startsWith('assets/');
     final isFileUri = path.startsWith('file://');
-    final isFilePath = !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
+    final isFilePath =
+        !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
 
     if (isNetwork) {
       return Image.network(
@@ -225,8 +274,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                             child: _selectedTab == 0
                                 ? _detailsTab()
                                 : _selectedTab == 1
-                                    ? _photosTab()
-                                    : _deliveredTab(),
+                                ? _photosTab()
+                                : _deliveredTab(),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -281,13 +330,13 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _dragHandle() => Container(
-        height: 5,
-        width: 54,
-        decoration: BoxDecoration(
-          color: AppColors.blackCat.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.zero,
-        ),
-      );
+    height: 5,
+    width: 54,
+    decoration: BoxDecoration(
+      color: AppColors.blackCat.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.zero,
+    ),
+  );
 
   Widget _topHero(BuildContext context) {
     final isBrandRequest = _isBrandRequest(request);
@@ -345,7 +394,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   String _headerAvatarPath() {
     final accepted = _safeAcceptedClientAvatarPath(request);
     if (accepted.isNotEmpty) return accepted;
-    final clientProfile = _normalizeImagePath(request.clientProfileImage.trim());
+    final clientProfile = _normalizeImagePath(
+      request.clientProfileImage.trim(),
+    );
     if (clientProfile.isNotEmpty) return clientProfile;
     final preview = _normalizeImagePath(request.previewImageAsset.trim());
     if (preview.isNotEmpty) return preview;
@@ -353,7 +404,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _requestTypeRow() {
-    final requestLabel = request.isDirectRequest ? 'Direct Request' : 'Standard Request';
+    final requestLabel = request.isDirectRequest
+        ? 'Direct Request'
+        : 'Standard Request';
     final orderLabel = request.orderType == RequestOrderTypeV2.group
         ? 'Group Order'
         : 'Single Order';
@@ -403,10 +456,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
-  static Widget _summaryPairRow({
-    required Widget left,
-    required Widget right,
-  }) {
+  static Widget _summaryPairRow({required Widget left, required Widget right}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -518,11 +568,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: const Icon(
-              Icons.check,
-              color: Color(0xFF1E8E5A),
-              size: 16,
-            ),
+            child: const Icon(Icons.check, color: Color(0xFF1E8E5A), size: 16),
           ),
           const SizedBox(width: 10),
           const Expanded(
@@ -628,7 +674,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           _deliveryInfoRow(
             icon: Icons.person_outline_rounded,
             label: 'Client Name',
-            value: request.clientName.trim().isEmpty ? '-' : request.clientName.trim(),
+            value: request.clientName.trim().isEmpty
+                ? '-'
+                : request.clientName.trim(),
           ),
           _deliveryInfoRow(
             icon: Icons.local_shipping_outlined,
@@ -726,10 +774,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
             valueWeight: FontWeight.w400,
           ),
           const SizedBox(height: 10),
-          _detailRow(
-            'Need by',
-            _needByLabel(request.neededBy),
-          ),
+          _detailRow('Need by', _needByLabel(request.neededBy)),
           const SizedBox(height: 14),
           const Text(
             'Nail Dimensions',
@@ -750,7 +795,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   Widget _acceptedClientDetailsSection(ClientRequestV2 request) {
     final name = request.acceptedClientName.trim().isNotEmpty
         ? request.acceptedClientName.trim()
-        : (request.clientName.trim().isNotEmpty ? request.clientName.trim() : 'Client');
+        : (request.clientName.trim().isNotEmpty
+              ? request.clientName.trim()
+              : 'Client');
     final avatarPath = _safeAcceptedClientAvatarPath(request);
     final avatarLetter = name[0].toUpperCase();
     return _borderBox(
@@ -810,7 +857,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   String _safeAcceptedClientAvatarPath(ClientRequestV2 request) {
-    final accepted = _normalizeImagePath(request.acceptedClientProfileImage.trim());
+    final accepted = _normalizeImagePath(
+      request.acceptedClientProfileImage.trim(),
+    );
     if (accepted.isEmpty) return '';
     final blocked = <String>{
       _normalizeImagePath(request.clientProfileImage),
@@ -887,32 +936,17 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       builder: (context, snapshot) {
         final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
         if (isGroup) {
-          final baseClients = _buildGroupMeasurementClients();
-          final clients = <GroupClientMeasurementData>[];
-          for (var i = 0; i < baseClients.length; i++) {
-            final client = baseClients[i];
-            final slotIndex = i + 1;
-            final slotNfc = slotIndex == 1
-                ? nfc.main
-                : (nfc.groupBySlotIndex[slotIndex] ??
-                    RequestFingerNfcSelection.emptyConst);
-            clients.add(
-              GroupClientMeasurementData(
-                name: client.name,
-                clientEmail: client.clientEmail,
-                nailShape: client.nailShape,
-                nailLength: client.nailLength,
-                leftHand: client.leftHand,
-                rightHand: client.rightHand,
-                leftNfc: slotNfc.left,
-                rightNfc: slotNfc.right,
-              ),
-            );
-          }
-          return GroupClientMeasurementsTabs(
-            clients: clients,
-            compactRequestDetailsLayout: true,
-            tabViewHeight: 248,
+          return FutureBuilder<List<GroupClientMeasurementData>>(
+            future: _loadGroupMeasurementClients(nfc),
+            builder: (context, groupSnapshot) {
+              final clients =
+                  groupSnapshot.data ?? _buildGroupMeasurementClients(nfc);
+              return GroupClientMeasurementsTabs(
+                clients: clients,
+                compactRequestDetailsLayout: true,
+                tabViewHeight: 312,
+              );
+            },
           );
         }
 
@@ -950,11 +984,23 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                     request.nailShape.trim().isEmpty ? '-' : request.nailShape,
                   ),
                 ),
-                const SizedBox(width: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: SizedBox(
+                    height: 42,
+                    child: VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: _metaValueCard(
                     'Length',
-                    request.nailLength.trim().isEmpty ? '-' : request.nailLength,
+                    request.nailLength.trim().isEmpty
+                        ? '-'
+                        : request.nailLength,
                   ),
                 ),
               ],
@@ -992,10 +1038,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
             amountText,
           ),
           const SizedBox(height: 10),
-          _detailRow(
-            'Status',
-            paymentStatus,
-          ),
+          _detailRow('Status', paymentStatus),
         ],
       ),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -1061,13 +1104,23 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                 ),
               ),
             ),
-            if (nfcRequested) ...[_nfcChip(), const SizedBox(width: 6)],
-            Text(
-              withMm(value),
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: AppColors.blackCat,
+            SizedBox(
+              width: 34,
+              child: nfcRequested
+                  ? Center(child: _nfcChip())
+                  : const SizedBox.shrink(),
+            ),
+            Expanded(
+              child: Text(
+                withMm(value),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
+                ),
               ),
             ),
           ],
@@ -1151,21 +1204,424 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
-  List<GroupClientMeasurementData> _buildGroupMeasurementClients() {
-    final submittedName = request.clientName.trim().isEmpty
+  Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients(
+    RequestNfcDetails nfc,
+  ) async {
+    final hydrated = await ArtistRequestsRepository.fetchRequestById(
+      sourceCollection: request.sourceCollection,
+      requestId: request.id,
+    );
+    final clients = _buildGroupMeasurementClients(
+      nfc,
+      source: hydrated ?? request,
+    );
+    final directGroupClients = await _loadGroupClientOverrides(nfc);
+    final submittedDims = await _loadSubmittedMeasurementOverride();
+    var resolvedClients = clients;
+
+    if (clients.isNotEmpty && submittedDims != null) {
+      final left = submittedDims['left'] ?? const <String, String>{};
+      final right = submittedDims['right'] ?? const <String, String>{};
+      if (left.values.any((v) => v.trim().isNotEmpty) ||
+          right.values.any((v) => v.trim().isNotEmpty)) {
+        final current = clients.first;
+        resolvedClients = <GroupClientMeasurementData>[
+          GroupClientMeasurementData(
+            name: current.name,
+            clientEmail: current.clientEmail,
+            nailShape: current.nailShape,
+            nailLength: current.nailLength,
+            leftHand: left.values.any((v) => v.trim().isNotEmpty)
+                ? left
+                : current.leftHand,
+            rightHand: right.values.any((v) => v.trim().isNotEmpty)
+                ? right
+                : current.rightHand,
+            leftNfc: current.leftNfc,
+            rightNfc: current.rightNfc,
+          ),
+          ...clients.skip(1),
+        ];
+      }
+    }
+
+    if (directGroupClients.isEmpty) return resolvedClients;
+
+    final merged = <GroupClientMeasurementData>[...resolvedClients];
+    final seen = <String>{};
+    for (final client in merged) {
+      final email = client.clientEmail.trim().toLowerCase();
+      final name = client.name.trim().toLowerCase();
+      if (email.isNotEmpty) seen.add('email:$email');
+      if (name.isNotEmpty) seen.add('name:$name');
+    }
+    for (final client in directGroupClients) {
+      final email = client.clientEmail.trim().toLowerCase();
+      final name = client.name.trim().toLowerCase();
+      final keys = <String>{
+        if (email.isNotEmpty) 'email:$email',
+        if (name.isNotEmpty) 'name:$name',
+      };
+      if (keys.isEmpty || keys.any(seen.contains)) continue;
+      seen.addAll(keys);
+      merged.add(client);
+      if (merged.length >= 16) break;
+    }
+    return merged;
+  }
+
+  Future<List<GroupClientMeasurementData>> _loadGroupClientOverrides(
+    RequestNfcDetails nfc,
+  ) async {
+    final clients = <GroupClientMeasurementData>[];
+    final seen = <String>{};
+
+    Map<String, String> dimsFrom(Object? source, {required bool left}) {
+      final map = _asMap(source);
+      if (map.isEmpty) return const <String, String>{};
+      final nested = _asMap(map['dimensions']);
+      final data = nested.isNotEmpty ? nested : map;
+
+      String pick(String finger) {
+        final upper = finger[0].toUpperCase() + finger.substring(1);
+        final candidates = left
+            ? <String>[finger, 'l$upper', 'left$upper', 'left_$finger']
+            : <String>[finger, 'r$upper', 'right$upper', 'right_$finger'];
+        for (final key in candidates) {
+          final text = (data[key] ?? '').toString().trim();
+          if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+        }
+        return '';
+      }
+
+      return <String, String>{
+        'thumb': pick('thumb'),
+        'index': pick('index'),
+        'middle': pick('middle'),
+        'ring': pick('ring'),
+        'pinky': pick('pinky'),
+      };
+    }
+
+    Map<String, String> firstDims(
+      Iterable<Object?> sources, {
+      required bool left,
+    }) {
+      for (final source in sources) {
+        final dims = dimsFrom(source, left: left);
+        if (dims.values.any((v) => v.trim().isNotEmpty)) return dims;
+      }
+      return const <String, String>{};
+    }
+
+    int slotIndexOf(Map<String, dynamic> client, int fallback) {
+      final raw =
+          client['slotIndex'] ?? client['slot_index'] ?? client['index'];
+      if (raw is int) return raw;
+      if (raw is num) return raw.toInt();
+      return int.tryParse((raw ?? '').toString().trim()) ?? fallback;
+    }
+
+    void addClient(Map<String, dynamic> client, int fallbackIndex) {
+      if (client.isEmpty) return;
+      final email = _firstNonEmpty(<Object?>[
+        client['clientEmail'],
+        client['client_email'],
+        client['email'],
+      ]).toLowerCase();
+      final id = _firstNonEmpty(<Object?>[
+        client['clientId'],
+        client['client_id'],
+        client['id'],
+        client['uid'],
+      ]).toLowerCase();
+      final name = _firstNonEmpty(<Object?>[
+        client['clientName'],
+        client['client_name'],
+        client['name'],
+        client['displayName'],
+        client['display_name'],
+      ], fallback: 'Client $fallbackIndex');
+
+      final keys = <String>{
+        if (email.isNotEmpty) 'email:$email',
+        if (id.isNotEmpty) 'id:$id',
+        if (name.trim().isNotEmpty) 'name:${name.trim().toLowerCase()}',
+      };
+      if (keys.isEmpty || keys.any(seen.contains)) return;
+
+      final savedNails = _asMap(client['savedNails'] ?? client['saved_nails']);
+      final draftNails = _asMap(client['draftNails'] ?? client['draft_nails']);
+      final nailPreferences = _asMap(
+        client['nailPreferences'] ?? client['nail_preferences'],
+      );
+      final nailSource = savedNails.isNotEmpty
+          ? savedNails
+          : (draftNails.isNotEmpty ? draftNails : nailPreferences);
+      final left = firstDims(<Object?>[
+        client['leftHandDimensions'],
+        client['left_hand_dimensions'],
+        nailSource['leftHandDimensions'],
+        nailSource['left_hand_dimensions'],
+        nailSource['dimensions'],
+        client['dimensions'],
+      ], left: true);
+      final right = firstDims(<Object?>[
+        client['rightHandDimensions'],
+        client['right_hand_dimensions'],
+        nailSource['rightHandDimensions'],
+        nailSource['right_hand_dimensions'],
+        nailSource['dimensions'],
+        client['dimensions'],
+      ], left: false);
+      final slotIndex = slotIndexOf(client, fallbackIndex);
+      final slotNfc =
+          nfc.groupBySlotIndex[slotIndex] ??
+          RequestFingerNfcSelection.emptyConst;
+
+      seen.addAll(keys);
+      clients.add(
+        GroupClientMeasurementData(
+          name: name,
+          clientEmail: email,
+          nailShape: _firstNonEmpty(<Object?>[
+            client['nailShape'],
+            client['nail_shape'],
+            nailSource['shape'],
+            nailSource['nailShape'],
+            nailSource['nail_shape'],
+          ], fallback: request.nailShape),
+          nailLength: _firstNonEmpty(<Object?>[
+            client['nailLength'],
+            client['nail_length'],
+            nailSource['length'],
+            nailSource['nailLength'],
+            nailSource['nail_length'],
+          ], fallback: request.nailLength),
+          leftHand: left,
+          rightHand: right,
+          leftNfc: slotNfc.left,
+          rightNfc: slotNfc.right,
+        ),
+      );
+    }
+
+    void addFromSource(Map<String, dynamic> source) {
+      final payload = _asMap(source['payload']);
+      final details = _asMap(source['details']);
+      final data = _asMap(source['data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
+      final nestedSources = <Map<String, dynamic>>[
+        source,
+        payload,
+        details,
+        data,
+        requestDetails,
+        orderData,
+      ];
+
+      var fallbackIndex = 1;
+      for (final nested in nestedSources) {
+        final groupSources = <Object?>[
+          _asMap(nested['groupOrder'] ?? nested['group_order'])['clients'],
+          nested['groupClients'],
+          nested['group_clients'],
+          nested['selectedGroupClients'],
+          nested['selected_group_clients'],
+          nested['groupClientMeasurements'],
+          nested['group_client_measurements'],
+        ];
+        for (final groupSource in groupSources) {
+          for (final rawClient in _asList(groupSource)) {
+            addClient(_asMap(rawClient), fallbackIndex++);
+          }
+        }
+      }
+    }
+
+    try {
+      final root = await Supabase.instance.client
+          .from(_requestTable)
+          .select()
+          .eq('id', request.id)
+          .maybeSingle();
+      if (root != null) addFromSource(Map<String, dynamic>.from(root as Map));
+
+      final detailRows = await Supabase.instance.client
+          .from(_requestDetailsTable)
+          .select()
+          .eq('request_id', request.id);
+      for (final row in detailRows) {
+        final map = _asMap(row);
+        addFromSource(map);
+        addFromSource(_asMap(map['data']));
+      }
+    } catch (_) {}
+
+    return clients;
+  }
+
+  Future<Map<String, Map<String, String>>?>
+  _loadSubmittedMeasurementOverride() async {
+    Map<String, String> dimsFrom(Object? source, {required bool left}) {
+      final map = _asMap(source);
+      if (map.isEmpty) return const <String, String>{};
+      final nested = _asMap(map['dimensions']);
+      final data = nested.isNotEmpty ? nested : map;
+
+      String pick(String finger) {
+        final upper = finger[0].toUpperCase() + finger.substring(1);
+        final candidates = left
+            ? <String>[finger, 'l$upper', 'left$upper', 'left_$finger']
+            : <String>[finger, 'r$upper', 'right$upper', 'right_$finger'];
+        for (final key in candidates) {
+          final text = (data[key] ?? '').toString().trim();
+          if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+        }
+        return '';
+      }
+
+      return <String, String>{
+        'thumb': pick('thumb'),
+        'index': pick('index'),
+        'middle': pick('middle'),
+        'ring': pick('ring'),
+        'pinky': pick('pinky'),
+      };
+    }
+
+    Map<String, String> firstDims(
+      Iterable<Object?> sources, {
+      required bool left,
+    }) {
+      for (final source in sources) {
+        final dims = dimsFrom(source, left: left);
+        if (dims.values.any((v) => v.trim().isNotEmpty)) return dims;
+      }
+      return const <String, String>{};
+    }
+
+    Map<String, Map<String, String>> fromSource(Map<String, dynamic> source) {
+      final payload = _asMap(source['payload']);
+      final details = _asMap(source['details']);
+      final data = _asMap(source['data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
+      final sources = <Map<String, dynamic>>[
+        source,
+        payload,
+        details,
+        data,
+        requestDetails,
+        orderData,
+      ];
+
+      final leftSources = <Object?>[];
+      final rightSources = <Object?>[];
+      for (final item in sources) {
+        final nailPreferences = _asMap(
+          item['nailPreferences'] ?? item['nail_preferences'],
+        );
+        final snapshotNailPreferences = _asMap(
+          _asMap(
+            item['clientProfileSnapshot'] ?? item['client_profile_snapshot'],
+          )['nailPreferences'],
+        );
+        leftSources.addAll(<Object?>[
+          item['leftHandDimensions'],
+          item['left_hand_dimensions'],
+          nailPreferences['leftHandDimensions'],
+          nailPreferences['left_hand_dimensions'],
+          nailPreferences['dimensions'],
+          snapshotNailPreferences['dimensions'],
+          item['dimensions'],
+        ]);
+        rightSources.addAll(<Object?>[
+          item['rightHandDimensions'],
+          item['right_hand_dimensions'],
+          nailPreferences['rightHandDimensions'],
+          nailPreferences['right_hand_dimensions'],
+          nailPreferences['dimensions'],
+          snapshotNailPreferences['dimensions'],
+          item['dimensions'],
+        ]);
+      }
+
+      return <String, Map<String, String>>{
+        'left': firstDims(leftSources, left: true),
+        'right': firstDims(rightSources, left: false),
+      };
+    }
+
+    bool hasAny(Map<String, Map<String, String>> dims) {
+      final left = dims['left'] ?? const <String, String>{};
+      final right = dims['right'] ?? const <String, String>{};
+      return left.values.any((v) => v.trim().isNotEmpty) ||
+          right.values.any((v) => v.trim().isNotEmpty);
+    }
+
+    try {
+      final root = await Supabase.instance.client
+          .from(_requestTable)
+          .select()
+          .eq('id', request.id)
+          .maybeSingle();
+      if (root != null) {
+        final dims = fromSource(Map<String, dynamic>.from(root as Map));
+        if (hasAny(dims)) return dims;
+      }
+
+      final detailRows = await Supabase.instance.client
+          .from(_requestDetailsTable)
+          .select()
+          .eq('request_id', request.id);
+      for (final row in detailRows) {
+        final map = _asMap(row);
+        final dims = fromSource(map);
+        if (hasAny(dims)) return dims;
+        final dataDims = fromSource(_asMap(map['data']));
+        if (hasAny(dataDims)) return dataDims;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  List<GroupClientMeasurementData> _buildGroupMeasurementClients(
+    RequestNfcDetails nfc, {
+    ClientRequestV2? source,
+  }) {
+    final data = source ?? request;
+    final submittedName = data.clientName.trim().isEmpty
         ? 'Client'
-        : request.clientName.trim();
+        : data.clientName.trim();
     final clients = <GroupClientMeasurementData>[
       GroupClientMeasurementData(
         name: submittedName,
-        nailShape: request.nailShape,
-        nailLength: request.nailLength,
-        leftHand: _dimsMap(request.leftHand),
-        rightHand: _dimsMap(request.rightHand),
+        clientEmail: data.clientEmail,
+        nailShape: data.nailShape,
+        nailLength: data.nailLength,
+        leftHand: _dimsMap(data.leftHand),
+        rightHand: _dimsMap(data.rightHand),
+        leftNfc: nfc.main.left,
+        rightNfc: nfc.main.right,
       ),
     ];
-    final seen = <String>{submittedName.toLowerCase()};
-    for (final client in request.groupClients) {
+    final seen = <String>{
+      submittedName.toLowerCase(),
+      if (data.clientEmail.trim().isNotEmpty)
+        data.clientEmail.trim().toLowerCase(),
+    };
+    for (final client in data.groupClients) {
       final name = client.clientName.trim().isEmpty
           ? 'Client ${client.slotIndex}'
           : client.clientName.trim();
@@ -1175,13 +1631,19 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       if (seen.contains(key) || seen.contains(name.toLowerCase())) continue;
       seen.add(key);
       seen.add(name.toLowerCase());
+      final slotNfc =
+          nfc.groupBySlotIndex[client.slotIndex] ??
+          RequestFingerNfcSelection.emptyConst;
       clients.add(
         GroupClientMeasurementData(
           name: name,
+          clientEmail: client.clientEmail,
           nailShape: client.nailShape,
           nailLength: client.nailLength,
           leftHand: _dimsMap(client.leftHand),
           rightHand: _dimsMap(client.rightHand),
+          leftNfc: slotNfc.left,
+          rightNfc: slotNfc.right,
         ),
       );
       if (clients.length >= 16) break;
@@ -1214,7 +1676,6 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       child: child,
     );
   }
-
 
   String _needByLabel(DateTime d) {
     const months = [

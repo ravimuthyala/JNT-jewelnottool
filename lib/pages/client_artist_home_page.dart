@@ -213,14 +213,22 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
     for (final table in const <String>['client_artist', 'client']) {
       try {
         if (uid.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('id', uid).limit(1);
+          final rows = await supabase
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .limit(1);
           if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
 
         if (email.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('email', email).limit(1);
+          final rows = await supabase
+              .from(table)
+              .select()
+              .eq('email', email)
+              .limit(1);
           if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
@@ -607,6 +615,11 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         profile: _profile,
         showExtendedAvatarMenu: true,
         showProfileMenu: true,
+        bottomNavIndex: 4,
+        onNavTap: (i) {
+          if (!mounted) return;
+          setState(() => _clientIndex = i);
+        },
         onBackHome: () => setState(() => _clientIndex = 0),
         onOpenProfile: _openUnifiedProfile,
         onOpenEarnings: _showCampaignsTab
@@ -652,24 +665,9 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
       selectedItemColor: AppColors.deepPlum,
       unselectedItemColor: Colors.black.withValues(alpha: 0.55),
       items: [
-        _clientItem(
-          Icons.home_outlined,
-          Icons.home,
-          'Home',
-          true,
-        ),
-        _clientItem(
-          Icons.add_circle_outline,
-          Icons.add_circle,
-          'Design',
-          true,
-        ),
-        _clientItem(
-          Icons.inbox_outlined,
-          Icons.inbox,
-          'Requests',
-          true,
-        ),
+        _clientItem(Icons.home_outlined, Icons.home, 'Home', true),
+        _clientItem(Icons.add_circle_outline, Icons.add_circle, 'Design', true),
+        _clientItem(Icons.inbox_outlined, Icons.inbox, 'Requests', true),
         if (_showCampaignsTab)
           _clientItem(
             Icons.campaign_outlined,

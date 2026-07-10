@@ -10,6 +10,7 @@ import 'artist_earnings_page.dart';
 import 'artist_profile_page.dart';
 import 'artist_inbox_page.dart';
 import 'artist_history_page.dart';
+import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
 
 import '../models/artist_request_legacy_models.dart'
@@ -73,6 +74,34 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
 
   void _openProfilePage() => _goToTab(4);
 
+  void _openCalendarPage() => _goToTab(1);
+
+  void _openHistoryPage() => _goToTab(2);
+
+  void _openEarningsPage() => _goToTab(3);
+
+  void _openReviewsPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistReviewsPage(
+          showBottomNav: true,
+          bottomNavCurrentIndex: 4,
+          onBottomNavTap: (index) {
+            Navigator.of(context).pop();
+            _goToTab(index);
+          },
+          onManageProfile: _openProfilePage,
+          onOpenHistory: _openHistoryPage,
+          onOpenCalendar: _openCalendarPage,
+          onOpenEarnings: _openEarningsPage,
+          onOpenReviews: () {},
+          onSignOut: () => _signOut(),
+        ),
+      ),
+    );
+  }
+
   void _openInbox() {
     Navigator.push(
       context,
@@ -103,6 +132,10 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         requests: const <ClientRequest>[],
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,
+        onOpenHistory: _openHistoryPage,
+        onOpenCalendar: _openCalendarPage,
+        onOpenReviews: _openReviewsPage,
+        onOpenEarnings: _openEarningsPage,
         onOpenInbox: _openInbox,
         onSignOut: () => _signOut(),
       ),
@@ -111,6 +144,9 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         onBackHome: () => setState(() => _index = 0),
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,
+        onOpenHistory: _openHistoryPage,
+        onOpenCalendar: _openCalendarPage,
+        onOpenReviews: _openReviewsPage,
         onOpenInbox: _openInbox,
         onSignOut: () => _signOut(),
       ),
@@ -118,6 +154,9 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
       ArtistEarningsPage(
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,
+        onOpenHistory: _openHistoryPage,
+        onOpenCalendar: _openCalendarPage,
+        onOpenReviews: _openReviewsPage,
         onOpenInbox: _openInbox,
         onSignOut: () => _signOut(),
       ),

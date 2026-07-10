@@ -113,6 +113,8 @@ class _ClientArtistHomePageClientState
         onBackHome: () => _onNavTap(0),
         profile: _profile,
         showExtendedAvatarMenu: true,
+        bottomNavIndex: 3,
+        onNavTap: _onNavTap,
       ),
       ClientProfilePage(
         profile: _profile,
@@ -139,10 +141,7 @@ class _ClientArtistHomePageClientState
 }
 
 class _ClientBottomNav extends StatelessWidget {
-  const _ClientBottomNav({
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const _ClientBottomNav({required this.currentIndex, required this.onTap});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -157,19 +156,9 @@ class _ClientBottomNav extends StatelessWidget {
       unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
       items: [
         _item(Icons.home_outlined, Icons.home, 'Home', true),
-        _item(
-          Icons.add_circle_outline,
-          Icons.add_circle,
-          'Design',
-          true,
-        ),
+        _item(Icons.add_circle_outline, Icons.add_circle, 'Design', true),
         _item(Icons.brush_outlined, Icons.brush, 'Artists', true),
-        _item(
-          Icons.receipt_long_outlined,
-          Icons.receipt_long,
-          'Orders',
-          true,
-        ),
+        _item(Icons.receipt_long_outlined, Icons.receipt_long, 'Orders', true),
         _item(Icons.person_outline, Icons.person, 'Profile', true),
       ],
     );

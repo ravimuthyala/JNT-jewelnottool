@@ -57,7 +57,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     debugLabel: 'profileNotificationsButton',
   );
 
-
   // Match ClientRegistrationPage sizing (same family you used there)
 
   static const double _smallFs = 13.5;
@@ -194,12 +193,20 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     for (final table in const <String>['client', 'client_artist']) {
       try {
         if (uid.isNotEmpty) {
-          final rows = await supabase.from(table).select('id').eq('id', uid).limit(1);
+          final rows = await supabase
+              .from(table)
+              .select('id')
+              .eq('id', uid)
+              .limit(1);
           if (rows.isNotEmpty) return table;
         }
 
         if (email.isNotEmpty) {
-          final rows = await supabase.from(table).select('id').eq('email', email).limit(1);
+          final rows = await supabase
+              .from(table)
+              .select('id')
+              .eq('email', email)
+              .limit(1);
           if (rows.isNotEmpty) return table;
         }
       } catch (_) {}
@@ -219,14 +226,22 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     for (final table in const <String>['client', 'client_artist']) {
       try {
         if (uid.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('id', uid).limit(1);
+          final rows = await supabase
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .limit(1);
           if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
 
         if (email.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('email', email).limit(1);
+          final rows = await supabase
+              .from(table)
+              .select()
+              .eq('email', email)
+              .limit(1);
           if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
@@ -345,13 +360,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     );
   }
 
-
   Future<void> _loadCommunicationPreferences() async {
     final data = await _readClientRowFromSupabase();
     if (!mounted || data == null) return;
 
     final rootPrefs = _asMap(data['communicationPreferences']);
-    final nestedPrefs = _asMap(_asMap(data['client'])['communicationPreferences']);
+    final nestedPrefs = _asMap(
+      _asMap(data['client'])['communicationPreferences'],
+    );
     final source = rootPrefs.isNotEmpty ? rootPrefs : nestedPrefs;
     if (source.isEmpty) return;
 
@@ -419,9 +435,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       'id': uid,
       'email': (user?.email ?? _profile.basic.email).trim().toLowerCase(),
       'communicationPreferences': preferences.toMap(),
-      'client': {
-        'communicationPreferences': preferences.toMap(),
-      },
+      'client': {'communicationPreferences': preferences.toMap()},
       'updated_at': DateTime.now().toIso8601String(),
     });
   }
@@ -741,6 +755,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
     final avatarLetter = name.isNotEmpty ? name[0].toUpperCase() : '';
     final avatarUrl = _profile.basic.profileImageUrl.trim();
+    const avatarSize = 72.0;
     final locationText = (city.isEmpty && state.isEmpty)
         ? '—'
         : '${city.isEmpty ? '' : city}${city.isNotEmpty && state.isNotEmpty ? ', ' : ''}${state.isEmpty ? '' : state}';
@@ -780,9 +795,13 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                     const SizedBox(height: 6),
                     ExcludeSemantics(
                       child: SizedBox(
-                        height: 72,
-                        width: 72,
-                        child: _buildAvatarContent(avatarUrl, avatarLetter),
+                        height: avatarSize,
+                        width: avatarSize,
+                        child: _buildAvatarContent(
+                          avatarUrl,
+                          avatarLetter,
+                          avatarSize,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -807,7 +826,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                               style: TextStyle(
                                 fontSize: _smallFs,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.blackCat.withValues(alpha: 0.75),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.75,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -816,7 +837,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                               style: TextStyle(
                                 fontSize: _smallFs,
                                 fontWeight: FontWeight.w400,
-                                color: AppColors.blackCat.withValues(alpha: 0.75),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.75,
+                                ),
                               ),
                             ),
                           ],
@@ -933,18 +956,22 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     );
   }
 
-  Widget _buildAvatarContent(String src, String fallbackLetter) {
+  Widget _buildAvatarContent(
+    String src,
+    String fallbackLetter,
+    double avatarSize,
+  ) {
     final trimmed = src.trim();
     if (trimmed.startsWith('gs://') || trimmed.startsWith('clients/')) {
       return ClipRRect(
         borderRadius: BorderRadius.zero,
-        child: SizedBox(
-          width: 68,
-          height: 68,
+        child: SizedBox.square(
+          dimension: avatarSize,
           child: ClientProfileAvatarIcon(
             imageUrl: trimmed,
             displayName: _profile.basic.name,
-            size: 24,
+            size: avatarSize,
+            resolveCurrentUserFallback: true,
           ),
         ),
       );
@@ -956,12 +983,13 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           final bytes = base64Decode(src.substring(comma + 1));
           return ClipRRect(
             borderRadius: BorderRadius.zero,
-            child: Image.memory(
-              bytes,
-              width: 68,
-              height: 68,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _avatarLetter(fallbackLetter),
+            child: SizedBox.square(
+              dimension: avatarSize,
+              child: Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _avatarLetter(fallbackLetter),
+              ),
             ),
           );
         } catch (_) {
@@ -972,12 +1000,13 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     if (src.startsWith('http://') || src.startsWith('https://')) {
       return ClipRRect(
         borderRadius: BorderRadius.zero,
-        child: Image.network(
-          src,
-          width: 68,
-          height: 68,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _avatarLetter(fallbackLetter),
+        child: SizedBox.square(
+          dimension: avatarSize,
+          child: Image.network(
+            src,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => _avatarLetter(fallbackLetter),
+          ),
         ),
       );
     }
@@ -1260,7 +1289,9 @@ class _CommunicationPreferencePopupState
                               icon: Icon(
                                 Icons.close_rounded,
                                 size: 22,
-                                color: AppColors.blackCat.withValues(alpha: 0.75),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.75,
+                                ),
                               ),
                               onPressed: () => Navigator.pop(context),
                             ),
@@ -1559,7 +1590,9 @@ class _CommunicationPreferencePopupState
                 value: value,
                 activeThumbColor: AppColors.blackCat,
                 inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
+                inactiveTrackColor: AppColors.blackCatLight.withValues(
+                  alpha: 0.35,
+                ),
                 onChanged: onChanged,
               ),
             ),
@@ -1660,11 +1693,11 @@ class _CommunicationPreferencePopupState
   }
 
   Widget _divider() => ExcludeSemantics(
-        child: Divider(
-          height: 18,
-          color: AppColors.blackCat.withValues(alpha: 0.35),
-        ),
-      );
+    child: Divider(
+      height: 18,
+      color: AppColors.blackCat.withValues(alpha: 0.35),
+    ),
+  );
 }
 
 enum _PreferredContactMethod { email, push, sms }

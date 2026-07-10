@@ -36,8 +36,9 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
 
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
-  final FocusNode _emailFocusNode =
-      FocusNode(debugLabel: 'forgotPasswordEmail');
+  final FocusNode _emailFocusNode = FocusNode(
+    debugLabel: 'forgotPasswordEmail',
+  );
 
   bool _loading = false;
 
@@ -84,11 +85,15 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
+        borderSide: BorderSide(
+          color: AppColors.blackCat.withValues(alpha: 0.35),
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide:  BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
+        borderSide: BorderSide(
+          color: AppColors.blackCat.withValues(alpha: 0.35),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
@@ -119,19 +124,31 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     if (_formKey.currentState?.validate() != true) {
       final error = _emailValidator(_emailCtrl.text);
       if (error != null) {
-        SemanticsService.sendAnnouncement(error as FlutterView, view as String, Directionality.of(context));
+        SemanticsService.sendAnnouncement(
+          error as FlutterView,
+          view as String,
+          Directionality.of(context),
+        );
       }
       return;
     }
 
     final email = _emailCtrl.text.trim();
     setState(() => _loading = true);
-    SemanticsService.sendAnnouncement('Sending reset link' as FlutterView, view as String, Directionality.of(context));
+    SemanticsService.sendAnnouncement(
+      'Sending reset link' as FlutterView,
+      view as String,
+      Directionality.of(context),
+    );
 
     try {
       await _sendResetEmail(email);
       if (!mounted) return;
-      SemanticsService.sendAnnouncement('Reset link sent' as FlutterView, view as String, Directionality.of(context));
+      SemanticsService.sendAnnouncement(
+        'Reset link sent' as FlutterView,
+        view as String,
+        Directionality.of(context),
+      );
 
       await showDialog<void>(
         context: context,
@@ -144,7 +161,11 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     } catch (e) {
       if (!mounted) return;
       final message = 'Failed to send reset link: $e';
-      SemanticsService.sendAnnouncement(message as FlutterView, view as String, Directionality.of(context));
+      SemanticsService.sendAnnouncement(
+        message as FlutterView,
+        view as String,
+        Directionality.of(context),
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -169,172 +190,183 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
         child: Container(
           decoration: const BoxDecoration(borderRadius: BorderRadius.zero),
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              color: _alabaster,
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: ExcludeSemantics(
-                      child: Container(
-                        height: 5,
-                        width: 44,
-                        decoration: BoxDecoration(
-                          color: AppColors.blackCat,
-                          borderRadius: BorderRadius.zero,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                color: _alabaster,
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Center(
+                      child: ExcludeSemantics(
+                        child: Container(
+                          height: 5,
+                          width: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.blackCat,
+                            borderRadius: BorderRadius.zero,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  JntModalHeaderBar(
-                    onClose: () => Navigator.pop(context),
-                    closeTooltip: 'Close forgot password',
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    JntModalHeaderBar(
+                      onClose: () => Navigator.pop(context),
+                      closeTooltip: 'Close forgot password',
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Container(
-              color: _snow,
-              child: SafeArea(
-                top: false,
-                child: Form(
-                  key: _formKey,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const ExcludeSemantics(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
+              Container(
+                color: _snow,
+                child: SafeArea(
+                  top: false,
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const ExcludeSemantics(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Forgot Password',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                  fontFamily: 'Arialbold',
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          ExcludeSemantics(
                             child: Text(
-                              'Forgot Password',
+                              "Enter your email and we'll send you a reset link.",
                               style: TextStyle(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                                fontFamily: 'Arialbold',
                                 color: AppColors.blackCat,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ExcludeSemantics(
-                          child: Text(
-                            "Enter your email and we'll send you a reset link.",
-                            style: TextStyle(
-                              color: AppColors.blackCat,
-                              height: 1.25,
-                              fontWeight: FontWeight.w400,
-                              fontSize: 14,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _emailCtrl,
-                          focusNode: _emailFocusNode,
-                          autofocus: true,
-                          keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            fontFamily: 'Arial',
-                          ),
-                          decoration: _dec('Email'),
-                          validator: _emailValidator,
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 52,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ).copyWith(
-                              side: WidgetStateProperty.resolveWith((states) {
-                                if (states.contains(WidgetState.focused)) {
-                                  return const BorderSide(
-                                    color: _focusRing,
-                                    width: 2,
-                                  );
-                                }
-                                return BorderSide.none;
-                              }),
-                            ),
-                            onPressed: _loading ? null : _onSend,
-                            child: _loading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.snow,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Send reset link',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      fontFamily: 'Arial',
-                                      color: AppColors.snow,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Center(
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: AppColors.blackCat,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ).copyWith(
-                              side: WidgetStateProperty.resolveWith((states) {
-                                if (states.contains(WidgetState.focused)) {
-                                  return const BorderSide(
-                                    color: _focusRing,
-                                    width: 2,
-                                  );
-                                }
-                                return BorderSide.none;
-                              }),
-                            ),
-                            onPressed: _loading
-                                ? null
-                                : () => Navigator.pop(context),
-                            child: Text(
-                              'Back to Login',
-                              style: TextStyle(
+                                height: 1.25,
                                 fontWeight: FontWeight.w400,
                                 fontSize: 14,
                                 fontFamily: 'Arial',
-                                color: AppColors.blackCat,
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                      ],
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: _emailCtrl,
+                            focusNode: _emailFocusNode,
+                            autofocus: true,
+                            keyboardType: TextInputType.emailAddress,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              fontFamily: 'Arial',
+                            ),
+                            decoration: _dec('Email'),
+                            validator: _emailValidator,
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 52,
+                            child: ElevatedButton(
+                              style:
+                                  ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.blackCat,
+                                    foregroundColor: AppColors.snow,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ).copyWith(
+                                    side: WidgetStateProperty.resolveWith((
+                                      states,
+                                    ) {
+                                      if (states.contains(
+                                        WidgetState.focused,
+                                      )) {
+                                        return const BorderSide(
+                                          color: _focusRing,
+                                          width: 2,
+                                        );
+                                      }
+                                      return BorderSide.none;
+                                    }),
+                                  ),
+                              onPressed: _loading ? null : _onSend,
+                              child: _loading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.snow,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Send reset link',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        fontFamily: 'Arial',
+                                        color: AppColors.snow,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Center(
+                            child: TextButton(
+                              style:
+                                  TextButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    foregroundColor: AppColors.blackCat,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ).copyWith(
+                                    side: WidgetStateProperty.resolveWith((
+                                      states,
+                                    ) {
+                                      if (states.contains(
+                                        WidgetState.focused,
+                                      )) {
+                                        return const BorderSide(
+                                          color: _focusRing,
+                                          width: 2,
+                                        );
+                                      }
+                                      return BorderSide.none;
+                                    }),
+                                  ),
+                              onPressed: _loading
+                                  ? null
+                                  : () => Navigator.pop(context),
+                              child: Text(
+                                'Back to Login',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 14,
+                                  fontFamily: 'Arial',
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -395,21 +427,24 @@ class _ResetLinkSentDialog extends StatelessWidget {
           SizedBox(
             height: 50,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.blackCat,
-                foregroundColor: AppColors.snow,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              ).copyWith(
-                side: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.focused)) {
-                    return const BorderSide(
-                      color: _ForgotPasswordSheetState._focusRing,
-                      width: 2,
-                    );
-                  }
-                  return BorderSide.none;
-                }),
-              ),
+              style:
+                  ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ).copyWith(
+                    side: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.focused)) {
+                        return const BorderSide(
+                          color: _ForgotPasswordSheetState._focusRing,
+                          width: 2,
+                        );
+                      }
+                      return BorderSide.none;
+                    }),
+                  ),
               onPressed: () => Navigator.pop(context),
               child: const Text(
                 'OK',

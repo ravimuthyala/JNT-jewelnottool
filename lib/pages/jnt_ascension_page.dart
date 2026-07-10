@@ -946,10 +946,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   }
 
   Widget _activityTab() {
-    final orders = _readMetricInt('completedOrders');
-    final deliveredOrders = _stageSummary.deliveredOrders;
-    final currentTier = _currentLevel.label;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -999,98 +995,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE4E4E4)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Completed orders: $orders',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Delivered orders: $deliveredOrders',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Artist GMV: \$${artistGmv.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Artist earnings: \$${artistEarnings.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'JNT revenue: \$${jntRevenue.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Current tier: $currentTier',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Points to next tier: ${_fmtPoints(_pointsToNextTier)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (isGoldsmith &&
-                  crownedPointsQualified &&
-                  !crownedRevenueQualified) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '\$${jntRevenueToCrowned.toStringAsFixed(0)} JNT revenue remaining to unlock Crowned benefits.',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.35,
-                    color: Color(0xFF3A3025),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
             ],
           ),
         ),

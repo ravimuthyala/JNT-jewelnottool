@@ -22,12 +22,14 @@ class ClientShellPage extends StatefulWidget {
     this.initialIndex = 0,
     this.forceEnableAllTabs = false,
     this.initialArtistName,
+    this.initialBrandPartnerApprovedByAdmin,
   });
 
   final ClientProfileDraft profile;
   final int initialIndex;
   final bool forceEnableAllTabs;
   final String? initialArtistName;
+  final bool? initialBrandPartnerApprovedByAdmin;
 
   @override
   State<ClientShellPage> createState() => _ClientShellPageState();
@@ -52,6 +54,8 @@ class _ClientShellPageState extends State<ClientShellPage> {
     _index = widget.initialIndex;
     _forceEnableAllTabs = widget.forceEnableAllTabs;
     _initialArtistName = widget.initialArtistName;
+    _brandPartnerApprovedByAdmin =
+        widget.initialBrandPartnerApprovedByAdmin ?? false;
     unawaited(_loadClientProfileFromSupabase());
     unawaited(_loadBrandPartnerApprovalStatus());
   }
@@ -409,6 +413,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
   }
 
   void _onNavTap(int i) {
+    if (!mounted) return;
     setState(() => _index = i);
   }
 
@@ -452,6 +457,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
             unawaited(_openTrackOrderPage());
           },
           onProfileUpdated: (updated) {
+            if (!mounted) return;
             setState(() {
               _profile = updated;
               _profileComplete = true;
@@ -541,6 +547,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
             unawaited(_showCompleteClientProfileDialog());
             return;
           }
+          if (!mounted) return;
           setState(() {
             _forceEnableAllTabs = true;
             _initialArtistName = artistName;
@@ -553,6 +560,8 @@ class _ClientShellPageState extends State<ClientShellPage> {
         onBackHome: () => _onNavTap(0),
         profile: _profile,
         isActiveTab: _index == (showRequestsTab ? 4 : 3),
+        bottomNavIndex: showRequestsTab ? 4 : 3,
+        onNavTap: _onNavTap,
         onOpenProfile: _openProfileFromAvatar,
         onLogout: _logoutToHomePage,
         showProfileMenu: showProfileInAvatar,
@@ -567,6 +576,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
             unawaited(_openTrackOrderPage());
           },
           onProfileUpdated: (updated) {
+            if (!mounted) return;
             setState(() {
               _profile = updated;
               _profileComplete = true;

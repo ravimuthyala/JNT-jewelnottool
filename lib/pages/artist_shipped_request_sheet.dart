@@ -46,7 +46,6 @@ class _ShippedRequestSheet extends StatefulWidget {
   State<_ShippedRequestSheet> createState() => _ShippedRequestSheetState();
 }
 
-
 class _ShipmentInfo {
   const _ShipmentInfo({
     required this.courier,
@@ -62,25 +61,41 @@ class _ShipmentInfo {
 class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   final SupabaseClient _supabase = Supabase.instance.client;
   bool _isMarkingDelivered = false;
-  int _selectedMeasurementTab = 0;
   String get _requestTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
-          ? 'company_custom_requests'
-          : 'client_custom_requests';
+      ? 'company_custom_requests'
+      : 'client_custom_requests';
 
   String get _requestDetailsTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
-          ? 'company_custom_requests_details'
-          : 'client_custom_requests_details';
+      ? 'company_custom_requests_details'
+      : 'client_custom_requests_details';
 
   Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
     return <String, dynamic>{};
   }
 
   List<Object?> _asList(Object? value) {
     if (value is Iterable) return value.toList(growable: false);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return const <Object?>[];
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) return List<Object?>.from(decoded);
+      } catch (_) {}
+    }
     return const <Object?>[];
   }
 
@@ -127,9 +142,15 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       final payment = _asMap(map['payment']);
       final payments = _asMap(map['payments']);
       final artistQuote = _asMap(map['artistQuote'] ?? map['artist_quote']);
-      final dataArtistQuote = _asMap(data['artistQuote'] ?? data['artist_quote']);
-      final payloadArtistQuote = _asMap(payload['artistQuote'] ?? payload['artist_quote']);
-      final detailsArtistQuote = _asMap(details['artistQuote'] ?? details['artist_quote']);
+      final dataArtistQuote = _asMap(
+        data['artistQuote'] ?? data['artist_quote'],
+      );
+      final payloadArtistQuote = _asMap(
+        payload['artistQuote'] ?? payload['artist_quote'],
+      );
+      final detailsArtistQuote = _asMap(
+        details['artistQuote'] ?? details['artist_quote'],
+      );
 
       final nestedMaps = <Map<String, dynamic>>[
         data,
@@ -209,7 +230,13 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       final details = _asMap(root['details']);
       final data = _asMap(root['data']);
       final shipping = _asMap(root['shipping']);
-      final nested = <Map<String, dynamic>>[root, payload, details, data, shipping];
+      final nested = <Map<String, dynamic>>[
+        root,
+        payload,
+        details,
+        data,
+        shipping,
+      ];
 
       String pick(List<String> keys) {
         final values = <Object?>[];
@@ -297,7 +324,9 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
     if (accepted.isNotEmpty) return accepted;
 
-    final existing = _normalizeImagePath(widget.request.clientProfileImage.trim());
+    final existing = _normalizeImagePath(
+      widget.request.clientProfileImage.trim(),
+    );
     if (existing.isNotEmpty) return existing;
 
     return _lookupShippedClientProfileImage(
@@ -401,7 +430,11 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     if (email.trim().isNotEmpty) {
       for (final table in const ['client', 'clients', 'client_artist']) {
         for (final column in const ['email', 'client_email']) {
-          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          final found = await lookupBy(
+            table,
+            column,
+            email.trim().toLowerCase(),
+          );
           if (found.isNotEmpty) return found;
         }
       }
@@ -409,7 +442,12 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
     if (name.trim().isNotEmpty) {
       for (final table in const ['client', 'clients', 'client_artist']) {
-        for (final column in const ['name', 'full_name', 'display_name', 'client_name']) {
+        for (final column in const [
+          'name',
+          'full_name',
+          'display_name',
+          'client_name',
+        ]) {
           final found = await lookupBy(table, column, name.trim());
           if (found.isNotEmpty) return found;
         }
@@ -512,7 +550,9 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                             child: Text(
                               'Delivery status updates automatically from courier tracking.',
                               style: TextStyle(
-                                color: AppColors.blackCat.withValues(alpha: 0.72),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.72,
+                                ),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13.5,
                               ),
@@ -579,7 +619,6 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-
   Widget _shipmentStatusCard(_ShipmentInfo info) {
     final courier = info.courier.trim();
     final tracking = info.tracking.trim();
@@ -593,19 +632,27 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             size: 22,
             color: AppColors.blackCat,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  shippedAt == null ? 'Shipped' : 'Shipped on ${_fmtDate(shippedAt)}',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  shippedAt == null
+                      ? 'Shipped'
+                      : 'Shipped on ${_fmtDate(shippedAt)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 _shippingInfoRow('Shipped by', courier.isEmpty ? '-' : courier),
                 const SizedBox(height: 8),
-                _shippingInfoRow('Tracking #', tracking.isEmpty ? '-' : tracking),
+                _shippingInfoRow(
+                  'Tracking #',
+                  tracking.isEmpty ? '-' : tracking,
+                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 44,
@@ -614,13 +661,18 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blackCat,
                       foregroundColor: AppColors.snow,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
                     icon: const Icon(Icons.travel_explore_rounded, size: 16),
                     label: const Text(
                       'Track Shipment',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                      ),
                     ),
                   ),
                 ),
@@ -651,20 +703,14 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
         Expanded(
           child: Text(
             value.trim().isEmpty ? '-' : value.trim(),
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13.5,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
           ),
         ),
       ],
     );
   }
 
-  Widget _sectionCard({
-    required String title,
-    required Widget child,
-  }) {
+  Widget _sectionCard({required String title, required Widget child}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
@@ -674,11 +720,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle(title),
-          const SizedBox(height: 10),
-          child,
-        ],
+        children: [_sectionTitle(title), const SizedBox(height: 10), child],
       ),
     );
   }
@@ -691,7 +733,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             Icons.image_outlined,
             color: AppColors.blackCat.withValues(alpha: 0.45),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text(
             message,
             style: TextStyle(
@@ -988,10 +1030,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-  static Widget _summaryPairRow({
-    required Widget left,
-    required Widget right,
-  }) {
+  static Widget _summaryPairRow({required Widget left, required Widget right}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -1153,17 +1192,11 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               final amountText = amount != null && amount > 0
                   ? '\$${amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2)}'
                   : '-';
-              return _paymentDetailRow(
-                'Final Amount by Artist',
-                amountText,
-              );
+              return _paymentDetailRow('Final Amount by Artist', amountText);
             },
           ),
           const SizedBox(height: 10),
-          _paymentDetailRow(
-            'Status',
-            paymentStatus,
-          ),
+          _paymentDetailRow('Status', paymentStatus),
         ],
       ),
     );
@@ -1217,70 +1250,10 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       );
     }
 
-    final safeIndex = _selectedMeasurementTab.clamp(0, clients.length - 1);
-    final selected = clients[safeIndex];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: 52,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: clients.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final active = index == safeIndex;
-                final name = clients[index].name.trim().isEmpty
-                    ? 'Client ${index + 1}'
-                    : clients[index].name.trim();
-                return InkWell(
-                  borderRadius: BorderRadius.zero,
-                  onTap: () => setState(() => _selectedMeasurementTab = index),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: active
-                              ? AppColors.balletSlippers
-                              : Colors.transparent,
-                          width: 4,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(
-                          alpha: active ? 1 : 0.62,
-                        ),
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            child: _measurementBody(selected),
-          ),
-        ],
-      ),
+    return GroupClientMeasurementsTabs(
+      clients: clients,
+      compactRequestDetailsLayout: true,
+      tabViewHeight: 312,
     );
   }
 
@@ -1289,7 +1262,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          Row(
+        IntrinsicHeight(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -1299,7 +1273,14 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                   nfc: client.leftNfc,
                 ),
               ),
-              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: AppColors.blackCatBorderLight,
+                ),
+              ),
               Expanded(
                 child: _handCardFromMap(
                   'Right Hand',
@@ -1309,26 +1290,39 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _measureField(
-                  'Shape',
-                  client.nailShape.trim().isEmpty ? '-' : client.nailShape,
+        ),
+        const SizedBox(height: 10),
+        Divider(height: 1, thickness: 1, color: AppColors.blackCatBorderLight),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _measureField(
+                'Shape',
+                client.nailShape.trim().isEmpty ? '-' : client.nailShape,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: SizedBox(
+                height: 24,
+                child: VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: AppColors.blackCatBorderLight,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _measureField(
-                  'Length',
-                  _prettyLength(client.nailLength).trim().isEmpty
-                      ? '-'
-                      : _prettyLength(client.nailLength),
-                ),
+            ),
+            Expanded(
+              child: _measureField(
+                'Length',
+                _prettyLength(client.nailLength).trim().isEmpty
+                    ? '-'
+                    : _prettyLength(client.nailLength),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -1339,25 +1333,23 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     Map<String, bool> nfc = const <String, bool>{},
   }) {
     String pick(String key) => (dims[key] ?? '').trim();
-    return _softBox(
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
-          const SizedBox(height: 8),
-          _dimRow('Thumb', pick('thumb'), nfcRequested: nfc['thumb'] == true),
-          _dimRow('Index', pick('index'), nfcRequested: nfc['index'] == true),
-          _dimRow('Middle', pick('middle'), nfcRequested: nfc['middle'] == true),
-          _dimRow('Ring', pick('ring'), nfcRequested: nfc['ring'] == true),
-          _dimRow('Pinky', pick('pinky'), nfcRequested: nfc['pinky'] == true),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        _dimRow('Thumb', pick('thumb'), nfcRequested: nfc['thumb'] == true),
+        _dimRow('Index', pick('index'), nfcRequested: nfc['index'] == true),
+        _dimRow('Middle', pick('middle'), nfcRequested: nfc['middle'] == true),
+        _dimRow('Ring', pick('ring'), nfcRequested: nfc['ring'] == true),
+        _dimRow('Pinky', pick('pinky'), nfcRequested: nfc['pinky'] == true),
+      ],
     );
   }
 
@@ -1374,10 +1366,14 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
+          SizedBox(
+            width: 40,
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: AppColors.blackCat.withValues(alpha: 0.60),
                 fontWeight: FontWeight.w600,
@@ -1385,10 +1381,30 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               ),
             ),
           ),
-          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
-          Text(
-            formatMm(raw),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (nfcRequested) ...[
+                    _nfcDimensionChip(),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    formatMm(raw),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -1414,7 +1430,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-  Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
+  Future<List<GroupClientMeasurementData>>
+  _loadGroupMeasurementClients() async {
     final merged = <GroupClientMeasurementData>[];
     final seen = <String>{};
     final nfcDetails = await loadRequestNfcDetails(
@@ -1491,6 +1508,82 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       return const <String, String>{};
     }
 
+    void updateSubmittedClientFromSource(Map<String, dynamic> source) {
+      if (merged.isEmpty || source.isEmpty) return;
+
+      final payload = _asMap(source['payload']);
+      final details = _asMap(source['details']);
+      final data = _asMap(source['data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
+      final sources = <Map<String, dynamic>>[
+        source,
+        payload,
+        details,
+        data,
+        requestDetails,
+        orderData,
+      ];
+
+      final leftSources = <Object?>[];
+      final rightSources = <Object?>[];
+      for (final item in sources) {
+        final nailPreferences = _asMap(
+          item['nailPreferences'] ?? item['nail_preferences'],
+        );
+        final snapshotNailPreferences = _asMap(
+          _asMap(
+            item['clientProfileSnapshot'] ?? item['client_profile_snapshot'],
+          )['nailPreferences'],
+        );
+        leftSources.addAll(<Object?>[
+          item['leftHandDimensions'],
+          item['left_hand_dimensions'],
+          nailPreferences['leftHandDimensions'],
+          nailPreferences['left_hand_dimensions'],
+          nailPreferences['dimensions'],
+          snapshotNailPreferences['dimensions'],
+          item['dimensions'],
+        ]);
+        rightSources.addAll(<Object?>[
+          item['rightHandDimensions'],
+          item['right_hand_dimensions'],
+          nailPreferences['rightHandDimensions'],
+          nailPreferences['right_hand_dimensions'],
+          nailPreferences['dimensions'],
+          snapshotNailPreferences['dimensions'],
+          item['dimensions'],
+        ]);
+      }
+
+      final left = firstDims(leftSources, left: true);
+      final right = firstDims(rightSources, left: false);
+      if (left.values.every((v) => v.trim().isEmpty) &&
+          right.values.every((v) => v.trim().isEmpty)) {
+        return;
+      }
+
+      final current = merged.first;
+      merged[0] = GroupClientMeasurementData(
+        name: current.name,
+        clientEmail: current.clientEmail,
+        nailShape: current.nailShape,
+        nailLength: current.nailLength,
+        leftHand: left.values.any((v) => v.trim().isNotEmpty)
+            ? left
+            : current.leftHand,
+        rightHand: right.values.any((v) => v.trim().isNotEmpty)
+            ? right
+            : current.rightHand,
+        leftNfc: current.leftNfc,
+        rightNfc: current.rightNfc,
+      );
+    }
+
     void addGroupClientFromMap(Map<String, dynamic> client, int index) {
       if (client.isEmpty) return;
       final email = _firstNonEmpty(<Object?>[
@@ -1513,7 +1606,9 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       ], fallback: 'Client $index');
       final savedNails = _asMap(client['savedNails'] ?? client['saved_nails']);
       final draftNails = _asMap(client['draftNails'] ?? client['draft_nails']);
-      final nailPreferences = _asMap(client['nailPreferences'] ?? client['nail_preferences']);
+      final nailPreferences = _asMap(
+        client['nailPreferences'] ?? client['nail_preferences'],
+      );
       final nailSource = savedNails.isNotEmpty
           ? savedNails
           : (draftNails.isNotEmpty ? draftNails : nailPreferences);
@@ -1568,11 +1663,17 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     }
 
     void addGroupClientsFromSource(Map<String, dynamic> source) {
+      updateSubmittedClientFromSource(source);
+
       final payload = _asMap(source['payload']);
       final details = _asMap(source['details']);
       final data = _asMap(source['data']);
-      final requestDetails = _asMap(source['requestDetails'] ?? source['request_details']);
-      final orderData = _asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
       final nestedSources = <Map<String, dynamic>>[
         source,
         payload,
@@ -1606,7 +1707,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
           .select()
           .eq('id', widget.request.id)
           .maybeSingle();
-      if (root != null) addGroupClientsFromSource(Map<String, dynamic>.from(root));
+      if (root != null)
+        addGroupClientsFromSource(Map<String, dynamic>.from(root));
       final detailRows = await _supabase
           .from(_requestDetailsTable)
           .select()
@@ -1712,30 +1814,33 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
   Widget _measureField(String label, String value) {
     final trimmed = value.trim();
-    return _softBox(
-      Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.blackCat.withValues(alpha: 0.60),
-              fontWeight: FontWeight.w600,
-              fontSize: 13.5,
-            ),
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.blackCat.withValues(alpha: 0.60),
+            fontWeight: FontWeight.w600,
+            fontSize: 13.5,
           ),
-          const Spacer(),
-          Text(
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
             trimmed.isEmpty ? '-' : trimmed,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   static Widget _softBox(Widget child) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,

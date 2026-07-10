@@ -40,9 +40,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   Future<void> _verifyCode() async {
     try {
       final email =
-          SupabaseAuthService.currentUser?.email ??
-          widget.email ??
-          '';
+          SupabaseAuthService.currentUser?.email ?? widget.email ?? '';
       if (!mounted) return;
       if (SupabaseAuthService.currentUser == null) {
         setState(() {
@@ -91,10 +89,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       await SupabaseAuthService.updatePassword(_newCtrl.text.trim());
       await SupabaseAuthService.logout();
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/reset-password-success',
-        (route) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/reset-password-success', (route) => false);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -154,10 +151,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 const SizedBox(height: 16),
                 const Text(
                   'Reset Link Expired',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
@@ -179,10 +173,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       ),
                     ),
                     onPressed: () {
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                        '/login',
-                        (route) => false,
-                      );
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil('/login', (route) => false);
                     },
                     child: const Text('Request New Link'),
                   ),
@@ -205,6 +198,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       body: SafeArea(
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
             children: [
@@ -213,7 +207,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.zero,
-                  border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                  border: Border.all(
+                    color: Colors.black.withValues(alpha: 0.06),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

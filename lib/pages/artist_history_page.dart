@@ -1182,8 +1182,17 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
       ),
       itemBuilder: (_) {
         if (!widget.showExtendedAvatarMenu) {
-          return const [
-            PopupMenuItem(
+          return [
+            if (widget.onOpenReviews != null)
+              const PopupMenuItem(
+                value: _HeaderAvatarAction.reviews,
+                child: _HeaderMenuRow(
+                  icon: Icons.star_outline_rounded,
+                  label: 'Reviews',
+                ),
+              ),
+            if (widget.onOpenReviews != null) const PopupMenuDivider(),
+            const PopupMenuItem(
               value: _HeaderAvatarAction.signOut,
               child: _HeaderMenuRow(
                 icon: Icons.logout_rounded,

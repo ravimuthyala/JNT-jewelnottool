@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/auth_flags.dart';
+import '../../services/auth_email_alias_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/jnt_modal_app_bar.dart';
@@ -20,6 +21,7 @@ import 'step1_account.dart';
 import 'step2_location.dart';
 import 'step3_specialization.dart';
 import 'step4_credentials.dart';
+import 'step5_bundle_account.dart';
 
 class ArtistRegistrationFlow extends StatefulWidget {
   const ArtistRegistrationFlow({super.key});
@@ -29,15 +31,14 @@ class ArtistRegistrationFlow extends StatefulWidget {
 }
 
 class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
-  static const int _totalSteps = 4;
+  static const int _totalSteps = 5;
 
-  static const _stepLabels = ['Account', 'Location', 'Services', 'Payments'];
-
-  static const _stepSubtitles = [
-    'Account Credentials & Artist Profile',
-    'Location & Service Area',
-    'Specialization, Calendar & Portfolio',
-    'Credentials, Payment & Agreements',
+  static const _stepLabels = [
+    'Profile &\nAddress',
+    'Portfolio',
+    'Service &\nArea',
+    'Payment &\nPayout',
+    'Bundle &\nAccount',
   ];
 
   int _currentStep = 1;
@@ -48,6 +49,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
   final _step2Key = GlobalKey<Step2LocationState>();
   final _step3Key = GlobalKey<Step3SpecializationState>();
   final _step4Key = GlobalKey<Step4CredentialsState>();
+  final _step5Key = GlobalKey<Step5BundleAccountState>();
 
   void _onBack() {
     if (_currentStep == 1) {
@@ -62,18 +64,23 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       case 1:
         if (_step1Key.currentState?.validateAndSave(_draft) != true) return;
         setState(() => _currentStep = 2);
-
+        return;
       case 2:
         if (_step2Key.currentState?.validateAndSave(_draft) != true) return;
         setState(() => _currentStep = 3);
-
+        return;
       case 3:
         if (_step3Key.currentState?.validateAndSave(_draft) != true) return;
         setState(() => _currentStep = 4);
-
+        return;
       case 4:
         if (_step4Key.currentState?.validateAndSave(_draft) != true) return;
+        setState(() => _currentStep = 5);
+        return;
+      case 5:
+        if (_step5Key.currentState?.validateAndSave(_draft) != true) return;
         _submit();
+        return;
     }
   }
 
@@ -87,7 +94,75 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         _step3Key.currentState?.autofill();
       case 4:
         _step4Key.currentState?.autofill();
+      case 5:
+        _step5Key.currentState?.autofill();
     }
+  }
+
+  String _toSnakeCase(String input) {
+    return input
+        .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (match) {
+          return '${match.group(1)}_${match.group(2)}';
+        })
+        .replaceAllMapped(RegExp(r'([A-Z]+)([A-Z][a-z])'), (match) {
+          return '${match.group(1)}_${match.group(2)}';
+        })
+        .replaceAll('-', '_')
+        .toLowerCase();
+  }
+
+  Object? _normalizeSupabaseValue(Object? value) {
+    if (value is DateTime) return value.toUtc().toIso8601String();
+    if (value is Map) {
+      return value.map(
+        (key, entryValue) => MapEntry(
+          _toSnakeCase(key.toString()),
+          _normalizeSupabaseValue(entryValue),
+        ),
+      );
+    }
+    if (value is List) {
+      return value.map(_normalizeSupabaseValue).toList(growable: false);
+    }
+    return value;
+  }
+
+  Map<String, dynamic> _normalizeSupabasePayload(Map<String, dynamic> payload) {
+    return payload.map(
+      (key, value) =>
+          MapEntry(_toSnakeCase(key), _normalizeSupabaseValue(value)),
+    );
+  }
+
+  Map<String, dynamic> _sanitizeArtistTablePayload(
+    Map<String, dynamic> payload,
+  ) {
+    final sanitized = Map<String, dynamic>.from(payload);
+    const unsupportedAliasKeys = <String>{
+      'accountType',
+      'nameOrStudio',
+      'displayName',
+      'displayname',
+      'fullName',
+      'studioName',
+      'studioname',
+      'avatarUrl',
+      'avatarurl',
+      'photoUrl',
+      'photourl',
+      'profileImageUrl',
+      'profileimageurl',
+      'profilePhotoUrl',
+      'panel_displayName',
+      'panel_fullName',
+      'panel_nameOrStudio',
+      'panel_profileImageUrl',
+      'panel_nfc_request_enabled',
+    };
+    for (final key in unsupportedAliasKeys) {
+      sanitized.remove(key);
+    }
+    return sanitized;
   }
 
   Future<void> _submit() async {
@@ -122,6 +197,12 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         );
       }
 
+      await AuthEmailAliasService.saveAliasMapping(
+        loginEmail: email,
+        authEmail: supabaseUser?.email ?? email,
+        uid: supabaseUid,
+      );
+
       final profilePhotoUrl = await _uploadProfileImage(supabaseUid);
       final portfolioImageUrls = await _uploadPortfolioImages(
         supabaseUid,
@@ -133,8 +214,41 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         profilePhotoUrl: profilePhotoUrl,
         portfolioImageUrls: portfolioImageUrls,
       );
+      final directPayload = <String, dynamic>{
+        ...payload,
+        'id': supabaseUid,
+        'email': email,
+        'accountType': 'artist',
+        'profile': {
+          ...Map<String, dynamic>.from(payload['profile'] as Map),
+          'displayName': _draft.displayName.trim(),
+          'studioName': _draft.studioName.trim(),
+          'name': _draft.displayName.trim().isNotEmpty
+              ? _draft.displayName.trim()
+              : _draft.studioName.trim(),
+          'fullName': _draft.displayName.trim().isNotEmpty
+              ? _draft.displayName.trim()
+              : _draft.studioName.trim(),
+          'profileImageUrl': profilePhotoUrl.trim(),
+          'profilePhotoUrl': profilePhotoUrl.trim(),
+          'photoUrl': profilePhotoUrl.trim(),
+          'avatarUrl': profilePhotoUrl.trim(),
+        },
+      };
+      final supabasePayload = _normalizeSupabasePayload(
+        _sanitizeArtistTablePayload(directPayload),
+      );
+      final artistTable = Supabase.instance.client.from('artist');
+      final existingArtist = await artistTable
+          .select('id')
+          .eq('id', supabaseUid)
+          .maybeSingle();
 
-      await Supabase.instance.client.from('artist').upsert(payload);
+      if (existingArtist == null) {
+        await artistTable.insert(supabasePayload);
+      } else {
+        await artistTable.update(supabasePayload).eq('id', supabaseUid);
+      }
 
       if (!mounted) return;
 
@@ -390,6 +504,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       'panel_max_price': _draft.maxPrice.trim(),
       'panel_rush_available': _draft.rush,
       'panel_direct_requests_enabled': _draft.directRequestsEnabled,
+      'panel_nfc_request_enabled': _draft.nfcRequestEnabled,
       'panel_direct_request_year': _draft.directRequestYear,
       'panel_blocked_dates': _draft.blockedDates
           .map((date) => date.toIso8601String())
@@ -444,6 +559,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         'city': _draft.city.trim(),
         'state': resolvedState,
         'country': _draft.country.trim(),
+        'nfcRequestEnabled': _draft.nfcRequestEnabled,
         'addressLine1': _draft.addressLine1.trim(),
         'addressCity': _draft.addressCity.trim(),
         'addressLine2': _draft.addressLine2.trim(),
@@ -458,6 +574,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       },
       'availability': {
         'directRequestsEnabled': _draft.directRequestsEnabled,
+        'nfcRequestEnabled': _draft.nfcRequestEnabled,
         'blockedDates': _draft.blockedDates
             .map((date) => date.toIso8601String())
             .toList(),
@@ -516,6 +633,11 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         return Step3Specialization(key: _step3Key, draft: _draft);
       case 4:
         return Step4Credentials(key: _step4Key, draft: _draft);
+      case 5:
+        return Step5BundleAccount(
+          key: _step5Key,
+          draft: _draft,
+        );
       default:
         return const Center(child: Text('Coming soon'));
     }
@@ -558,14 +680,13 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
                 current: _currentStep,
                 total: _totalSteps,
                 stepLabels: _stepLabels,
-                sectionSubtitle: _stepSubtitles[_currentStep - 1],
+                sectionSubtitle: '',
               ),
               Expanded(child: _buildCurrentStep()),
               Container(
                 color: AppColors.snow,
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     if (_currentStep > 1) ...[
                       SizedBox(
@@ -589,14 +710,14 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
                     ],
+                    const Spacer(),
                     ContinueButton(
                       onTap: _onContinue,
                       loading: _submitting,
                       embedded: true,
                       label: _currentStep == _totalSteps
-                          ? 'Create My Account'
+                          ? 'Create Account'
                           : 'Continue',
                     ),
                   ],

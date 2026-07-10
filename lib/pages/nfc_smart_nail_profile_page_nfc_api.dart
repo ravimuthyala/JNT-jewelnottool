@@ -32,7 +32,11 @@ class _NfcProfileTarget {
 
 Future<_NfcProfileTarget?> _findNfcProfileTarget(String uid) async {
   for (final table in const <String>['client', 'client_artist']) {
-    final row = await _supabase.from(table).select().eq('id', uid).maybeSingle();
+    final row = await _supabase
+        .from(table)
+        .select()
+        .eq('id', uid)
+        .maybeSingle();
     if (row != null) {
       return _NfcProfileTarget(
         table: table,
@@ -50,7 +54,8 @@ Future<void> _saveNfcProfileForUser({
 }) async {
   final target = await _findNfcProfileTarget(uid);
   final resolvedTarget =
-      target ?? _NfcProfileTarget(table: 'client_artist', uid: uid, data: const {});
+      target ??
+      _NfcProfileTarget(table: 'client_artist', uid: uid, data: const {});
   final mergedClient = <String, dynamic>{
     ..._asMap(resolvedTarget.data['client']),
     'nfcSmartNailProfile': profile,
@@ -206,6 +211,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
           children: [
@@ -387,7 +393,9 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.55),
+                  disabledBackgroundColor: AppColors.blackCat.withValues(
+                    alpha: 0.55,
+                  ),
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
@@ -806,9 +814,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
     if (!isAvailable) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('NFC is not available on this device.'),
-        ),
+        const SnackBar(content: Text('NFC is not available on this device.')),
       );
       return;
     }
@@ -819,7 +825,10 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
     });
 
     await NfcManager.instance.startSession(
-      pollingOptions: const {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
+      pollingOptions: const {
+        NfcPollingOption.iso14443,
+        NfcPollingOption.iso15693,
+      },
       alertMessage: 'Hold your NFC nail near the top of your phone.',
       onDiscovered: (NfcTag tag) async {
         try {
@@ -869,7 +878,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${widget.selectedItem.title} activated successfully.'),
+              content: Text(
+                '${widget.selectedItem.title} activated successfully.',
+              ),
             ),
           );
         } catch (e) {
@@ -906,13 +917,25 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
       case 'snapchat':
         return _socialUrl('https://www.snapchat.com/add/', normalized);
       case 'facebook':
-        return _urlOrFallback(normalized, 'https://www.facebook.com/$normalized');
+        return _urlOrFallback(
+          normalized,
+          'https://www.facebook.com/$normalized',
+        );
       case 'linkedin':
-        return _urlOrFallback(normalized, 'https://www.linkedin.com/in/$normalized');
+        return _urlOrFallback(
+          normalized,
+          'https://www.linkedin.com/in/$normalized',
+        );
       case 'youtube':
-        return _urlOrFallback(normalized, 'https://www.youtube.com/@$normalized');
+        return _urlOrFallback(
+          normalized,
+          'https://www.youtube.com/@$normalized',
+        );
       case 'pinterest':
-        return _urlOrFallback(normalized, 'https://www.pinterest.com/$normalized');
+        return _urlOrFallback(
+          normalized,
+          'https://www.pinterest.com/$normalized',
+        );
       case 'xTwitter':
         return _socialUrl('https://x.com/', normalized);
       case 'threads':
@@ -970,7 +993,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
       throw Exception('Missing signed-in user.');
     }
 
-    final existing = (await _findNfcProfileTarget(uid))?.profile ?? const <String, dynamic>{};
+    final existing =
+        (await _findNfcProfileTarget(uid))?.profile ??
+        const <String, dynamic>{};
     final activationPayload = <String, dynamic>{
       ...existing,
       'isActivated': true,
@@ -987,7 +1012,8 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final statusText = _statusMessage ??
+    final statusText =
+        _statusMessage ??
         (_isScanning
             ? 'Keep your NFC nail near your phone.'
             : 'Hold your NFC nail near the top of your phone to activate it.');
@@ -1029,7 +1055,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
               decoration: BoxDecoration(
                 color: AppColors.snow,
                 borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(alpha: 0.18),
+                ),
               ),
               child: Column(
                 children: [
@@ -1080,7 +1108,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
             SizedBox(
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _isActivated ? () => Navigator.pop(context) : _startNfcScanAndActivate,
+                onPressed: _isActivated
+                    ? () => Navigator.pop(context)
+                    : _startNfcScanAndActivate,
                 icon: _isScanning
                     ? const SizedBox(
                         height: 16,
@@ -1090,7 +1120,12 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                           color: AppColors.snow,
                         ),
                       )
-                    : Icon(_isActivated ? Icons.done_rounded : Icons.sensors_rounded, size: 20),
+                    : Icon(
+                        _isActivated
+                            ? Icons.done_rounded
+                            : Icons.sensors_rounded,
+                        size: 20,
+                      ),
                 label: Text(
                   _isActivated
                       ? 'Done'
@@ -1099,7 +1134,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.55),
+                  disabledBackgroundColor: AppColors.blackCat.withValues(
+                    alpha: 0.55,
+                  ),
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),

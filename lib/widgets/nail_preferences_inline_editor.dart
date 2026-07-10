@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
+import '../utils/registration_input_utils.dart';
 import 'package:flutter/gestures.dart';
 
 /// Reusable inline editor for:
@@ -130,40 +132,41 @@ class _NailPreferencesInlineEditorState
   @override
   void didUpdateWidget(covariant NailPreferencesInlineEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldDims = oldWidget.initial.dimensions;
     final nextDims = widget.initial.dimensions;
-    final sameDims =
-        oldDims.lThumb == nextDims.lThumb &&
-        oldDims.lIndex == nextDims.lIndex &&
-        oldDims.lMiddle == nextDims.lMiddle &&
-        oldDims.lRing == nextDims.lRing &&
-        oldDims.lPinky == nextDims.lPinky &&
-        oldDims.rThumb == nextDims.rThumb &&
-        oldDims.rIndex == nextDims.rIndex &&
-        oldDims.rMiddle == nextDims.rMiddle &&
-        oldDims.rRing == nextDims.rRing &&
-        oldDims.rPinky == nextDims.rPinky &&
-        oldDims.lThumbNfc == nextDims.lThumbNfc &&
-        oldDims.lIndexNfc == nextDims.lIndexNfc &&
-        oldDims.lMiddleNfc == nextDims.lMiddleNfc &&
-        oldDims.lRingNfc == nextDims.lRingNfc &&
-        oldDims.lPinkyNfc == nextDims.lPinkyNfc &&
-        oldDims.rThumbNfc == nextDims.rThumbNfc &&
-        oldDims.rIndexNfc == nextDims.rIndexNfc &&
-        oldDims.rMiddleNfc == nextDims.rMiddleNfc &&
-        oldDims.rRingNfc == nextDims.rRingNfc &&
-        oldDims.rPinkyNfc == nextDims.rPinkyNfc;
-    final sameMeta =
-        oldWidget.initial.shape == widget.initial.shape &&
-        oldWidget.initial.length == widget.initial.length;
-    if (sameDims && sameMeta) return;
+    final currentDims = _currentDims();
+    final nextShape = _normalizeShape(widget.initial.shape);
+    final nextLength = _normalizeLength(widget.initial.length);
+    final matchesCurrentState =
+        currentDims.lThumb == nextDims.lThumb &&
+        currentDims.lIndex == nextDims.lIndex &&
+        currentDims.lMiddle == nextDims.lMiddle &&
+        currentDims.lRing == nextDims.lRing &&
+        currentDims.lPinky == nextDims.lPinky &&
+        currentDims.rThumb == nextDims.rThumb &&
+        currentDims.rIndex == nextDims.rIndex &&
+        currentDims.rMiddle == nextDims.rMiddle &&
+        currentDims.rRing == nextDims.rRing &&
+        currentDims.rPinky == nextDims.rPinky &&
+        currentDims.lThumbNfc == nextDims.lThumbNfc &&
+        currentDims.lIndexNfc == nextDims.lIndexNfc &&
+        currentDims.lMiddleNfc == nextDims.lMiddleNfc &&
+        currentDims.lRingNfc == nextDims.lRingNfc &&
+        currentDims.lPinkyNfc == nextDims.lPinkyNfc &&
+        currentDims.rThumbNfc == nextDims.rThumbNfc &&
+        currentDims.rIndexNfc == nextDims.rIndexNfc &&
+        currentDims.rMiddleNfc == nextDims.rMiddleNfc &&
+        currentDims.rRingNfc == nextDims.rRingNfc &&
+        currentDims.rPinkyNfc == nextDims.rPinkyNfc &&
+        _shape == nextShape &&
+        _length == nextLength;
+    if (matchesCurrentState) return;
     _syncFromInitial(widget.initial);
   }
 
   String _t(double? v) {
     if (v == null) return '';
     if (!v.isFinite) return '';
-    return v.toStringAsFixed(1);
+    return v.toStringAsFixed(2);
   }
 
   double? _parse(String v) {
@@ -584,7 +587,6 @@ class _NailPreferencesInlineEditorState
       ),
     );
   }
-
 }
 
 /// ---------------- UI helpers reused ----------------
@@ -730,6 +732,9 @@ class _FingerInput extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               decoration: inputDecoration(),
+              inputFormatters: <TextInputFormatter>[
+                NailDimensionTextInputFormatter(),
+              ],
             ),
           ),
           const SizedBox(height: 4),

@@ -29,11 +29,13 @@ class ClientArtistCommunicationPreferences {
   final ClientArtistPreferredContactMethod preferredContact;
   final bool marketingConsent;
 
-  factory ClientArtistCommunicationPreferences.defaults() {
-    return const ClientArtistCommunicationPreferences(
+  factory ClientArtistCommunicationPreferences.defaults({
+    bool pushNotifications = true,
+  }) {
+    return ClientArtistCommunicationPreferences(
       emailNotifications: true,
       smsNotifications: false,
-      pushNotifications: true,
+      pushNotifications: pushNotifications,
       accountActivity: true,
       securityAlerts: true,
       promotionsOffers: false,
@@ -46,6 +48,7 @@ class ClientArtistCommunicationPreferences {
 
   factory ClientArtistCommunicationPreferences.fromMap(
     Map<String, dynamic> map,
+    {bool? fallbackPushNotifications,}
   ) {
     ClientArtistPreferredContactMethod parsePreferred(dynamic raw) {
       switch ((raw ?? '').toString().trim()) {
@@ -68,7 +71,9 @@ class ClientArtistCommunicationPreferences {
       return fallback;
     }
 
-    final defaults = ClientArtistCommunicationPreferences.defaults();
+    final defaults = ClientArtistCommunicationPreferences.defaults(
+      pushNotifications: fallbackPushNotifications ?? true,
+    );
     return ClientArtistCommunicationPreferences(
       emailNotifications: asBool(
         map['emailNotifications'],
@@ -111,6 +116,32 @@ class ClientArtistCommunicationPreferences {
       'preferredContact': preferredContact.name,
       'marketingConsent': marketingConsent,
     };
+  }
+
+  ClientArtistCommunicationPreferences copyWith({
+    bool? emailNotifications,
+    bool? smsNotifications,
+    bool? pushNotifications,
+    bool? accountActivity,
+    bool? securityAlerts,
+    bool? promotionsOffers,
+    bool? reminders,
+    bool? newsUpdates,
+    ClientArtistPreferredContactMethod? preferredContact,
+    bool? marketingConsent,
+  }) {
+    return ClientArtistCommunicationPreferences(
+      emailNotifications: emailNotifications ?? this.emailNotifications,
+      smsNotifications: smsNotifications ?? this.smsNotifications,
+      pushNotifications: pushNotifications ?? this.pushNotifications,
+      accountActivity: accountActivity ?? this.accountActivity,
+      securityAlerts: securityAlerts ?? this.securityAlerts,
+      promotionsOffers: promotionsOffers ?? this.promotionsOffers,
+      reminders: reminders ?? this.reminders,
+      newsUpdates: newsUpdates ?? this.newsUpdates,
+      preferredContact: preferredContact ?? this.preferredContact,
+      marketingConsent: marketingConsent ?? this.marketingConsent,
+    );
   }
 }
 

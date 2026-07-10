@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../models/client_profile_models.dart';
+import '../services/address_validation_service.dart';
 import '../services/edit_profile_supabase_save.dart';
 import '../theme/app_colors.dart';
+import '../widgets/autocomplete_dropdown_sizing.dart';
 
 class EditShippingAddressPopup extends StatefulWidget {
   const EditShippingAddressPopup({super.key, required this.initial});
@@ -21,6 +24,9 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
   String? _stateValue;
   late final TextEditingController _zip;
   String? _countryValue;
+  Timer? _streetAutocompleteDebounce;
+  List<AddressSuggestion> _streetSuggestions = const [];
+  bool _streetSuggestionsLoading = false;
 
   final FocusNode _streetFocusNode = FocusNode(debugLabel: 'streetField');
   final FocusNode _cityFocusNode = FocusNode(debugLabel: 'cityField');
@@ -56,6 +62,7 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
 
   @override
   void dispose() {
+    _streetAutocompleteDebounce?.cancel();
     _street.dispose();
     _city.dispose();
     _zip.dispose();
@@ -65,6 +72,46 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
     _stateButtonFocusNode.dispose();
     _countryButtonFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _autofillAddressFromStreet() async {
+    _streetAutocompleteDebounce?.cancel();
+    final query = _street.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _streetSuggestionsLoading = false;
+        _streetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _streetSuggestionsLoading = true);
+    _streetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _streetSuggestionsLoading = false;
+          _streetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _street.text = selected.street;
+      _city.text = selected.city;
+      _zip.text = selected.zip;
+      _countryValue = 'United States';
+      _stateValue =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      _streetSuggestions = const [];
+    });
   }
 
   Future<void> _save() async {
@@ -158,6 +205,60 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _field('Street', _street, focusNode: _streetFocusNode),
+                      if (_streetSuggestionsLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (_streetSuggestions.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            final suggestionCount = _streetSuggestions.length;
+                            final menuHeight =
+                                AutocompleteDropdownSizing.menuHeight(
+                                  itemCount: suggestionCount,
+                                  itemExtent: 40,
+                                );
+                            return Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.snow,
+                                borderRadius: BorderRadius.zero,
+                                border: Border.all(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.20,
+                                  ),
+                                ),
+                              ),
+                              constraints: BoxConstraints(
+                                maxHeight: menuHeight,
+                              ),
+                              child: ListView.separated(
+                                shrinkWrap:
+                                    AutocompleteDropdownSizing.shrinkWrap(
+                                      suggestionCount,
+                                    ),
+                                physics:
+                                    AutocompleteDropdownSizing.scrollPhysics(
+                                      suggestionCount,
+                                    ),
+                                itemCount: suggestionCount,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (_, i) => ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    _streetSuggestions[i].displayLabel,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () => _applyStreetSuggestion(
+                                    _streetSuggestions[i],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: _fieldGap),
                       _field('City', _city, focusNode: _cityFocusNode),
                       const SizedBox(height: _fieldGap),
@@ -244,6 +345,9 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
           child: TextField(
             controller: c,
             focusNode: focusNode,
+            onChanged: label == 'Street'
+                ? (_) => _autofillAddressFromStreet()
+                : null,
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,

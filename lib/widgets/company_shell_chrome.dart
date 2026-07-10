@@ -11,12 +11,14 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
   const CompanyHeader({
     super.key,
     required this.companyName,
+    this.imageUrl = '',
     this.onOpenProfile,
     this.onLogout,
     this.trailing,
   });
 
   final String companyName;
+  final String imageUrl;
   final VoidCallback? onOpenProfile;
   final Future<void> Function()? onLogout;
   final Widget? trailing;
@@ -104,7 +106,10 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
               width: JntHeaderMetrics.avatarSize,
               child: ClipRRect(
                 borderRadius: BorderRadius.zero,
-                child: _CompanyAvatarIcon(companyName: companyName),
+                child: _CompanyAvatarIcon(
+                  companyName: companyName,
+                  imageUrl: imageUrl,
+                ),
               ),
             ),
           ),
@@ -113,9 +118,13 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
 }
 
 class _CompanyAvatarIcon extends StatefulWidget {
-  const _CompanyAvatarIcon({required this.companyName});
+  const _CompanyAvatarIcon({
+    required this.companyName,
+    this.imageUrl = '',
+  });
 
   final String companyName;
+  final String imageUrl;
 
   @override
   State<_CompanyAvatarIcon> createState() => _CompanyAvatarIconState();
@@ -128,7 +137,19 @@ class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
   @override
   void initState() {
     super.initState();
+    _avatarUrl = _normalizeStorageUrl(widget.imageUrl);
     _loadCompanyAvatar();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CompanyAvatarIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl ||
+        oldWidget.companyName != widget.companyName) {
+      _avatarUrl = _normalizeStorageUrl(widget.imageUrl);
+      _loading = true;
+      _loadCompanyAvatar();
+    }
   }
 
   String _firstNonEmpty(List<dynamic> values) {
@@ -224,6 +245,16 @@ class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
 
   Future<void> _loadCompanyAvatar() async {
     try {
+      final seededImageUrl = _normalizeStorageUrl(widget.imageUrl);
+      if (seededImageUrl.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _avatarUrl = seededImageUrl;
+          _loading = false;
+        });
+        return;
+      }
+
       final row = await _readCompanyRow();
       final data = row ?? const <String, dynamic>{};
       final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
@@ -278,10 +309,7 @@ class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
   @override
   Widget build(BuildContext context) {
     if (_loading && _avatarUrl.trim().isEmpty) {
-      return ClientProfileAvatarIcon(
-        displayName: widget.companyName,
-        size: JntHeaderMetrics.avatarSize,
-      );
+      return const SizedBox.expand();
     }
 
     return ClientProfileAvatarIcon(

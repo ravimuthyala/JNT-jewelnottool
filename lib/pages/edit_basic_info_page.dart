@@ -64,6 +64,7 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,7 +140,9 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Unable to save basic info: $e')),
+                          SnackBar(
+                            content: Text('Unable to save basic info: $e'),
+                          ),
                         );
                         return;
                       }

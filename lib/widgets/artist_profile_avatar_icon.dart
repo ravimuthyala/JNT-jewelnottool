@@ -30,7 +30,7 @@ class ArtistProfileAvatarIcon extends StatefulWidget {
 class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
   String _displayName = '';
   String _avatarUrl = '';
-  bool _loading = true;
+  String _secondaryAvatarUrl = '';
 
   @override
   void initState() {
@@ -50,36 +50,52 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
   Future<void> _hydrateAvatar() async {
     final seedName = (widget.displayName ?? '').trim();
     final seedAvatar = _cleanAvatarValue((widget.profileImageUrl ?? '').trim());
+    final user = Supabase.instance.client.auth.currentUser;
+    final uid = (user?.id ?? '').trim();
+    final email = (user?.email ?? '').trim().toLowerCase();
+    final directPrimary = uid.isEmpty
+        ? ''
+        : _publicStorageUrl(
+            'profile-pictures',
+            'artists/$uid/profile/avatar.jpg',
+          );
+    final directSecondary = uid.isEmpty
+        ? ''
+        : _publicStorageUrl(
+            'profile-pictures',
+            'client_artists/$uid/profile/avatar.jpg',
+          );
+    final resolvedSeedAvatar = _resolveAvatarUrl(seedAvatar);
 
-    if (seedName.isNotEmpty || seedAvatar.isNotEmpty) {
+    if (seedName.isNotEmpty ||
+        resolvedSeedAvatar.isNotEmpty ||
+        directPrimary.isNotEmpty) {
       setState(() {
         _displayName = seedName;
-        _avatarUrl = _resolveAvatarUrl(seedAvatar);
-        _loading = false;
+        _avatarUrl = resolvedSeedAvatar.isNotEmpty
+            ? resolvedSeedAvatar
+            : directPrimary;
+        _secondaryAvatarUrl =
+            resolvedSeedAvatar.isNotEmpty || directPrimary.isEmpty
+            ? ''
+            : directSecondary;
       });
-      if (seedAvatar.isNotEmpty) return;
+      if (resolvedSeedAvatar.isNotEmpty || directPrimary.isNotEmpty) return;
     }
 
     try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-      final uid = (user?.id ?? '').trim();
-      final email = (user?.email ?? '').trim().toLowerCase();
-
       if (uid.isEmpty && email.isEmpty) {
-        if (!mounted) return;
-        setState(() => _loading = false);
         return;
       }
 
       final artistData =
           await _readArtistRow(table: 'artist', uid: uid, email: email) ??
-              await _readArtistRow(
-                table: 'client_artist',
-                uid: uid,
-                email: email,
-              ) ??
-              const <String, dynamic>{};
+          await _readArtistRow(
+            table: 'client_artist',
+            uid: uid,
+            email: email,
+          ) ??
+          const <String, dynamic>{};
 
       final profile = _asMap(artistData['profile']);
       final basic = _asMap(artistData['basic']);
@@ -113,64 +129,60 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
         'Artist',
       ]);
 
-      final rawAvatar = _cleanAvatarValue(_firstNonEmpty([
-        seedAvatar,
-        profile['profileImageUrl'],
-        profile['profile_image_url'],
-        profile['profilePhotoUrl'],
-        profile['profile_photo_url'],
-        profile['photoUrl'],
-        profile['photo_url'],
-        profile['avatarUrl'],
-        profile['avatar_url'],
-        artist['profileImageUrl'],
-        artist['profile_image_url'],
-        artist['profilePhotoUrl'],
-        artist['profile_photo_url'],
-        artist['photoUrl'],
-        artist['photo_url'],
-        artist['avatarUrl'],
-        artist['avatar_url'],
-        basic['profileImageUrl'],
-        basic['profile_image_url'],
-        basic['photoUrl'],
-        basic['photo_url'],
-        basic['avatarUrl'],
-        basic['avatar_url'],
-        artistData['panel_profileImageUrl'],
-        artistData['panel_profile_image_url'],
-        artistData['profileImageUrl'],
-        artistData['profile_image_url'],
-        artistData['profilePhotoUrl'],
-        artistData['profile_photo_url'],
-        artistData['photoUrl'],
-        artistData['photo_url'],
-        artistData['avatarUrl'],
-        artistData['avatar_url'],
-        artistData['imageUrl'],
-        artistData['image_url'],
-        artistData['photo'],
-      ]));
-
-      final fallbackStoragePath = uid.isEmpty
-          ? ''
-          : _publicStorageUrl('profile-pictures', 'artists/$uid/profile/avatar.jpg');
+      final rawAvatar = _cleanAvatarValue(
+        _firstNonEmpty([
+          seedAvatar,
+          profile['profileImageUrl'],
+          profile['profile_image_url'],
+          profile['profilePhotoUrl'],
+          profile['profile_photo_url'],
+          profile['photoUrl'],
+          profile['photo_url'],
+          profile['avatarUrl'],
+          profile['avatar_url'],
+          artist['profileImageUrl'],
+          artist['profile_image_url'],
+          artist['profilePhotoUrl'],
+          artist['profile_photo_url'],
+          artist['photoUrl'],
+          artist['photo_url'],
+          artist['avatarUrl'],
+          artist['avatar_url'],
+          basic['profileImageUrl'],
+          basic['profile_image_url'],
+          basic['photoUrl'],
+          basic['photo_url'],
+          basic['avatarUrl'],
+          basic['avatar_url'],
+          artistData['panel_profileImageUrl'],
+          artistData['panel_profile_image_url'],
+          artistData['profileImageUrl'],
+          artistData['profile_image_url'],
+          artistData['profilePhotoUrl'],
+          artistData['profile_photo_url'],
+          artistData['photoUrl'],
+          artistData['photo_url'],
+          artistData['avatarUrl'],
+          artistData['avatar_url'],
+          artistData['imageUrl'],
+          artistData['image_url'],
+          artistData['photo'],
+        ]),
+      );
 
       final resolvedAvatar = _firstNonEmpty([
         _resolveAvatarUrl(rawAvatar),
-        fallbackStoragePath,
+        directPrimary,
+        directSecondary,
       ]);
 
       if (!mounted) return;
       setState(() {
         _displayName = resolvedName;
         _avatarUrl = resolvedAvatar;
-        _loading = false;
+        _secondaryAvatarUrl = '';
       });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>?> _readArtistRow({
@@ -183,7 +195,11 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
     Future<Map<String, dynamic>?> tryEq(String column, String value) async {
       if (value.trim().isEmpty) return null;
       try {
-        final rows = await supabase.from(table).select().eq(column, value).limit(1);
+        final rows = await supabase
+            .from(table)
+            .select()
+            .eq(column, value)
+            .limit(1);
         if (rows.isNotEmpty) {
           return Map<String, dynamic>.from(rows.first as Map);
         }
@@ -271,8 +287,6 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
   @override
   Widget build(BuildContext context) {
     final src = _avatarUrl.trim();
-
-    if (_loading && src.isEmpty) return _fallback();
     if (src.isEmpty) return _fallback();
 
     final size = widget.size ?? 36.0;
@@ -299,13 +313,28 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
     }
 
     return _frame(
-      Image.network(
-        src,
-        fit: BoxFit.cover,
-        cacheWidth: cacheSize,
-        cacheHeight: cacheSize,
-        errorBuilder: (_, _, _) => _fallback(),
-      ),
+      _buildNetworkImage(src, cacheSize, _secondaryAvatarUrl.trim()),
+    );
+  }
+
+  Widget _buildNetworkImage(String url, int cacheSize, String secondaryUrl) {
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      cacheWidth: cacheSize,
+      cacheHeight: cacheSize,
+      errorBuilder: (_, _, _) {
+        if (secondaryUrl.isNotEmpty && secondaryUrl != url) {
+          return Image.network(
+            secondaryUrl,
+            fit: BoxFit.cover,
+            cacheWidth: cacheSize,
+            cacheHeight: cacheSize,
+            errorBuilder: (_, _, _) => _fallback(),
+          );
+        }
+        return _fallback();
+      },
     );
   }
 
@@ -348,9 +377,6 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
 
     if (size == null) return clipped;
 
-    return SizedBox.square(
-      dimension: size,
-      child: clipped,
-    );
+    return SizedBox.square(dimension: size, child: clipped);
   }
 }

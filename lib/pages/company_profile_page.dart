@@ -593,6 +593,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       backgroundColor: AppColors.snow,
       appBar: CompanyHeader(
         companyName: companyName.isEmpty ? 'Company' : companyName,
+        imageUrl: _profileImageUrl,
         trailing: IconButton(
           onPressed: () => widget.onClose?.call(),
           icon: const Icon(
@@ -722,21 +723,23 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       return ClientProfileAvatarIcon(
         imageUrl: src,
         displayName: displayName,
-        size: 24,
+        size: 72,
       );
     }
     if (src.startsWith('http://') || src.startsWith('https://')) {
-      return Image.network(
-        src,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) =>
-            ClientProfileAvatarIcon(displayName: displayName, size: 24),
+      return SizedBox.expand(
+        child: Image.network(
+          src,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) =>
+              ClientProfileAvatarIcon(displayName: displayName, size: 72),
+        ),
       );
     }
     return ClientProfileAvatarIcon(
       imageUrl: src,
       displayName: displayName,
-      size: 24,
+      size: 72,
     );
   }
 }
@@ -1632,6 +1635,3 @@ class _PopupActions extends StatelessWidget {
     );
   }
 }
-
-
-

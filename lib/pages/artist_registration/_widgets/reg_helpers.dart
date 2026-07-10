@@ -55,6 +55,8 @@ const double kLabelFs = 16;
 const double kHintFs = 12.5;
 const double kFieldHeight = 46;
 const double kFieldVertPad = 16;
+const double kFieldGap = 16;
+const double kTightGap = 6;
 const Color kSectionFill = AppColors.snow;
 
 TextStyle get kRegTitleStyle => const TextStyle(
@@ -337,33 +339,37 @@ class RegTypeAheadField extends StatelessWidget {
                 final count = optionsList.length;
                 final menuH = AutocompleteDropdownSizing.menuHeight(itemCount: count, itemExtent: 40);
                 return TextFieldTapRegion(
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      color: AppColors.snow,
-                      elevation: 4,
-                      borderRadius: BorderRadius.zero,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: menuH,
-                          maxWidth: maxW < 260 ? 260 : maxW,
-                        ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(count),
-                          physics: AutocompleteDropdownSizing.scrollPhysics(count),
-                          itemCount: count,
-                          itemBuilder: (ctx, i) {
-                            final option = optionsList.elementAt(i);
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                option,
-                                style: const TextStyle(fontSize: kInputFs, color: AppColors.blackCat),
-                              ),
-                              onTap: () => onSelected(option),
-                            );
-                          },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        color: AppColors.snow,
+                        elevation: 4,
+                        borderRadius: BorderRadius.zero,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: menuH,
+                            maxWidth: maxW < 260 ? 260 : maxW,
+                          ),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(count),
+                            physics: AutocompleteDropdownSizing.scrollPhysics(count),
+                            itemCount: count,
+                            itemBuilder: (ctx, i) {
+                              final option = optionsList.elementAt(i);
+                              return ListTile(
+                                dense: true,
+                                tileColor: AppColors.snow,
+                                title: Text(
+                                  option,
+                                  style: const TextStyle(fontSize: kInputFs, color: AppColors.blackCat),
+                                ),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -378,6 +384,99 @@ class RegTypeAheadField extends StatelessWidget {
                 style: const TextStyle(fontSize: 10.5, color: Colors.red),
               ),
             ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class RegPopupDropdown<T> extends StatelessWidget {
+  const RegPopupDropdown({
+    super.key,
+    required this.label,
+    required this.hint,
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.onChanged,
+    this.validator,
+  });
+
+  final String label;
+  final String hint;
+  final T? value;
+  final List<T> items;
+  final String Function(T) itemLabel;
+  final ValueChanged<T?> onChanged;
+  final String? Function(T?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<T>(
+      initialValue: value,
+      validator: validator,
+      builder: (field) {
+        final selected = field.value;
+        final hasValue = selected != null;
+        final menuHeight = AutocompleteDropdownSizing.menuHeight(
+          itemCount: items.length,
+          itemExtent: 48,
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PopupMenuButton<T>(
+              color: AppColors.snow,
+              surfaceTintColor: AppColors.snow,
+              elevation: 4,
+              offset: const Offset(0, kFieldHeight + 6),
+              constraints: BoxConstraints(maxHeight: menuHeight),
+              onSelected: (selectedItem) {
+                field.didChange(selectedItem);
+                onChanged(selectedItem);
+              },
+              itemBuilder: (context) => items
+                  .map(
+                    (item) => PopupMenuItem<T>(
+                      value: item,
+                      child: Text(
+                        itemLabel(item),
+                        style: const TextStyle(
+                          fontSize: kInputFs,
+                          color: AppColors.blackCat,
+                          fontFamily: 'Arial',
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+              child: InputDecorator(
+                decoration: regDec(label, hint).copyWith(
+                  errorText: field.errorText,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        hasValue ? itemLabel(selected as T) : hint,
+                        style: TextStyle(
+                          fontSize: kInputFs,
+                          color: hasValue
+                              ? AppColors.blackCat
+                              : AppColors.blackCat.withValues(alpha: 0.45),
+                          fontFamily: 'Arial',
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down, color: AppColors.blackCat),
+                  ],
+                ),
+              ),
+            ),
           ],
         );
       },

@@ -30,13 +30,14 @@ class RegistrationDraft {
   String zip = '';
 
   // ── Step 3 · Specialization & Pricing ────────────────────────────────────
-  Set<String> services = {'Custom Press-ons', 'Nail Art'};
+  Set<String> services = {};
   String minPrice = '15';
   String maxPrice = '5000';
   bool rush = false;
 
   // ── Step 3 · Year Calendar ────────────────────────────────────────────────
   bool directRequestsEnabled = true;
+  bool nfcRequestEnabled = true;
   int directRequestYear = DateTime.now().year;
   Set<DateTime> blockedDates = {};
 

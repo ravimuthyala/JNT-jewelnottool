@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
+import '../utils/registration_input_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
 class EditNailPreferencesPage extends StatefulWidget {
@@ -29,8 +31,9 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
   late final TextEditingController rRing;
   late final TextEditingController rPinky;
 
-  final FocusNode _leftThumbFocusNode =
-      FocusNode(debugLabel: 'leftThumbMeasurementField');
+  final FocusNode _leftThumbFocusNode = FocusNode(
+    debugLabel: 'leftThumbMeasurementField',
+  );
 
   String selectedShape = '';
   NailLength selectedLength = NailLength.medium;
@@ -38,7 +41,10 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
   bool _a11yNavigationActive(BuildContext context) {
     final mediaQuery = MediaQuery.maybeOf(context);
     return mediaQuery?.accessibleNavigation ??
-        WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
             .accessibleNavigation;
   }
 
@@ -96,13 +102,14 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
   String _t(double? v) {
     if (v == null) return '';
     if (!v.isFinite) return '';
-    return v.toStringAsFixed(1);
+    return v.toStringAsFixed(2);
   }
 
   double? _parse(String v) {
-    final cleaned = v
-        .trim()
-        .replaceAll(RegExp(r'\s*mm$', caseSensitive: false), '');
+    final cleaned = v.trim().replaceAll(
+      RegExp(r'\s*mm$', caseSensitive: false),
+      '',
+    );
     if (cleaned.isEmpty) return null;
     final parsed = double.tryParse(cleaned);
     if (parsed == null || !parsed.isFinite) return null;
@@ -110,35 +117,35 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
   }
 
   InputDecoration _miniDec() => InputDecoration(
-        isDense: true,
-        filled: true,
-        fillColor: AppColors.snow,
-        hintText: '0.0',
-        hintStyle: TextStyle(
-          fontSize: 12,
-          color: AppColors.blackCat.withValues(alpha: 0.35),
-          fontWeight: FontWeight.w400,
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-            width: 1.8,
-          ),
-        ),
-      );
+    isDense: true,
+    filled: true,
+    fillColor: AppColors.snow,
+    hintText: '0.0',
+    hintStyle: TextStyle(
+      fontSize: 12,
+      color: AppColors.blackCat.withValues(alpha: 0.35),
+      fontWeight: FontWeight.w400,
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.35)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: BorderSide(
+        color: AppColors.blackCat.withValues(alpha: 0.35),
+        width: 1.8,
+      ),
+    ),
+  );
 
   TextStyle _subhead() => TextStyle(
-        fontWeight: FontWeight.w900,
-        fontSize: 15.5,
-        color: AppColors.blackCat.withValues(alpha: 0.85),
-      );
+    fontWeight: FontWeight.w900,
+    fontSize: 15.5,
+    color: AppColors.blackCat.withValues(alpha: 0.85),
+  );
 
   Future<void> _save() async {
     final dims = NailDimensions(
@@ -332,9 +339,8 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
                           title: 'Short',
                           subtitle: 'Just past fingertip',
                           selected: selectedLength == NailLength.short,
-                          onTap: () => setState(
-                            () => selectedLength = NailLength.short,
-                          ),
+                          onTap: () =>
+                              setState(() => selectedLength = NailLength.short),
                         ),
                       ),
                     ],
@@ -358,9 +364,8 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
                           title: 'Long',
                           subtitle: 'Extended length',
                           selected: selectedLength == NailLength.long,
-                          onTap: () => setState(
-                            () => selectedLength = NailLength.long,
-                          ),
+                          onTap: () =>
+                              setState(() => selectedLength = NailLength.long),
                         ),
                       ),
                     ],
@@ -394,7 +399,9 @@ class _EditNailPreferencesPageState extends State<EditNailPreferencesPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
                 ),
                 onPressed: _save,
                 child: const Text(
@@ -679,6 +686,9 @@ class _FingerInputState extends State<_FingerInput> {
                   fontWeight: FontWeight.w800,
                 ),
                 decoration: widget.inputDecoration(),
+                inputFormatters: <TextInputFormatter>[
+                  NailDimensionTextInputFormatter(),
+                ],
               ),
             ),
           ),
@@ -712,7 +722,9 @@ class _ShapeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : AppColors.snow;
+    final bg = selected
+        ? AppColors.blackCat.withValues(alpha: 0.10)
+        : AppColors.snow;
     final border = selected
         ? AppColors.blackCat
         : AppColors.blackCat.withValues(alpha: 0.10);
@@ -791,7 +803,9 @@ class _LengthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.blackCat.withValues(alpha: 0.10) : AppColors.snow;
+    final bg = selected
+        ? AppColors.blackCat.withValues(alpha: 0.10)
+        : AppColors.snow;
     final border = selected
         ? AppColors.blackCat
         : AppColors.blackCat.withValues(alpha: 0.10);
@@ -816,7 +830,10 @@ class _LengthCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   subtitle,

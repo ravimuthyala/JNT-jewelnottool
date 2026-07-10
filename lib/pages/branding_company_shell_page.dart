@@ -366,6 +366,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     final pages = <Widget>[
       BrandingCompanyHomePage(
         companyName: data.companyName,
+        companyLogoUrl: data.avatarUrl,
         campaignCount: campaignCount,
         cancelledCount: cancelledCount,
         inProgressCount: inProgressCount,
@@ -390,6 +391,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       _ComingSoonPage(
         title: 'Company Requests',
         companyName: data.companyName,
+        companyLogoUrl: data.avatarUrl,
         onOpenProfile: () => _onNavTap(
           4,
           profile: profileForDesign,
@@ -400,6 +402,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       _ComingSoonPage(
         title: 'Company Calendar',
         companyName: data.companyName,
+        companyLogoUrl: data.avatarUrl,
         onOpenProfile: () => _onNavTap(
           4,
           profile: profileForDesign,
@@ -900,12 +903,14 @@ class _ComingSoonPage extends StatelessWidget {
   const _ComingSoonPage({
     required this.title,
     required this.companyName,
+    this.companyLogoUrl = '',
     this.onOpenProfile,
     required this.onLogout,
   });
 
   final String title;
   final String companyName;
+  final String companyLogoUrl;
   final VoidCallback? onOpenProfile;
   final Future<void> Function() onLogout;
 
@@ -915,6 +920,7 @@ class _ComingSoonPage extends StatelessWidget {
       backgroundColor: const Color(0xFFF7F7FB),
       appBar: CompanyHeader(
         companyName: companyName,
+        imageUrl: companyLogoUrl,
         onOpenProfile: onOpenProfile,
         onLogout: onLogout,
       ),

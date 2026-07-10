@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
 // ✅ Import ClientProfileDraft (and whatever it needs)
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
+import '../utils/registration_input_utils.dart';
 
 class EditPersonalInfoPage extends StatefulWidget {
   const EditPersonalInfoPage({super.key, required this.profile});
@@ -25,7 +27,11 @@ class _EditPersonalInfoPageState extends State<EditPersonalInfoPage> {
     super.initState();
     nameCtrl = TextEditingController(text: widget.profile.basic.name);
     emailCtrl = TextEditingController(text: widget.profile.basic.email);
-    phoneCtrl = TextEditingController(text: widget.profile.basic.phone);
+    phoneCtrl = TextEditingController(
+      text: RegistrationInputUtils.formatUsPhoneLocal(
+        widget.profile.basic.phone,
+      ),
+    );
   }
 
   @override
@@ -101,6 +107,7 @@ class _EditPersonalInfoPageState extends State<EditPersonalInfoPage> {
     TextEditingController c, {
     TextInputType? keyboardType,
   }) {
+    final isPhoneField = keyboardType == TextInputType.phone;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -116,6 +123,13 @@ class _EditPersonalInfoPageState extends State<EditPersonalInfoPage> {
         TextField(
           controller: c,
           keyboardType: keyboardType,
+          inputFormatters: isPhoneField
+              ? <TextInputFormatter>[
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                  UsPhoneTextInputFormatter(),
+                ]
+              : null,
           // ✅ ADD THIS
           style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w400),
           decoration: InputDecoration(

@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../theme/app_colors.dart';
 import '../services/artist_directory_service.dart';
+import '../services/address_validation_service.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
@@ -18,6 +19,10 @@ import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import 'artist_reviews_page.dart';
+import 'client_artist_home_page.dart';
+import 'client_artist_profile_page.dart';
+import 'client_profile_page.dart';
+import 'client_shell_page.dart';
 import 'notifications_page.dart';
 import '../models/client_profile_models.dart'
     show
@@ -37,12 +42,20 @@ final BorderSide _requestBorder = BorderSide(
   color: AppColors.blackCat.withValues(alpha: 0.25),
 );
 
+enum ClientRequestBottomNavVariant {
+  legacy,
+  client,
+  clientAmbassador,
+  clientArtist,
+}
+
 class ClientCustomRequestPage extends StatefulWidget {
   const ClientCustomRequestPage({
     super.key,
     required this.profile,
     this.initialArtistName,
     this.onBackHome,
+    this.showBackArrow = true,
     this.showBottomNav = false,
     this.bottomNavIndex = 1,
     this.onNavTap,
@@ -54,12 +67,14 @@ class ClientCustomRequestPage extends StatefulWidget {
     this.onLogout,
     this.showExtendedAvatarMenu = false,
     this.showProfileMenu = false,
+    this.bottomNavVariant = ClientRequestBottomNavVariant.legacy,
     this.initialRequestData,
     this.isActiveTab = true,
   });
 
   final ClientProfileDraft profile;
   final VoidCallback? onBackHome;
+  final bool showBackArrow;
   final bool showBottomNav;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
@@ -71,6 +86,7 @@ class ClientCustomRequestPage extends StatefulWidget {
   final Future<void> Function()? onLogout;
   final bool showExtendedAvatarMenu;
   final bool showProfileMenu;
+  final ClientRequestBottomNavVariant bottomNavVariant;
   final Map<String, dynamic>? initialRequestData;
   final bool isActiveTab;
 
@@ -207,6 +223,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   final TextEditingController _shipStateCtrl = TextEditingController();
   String _shipState = '';
   String _shipCountry = 'United States';
+  Timer? _shipStreetAutocompleteDebounce;
+  List<AddressSuggestion> _shipStreetSuggestions = const [];
+  bool _shipStreetSuggestionsLoading = false;
 
   // Group order clients (loaded from DB only)
   List<CompletedClient> _completedClients = <CompletedClient>[];
@@ -217,10 +236,58 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   bool _isSubmitting = false;
 
   final List<String> _artistNames = [];
+  final Map<String, bool> _artistAcceptsNfcByNameLower = <String, bool>{};
+  final Map<String, bool> _artistIsProfessionalByNameLower = <String, bool>{};
   final Map<String, String> _fieldErrors = <String, String>{};
 
   bool get _isShipCountryUs =>
       _shipCountry.trim().toLowerCase() == 'united states';
+
+  Future<void> _autofillShippingAddressFromStreet() async {
+    _shipStreetAutocompleteDebounce?.cancel();
+    final query = _shipStreetCtrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _shipStreetSuggestionsLoading = false;
+        _shipStreetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _shipStreetSuggestionsLoading = true);
+    _shipStreetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _shipStreetSuggestionsLoading = false;
+          _shipStreetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyShippingStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _shipStreetCtrl.text = selected.street;
+      _shipCityCtrl.text = selected.city;
+      _shipZipCtrl.text = selected.zip;
+      _shipCountry = 'United States';
+      _shipState =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      _shipStateCtrl.text = _shipState;
+      _shipStreetSuggestions = const [];
+      _fieldErrors.remove('shipStreet');
+      _fieldErrors.remove('shipCity');
+      _fieldErrors.remove('shipState');
+      _fieldErrors.remove('shipZip');
+      _fieldErrors.remove('shipCountry');
+    });
+  }
 
   @override
   void initState() {
@@ -332,6 +399,32 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           .where((e) => e.isNotEmpty)
           .toList();
       setState(() {
+        _artistAcceptsNfcByNameLower
+          ..clear()
+          ..addEntries(
+            entries
+                .where((e) => e.acceptsDirectRequests)
+                .where((e) => e.name.trim().isNotEmpty)
+                .map(
+                  (e) => MapEntry(
+                    e.name.trim().toLowerCase(),
+                    e.acceptsNfcRequests,
+                  ),
+                ),
+          );
+        _artistIsProfessionalByNameLower
+          ..clear()
+          ..addEntries(
+            entries
+                .where((e) => e.acceptsDirectRequests)
+                .where((e) => e.name.trim().isNotEmpty)
+                .map(
+                  (e) => MapEntry(
+                    e.name.trim().toLowerCase(),
+                    _artistEntryIsProfessional(e),
+                  ),
+                ),
+          );
         _artistNames
           ..clear()
           ..addAll(
@@ -349,8 +442,56 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
             ..clear()
             ..addAll(_dedupeArtistNames(<String>[selected, ..._artistNames]));
         }
+        _syncSelectedArtistForFilters();
       });
     } catch (_) {}
+  }
+
+  bool _artistEntryIsProfessional(ArtistDirectoryEntry entry) {
+    final credential = entry.credential.trim().toLowerCase();
+    return !(credential.contains('student') ||
+        credential.contains('unlicensed') ||
+        credential.contains('non-licensed'));
+  }
+
+  bool _requestNeedsNfcAcceptedArtist() {
+    final selectedNails = NailPreferences(
+      dimensions: _singleNailPrefs.dimensions,
+      shape: _shape,
+      length: _length,
+    );
+    return _requestHasSelectedNfc(mainNails: selectedNails);
+  }
+
+  List<String> _filteredArtistOptions() {
+    final needsNfc = _requestNeedsNfcAcceptedArtist();
+    final names = _artistNames
+        .where((name) {
+          if (!_allowNonLicensed &&
+              _artistIsProfessionalByNameLower[name.trim().toLowerCase()] !=
+                  true) {
+            return false;
+          }
+          if (!needsNfc) return true;
+          return _artistAcceptsNfcByNameLower[name.trim().toLowerCase()] ==
+              true;
+        })
+        .toList(growable: false);
+    return _dedupeArtistNames(names);
+  }
+
+  void _syncSelectedArtistForFilters() {
+    final selected = (_selectedArtist ?? '').trim();
+    if (selected.isEmpty) return;
+    final key = selected.toLowerCase();
+    if (!_allowNonLicensed && _artistIsProfessionalByNameLower[key] != true) {
+      _selectedArtist = null;
+      return;
+    }
+    if (_requestNeedsNfcAcceptedArtist() &&
+        _artistAcceptsNfcByNameLower[key] != true) {
+      _selectedArtist = null;
+    }
   }
 
   List<String> _dedupeArtistNames(List<String> rawNames) {
@@ -377,6 +518,12 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       );
       for (final artist in artists) {
         if (!artist.acceptsDirectRequests) continue;
+        if (!_allowNonLicensed && !_artistEntryIsProfessional(artist)) {
+          continue;
+        }
+        if (_requestNeedsNfcAcceptedArtist() && !artist.acceptsNfcRequests) {
+          continue;
+        }
         if (artist.name.trim().toLowerCase() != normalizedName) continue;
         final email = artist.email.trim().toLowerCase();
         if (email.isNotEmpty) return email;
@@ -590,12 +737,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     cleanSummary['submissionFingerprint'] = submissionFingerprint;
     cleanDetails['submissionFingerprint'] = submissionFingerprint;
 
-    final orderNumber =
-        _firstNonEmpty([cleanSummary['orderNumber']]).isNotEmpty
+    final orderNumber = _firstNonEmpty([cleanSummary['orderNumber']]).isNotEmpty
         ? _firstNonEmpty([cleanSummary['orderNumber']])
-        : 'CR-${DateTime.now().microsecondsSinceEpoch.toString().substring(
-            DateTime.now().microsecondsSinceEpoch.toString().length - 5,
-          )}';
+        : 'CR-${DateTime.now().microsecondsSinceEpoch.toString().substring(DateTime.now().microsecondsSinceEpoch.toString().length - 5)}';
     cleanSummary['orderNumber'] = orderNumber;
     cleanDetails['orderNumber'] = orderNumber;
 
@@ -666,7 +810,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       ]),
       'photoCount': cleanSummary['photoCount'] ?? 0,
       'hasInspirationPhotos': cleanSummary['hasInspirationPhotos'] ?? false,
-      'inspirationPhotos': cleanSummary['inspirationPhotos'] ?? const <String>[],
+      'inspirationPhotos':
+          cleanSummary['inspirationPhotos'] ?? const <String>[],
       'submissionFingerprint': submissionFingerprint,
       'createdAt': cleanSummary['createdAt'] ?? nowIso,
       'updatedAt': cleanSummary['updatedAt'] ?? nowIso,
@@ -680,7 +825,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       'shipping': _asStringMap(cleanDetails['shipping']),
       'order': _asStringMap(cleanDetails['order']),
       'groupOrder': _asStringMap(cleanDetails['groupOrder']),
-      'inspirationPhotos': cleanDetails['inspirationPhotos'] ?? const <String>[],
+      'inspirationPhotos':
+          cleanDetails['inspirationPhotos'] ?? const <String>[],
       'submissionFingerprint': submissionFingerprint,
       'orderNumber': orderNumber,
     };
@@ -756,8 +902,12 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       'is_direct_request': _asBool(cleanSummary['isDirectRequest']),
       'fallback_to_pool': _asBool(cleanSummary['fallbackToPool']),
       'open_to_artist_pool': !_asBool(cleanSummary['isDirectRequest']),
-      'direct_artist_status': _asBool(cleanSummary['isDirectRequest']) ? 'in_review' : '',
-      'artist_pool_status': _asBool(cleanSummary['isDirectRequest']) ? 'locked' : 'in_review',
+      'direct_artist_status': _asBool(cleanSummary['isDirectRequest'])
+          ? 'in_review'
+          : '',
+      'artist_pool_status': _asBool(cleanSummary['isDirectRequest'])
+          ? 'locked'
+          : 'in_review',
       'allow_non_licensed': _asBool(cleanSummary['allowNonLicensed']),
       'is_group_order': _asBool(cleanSummary['isGroupOrder']),
       'group_client_count':
@@ -877,13 +1027,15 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       return;
     }
 
-    await Supabase.instance.client.from('client_custom_requests_details').insert({
-      'request_id': requestId,
-      'detail_key': 'payload',
-      'data': cleanData,
-      'created_at': nowIso,
-      'updated_at': nowIso,
-    });
+    await Supabase.instance.client
+        .from('client_custom_requests_details')
+        .insert({
+          'request_id': requestId,
+          'detail_key': 'payload',
+          'data': cleanData,
+          'created_at': nowIso,
+          'updated_at': nowIso,
+        });
   }
 
   Future<void> _updateSupabaseClientCustomRequest(
@@ -1169,6 +1321,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
   @override
   void dispose() {
+    _shipStreetAutocompleteDebounce?.cancel();
     _dateCtrl.dispose();
     _descCtrl.dispose();
     _shipStreetCtrl.dispose();
@@ -1186,7 +1339,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
   void _onAvatarMenuSelected(String value) {
     if (value == 'profile') {
-      widget.onOpenProfile?.call();
+      unawaited(_openProfileFromAvatarMenu());
       return;
     }
     if (value == 'history') {
@@ -1212,11 +1365,59 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       return;
     }
     if (value == 'logout') {
-      _logout();
+      unawaited(_logout());
     }
   }
 
+  Future<void> _openProfileFromAvatarMenu() async {
+    if (!widget.showBottomNav) {
+      widget.onOpenProfile?.call();
+      return;
+    }
+
+    if (widget.bottomNavVariant == ClientRequestBottomNavVariant.clientArtist) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ClientArtistProfilePage(initialProfile: widget.profile),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ClientProfilePage(
+          profile: widget.profile,
+          onBackHome: () => Navigator.of(context).pop(),
+          onOpenDesignRequest: () {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (_) => ClientShellPage(
+                  profile: widget.profile,
+                  initialIndex: 1,
+                  forceEnableAllTabs: true,
+                ),
+              ),
+              (route) => false,
+            );
+          },
+          onOpenTrackOrder: () {
+            Navigator.of(context).pop();
+          },
+          onLogout: _logout,
+        ),
+      ),
+    );
+  }
+
   Future<void> _logout() async {
+    if (widget.showBottomNav) {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      return;
+    }
     if (widget.onLogout != null) {
       await widget.onLogout!.call();
       return;
@@ -2413,6 +2614,26 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     final budgetMin = _budget.start.round();
     final budgetMax = _budget.end.round();
     final selectedArtist = _selectedArtist ?? '';
+    final selectedArtistRequiresNfc =
+        _requestNeedsNfcAcceptedArtist() && selectedArtist.trim().isNotEmpty;
+    if (selectedArtistRequiresNfc &&
+        _artistAcceptsNfcByNameLower[selectedArtist.trim().toLowerCase()] !=
+            true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please select an artist who accepts NFC for this request.',
+            ),
+          ),
+        );
+      }
+      setState(() {
+        _selectedArtist = null;
+        _isSubmitting = false;
+      });
+      return;
+    }
     final selectedArtistEmail = await _resolveSelectedArtistEmail(
       selectedArtist,
     );
@@ -2530,6 +2751,11 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         details: requestDetails,
       );
       try {
+        final excludeArtistEmails =
+            widget.bottomNavVariant ==
+                ClientRequestBottomNavVariant.clientArtist
+            ? <String>[widget.profile.basic.email]
+            : const <String>[];
         await NotificationsService.notifyArtistsForNewClientRequest(
           clientName: profile.basic.name,
           isDirectRequest: isDirectRequest,
@@ -2539,6 +2765,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           orderNumber: _firstNonEmpty([requestSummary['orderNumber']]),
           sourceCollection: 'Client_Custom_Requests',
           allowNonLicensed: _allowNonLicensed,
+          nfcRequested: nfcRequested,
+          excludeArtistEmails: excludeArtistEmails,
         );
       } catch (e) {
         debugPrint('CLIENT CUSTOM REQUEST NOTIFICATION FAILED: $e');
@@ -2791,10 +3019,12 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           toolbarHeight: JntHeaderMetrics.toolbarHeight,
           automaticallyImplyLeading: false,
 
-          leadingWidth: widget.onBackHome != null ? 108 : JntHeaderMetrics.leadingWidth,
+          leadingWidth: widget.onBackHome != null && widget.showBackArrow
+              ? 108
+              : JntHeaderMetrics.leadingWidth,
           leading: Row(
             children: [
-              if (widget.onBackHome != null)
+              if (widget.onBackHome != null && widget.showBackArrow)
                 SizedBox(
                   width: 50,
                   child: IconButton(
@@ -2829,7 +3059,9 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: JntHeaderMetrics.rightPadding),
+              padding: const EdgeInsets.only(
+                right: JntHeaderMetrics.rightPadding,
+              ),
               child: _AvatarMenu(
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
@@ -3079,8 +3311,10 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                   scale: 0.95,
                   child: Checkbox(
                     value: _allowNonLicensed,
-                    onChanged: (v) =>
-                        setState(() => _allowNonLicensed = (v ?? true)),
+                    onChanged: (v) => setState(() {
+                      _allowNonLicensed = (v ?? true);
+                      _syncSelectedArtistForFilters();
+                    }),
                     activeColor: AppColors.blackCat,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
@@ -3430,6 +3664,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                   oldCount: oldNfcCount,
                                   newCount: newNfcCount,
                                 );
+                                _syncSelectedArtistForFilters();
                               });
                             },
                           ),
@@ -3490,8 +3725,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     builder: (context) {
                       final selected = (_selectedArtist ?? '').trim();
                       final options = _dedupeArtistNames(<String>[
-                        if (selected.isNotEmpty) selected,
-                        ..._artistNames,
+                        ..._filteredArtistOptions(),
                       ]);
                       return _SearchableSelectField(
                         value: selected,
@@ -3506,68 +3740,70 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     },
                   ),
 
-                  const SizedBox(height: 14),
-                  Text(
-                    'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.blackCat.withValues(alpha: 0.75),
-                      height: 1.2,
-                      fontSize: 13,
+                  if ((_selectedArtist ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
+                        height: 1.2,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Yes'),
-                        selected: _fallbackToPool == true,
-                        selectedColor: AppColors.blackCat,
-                        backgroundColor: _requestSnow,
-                        checkmarkColor: AppColors.snow,
-                        onSelected: (_) =>
-                            setState(() => _fallbackToPool = true),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
-                          color: _fallbackToPool == true
-                              ? AppColors.snow
-                              : AppColors.blackCat,
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Yes'),
+                          selected: _fallbackToPool == true,
+                          selectedColor: AppColors.blackCat,
+                          backgroundColor: _requestSnow,
+                          checkmarkColor: AppColors.snow,
+                          onSelected: (_) =>
+                              setState(() => _fallbackToPool = true),
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w400,
+                            fontSize: 12,
+                            color: _fallbackToPool == true
+                                ? AppColors.snow
+                                : AppColors.blackCat,
+                          ),
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.08),
+                          ),
+                          visualDensity: const VisualDensity(
+                            horizontal: -2,
+                            vertical: -2,
+                          ),
                         ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.08),
+                        const SizedBox(width: 10),
+                        ChoiceChip(
+                          label: const Text('No'),
+                          selected: _fallbackToPool == false,
+                          selectedColor: AppColors.blackCat,
+                          backgroundColor: _requestSnow,
+                          checkmarkColor: AppColors.snow,
+                          onSelected: (_) =>
+                              setState(() => _fallbackToPool = false),
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w400,
+                            fontSize: 12,
+                            color: _fallbackToPool == false
+                                ? AppColors.snow
+                                : AppColors.blackCat,
+                          ),
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.08),
+                          ),
+                          visualDensity: const VisualDensity(
+                            horizontal: -2,
+                            vertical: -2,
+                          ),
                         ),
-                        visualDensity: const VisualDensity(
-                          horizontal: -2,
-                          vertical: -2,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ChoiceChip(
-                        label: const Text('No'),
-                        selected: _fallbackToPool == false,
-                        selectedColor: AppColors.blackCat,
-                        backgroundColor: _requestSnow,
-                        checkmarkColor: AppColors.snow,
-                        onSelected: (_) =>
-                            setState(() => _fallbackToPool = false),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
-                          color: _fallbackToPool == false
-                              ? AppColors.snow
-                              : AppColors.blackCat,
-                        ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.08),
-                        ),
-                        visualDensity: const VisualDensity(
-                          horizontal: -2,
-                          vertical: -2,
-                        ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -3595,6 +3831,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     oldCount: oldNfcCount,
                     newCount: newNfcCount,
                   );
+                  _syncSelectedArtistForFilters();
                   _fieldErrors.remove('shape');
                   _fieldErrors.remove('length');
                 });
@@ -3685,8 +3922,59 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                       verticalPadding: 14,
                       onChanged: (_) => setState(() {
                         _fieldErrors.remove('shipStreet');
+                        _autofillShippingAddressFromStreet();
                       }),
                     ),
+                    if (_shipStreetSuggestionsLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (_shipStreetSuggestions.isNotEmpty)
+                      Builder(
+                        builder: (context) {
+                          final suggestionCount = _shipStreetSuggestions.length;
+                          final menuHeight =
+                              AutocompleteDropdownSizing.menuHeight(
+                                itemCount: suggestionCount,
+                                itemExtent: 40,
+                              );
+                          return Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            decoration: BoxDecoration(
+                              color: _requestSnow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.20,
+                                ),
+                              ),
+                            ),
+                            constraints: BoxConstraints(maxHeight: menuHeight),
+                            child: ListView.separated(
+                              shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
+                                suggestionCount,
+                              ),
+                              physics: AutocompleteDropdownSizing.scrollPhysics(
+                                suggestionCount,
+                              ),
+                              itemCount: suggestionCount,
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, i) => ListTile(
+                                dense: true,
+                                title: Text(
+                                  _shipStreetSuggestions[i].displayLabel,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                onTap: () => _applyShippingStreetSuggestion(
+                                  _shipStreetSuggestions[i],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     _InlineError(text: _fieldErrors['shipStreet']),
                     const SizedBox(height: 4),
                     _InputField(
@@ -3792,48 +4080,152 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           ],
         ),
         bottomNavigationBar: widget.showBottomNav
-            ? BottomNavigationBar(
-                currentIndex: widget.bottomNavIndex,
-                selectedItemColor: AppColors.blackCat,
-                unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
-                type: BottomNavigationBarType.fixed,
-                onTap: (i) {
-                  if (widget.onNavTap != null) {
-                    widget.onNavTap!(i);
-                    if (Navigator.of(context).canPop()) {
-                      Navigator.of(context).pop();
-                    }
-                    return;
-                  }
-                  if (i != widget.bottomNavIndex) {
-                    Navigator.pop(context);
-                  }
-                },
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.home_filled),
-                    label: 'Home',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.add_circle_outline),
-                    label: 'Design',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.inbox_outlined),
-                    label: 'Campaigns',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.calendar_month_outlined),
-                    label: 'Calendar',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.history),
-                    label: 'History',
-                  ),
-                ],
-              )
+            ? _buildBottomNav(context)
             : null,
       ),
+    );
+  }
+
+  Widget _buildBottomNav(BuildContext context) {
+    final items = switch (widget.bottomNavVariant) {
+      ClientRequestBottomNavVariant.client => const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.add_circle_outline),
+          activeIcon: Icon(Icons.add_circle),
+          label: 'Design',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.brush_outlined),
+          activeIcon: Icon(Icons.brush),
+          label: 'Artists',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.receipt_long_outlined),
+          activeIcon: Icon(Icons.receipt_long),
+          label: 'Orders',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline),
+          activeIcon: Icon(Icons.person),
+          label: 'Profile',
+        ),
+      ],
+      ClientRequestBottomNavVariant.clientAmbassador => const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.add_circle_outline),
+          activeIcon: Icon(Icons.add_circle),
+          label: 'Design',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.inbox_outlined),
+          activeIcon: Icon(Icons.inbox),
+          label: 'Campaigns',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.brush_outlined),
+          activeIcon: Icon(Icons.brush),
+          label: 'Artists',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.receipt_long_outlined),
+          activeIcon: Icon(Icons.receipt_long),
+          label: 'Orders',
+        ),
+      ],
+      ClientRequestBottomNavVariant.clientArtist => const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.add_circle_outline),
+          activeIcon: Icon(Icons.add_circle),
+          label: 'Design',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.inbox_outlined),
+          activeIcon: Icon(Icons.inbox),
+          label: 'Requests',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.campaign_outlined),
+          activeIcon: Icon(Icons.campaign),
+          label: 'Campaigns',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.receipt_long_outlined),
+          activeIcon: Icon(Icons.receipt_long),
+          label: 'Orders',
+        ),
+      ],
+      ClientRequestBottomNavVariant.legacy => const [
+        BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.add_circle_outline),
+          label: 'Design',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.inbox_outlined),
+          label: 'Campaigns',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.calendar_month_outlined),
+          label: 'Calendar',
+        ),
+        BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+      ],
+    };
+    final safeCurrentIndex = widget.bottomNavIndex.clamp(0, items.length - 1);
+
+    return BottomNavigationBar(
+      currentIndex: safeCurrentIndex,
+      backgroundColor: AppColors.balletSlippers,
+      selectedItemColor: AppColors.deepPlum,
+      unselectedItemColor: Colors.black.withValues(alpha: 0.55),
+      showUnselectedLabels: true,
+      type: BottomNavigationBarType.fixed,
+      onTap: (i) {
+        if (widget.onNavTap != null) {
+          final destination = switch (widget.bottomNavVariant) {
+            ClientRequestBottomNavVariant.clientArtist => ClientArtistHomePage(
+              showContinueProfileCard: false,
+              enableAllTabs: true,
+              initialTabIndex: i,
+              profile: widget.profile,
+            ),
+            ClientRequestBottomNavVariant.client ||
+            ClientRequestBottomNavVariant.clientAmbassador ||
+            ClientRequestBottomNavVariant.legacy => ClientShellPage(
+              profile: widget.profile,
+              initialIndex: i,
+              forceEnableAllTabs: true,
+              initialBrandPartnerApprovedByAdmin:
+                  widget.bottomNavVariant ==
+                  ClientRequestBottomNavVariant.clientAmbassador,
+            ),
+          };
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => destination),
+            (route) => false,
+          );
+          return;
+        }
+        if (i != safeCurrentIndex) {
+          Navigator.pop(context);
+        }
+      },
+      items: items,
     );
   }
 
@@ -4041,6 +4433,7 @@ class _AvatarMenu extends StatelessWidget {
             imageUrl: avatarUrl,
             displayName: displayName,
             size: JntHeaderMetrics.avatarSize,
+            resolveCurrentUserFallback: true,
           ),
         ),
       ),
@@ -4349,6 +4742,15 @@ class _SearchableSelectField extends StatelessWidget {
           controller: controller,
           focusNode: focusNode,
           textAlignVertical: TextAlignVertical.center,
+          onChanged: (text) {
+            final normalizedText = text.trim();
+            final matchesExisting = normalizedItems.any(
+              (item) => item.toLowerCase() == normalizedText.toLowerCase(),
+            );
+            if (normalizedText.isEmpty || !matchesExisting) {
+              onChanged('');
+            }
+          },
           onTap: () {
             if (controller.text.trim().isEmpty && normalizedItems.isNotEmpty) {
               controller.value = const TextEditingValue(text: ' ');

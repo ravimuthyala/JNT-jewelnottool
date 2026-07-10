@@ -404,12 +404,22 @@ class ArtistDirectoryService {
           data['profileData'] ??
           data['profile_data'],
     );
+    final profileAddress = _asMap(profile['address']);
+    final basic = _asMap(data['basic'] ?? data['basic_json']);
+    final basicAddress = _asMap(basic['address']);
     final address = _asMap(data['address'] ?? data['address_json']);
     final pricing = _asMap(data['pricing'] ?? data['pricing_json']);
     final credentials = _asMap(data['credentials'] ?? data['credentials_json']);
     final artist = _asMap(data['artist'] ?? data['artist_json']);
+    final artistAddress = _asMap(artist['address']);
+    final artistProfile = _asMap(artist['profile']);
+    final artistProfileAddress = _asMap(artistProfile['address']);
     final artistPricing = _asMap(artist['pricing']);
     final artistCredentials = _asMap(artist['credentials']);
+    final client = _asMap(data['client']);
+    final clientAddress = _asMap(client['address']);
+    final clientProfile = _asMap(client['profile']);
+    final clientProfileAddress = _asMap(clientProfile['address']);
     final portfolio = _asMap(data['portfolio'] ?? data['portfolio_json']);
     final artistPortfolio = _asMap(artist['portfolio']);
     final ascension = _asMap(data['ascension'] ?? data['ascension_json']);
@@ -519,11 +529,44 @@ class ArtistDirectoryService {
     final city = firstNonEmpty([
       address['city'],
       address['addressCity'],
+      basicAddress['city'],
+      basicAddress['addressCity'],
+      profileAddress['city'],
+      profileAddress['addressCity'],
+      clientAddress['city'],
+      clientAddress['addressCity'],
+      clientProfileAddress['city'],
+      clientProfileAddress['addressCity'],
+      basic['city'],
+      basic['addressCity'],
+      profile['city'],
+      profile['addressCity'],
+      clientProfile['city'],
+      clientProfile['addressCity'],
+      artistProfile['city'],
+      artistProfile['addressCity'],
+      artistAddress['city'],
+      artistAddress['addressCity'],
+      artistProfileAddress['city'],
+      artistProfileAddress['addressCity'],
+      artist['city'],
+      artist['addressCity'],
       data['panel_city'],
       data['city'],
     ]);
     final state = firstNonEmpty([
       address['state'],
+      basicAddress['state'],
+      profileAddress['state'],
+      clientAddress['state'],
+      clientProfileAddress['state'],
+      basic['state'],
+      profile['state'],
+      clientProfile['state'],
+      artistProfile['state'],
+      artistAddress['state'],
+      artistProfileAddress['state'],
+      artist['state'],
       data['panel_state'],
       data['state'],
     ]);

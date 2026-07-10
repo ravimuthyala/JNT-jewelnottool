@@ -17,13 +17,20 @@ Future<void> showSimpleStatusRequestSheet({
   required ClientRequestV2 request,
   required SimpleRequestStatus status,
   required DateTime date,
+  Future<void> Function()? onResubmit,
+  bool forceDeclinedByArtistReason = false,
 }) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) =>
-        _SimpleStatusRequestSheet(request: request, status: status, date: date),
+    builder: (_) => _SimpleStatusRequestSheet(
+      request: request,
+      status: status,
+      date: date,
+      onResubmit: onResubmit,
+      forceDeclinedByArtistReason: forceDeclinedByArtistReason,
+    ),
   );
 }
 
@@ -32,11 +39,15 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
     required this.request,
     required this.status,
     required this.date,
+    this.onResubmit,
+    this.forceDeclinedByArtistReason = false,
   });
 
   final ClientRequestV2 request;
   final SimpleRequestStatus status;
   final DateTime date;
+  final Future<void> Function()? onResubmit;
+  final bool forceDeclinedByArtistReason;
   static const int _decodeMax = 1024;
 
   @override
@@ -127,7 +138,9 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w400,
                                       fontSize: 13.5,
-                                      color: Colors.black.withValues(alpha: 0.62),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.62,
+                                      ),
                                     ),
                                   ),
                                   if (_statusReason().isNotEmpty) ...[
@@ -137,7 +150,9 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                       style: TextStyle(
                                         fontWeight: FontWeight.w500,
                                         fontSize: 13.5,
-                                        color: Colors.black.withValues(alpha: 0.70),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.70,
+                                        ),
                                         height: 1.25,
                                       ),
                                     ),
@@ -170,30 +185,71 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                       ],
                       const SizedBox(height: 16),
                       Center(
-                        child: SizedBox(
-                          height: 52,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              elevation: 0,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 18),
-                              child: Text(
-                                'Close',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  fontFamily: 'Arial',
+                        child: Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            SizedBox(
+                              height: 52,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.blackCat,
+                                  foregroundColor: AppColors.snow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  elevation: 0,
+                                ),
+                                onPressed: () => Navigator.pop(context),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 18),
+                                  child: Text(
+                                    'Close',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      fontFamily: 'Arial',
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                            if (onResubmit != null)
+                              SizedBox(
+                                height: 52,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.snow,
+                                    foregroundColor: AppColors.blackCat,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                    side: const BorderSide(
+                                      color: AppColors.blackCat,
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  onPressed: () async {
+                                    Navigator.pop(context);
+                                    await onResubmit!.call();
+                                  },
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                    ),
+                                    child: Text(
+                                      'Resubmit',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        fontFamily: 'Arial',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -225,7 +281,8 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
 
   Widget _topHeroCondensed(ClientRequestV2 r) {
     final letter = r.clientName.isEmpty ? '' : r.clientName[0].toUpperCase();
-    final showTitle = r.title.trim().isNotEmpty &&
+    final showTitle =
+        r.title.trim().isNotEmpty &&
         r.title.trim().toLowerCase() != r.clientName.trim().toLowerCase();
 
     return Column(
@@ -234,7 +291,9 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
           future: _resolveClientProfileImage(r),
           initialData: r.clientProfileImage.trim(),
           builder: (context, snapshot) {
-            final avatarPath = _normalizeImagePath((snapshot.data ?? '').trim());
+            final avatarPath = _normalizeImagePath(
+              (snapshot.data ?? '').trim(),
+            );
             if (avatarPath.isNotEmpty) {
               return SizedBox(
                 height: 70,
@@ -419,7 +478,11 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
     if (email.trim().isNotEmpty) {
       for (final table in const ['client', 'clients', 'client_artist']) {
         for (final column in const ['email', 'client_email']) {
-          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          final found = await lookupBy(
+            table,
+            column,
+            email.trim().toLowerCase(),
+          );
           if (found.isNotEmpty) return found;
         }
       }
@@ -624,6 +687,9 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
       return reason.isNotEmpty ? reason : 'Cancelled by user';
     }
     if (status == SimpleRequestStatus.declined) {
+      if (forceDeclinedByArtistReason) {
+        return 'Declined by Artist';
+      }
       final reason = request.declineReason.trim();
       if (reason.isNotEmpty) return reason;
       if (request.cancelReason.trim().isNotEmpty) {

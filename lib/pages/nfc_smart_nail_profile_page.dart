@@ -32,7 +32,11 @@ class _NfcProfileTarget {
 
 Future<_NfcProfileTarget?> _findNfcProfileTarget(String uid) async {
   for (final table in const <String>['client', 'client_artist']) {
-    final row = await _supabase.from(table).select().eq('id', uid).maybeSingle();
+    final row = await _supabase
+        .from(table)
+        .select()
+        .eq('id', uid)
+        .maybeSingle();
     if (row != null) {
       return _NfcProfileTarget(
         table: table,
@@ -50,7 +54,8 @@ Future<void> _saveNfcProfileForUser({
 }) async {
   final target = await _findNfcProfileTarget(uid);
   final resolvedTarget =
-      target ?? _NfcProfileTarget(table: 'client_artist', uid: uid, data: const {});
+      target ??
+      _NfcProfileTarget(table: 'client_artist', uid: uid, data: const {});
   final mergedClient = <String, dynamic>{
     ..._asMap(resolvedTarget.data['client']),
     'nfcSmartNailProfile': profile,
@@ -206,6 +211,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
           children: [
@@ -387,7 +393,9 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.55),
+                  disabledBackgroundColor: AppColors.blackCat.withValues(
+                    alpha: 0.55,
+                  ),
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
@@ -985,7 +993,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
       throw Exception('Missing signed-in user.');
     }
 
-    final existing = (await _findNfcProfileTarget(uid))?.profile ?? const <String, dynamic>{};
+    final existing =
+        (await _findNfcProfileTarget(uid))?.profile ??
+        const <String, dynamic>{};
     final activationPayload = <String, dynamic>{
       ...existing,
       'isActivated': true,
@@ -1045,7 +1055,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
               decoration: BoxDecoration(
                 color: AppColors.snow,
                 borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(alpha: 0.18),
+                ),
               ),
               child: Column(
                 children: [
@@ -1122,7 +1134,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.blackCat,
                   foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withValues(alpha: 0.55),
+                  disabledBackgroundColor: AppColors.blackCat.withValues(
+                    alpha: 0.55,
+                  ),
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),

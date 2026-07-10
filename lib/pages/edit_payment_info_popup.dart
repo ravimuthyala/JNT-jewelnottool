@@ -97,6 +97,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,86 +134,46 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                   },
                   child: Column(
                     children: [
-                      RadioListTile<PaymentMethod>(
+                      _paymentMethodTile(
                         value: PaymentMethod.applePay,
-                        title: const Text(
-                          'Apple Pay',
-                          style: TextStyle(fontSize: _inputFs),
-                        ),
-                        activeColor: AppColors.blackCat,
-                        tileColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                          side: const BorderSide(color: AppColors.alabaster),
-                        ),
-                        contentPadding: EdgeInsets.zero,
+                        label: 'Apple Pay',
                       ),
-                      RadioListTile<PaymentMethod>(
+                      _paymentMethodTile(
                         value: PaymentMethod.venmo,
-                        title: const Text(
-                          'Venmo',
-                          style: TextStyle(fontSize: _inputFs),
-                        ),
-                        activeColor: AppColors.blackCat,
-                        tileColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                          side: const BorderSide(color: AppColors.alabaster),
-                        ),
-                        contentPadding: EdgeInsets.zero,
+                        label: 'Venmo',
                       ),
 
-                if (_method == PaymentMethod.venmo)
-                  _MethodFieldsCard(
-                    title: 'Venmo Details',
-                    child: TextFormField(
-                      controller: _venmoHandle,
-                      style: const TextStyle(fontSize: _inputFs),
-                      decoration: _dec('Venmo Username', '@username'),
-                      validator: (v) => _req(v, 'Venmo Username'),
-                    ),
-                  ),
+                      if (_method == PaymentMethod.venmo)
+                        _MethodFieldsCard(
+                          title: 'Venmo Details',
+                          child: TextFormField(
+                            controller: _venmoHandle,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec('Venmo Username', '@username'),
+                            validator: (v) => _req(v, 'Venmo Username'),
+                          ),
+                        ),
 
-                      RadioListTile<PaymentMethod>(
+                      _paymentMethodTile(
                         value: PaymentMethod.paypal,
-                        title: const Text(
-                          'PayPal',
-                          style: TextStyle(fontSize: _inputFs),
-                        ),
-                        activeColor: AppColors.blackCat,
-                        tileColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                          side: const BorderSide(color: AppColors.alabaster),
-                        ),
-                        contentPadding: EdgeInsets.zero,
+                        label: 'PayPal',
                       ),
 
-                if (_method == PaymentMethod.paypal)
-                  _MethodFieldsCard(
-                    title: 'PayPal Details',
-                    child: TextFormField(
-                      controller: _paypalEmail,
-                      style: const TextStyle(fontSize: _inputFs),
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: _dec('PayPal Email', 'name@email.com'),
-                      validator: (v) => _req(v, 'PayPal Email'),
-                    ),
-                  ),
+                      if (_method == PaymentMethod.paypal)
+                        _MethodFieldsCard(
+                          title: 'PayPal Details',
+                          child: TextFormField(
+                            controller: _paypalEmail,
+                            style: const TextStyle(fontSize: _inputFs),
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: _dec('PayPal Email', 'name@email.com'),
+                            validator: (v) => _req(v, 'PayPal Email'),
+                          ),
+                        ),
 
-                      RadioListTile<PaymentMethod>(
+                      _paymentMethodTile(
                         value: PaymentMethod.card,
-                        title: const Text(
-                          'Credit / Debit Card',
-                          style: TextStyle(fontSize: _inputFs),
-                        ),
-                        activeColor: AppColors.blackCat,
-                        tileColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                          side: const BorderSide(color: AppColors.alabaster),
-                        ),
-                        contentPadding: EdgeInsets.zero,
+                        label: 'Credit / Debit Card',
                       ),
                     ],
                   ),
@@ -277,17 +238,20 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
 
                 const SizedBox(height: 6),
 
-                CheckboxListTile(
-                  value: _save,
-                  onChanged: (v) => setState(() => _save = v ?? false),
-                  title: const Text(
-                    'Save payment method for future use',
-                    style: TextStyle(fontSize: _inputFs),
+                Material(
+                  color: AppColors.snow,
+                  child: CheckboxListTile(
+                    value: _save,
+                    onChanged: (v) => setState(() => _save = v ?? false),
+                    title: const Text(
+                      'Save payment method for future use',
+                      style: TextStyle(fontSize: _inputFs),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: AppColors.blackCat,
+                    tileColor: AppColors.snow,
                   ),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppColors.blackCat,
-                  tileColor: AppColors.snow,
                 ),
 
                 const SizedBox(height: 6),
@@ -337,7 +301,9 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Unable to save payment info: $e')),
+                          SnackBar(
+                            content: Text('Unable to save payment info: $e'),
+                          ),
                         );
                         return;
                       }
@@ -363,6 +329,26 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
       ),
     );
   }
+
+  Widget _paymentMethodTile({
+    required PaymentMethod value,
+    required String label,
+  }) {
+    return Material(
+      color: AppColors.snow,
+      child: RadioListTile<PaymentMethod>(
+        value: value,
+        title: Text(label, style: const TextStyle(fontSize: _inputFs)),
+        activeColor: AppColors.blackCat,
+        tileColor: AppColors.snow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+          side: const BorderSide(color: AppColors.alabaster),
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
 }
 
 /// ---------------- Method Fields Card ----------------
@@ -385,14 +371,7 @@ class _MethodFieldsCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-          ),
-          const SizedBox(height: 6),
-          child,
-        ],
+        children: [child],
       ),
     );
   }

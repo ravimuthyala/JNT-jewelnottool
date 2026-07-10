@@ -84,10 +84,16 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
     try {
       if (id.isNotEmpty) {
         final byId = await _supabase.from(table).select().eq('id', id).limit(1);
-        if (byId.isNotEmpty) return Map<String, dynamic>.from(byId.first as Map);
+        if (byId.isNotEmpty)
+          return Map<String, dynamic>.from(byId.first as Map);
 
-        final byUid = await _supabase.from(table).select().eq('uid', id).limit(1);
-        if (byUid.isNotEmpty) return Map<String, dynamic>.from(byUid.first as Map);
+        final byUid = await _supabase
+            .from(table)
+            .select()
+            .eq('uid', id)
+            .limit(1);
+        if (byUid.isNotEmpty)
+          return Map<String, dynamic>.from(byUid.first as Map);
       }
 
       if (email.isNotEmpty) {
@@ -131,7 +137,9 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
 
   List<String> _buildSpecializations(Map<String, dynamic> data) {
     final artist = (data['artist'] as Map<String, dynamic>?) ?? const {};
-    return _asStringList(data['panel_services']).isNotEmpty
+    return _asStringList(data['panel_artist_services']).isNotEmpty
+        ? _asStringList(data['panel_artist_services'])
+        : _asStringList(data['panel_services']).isNotEmpty
         ? _asStringList(data['panel_services'])
         : _asStringList(data['services']).isNotEmpty
         ? _asStringList(data['services'])
@@ -307,12 +315,40 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
 
                 final profile =
                     (data['profile'] as Map<String, dynamic>?) ?? const {};
+                final profileAddress =
+                    (profile['address'] as Map<String, dynamic>?) ?? const {};
+                final basic =
+                    (data['basic'] as Map<String, dynamic>?) ?? const {};
+                final basicAddress =
+                    (basic['address'] as Map<String, dynamic>?) ?? const {};
                 final address =
                     (data['address'] as Map<String, dynamic>?) ?? const {};
                 final pricing =
                     (data['pricing'] as Map<String, dynamic>?) ?? const {};
                 final artist =
                     (data['artist'] as Map<String, dynamic>?) ?? const {};
+                final client =
+                    (data['client'] as Map<String, dynamic>?) ?? const {};
+                final clientProfile =
+                    (client['profile'] as Map<String, dynamic>?) ?? const {};
+                final clientAddress =
+                    (client['address'] as Map<String, dynamic>?) ?? const {};
+                final clientProfileAddress =
+                    (clientProfile['address'] as Map<String, dynamic>?) ??
+                    const {};
+                final artistProfile =
+                    (data['artist_profile'] as Map<String, dynamic>?) ??
+                    const {};
+                final nestedArtistProfile =
+                    (artist['profile'] as Map<String, dynamic>?) ?? const {};
+                final artistProfileAddress =
+                    (artistProfile['address'] as Map<String, dynamic>?) ??
+                    const {};
+                final nestedArtistProfileAddress =
+                    (nestedArtistProfile['address'] as Map<String, dynamic>?) ??
+                    const {};
+                final artistAddress =
+                    (artist['address'] as Map<String, dynamic>?) ?? const {};
                 final artistPricing =
                     (artist['pricing'] as Map<String, dynamic>?) ?? const {};
 
@@ -326,16 +362,50 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                 ]);
 
                 final city = _first([
+                  basicAddress['city'],
+                  basicAddress['addressCity'],
+                  profileAddress['city'],
+                  profileAddress['addressCity'],
+                  clientAddress['city'],
+                  clientAddress['addressCity'],
+                  clientProfileAddress['city'],
+                  clientProfileAddress['addressCity'],
                   data['panel_city'],
+                  basic['city'],
+                  basic['addressCity'],
                   profile['city'],
+                  profile['addressCity'],
+                  clientProfile['city'],
+                  clientProfile['addressCity'],
+                  artistProfile['city'],
+                  nestedArtistProfile['city'],
                   address['city'],
+                  artist['city'],
+                  artistAddress['city'],
+                  artistAddress['addressCity'],
+                  artistProfileAddress['city'],
+                  artistProfileAddress['addressCity'],
+                  nestedArtistProfileAddress['city'],
+                  nestedArtistProfileAddress['addressCity'],
                   data['city'],
                 ]);
 
                 final state = _first([
+                  basicAddress['state'],
+                  profileAddress['state'],
+                  clientAddress['state'],
+                  clientProfileAddress['state'],
                   data['panel_state'],
+                  basic['state'],
                   profile['state'],
+                  clientProfile['state'],
+                  artistProfile['state'],
+                  nestedArtistProfile['state'],
                   address['state'],
+                  artist['state'],
+                  artistAddress['state'],
+                  artistProfileAddress['state'],
+                  nestedArtistProfileAddress['state'],
                   data['state'],
                 ]);
 
@@ -389,15 +459,25 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                 );
                 final acceptsNfcRequests = _asBool(
                   data['panel_nfcRequestEnabled'] ??
+                      data['panel_nfc_request_enabled'] ??
                       (data['availability']
                           as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
+                      (data['availability']
+                          as Map<String, dynamic>?)?['nfc_request_enabled'] ??
                       (data['profile']
                           as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
+                      (data['profile']
+                          as Map<String, dynamic>?)?['nfc_request_enabled'] ??
                       (data['artist']
+                          as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
+                      (data['artist']
+                          as Map<String, dynamic>?)?['nfc_request_enabled'] ??
+                      ((data['artist']
+                              as Map<String, dynamic>?)?['availability']
                           as Map<String, dynamic>?)?['nfcRequestEnabled'] ??
                       ((data['artist']
                               as Map<String, dynamic>?)?['availability']
-                          as Map<String, dynamic>?)?['nfcRequestEnabled'],
+                          as Map<String, dynamic>?)?['nfc_request_enabled'],
                   fallback: false,
                 );
 
@@ -449,8 +529,7 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                                 autofocus: MediaQuery.of(
                                   context,
                                 ).accessibleNavigation,
-                                onPressed: () =>
-                                    Navigator.of(context).pop(),
+                                onPressed: () => Navigator.of(context).pop(),
                                 icon: const Icon(Icons.close_rounded),
                               ),
                             ),
@@ -462,145 +541,73 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
                         children: [
-                              const SizedBox(height: 2),
-                              Stack(
-                                children: [
-                                  Center(
-                                    child: ExcludeSemantics(
-                                      child: _ArtistProfileImage(
-                                        url: avatarUrl,
-                                        displayName: name,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              Semantics(
-                                container: true,
-                                label:
-                                    '${name.isEmpty ? 'Artist' : name}, ${rating > 0 ? '${rating.toStringAsFixed(1)} star rating' : 'no rating available'}',
+                          const SizedBox(height: 2),
+                          Stack(
+                            children: [
+                              Center(
                                 child: ExcludeSemantics(
-                                  child: Center(
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          name.isEmpty ? 'Artist' : name,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.blackCat,
-                                            fontFamily: 'ArialBold',
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Icon(
-                                          Icons.star_rounded,
-                                          size: 20,
-                                          color: AppColors.balletSlippers,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          rating > 0
-                                              ? rating.toStringAsFixed(1)
-                                              : 'N/A',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: AppColors.blackCat,
-                                            fontFamily: 'Arial',
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  child: _ArtistProfileImage(
+                                    url: avatarUrl,
+                                    displayName: name,
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Center(
-                                child: Column(
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Semantics(
+                            container: true,
+                            label:
+                                '${name.isEmpty ? 'Artist' : name}, ${rating > 0 ? '${rating.toStringAsFixed(1)} star rating' : 'no rating available'}',
+                            child: ExcludeSemantics(
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (techType.isNotEmpty)
-                                      Semantics(
-                                        container: true,
-                                        label: techType,
-                                        child: ExcludeSemantics(
-                                          child: Text(
-                                            techType,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                              color: AppColors.blackCat,
-                                              fontFamily: 'Arial',
-                                            ),
-                                          ),
-                                        ),
+                                    Text(
+                                      name.isEmpty ? 'Artist' : name,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.blackCat,
+                                        fontFamily: 'ArialBold',
                                       ),
-                                    if (yearsExperience.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Semantics(
-                                        container: true,
-                                        label:
-                                            'Experience, ${_experienceSemanticLabel(yearsExperience)}',
-                                        child: ExcludeSemantics(
-                                          child: Text(
-                                            yearsExperience,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                              color: AppColors.blackCat,
-                                              fontFamily: 'Arial',
-                                            ),
-                                          ),
-                                        ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      size: 20,
+                                      color: AppColors.balletSlippers,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      rating > 0
+                                          ? rating.toStringAsFixed(1)
+                                          : 'N/A',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.blackCat,
+                                        fontFamily: 'Arial',
                                       ),
-                                    ],
-                                    if (minPrice.isNotEmpty ||
-                                        maxPrice.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Semantics(
-                                        container: true,
-                                        label: _budgetSemanticLabel(
-                                          minPrice,
-                                          maxPrice,
-                                        ),
-                                        child: ExcludeSemantics(
-                                          child: Text(
-                                            'Budget: ${_budgetDisplayValue(minPrice)} - ${_budgetDisplayValue(maxPrice)}',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                              color: AppColors.blackCat,
-                                              fontFamily: 'Arial',
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              if ([
-                                city,
-                                state,
-                              ].where((e) => e.trim().isNotEmpty).isNotEmpty)
-                                Semantics(
-                                  container: true,
-                                  label: [city, state]
-                                      .where((e) => e.trim().isNotEmpty)
-                                      .join(', '),
-                                  child: ExcludeSemantics(
-                                    child: Center(
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Column(
+                              children: [
+                                if (techType.isNotEmpty)
+                                  Semantics(
+                                    container: true,
+                                    label: techType,
+                                    child: ExcludeSemantics(
                                       child: Text(
-                                        [city, state]
-                                            .where((e) => e.trim().isNotEmpty)
-                                            .join(', '),
+                                        techType,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           fontSize: 13,
@@ -611,31 +618,134 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                                       ),
                                     ),
                                   ),
-                                ),
-                              const SizedBox(height: 10),
-
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _metaBand(
-                                    language: language,
-                                    currency: currency,
-                                    directRequestsEnabled:
-                                        directRequestsEnabled,
+                                if (yearsExperience.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Semantics(
+                                    container: true,
+                                    label:
+                                        'Experience, ${_experienceSemanticLabel(yearsExperience)}',
+                                    child: ExcludeSemantics(
+                                      child: Text(
+                                        yearsExperience,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.blackCat,
+                                          fontFamily: 'Arial',
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  _artistBioSection(bio),
-                                  _specializationSection(
-                                    specializations: specializations,
-                                    acceptsNfcRequests: acceptsNfcRequests,
-                                  ),
-                                  _previousArtSection(portfolioImages),
                                 ],
+                                if (minPrice.isNotEmpty ||
+                                    maxPrice.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Semantics(
+                                    container: true,
+                                    label: _budgetSemanticLabel(
+                                      minPrice,
+                                      maxPrice,
+                                    ),
+                                    child: ExcludeSemantics(
+                                      child: Text(
+                                        'Budget: ${_budgetDisplayValue(minPrice)} - ${_budgetDisplayValue(maxPrice)}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.blackCat,
+                                          fontFamily: 'Arial',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          if ([
+                            city,
+                            state,
+                          ].where((e) => e.trim().isNotEmpty).isNotEmpty)
+                            Semantics(
+                              container: true,
+                              label: [
+                                city,
+                                state,
+                              ].where((e) => e.trim().isNotEmpty).join(', '),
+                              child: ExcludeSemantics(
+                                child: Center(
+                                  child: Text(
+                                    [city, state]
+                                        .where((e) => e.trim().isNotEmpty)
+                                        .join(', '),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.blackCat,
+                                      fontFamily: 'Arial',
+                                    ),
+                                  ),
+                                ),
                               ),
+                            ),
+                          if (acceptsNfcRequests) ...[
+                            const SizedBox(height: 6),
+                            Semantics(
+                              container: true,
+                              label: 'Accepts NFC',
+                              child: const ExcludeSemantics(
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.nfc_rounded,
+                                        size: 16,
+                                        color: AppColors.blackCat,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Accepts NFC',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.blackCat,
+                                          fontFamily: 'Arial',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _metaBand(
+                                language: language,
+                                currency: currency,
+                                directRequestsEnabled: directRequestsEnabled,
+                              ),
+                              _artistBioSection(bio),
+                              _specializationSection(
+                                specializations: specializations,
+                              ),
+                              _previousArtSection(portfolioImages),
                             ],
                           ),
-                        ),
-                      ],
-                    );
+                        ],
+                      ),
+                    ),
+                  ],
+                );
               },
             ),
           ),
@@ -808,10 +918,7 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
     );
   }
 
-  Widget _specializationSection({
-    required List<String> specializations,
-    required bool acceptsNfcRequests,
-  }) {
+  Widget _specializationSection({required List<String> specializations}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
       decoration: const BoxDecoration(
@@ -833,21 +940,9 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                     'Specialization',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
-                  if (acceptsNfcRequests) ...[
-                    const SizedBox(width: 8),
-                    _acceptsNfcTag(),
-                  ],
                 ],
               ),
             ),
-            if (acceptsNfcRequests) ...[
-              const SizedBox(height: 8),
-              Semantics(
-                container: true,
-                label: 'Artist accepts NFC requests',
-                child: const SizedBox.shrink(),
-              ),
-            ],
             const SizedBox(height: 10),
             if (specializations.isEmpty)
               Semantics(
@@ -933,25 +1028,6 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
             const SizedBox(height: 10),
             _previousArtStrip(images),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _acceptsNfcTag() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: const BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: const Text(
-        'Accepts NFC',
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: AppColors.blackCat,
-          height: 1.1,
         ),
       ),
     );

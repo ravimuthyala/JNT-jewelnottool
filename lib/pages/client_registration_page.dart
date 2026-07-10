@@ -1,10 +1,13 @@
 // lib/pages/client_registration_page.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthException, UserAttributes, FileOptions;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthException, UserAttributes, FileOptions;
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../services/supabase_bootstrap.dart';
 import '../theme/app_colors.dart';
@@ -22,6 +25,7 @@ import '../widgets/nail_preferences_inline_editor.dart';
 import '../widgets/payment_method_section.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
+import '../widgets/coin_selector_page.dart';
 
 const Color _clientRegHeaderBg = AppColors.alabaster;
 const Color _clientRegBodyBg = AppColors.snow;
@@ -65,6 +69,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   final _cityCtrl = TextEditingController();
   final _zipCtrl = TextEditingController();
   final _manualStateCtrl = TextEditingController();
+  Timer? _streetAutocompleteDebounce;
+  List<AddressSuggestion> _streetSuggestions = const [];
+  bool _streetSuggestionsLoading = false;
   String _phoneAreaCode = '+1';
   static final List<Map<String, String>> _phonePickerCountries = codes
       .where(
@@ -400,9 +407,11 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     final selected = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _CoinSelectorPage(
-          items: _coinReferences,
+        builder: (_) => CoinSelectorPage(
+          items: coinReferences,
           progressText: '${_currentMeasuredMap().length}/10',
+          title: 'Select Coin',
+          initialSelection: _measurementCoinReference,
         ),
       ),
     );
@@ -439,12 +448,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
 
             Future<void> saveCurrentAndMoveNext(double mm) async {
               if (!mm.isFinite || mm <= 0) {
-                _authLog(
-                  'invalid measurement for ${step.key}: $mm',
-                );
+                _authLog('invalid measurement for ${step.key}: $mm');
                 ScaffoldMessenger.of(pageContext).showSnackBar(
                   const SnackBar(
-                    content: Text('Invalid measurement value. Please try again.'),
+                    content: Text(
+                      'Invalid measurement value. Please try again.',
+                    ),
                   ),
                 );
                 return;
@@ -573,7 +582,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                 border: Border.all(
                                   color: current
                                       ? AppColors.blackCat
-                                      : AppColors.blackCat.withValues(alpha: 0.12),
+                                      : AppColors.blackCat.withValues(
+                                          alpha: 0.12,
+                                        ),
                                 ),
                                 borderRadius: BorderRadius.zero,
                               ),
@@ -662,16 +673,17 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                      onPressed: measuring
+                            onPressed: measuring
                                 ? null
                                 : () async {
                                     try {
                                       _authLog(
                                         'manual entry opened for ${step.key}',
                                       );
-                                      final manual = await _askManualMeasurement(
-                                        step.title,
-                                      );
+                                      final manual =
+                                          await _askManualMeasurement(
+                                            step.title,
+                                          );
                                       if (manual == null) return;
                                       await saveCurrentAndMoveNext(manual);
                                     } catch (e) {
@@ -790,7 +802,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     return values.any((v) => v != null && v.isFinite && v >= 8);
   }
 
-
   Map<String, dynamic> _buildClientFirestorePayload({
     required String uid,
     required ClientProfileDraft draft,
@@ -879,37 +890,34 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   }
 
   Future<String> _uploadProfileImage(String uid) async {
-  final bytes = _profilePhotoBytes;
+    final bytes = _profilePhotoBytes;
 
-  debugPrint('CLIENT PHOTO BYTES NULL = ${bytes == null}');
-  debugPrint('CLIENT PHOTO BYTES LENGTH = ${bytes?.length ?? 0}');
+    debugPrint('CLIENT PHOTO BYTES NULL = ${bytes == null}');
+    debugPrint('CLIENT PHOTO BYTES LENGTH = ${bytes?.length ?? 0}');
 
-  if (bytes == null || bytes.isEmpty) return '';
+    if (bytes == null || bytes.isEmpty) return '';
 
-  final path = 'clients/$uid/profile/avatar.jpg';
+    final path = 'clients/$uid/profile/avatar.jpg';
 
-  try {
-    final storage = SupabaseBootstrap.client.storage.from('profile-pictures');
+    try {
+      final storage = SupabaseBootstrap.client.storage.from('profile-pictures');
 
-    await storage.uploadBinary(
-      path,
-      bytes,
-      fileOptions: const FileOptions(
-        contentType: 'image/jpeg',
-        upsert: true,
-      ),
-    );
+      await storage.uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+      );
 
-    final publicUrl = storage.getPublicUrl(path).trim();
+      final publicUrl = storage.getPublicUrl(path).trim();
 
-    debugPrint('CLIENT SUPABASE PROFILE URL = $publicUrl');
+      debugPrint('CLIENT SUPABASE PROFILE URL = $publicUrl');
 
-    return publicUrl;
-  } catch (e) {
-    debugPrint('CLIENT SUPABASE PROFILE UPLOAD FAILED: $e');
-    return '';
+      return publicUrl;
+    } catch (e) {
+      debugPrint('CLIENT SUPABASE PROFILE UPLOAD FAILED: $e');
+      return '';
+    }
   }
-}
 
   Future<Map<String, String>> _uploadGuidedMeasurementPhotos(String uid) async {
     if (_guidedMeasurementPhotos.isEmpty) {
@@ -1125,6 +1133,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _streetAutocompleteDebounce?.cancel();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
@@ -1139,6 +1148,49 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     _zipCtrl.dispose();
     _manualStateCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _autofillAddressFromStreet() async {
+    _streetAutocompleteDebounce?.cancel();
+    final query = _streetCtrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _streetSuggestionsLoading = false;
+        _streetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _streetSuggestionsLoading = true);
+    _streetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _streetSuggestionsLoading = false;
+          _streetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _streetCtrl.text = selected.street;
+      _cityCtrl.text = selected.city;
+      _zipCtrl.text = selected.zip;
+      _selectedCountry = 'United States';
+      final resolved =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      final matched = usStates.where((s) => s == resolved).toList();
+      _selectedState = matched.isNotEmpty ? matched.first : null;
+      _manualStateCtrl.clear();
+      _streetSuggestions = const [];
+    });
   }
 
   // -----------------------
@@ -1653,8 +1705,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       final profilePhotoUrl = uploadedProfilePhotoUrl.trim();
 
       _authLog('uploading guided measurement photos');
-      final guidedMeasurementPhotoUrls =
-          await _uploadGuidedMeasurementPhotos(uid);
+      final guidedMeasurementPhotoUrls = await _uploadGuidedMeasurementPhotos(
+        uid,
+      );
       _authLog(
         'guided measurement photo upload count=${guidedMeasurementPhotoUrls.length}',
       );
@@ -1723,15 +1776,16 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     } on AuthException catch (e) {
       if (!mounted) return;
       final message = e.message.toLowerCase();
-      final msg = message.contains('already registered') ||
+      final msg =
+          message.contains('already registered') ||
               message.contains('already exists') ||
               message.contains('user already registered')
           ? 'Email already registered. Please sign in.'
           : message.contains('invalid')
-              ? 'Invalid email or password.'
-              : message.contains('weak')
-                  ? 'Password is too weak.'
-                  : e.message;
+          ? 'Invalid email or password.'
+          : message.contains('weak')
+          ? 'Password is too weak.'
+          : e.message;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       _authLog('unexpected error: $e');
@@ -1784,6 +1838,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
             children: [
               Form(
                 key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: Column(
                   children: [
                     _SectionCard(
@@ -2040,9 +2095,65 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               'Street Address',
                               'Enter Street Address',
                             ),
+                            onChanged: (_) => _autofillAddressFromStreet(),
                             validator: (v) =>
                                 _requiredValidator(v, 'Street Address'),
                           ),
+                          if (_streetSuggestionsLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: LinearProgressIndicator(minHeight: 2),
+                            ),
+                          if (_streetSuggestions.isNotEmpty)
+                            Builder(
+                              builder: (context) {
+                                final suggestionCount =
+                                    _streetSuggestions.length;
+                                final menuHeight =
+                                    AutocompleteDropdownSizing.menuHeight(
+                                      itemCount: suggestionCount,
+                                      itemExtent: 40,
+                                    );
+                                return Container(
+                                  margin: const EdgeInsets.only(top: 8),
+                                  decoration: BoxDecoration(
+                                    color: _clientRegBodyBg,
+                                    borderRadius: BorderRadius.zero,
+                                    border: Border.all(
+                                      color: _clientRegBrandInk.withValues(
+                                        alpha: 0.20,
+                                      ),
+                                    ),
+                                  ),
+                                  constraints: BoxConstraints(
+                                    maxHeight: menuHeight,
+                                  ),
+                                  child: ListView.separated(
+                                    shrinkWrap:
+                                        AutocompleteDropdownSizing.shrinkWrap(
+                                          suggestionCount,
+                                        ),
+                                    physics:
+                                        AutocompleteDropdownSizing.scrollPhysics(
+                                          suggestionCount,
+                                        ),
+                                    itemCount: suggestionCount,
+                                    separatorBuilder: (_, _) =>
+                                        const Divider(height: 1),
+                                    itemBuilder: (_, i) => ListTile(
+                                      dense: true,
+                                      title: Text(
+                                        _streetSuggestions[i].displayLabel,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      onTap: () => _applyStreetSuggestion(
+                                        _streetSuggestions[i],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           const SizedBox(height: 6),
 
                           _FieldLabel.required('City'),
@@ -2469,7 +2580,9 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
             decoration: BoxDecoration(
               color: AppColors.snow,
               borderRadius: BorderRadius.zero,
-              border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: 0.12),
+              ),
             ),
             child: Row(
               children: [

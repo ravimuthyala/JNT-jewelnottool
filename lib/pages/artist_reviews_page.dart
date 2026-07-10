@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 
@@ -378,26 +379,28 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
             type: entry.value,
             date: submittedAt,
             rating: rating ?? 0,
-            comment: (data['client_review_text'] ??
-                    data['clientReviewText'] ??
-                    details['clientReviewText'] ??
-                    payload['clientReviewText'] ??
-                    review['comment'] ??
-                    '')
-                .toString()
-                .trim(),
-            requestId: (data['order_number'] ??
-                    data['orderNumber'] ??
-                    data['request_number'] ??
-                    data['requestNumber'] ??
-                    data['client_request_number'] ??
-                    data['clientRequestNumber'] ??
-                    data['brand_request_number'] ??
-                    data['brandRequestNumber'] ??
-                    data['id'] ??
-                    '')
-                .toString()
-                .trim(),
+            comment:
+                (data['client_review_text'] ??
+                        data['clientReviewText'] ??
+                        details['clientReviewText'] ??
+                        payload['clientReviewText'] ??
+                        review['comment'] ??
+                        '')
+                    .toString()
+                    .trim(),
+            requestId:
+                (data['order_number'] ??
+                        data['orderNumber'] ??
+                        data['request_number'] ??
+                        data['requestNumber'] ??
+                        data['client_request_number'] ??
+                        data['clientRequestNumber'] ??
+                        data['brand_request_number'] ??
+                        data['brandRequestNumber'] ??
+                        data['id'] ??
+                        '')
+                    .toString()
+                    .trim(),
             tipAmount: tipAmount,
             thankYouNote: '',
             avatarUrl: avatarUrl,
@@ -443,65 +446,99 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications: () {},
-        trailing: widget.clientArtistMenuStyle
-            ? _ReviewsAvatarMenu(
-                onManageProfile: widget.onManageProfile,
-                onOpenHistory: widget.onOpenHistory,
-                onOpenCalendar: widget.onOpenCalendar,
-                onOpenArtist: widget.onOpenArtist,
-                onOpenEarnings: widget.onOpenEarnings,
-                onOpenReviews: widget.onOpenReviews,
-                onSignOut: widget.onSignOut,
-              )
-            : IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                tooltip: 'Close reviews',
-                icon: const Icon(Icons.close_rounded),
-              ),
+        trailing: _ReviewsAvatarMenu(
+          onManageProfile: widget.onManageProfile,
+          onOpenHistory: widget.onOpenHistory,
+          onOpenCalendar: widget.onOpenCalendar,
+          onOpenArtist: widget.onOpenArtist,
+          onOpenEarnings: widget.onOpenEarnings,
+          onOpenReviews: widget.onOpenReviews,
+          onSignOut: widget.onSignOut,
+          logoutOnly: !widget.clientArtistMenuStyle,
+          useArtistAvatar: !widget.clientArtistMenuStyle,
+        ),
       ),
       bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigationBar(
-              backgroundColor: AppColors.balletSlippers,
-              currentIndex: widget.bottomNavCurrentIndex,
-              onTap: widget.onBottomNavTap,
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: Colors.black.withValues(alpha: 0.55),
-              items: [
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.add_circle_outline),
-                  activeIcon: Icon(Icons.add_circle),
-                  label: 'Design',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.inbox_outlined),
-                  activeIcon: Icon(Icons.inbox),
-                  label: 'Requests',
-                ),
-                if (widget.showCampaignsTab)
-                  const BottomNavigationBarItem(
-                    icon: Icon(Icons.campaign_outlined),
-                    activeIcon: Icon(Icons.campaign),
-                    label: 'Campaigns',
-                  ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  activeIcon: Icon(Icons.receipt_long),
-                  label: 'Orders',
-                ),
-                if (!widget.showCampaignsTab)
-                  const BottomNavigationBarItem(
-                    icon: Icon(Icons.attach_money_outlined),
-                    activeIcon: Icon(Icons.attach_money),
-                    label: 'Earnings',
-                  ),
-              ],
-            )
+          ? (widget.clientArtistMenuStyle
+                ? BottomNavigationBar(
+                    backgroundColor: AppColors.balletSlippers,
+                    currentIndex: widget.bottomNavCurrentIndex,
+                    onTap: widget.onBottomNavTap,
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: AppColors.blackCat,
+                    unselectedItemColor: Colors.black.withValues(alpha: 0.55),
+                    items: [
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.home_outlined),
+                        activeIcon: Icon(Icons.home),
+                        label: 'Home',
+                      ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.add_circle_outline),
+                        activeIcon: Icon(Icons.add_circle),
+                        label: 'Design',
+                      ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.inbox_outlined),
+                        activeIcon: Icon(Icons.inbox),
+                        label: 'Requests',
+                      ),
+                      if (widget.showCampaignsTab)
+                        const BottomNavigationBarItem(
+                          icon: Icon(Icons.campaign_outlined),
+                          activeIcon: Icon(Icons.campaign),
+                          label: 'Campaigns',
+                        ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.receipt_long_outlined),
+                        activeIcon: Icon(Icons.receipt_long),
+                        label: 'Orders',
+                      ),
+                      if (!widget.showCampaignsTab)
+                        const BottomNavigationBarItem(
+                          icon: Icon(Icons.attach_money_outlined),
+                          activeIcon: Icon(Icons.attach_money),
+                          label: 'Earnings',
+                        ),
+                    ],
+                  )
+                : BottomNavigationBar(
+                    backgroundColor: AppColors.balletSlippers,
+                    currentIndex: widget.bottomNavCurrentIndex,
+                    onTap: widget.onBottomNavTap,
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: AppColors.blackCat,
+                    unselectedItemColor: AppColors.blackCat.withValues(
+                      alpha: 0.55,
+                    ),
+                    items: const [
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.inbox_outlined),
+                        activeIcon: Icon(Icons.inbox),
+                        label: 'Requests',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.calendar_month_outlined),
+                        activeIcon: Icon(Icons.calendar_month),
+                        label: 'Calendar',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.history_outlined),
+                        activeIcon: Icon(Icons.history),
+                        label: 'History',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.attach_money_outlined),
+                        activeIcon: Icon(Icons.attach_money),
+                        label: 'Earnings',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.person_outline),
+                        activeIcon: Icon(Icons.person),
+                        label: 'Profile',
+                      ),
+                    ],
+                  ))
           : null,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
@@ -612,7 +649,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         children: [
           const Text(
             'Top Rated Artist',
-            style: TextStyle(color: AppColors.blackCat, fontWeight: FontWeight.w700, fontFamily: 'Arialbold'),
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -627,7 +668,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           const SizedBox(height: 2),
           Text(
             '$count reviews',
-            style: const TextStyle(fontSize: 12, fontFamily: 'Arial',color: AppColors.blackCat),
+            style: const TextStyle(
+              fontSize: 12,
+              fontFamily: 'Arial',
+              color: AppColors.blackCat,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -654,9 +699,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: active
-                      ? AppColors.balletSlippers
-                      : Colors.transparent,
+                  color: active ? AppColors.balletSlippers : Colors.transparent,
                   width: active ? 3 : 0,
                 ),
               ),
@@ -723,8 +766,9 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         builder: (fieldContext) => InkWell(
           onTap: () async {
             final box = fieldContext.findRenderObject() as RenderBox?;
-            final overlay = Overlay.of(fieldContext).context.findRenderObject()
-                as RenderBox?;
+            final overlay =
+                Overlay.of(fieldContext).context.findRenderObject()
+                    as RenderBox?;
             if (box == null || overlay == null) return;
             final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
             final menuPosition = RelativeRect.fromRect(
@@ -746,7 +790,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                       value: e,
                       child: Text(
                         e,
-                        style: const TextStyle(fontSize: 12.5, fontFamily: 'Arial',color: AppColors.blackCat),
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontFamily: 'Arial',
+                          color: AppColors.blackCat,
+                        ),
                       ),
                     ),
                   )
@@ -763,7 +811,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 Expanded(
                   child: Text(
                     value,
-                    style: const TextStyle(fontSize: 12.5, fontFamily: 'Arial',color: AppColors.blackCat),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontFamily: 'Arial',
+                      color: AppColors.blackCat,
+                    ),
                   ),
                 ),
                 const Icon(Icons.keyboard_arrow_down_rounded),
@@ -823,7 +875,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Icon(Icons.star_rounded, size: 16, color: AppColors.blackCat),
+                        Icon(
+                          Icons.star_rounded,
+                          size: 16,
+                          color: AppColors.blackCat,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           r.rating.toStringAsFixed(1),
@@ -843,7 +899,10 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     color: badgeColor,
                     child: Text(
                       badgeText,
@@ -870,7 +929,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           const SizedBox(height: 6),
           Text(
             r.comment,
-            style: const TextStyle(fontSize: 13, fontFamily: 'Arial',color: AppColors.blackCat),
+            style: const TextStyle(
+              fontSize: 13,
+              fontFamily: 'Arial',
+              color: AppColors.blackCat,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -957,6 +1020,8 @@ class _ReviewsAvatarMenu extends StatelessWidget {
     this.onOpenEarnings,
     this.onOpenReviews,
     this.onSignOut,
+    this.logoutOnly = false,
+    this.useArtistAvatar = false,
   });
 
   final VoidCallback? onManageProfile;
@@ -966,6 +1031,8 @@ class _ReviewsAvatarMenu extends StatelessWidget {
   final VoidCallback? onOpenEarnings;
   final VoidCallback? onOpenReviews;
   final VoidCallback? onSignOut;
+  final bool logoutOnly;
+  final bool useArtistAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -984,44 +1051,65 @@ class _ReviewsAvatarMenu extends StatelessWidget {
         if (value == 'reviews') onOpenReviews?.call();
         if (value == 'logout') onSignOut?.call();
       },
-      child: const ClientProfileAvatarIcon(size: 36),
-      itemBuilder: (context) => [
-        const PopupMenuItem<String>(
-          value: 'profile',
-          child: _AvatarMenuRow(icon: Icons.person_outline, label: 'Profile'),
-        ),
-        const PopupMenuItem<String>(
-          value: 'earnings',
-          child: _AvatarMenuRow(
-            icon: Icons.attach_money_outlined,
-            label: 'Earnings',
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'history',
-          child: _AvatarMenuRow(icon: Icons.history, label: 'History'),
-        ),
-        const PopupMenuItem<String>(
-          value: 'calendar',
-          child: _AvatarMenuRow(
-            icon: Icons.calendar_month_outlined,
-            label: 'Calendar',
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'artist',
-          child: _AvatarMenuRow(icon: Icons.brush_outlined, label: 'Artist'),
-        ),
-        const PopupMenuItem<String>(
-          value: 'reviews',
-          child: _AvatarMenuRow(icon: Icons.star_border, label: 'Reviews'),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: 'logout',
-          child: _AvatarMenuRow(icon: Icons.logout, label: 'Logout'),
-        ),
-      ],
+      child: useArtistAvatar
+          ? const ArtistProfileAvatarIcon(size: 36)
+          : const ClientProfileAvatarIcon(
+              size: JntHeaderMetrics.avatarSize,
+              resolveCurrentUserFallback: true,
+            ),
+      itemBuilder: (context) => logoutOnly
+          ? const [
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: _AvatarMenuRow(icon: Icons.logout, label: 'Logout'),
+              ),
+            ]
+          : [
+              const PopupMenuItem<String>(
+                value: 'profile',
+                child: _AvatarMenuRow(
+                  icon: Icons.person_outline,
+                  label: 'Profile',
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'earnings',
+                child: _AvatarMenuRow(
+                  icon: Icons.attach_money_outlined,
+                  label: 'Earnings',
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'history',
+                child: _AvatarMenuRow(icon: Icons.history, label: 'History'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'calendar',
+                child: _AvatarMenuRow(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Calendar',
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'artist',
+                child: _AvatarMenuRow(
+                  icon: Icons.brush_outlined,
+                  label: 'Artist',
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'reviews',
+                child: _AvatarMenuRow(
+                  icon: Icons.star_border,
+                  label: 'Reviews',
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'logout',
+                child: _AvatarMenuRow(icon: Icons.logout, label: 'Logout'),
+              ),
+            ],
     );
   }
 }

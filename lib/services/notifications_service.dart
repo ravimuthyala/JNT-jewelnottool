@@ -22,7 +22,8 @@ class NotificationsService {
     return fallback;
   }
 
-  static bool _looksLikeUuid(String value) => _uuidPattern.hasMatch(value.trim());
+  static bool _looksLikeUuid(String value) =>
+      _uuidPattern.hasMatch(value.trim());
 
   static Map<String, dynamic> _map(Object? value) {
     if (value is Map<String, dynamic>) return value;
@@ -147,7 +148,14 @@ class NotificationsService {
 
     if (existing is List && existing.isNotEmpty) {
       final id = existing.first['id'];
-      await _supabase.from('user_notifications').update(row..remove('created_at')..remove('created_at_millis')).eq('id', id);
+      await _supabase
+          .from('user_notifications')
+          .update(
+            row
+              ..remove('created_at')
+              ..remove('created_at_millis'),
+          )
+          .eq('id', id);
     } else {
       await _supabase.from('user_notifications').insert(row);
     }
@@ -168,7 +176,9 @@ class NotificationsService {
     final normalized = receiverEmail.trim().toLowerCase();
     if (normalized.isEmpty) return;
 
-    await _supabase.from('user_notifications').insert(
+    await _supabase
+        .from('user_notifications')
+        .insert(
           _notificationRow(
             receiverEmail: normalized,
             title: title,
@@ -317,7 +327,10 @@ class NotificationsService {
     }
     if (idsToDelete.isEmpty) return;
 
-    await _supabase.from('user_notifications').delete().inFilter('id', idsToDelete);
+    await _supabase
+        .from('user_notifications')
+        .delete()
+        .inFilter('id', idsToDelete);
   }
 
   static Future<void> notifyArtistsForNewClientRequest({
@@ -329,6 +342,7 @@ class NotificationsService {
     required String sourceCollection,
     String orderNumber = '',
     bool allowNonLicensed = true,
+    bool nfcRequested = false,
     Iterable<String> excludeArtistEmails = const <String>[],
   }) async {
     final targets = await _resolveArtistNotificationTargets(
@@ -336,6 +350,7 @@ class NotificationsService {
       selectedArtistEmail: selectedArtistEmail,
       selectedArtistName: selectedArtistName,
       allowNonLicensed: allowNonLicensed,
+      requireNfcEnabled: nfcRequested,
       excludeArtistEmails: excludeArtistEmails,
     );
 
@@ -381,8 +396,12 @@ class NotificationsService {
 
     final client = clientName.trim().isEmpty ? 'Client' : clientName.trim();
     final brand = brandName.trim().isEmpty ? 'Brand' : brandName.trim();
-    final campaign = campaignName.trim().isEmpty ? 'Campaign' : campaignName.trim();
-    final orderRef = orderNumber.trim().isNotEmpty ? orderNumber.trim() : orderId;
+    final campaign = campaignName.trim().isEmpty
+        ? 'Campaign'
+        : campaignName.trim();
+    final orderRef = orderNumber.trim().isNotEmpty
+        ? orderNumber.trim()
+        : orderId;
     for (final email in targets) {
       await createUserNotification(
         receiverEmail: email,
@@ -419,8 +438,12 @@ class NotificationsService {
     );
 
     final client = clientName.trim().isEmpty ? 'Client' : clientName.trim();
-    final campaign = campaignName.trim().isEmpty ? 'Campaign' : campaignName.trim();
-    final orderRef = orderNumber.trim().isNotEmpty ? orderNumber.trim() : orderId;
+    final campaign = campaignName.trim().isEmpty
+        ? 'Campaign'
+        : campaignName.trim();
+    final orderRef = orderNumber.trim().isNotEmpty
+        ? orderNumber.trim()
+        : orderId;
     for (final email in targets) {
       await createUserNotification(
         receiverEmail: email,
@@ -457,23 +480,26 @@ class NotificationsService {
       );
     }
 
-    await _supabase.from('admin_notifications').insert({
-      'type': type,
-      'source': sourceCollection,
-      'request_id': orderId,
-      'title': title,
-      'message': body,
-      'date_label': DateTime.now().toIso8601String(),
-      'event_at': DateTime.now().toIso8601String(),
-      'payload': <String, dynamic>{
-        ...extra,
-        'orderId': orderId,
-        'orderNumber': orderNumber,
-        'sourceCollection': sourceCollection,
-      },
-      'created_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    }).catchError((_) {});
+    await _supabase
+        .from('admin_notifications')
+        .insert({
+          'type': type,
+          'source': sourceCollection,
+          'request_id': orderId,
+          'title': title,
+          'message': body,
+          'date_label': DateTime.now().toIso8601String(),
+          'event_at': DateTime.now().toIso8601String(),
+          'payload': <String, dynamic>{
+            ...extra,
+            'orderId': orderId,
+            'orderNumber': orderNumber,
+            'sourceCollection': sourceCollection,
+          },
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .catchError((_) {});
   }
 
   static Future<Set<String>> resolveBrandRecipientEmails({
@@ -483,7 +509,10 @@ class NotificationsService {
     Iterable<String> excludeEmails = const <String>[],
   }) async {
     String norm(Object? v) => (v ?? '').toString().trim().toLowerCase();
-    final excluded = excludeEmails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+    final excluded = excludeEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
     final out = <String>{};
 
     void addEmail(Object? v) {
@@ -597,31 +626,61 @@ class NotificationsService {
     for (final uid in companyUidCandidates) {
       try {
         if (_looksLikeUuid(uid)) {
-          final row = await _supabase.from('company').select().eq('id', uid).maybeSingle();
+          final row = await _supabase
+              .from('company')
+              .select()
+              .eq('id', uid)
+              .maybeSingle();
           if (row != null) addFromCompanyRow(Map<String, dynamic>.from(row));
         }
       } catch (_) {}
       try {
-        final rows = _rows(await _supabase.from('company').select().eq('company_uid', uid).limit(50));
+        final rows = _rows(
+          await _supabase
+              .from('company')
+              .select()
+              .eq('company_uid', uid)
+              .limit(50),
+        );
         for (final row in rows) addFromCompanyRow(row);
       } catch (_) {}
       try {
-        final rows = _rows(await _supabase.from('company').select().eq('uid', uid).limit(50));
+        final rows = _rows(
+          await _supabase.from('company').select().eq('uid', uid).limit(50),
+        );
         for (final row in rows) addFromCompanyRow(row);
       } catch (_) {}
     }
 
     for (final email in companyEmailCandidates) {
       try {
-        final rows = _rows(await _supabase.from('company').select().ilike('email', email).limit(50));
+        final rows = _rows(
+          await _supabase
+              .from('company')
+              .select()
+              .ilike('email', email)
+              .limit(50),
+        );
         for (final row in rows) addFromCompanyRow(row);
       } catch (_) {}
       try {
-        final rows = _rows(await _supabase.from('company').select().ilike('company_email', email).limit(50));
+        final rows = _rows(
+          await _supabase
+              .from('company')
+              .select()
+              .ilike('company_email', email)
+              .limit(50),
+        );
         for (final row in rows) addFromCompanyRow(row);
       } catch (_) {}
       try {
-        final rows = _rows(await _supabase.from('company').select().ilike('panel_contact_email', email).limit(50));
+        final rows = _rows(
+          await _supabase
+              .from('company')
+              .select()
+              .ilike('panel_contact_email', email)
+              .limit(50),
+        );
         for (final row in rows) addFromCompanyRow(row);
       } catch (_) {}
     }
@@ -634,18 +693,26 @@ class NotificationsService {
     required String selectedArtistEmail,
     required String selectedArtistName,
     required bool allowNonLicensed,
+    bool requireNfcEnabled = false,
     bool requireBrandEligible = false,
     Iterable<String> excludeArtistEmails = const <String>[],
   }) async {
     final targets = <String>{};
     final normalizedSelected = selectedArtistEmail.trim().toLowerCase();
     final normalizedSelectedName = selectedArtistName.trim().toLowerCase();
-    final excluded = excludeArtistEmails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+    final excluded = excludeArtistEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
 
     bool isLicensedArtist(Map<String, dynamic> data) {
       final profile = _map(data['profile']);
       final credentials = _map(data['credentials']);
       final nestedCredentials = _map(profile['credentials']);
+      final artist = _map(data['artist']);
+      final artistCredentials = _map(artist['credentials']);
+      final artistProfile = _map(data['artist_profile']);
+      final artistProfileCredentials = _map(artistProfile['credentials']);
       final candidates = <Object?>[
         credentials['nailTechType'],
         credentials['nail_tech_type'],
@@ -653,6 +720,16 @@ class NotificationsService {
         nestedCredentials['nail_tech_type'],
         profile['nailTechType'],
         profile['nail_tech_type'],
+        artistProfileCredentials['nailTechType'],
+        artistProfileCredentials['nail_tech_type'],
+        artistCredentials['nailTechType'],
+        artistCredentials['nail_tech_type'],
+        artistProfile['nailTechType'],
+        artistProfile['nail_tech_type'],
+        artist['nailTechType'],
+        artist['nail_tech_type'],
+        data['panel_artist_nailTechType'],
+        data['panel_artist_nail_tech_type'],
         data['panel_nail_tech_type'],
         data['panel_nailTechType'],
         data['nail_tech_type'],
@@ -668,7 +745,10 @@ class NotificationsService {
         }
       }
       if (type.isEmpty) return true;
-      final isUnlicensed = type.contains('student') || type.contains('non-licensed') || type.contains('unlicensed');
+      final isUnlicensed =
+          type.contains('student') ||
+          type.contains('non-licensed') ||
+          type.contains('unlicensed');
       return !isUnlicensed;
     }
 
@@ -676,7 +756,11 @@ class NotificationsService {
       final profile = _map(data['profile']);
       final basic = _map(data['basic']);
       final ascension = _map(data['ascension']);
-      final sponsorshipRequest = _map(data['sponsorshipRequest'].toString().isNotEmpty ? data['sponsorshipRequest'] : data['sponsorship_request']);
+      final sponsorshipRequest = _map(
+        data['sponsorshipRequest'].toString().isNotEmpty
+            ? data['sponsorshipRequest']
+            : data['sponsorship_request'],
+      );
       final tierCandidates = <Object?>[
         ascension['tier'],
         ascension['levelName'],
@@ -701,7 +785,12 @@ class NotificationsService {
         data['tier'],
       ];
       for (final raw in tierCandidates) {
-        final tier = (raw ?? '').toString().trim().toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
+        final tier = (raw ?? '')
+            .toString()
+            .trim()
+            .toLowerCase()
+            .replaceAll('_', ' ')
+            .replaceAll('-', ' ');
         if (tier == 'goldsmith' || tier == 'crowned') return true;
         if (tier.contains('goldsmith') || tier.contains('crowned')) return true;
       }
@@ -725,12 +814,41 @@ class NotificationsService {
       return false;
     }
 
+    bool acceptsNfcRequests(Map<String, dynamic> data) {
+      final profile = _map(data['profile']);
+      final availability = _map(data['availability']);
+      final artist = _map(data['artist']);
+      final artistAvailability = _map(artist['availability']);
+      final candidates = <Object?>[
+        data['panel_nfc_request_enabled'],
+        data['panel_nfcRequestEnabled'],
+        data['nfc_request_enabled'],
+        data['nfcRequestEnabled'],
+        availability['nfcRequestEnabled'],
+        availability['nfc_request_enabled'],
+        profile['nfcRequestEnabled'],
+        profile['nfc_request_enabled'],
+        artist['nfcRequestEnabled'],
+        artist['nfc_request_enabled'],
+        artistAvailability['nfcRequestEnabled'],
+        artistAvailability['nfc_request_enabled'],
+      ];
+      for (final raw in candidates) {
+        if (_asBool(raw, fallback: false)) return true;
+      }
+      return false;
+    }
+
     Future<void> scanTable(String table) async {
       final rows = _rows(await _supabase.from(table).select());
       for (final data in rows) {
         final email = _email(data['email']);
         if (email.isEmpty || excluded.contains(email)) continue;
-        final name = (data['name'] ?? data['display_name'] ?? data['displayName'] ?? '').toString().trim().toLowerCase();
+        final name =
+            (data['name'] ?? data['display_name'] ?? data['displayName'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
         final notifications = _map(data['notifications']);
         final allEnabled = _asBool(
           data['panel_all_client_request_notifications_enabled'] ??
@@ -740,14 +858,20 @@ class NotificationsService {
           fallback: true,
         );
         final directEnabled = _asBool(
-          notifications['directRequestNotificationsEnabled'] ?? notifications['direct_request_notifications_enabled'],
+          notifications['directRequestNotificationsEnabled'] ??
+              notifications['direct_request_notifications_enabled'],
           fallback: true,
         );
+        if (requireNfcEnabled && !acceptsNfcRequests(data)) continue;
 
         if (isDirectRequest) {
           if (requireBrandEligible && !isBrandEligibleArtist(data)) continue;
-          final emailMatch = normalizedSelected.isNotEmpty && email == normalizedSelected;
-          final nameMatch = normalizedSelected.isEmpty && normalizedSelectedName.isNotEmpty && name == normalizedSelectedName;
+          final emailMatch =
+              normalizedSelected.isNotEmpty && email == normalizedSelected;
+          final nameMatch =
+              normalizedSelected.isEmpty &&
+              normalizedSelectedName.isNotEmpty &&
+              name == normalizedSelectedName;
           if ((emailMatch || nameMatch) && directEnabled) targets.add(email);
         } else {
           if (!allowNonLicensed && !isLicensedArtist(data)) continue;
@@ -761,7 +885,8 @@ class NotificationsService {
     await scanTable('client_artist').catchError((_) {});
 
     if (isDirectRequest && normalizedSelected.isNotEmpty && targets.isEmpty) {
-      if (!excluded.contains(normalizedSelected)) targets.add(normalizedSelected);
+      if (!excluded.contains(normalizedSelected))
+        targets.add(normalizedSelected);
     }
     return targets;
   }
@@ -789,9 +914,19 @@ class NotificationsService {
     }
 
     bool isAdminLike(Map<String, dynamic> data) {
-      final role = (data['role'] ?? data['userRole'] ?? data['user_role'] ?? data['type'] ?? '').toString().trim().toLowerCase();
+      final role =
+          (data['role'] ??
+                  data['userRole'] ??
+                  data['user_role'] ??
+                  data['type'] ??
+                  '')
+              .toString()
+              .trim()
+              .toLowerCase();
       if (role.contains('admin')) return true;
-      final roles = (data['roles'] is List) ? (data['roles'] as List) : const <dynamic>[];
+      final roles = (data['roles'] is List)
+          ? (data['roles'] as List)
+          : const <dynamic>[];
       for (final raw in roles) {
         if (raw.toString().trim().toLowerCase().contains('admin')) return true;
       }

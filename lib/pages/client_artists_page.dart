@@ -13,6 +13,13 @@ import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 
+String _artistLocationText(String city, String state) {
+  return <String>[
+    city.trim(),
+    state.trim(),
+  ].where((value) => value.isNotEmpty).join(', ');
+}
+
 class ClientArtistsPage extends StatefulWidget {
   const ClientArtistsPage({
     super.key,
@@ -157,14 +164,15 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
 
       final dedup = <String, ArtistProfile>{};
       for (final p in profiles) {
-        final key = p.id.trim().isNotEmpty
-            ? p.id.trim()
-            : p.email.trim().toLowerCase();
+        final key = p.email.trim().isNotEmpty
+            ? p.email.trim().toLowerCase()
+            : p.id.trim();
         if (key.isEmpty) continue;
-        final existing = dedup[key];
-        dedup[key] = existing == null
-            ? p
-            : (p.projects.length > existing.projects.length ? p : existing);
+        dedup.update(
+          key,
+          (existing) => _mergeArtistProfiles(existing, p),
+          ifAbsent: () => p,
+        );
       }
 
       final resolvedProfiles = dedup.values.toList(growable: false)
@@ -217,6 +225,14 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
   Map<String, dynamic> _asMap(Object? raw) {
     if (raw is Map<String, dynamic>) return raw;
     if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {}
+    }
     return const <String, dynamic>{};
   }
 
@@ -234,6 +250,17 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
           .map((item) => item?.toString().trim() ?? '')
           .where((item) => item.isNotEmpty)
           .toList(growable: false);
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Iterable) {
+          return decoded
+              .map((item) => item?.toString().trim() ?? '')
+              .where((item) => item.isNotEmpty)
+              .toList(growable: false);
+        }
+      } catch (_) {}
     }
     if (raw is String && raw.trim().isNotEmpty) {
       return <String>[raw.trim()];
@@ -261,14 +288,100 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
     return fallback;
   }
 
+  ArtistProfile _mergeArtistProfiles(
+    ArtistProfile current,
+    ArtistProfile incoming,
+  ) {
+    String preferText(String a, String b) {
+      final left = a.trim();
+      final right = b.trim();
+      if (left.isEmpty) return right;
+      if (right.isEmpty) return left;
+      return right.length > left.length ? right : left;
+    }
+
+    List<ArtistProject> mergeProjects(
+      List<ArtistProject> left,
+      List<ArtistProject> right,
+    ) {
+      final merged = <ArtistProject>[];
+      final seen = <String>{};
+      for (final project in [...left, ...right]) {
+        final url = project.imageUrl.trim();
+        if (url.isEmpty || !seen.add(url)) continue;
+        merged.add(project);
+      }
+      return merged;
+    }
+
+    List<String> mergeStrings(List<String> left, List<String> right) {
+      final merged = <String>[];
+      final seen = <String>{};
+      for (final item in [...left, ...right]) {
+        final value = item.trim();
+        if (value.isEmpty || !seen.add(value.toLowerCase())) continue;
+        merged.add(item);
+      }
+      return merged;
+    }
+
+    final currentLocationScore =
+        (current.city.trim().isNotEmpty ? 1 : 0) +
+        (current.state.trim().isNotEmpty ? 1 : 0) +
+        (current.zip.trim().isNotEmpty ? 1 : 0);
+    final incomingLocationScore =
+        (incoming.city.trim().isNotEmpty ? 1 : 0) +
+        (incoming.state.trim().isNotEmpty ? 1 : 0) +
+        (incoming.zip.trim().isNotEmpty ? 1 : 0);
+    final locationWinner = incomingLocationScore > currentLocationScore
+        ? incoming
+        : current;
+
+    return ArtistProfile(
+      id: preferText(current.id, incoming.id),
+      name: preferText(current.name, incoming.name),
+      tierLabel: preferText(current.tierLabel, incoming.tierLabel),
+      email: preferText(current.email, incoming.email),
+      rating: incoming.rating > current.rating ? incoming.rating : current.rating,
+      city: locationWinner.city.trim(),
+      state: locationWinner.state.trim(),
+      zip: locationWinner.zip.trim(),
+      budgetMin: incoming.budgetMin > 0 ? incoming.budgetMin : current.budgetMin,
+      budgetMax: incoming.budgetMax > 0 ? incoming.budgetMax : current.budgetMax,
+      credential: preferText(current.credential, incoming.credential),
+      avatarUrl: preferText(current.avatarUrl, incoming.avatarUrl),
+      bio: preferText(current.bio, incoming.bio),
+      language: preferText(current.language, incoming.language),
+      currency: preferText(current.currency, incoming.currency),
+      services: mergeStrings(current.services, incoming.services),
+      yearsExperience: preferText(
+        current.yearsExperience ?? '',
+        incoming.yearsExperience ?? '',
+      ),
+      acceptsNfcRequests:
+          current.acceptsNfcRequests || incoming.acceptsNfcRequests,
+      acceptsDirectRequests:
+          current.acceptsDirectRequests || incoming.acceptsDirectRequests,
+      projects: mergeProjects(current.projects, incoming.projects),
+    );
+  }
+
   ArtistProfile? _artistProfileFromSupabaseRow(Map<String, dynamic> data) {
     final profile = _asMap(data['profile']);
+    final profileAddress = _asMap(profile['address']);
+    final basic = _asMap(data['basic']);
+    final basicAddress = _asMap(basic['address']);
     final portfolio = _asMap(data['portfolio']);
     final artist = _asMap(data['artist']);
     final artistProfile = _asMap(artist['profile']);
+    final artistProfileAddress = _asMap(artistProfile['address']);
     final artistPortfolio = _asMap(artist['portfolio']);
     final address = _asMap(data['address']);
     final artistAddress = _asMap(artist['address']);
+    final client = _asMap(data['client']);
+    final clientProfile = _asMap(client['profile']);
+    final clientAddress = _asMap(client['address']);
+    final clientProfileAddress = _asMap(clientProfile['address']);
     final pricing = _asMap(data['pricing']);
     final artistPricing = _asMap(artist['pricing']);
     final credentials = _asMap(data['credentials']);
@@ -384,6 +497,7 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
     ]);
 
     final services = [
+      ..._asStringList(data['panel_artist_services']),
       ..._asStringList(data['panel_services']),
       ..._asStringList(data['services']),
       ..._asStringList(artist['services']),
@@ -417,17 +531,78 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       rating: _asDouble(stats['rating'] ?? data['rating']),
       city: _firstNonEmpty([
         address['city'],
-        artistAddress['city'],
+        address['addressCity'],
+        basicAddress['city'],
+        basicAddress['addressCity'],
+        profileAddress['city'],
+        profileAddress['addressCity'],
+        clientAddress['city'],
+        clientAddress['addressCity'],
+        clientProfileAddress['city'],
+        clientProfileAddress['addressCity'],
+        basic['city'],
+        basic['addressCity'],
         profile['city'],
+        profile['addressCity'],
+        clientProfile['city'],
+        clientProfile['addressCity'],
+        artistAddress['city'],
+        artistAddress['addressCity'],
+        artistProfileAddress['city'],
+        artistProfileAddress['addressCity'],
+        profile['city'],
+        artistProfile['city'],
+        artist['city'],
         data['panel_city'],
         data['city'],
       ]),
       state: _firstNonEmpty([
         address['state'],
-        artistAddress['state'],
+        basicAddress['state'],
+        profileAddress['state'],
+        clientAddress['state'],
+        clientProfileAddress['state'],
+        basic['state'],
         profile['state'],
+        clientProfile['state'],
+        artistAddress['state'],
+        artistProfileAddress['state'],
+        profile['state'],
+        artistProfile['state'],
+        artist['state'],
         data['panel_state'],
         data['state'],
+      ]),
+      zip: _firstNonEmpty([
+        address['zip'],
+        address['postal_code'],
+        basicAddress['zip'],
+        basicAddress['postal_code'],
+        profileAddress['zip'],
+        profileAddress['postal_code'],
+        clientAddress['zip'],
+        clientAddress['postal_code'],
+        clientProfileAddress['zip'],
+        clientProfileAddress['postal_code'],
+        basic['zip'],
+        basic['postal_code'],
+        basic['addressZip'],
+        artistAddress['zip'],
+        artistAddress['postal_code'],
+        artistProfileAddress['zip'],
+        artistProfileAddress['postal_code'],
+        profile['zip'],
+        profile['postal_code'],
+        profile['addressZip'],
+        clientProfile['zip'],
+        clientProfile['postal_code'],
+        artistProfile['zip'],
+        artistProfile['postal_code'],
+        artist['zip'],
+        artist['postal_code'],
+        data['panel_zip'],
+        data['zip'],
+        data['postal_code'],
       ]),
       budgetMin: _asInt(
         pricing['minPrice'] ??
@@ -461,10 +636,15 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       yearsExperience: yearsExperience,
       acceptsNfcRequests: _asBool(
         data['panel_nfcRequestEnabled'] ??
+            data['panel_nfc_request_enabled'] ??
             availability['nfcRequestEnabled'] ??
+            availability['nfc_request_enabled'] ??
             profile['nfcRequestEnabled'] ??
+            profile['nfc_request_enabled'] ??
             artist['nfcRequestEnabled'] ??
-            artistAvailability['nfcRequestEnabled'],
+            artist['nfc_request_enabled'] ??
+            artistAvailability['nfcRequestEnabled'] ??
+            artistAvailability['nfc_request_enabled'],
         fallback: false,
       ),
       acceptsDirectRequests: _asBool(
@@ -677,10 +857,10 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                               final rating = artist.rating <= 0
                                   ? 'rating not available'
                                   : '${artist.rating.toStringAsFixed(1)} rating';
-                              final location = [
+                              final location = _artistLocationText(
                                 artist.city,
                                 artist.state,
-                              ].where((v) => v.trim().isNotEmpty).join(', ');
+                              );
                               final labelParts = <String>[
                                 artist.name,
                                 '${index + 1} of ${options.length}',
@@ -900,6 +1080,7 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
         appBar: widget.showCompanyChrome && widget.companyName != null
             ? CompanyHeader(
                 companyName: widget.companyName!,
+                imageUrl: widget.profile.basic.profileImageUrl,
                 onOpenProfile: widget.onOpenProfile,
                 onLogout: widget.onLogout,
               )
@@ -1419,6 +1600,7 @@ class _AvatarMenu extends StatelessWidget {
             imageUrl: avatarUrl,
             displayName: displayName,
             size: JntHeaderMetrics.avatarSize,
+            resolveCurrentUserFallback: true,
           ),
         ),
       ),
@@ -1463,10 +1645,7 @@ class _ArtistCard extends StatelessWidget {
     final ratingLabel = artist.rating <= 0
         ? 'rating not available'
         : '${artist.rating.toStringAsFixed(1)} star rating';
-    final location = [
-      artist.city.trim(),
-      artist.state.trim(),
-    ].where((value) => value.isNotEmpty).join(', ');
+    final location = _artistLocationText(artist.city, artist.state);
     final locationLabel = location.isEmpty
         ? 'location not available'
         : location;
@@ -1542,7 +1721,10 @@ class _ArtistCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${artist.city}, ${artist.state}',
+                      _artistLocationText(
+                        artist.city,
+                        artist.state,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1585,7 +1767,24 @@ class _ArtistCard extends StatelessWidget {
                     ),
                     if (artist.acceptsNfcRequests) ...[
                       const SizedBox(height: 6),
-                      const _NfcTag(),
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.nfc_rounded,
+                            size: 16,
+                            color: AppColors.blackCat,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Accepts NFC',
+                            style: TextStyle(
+                              color: AppColors.blackCat,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ],
                 ),
@@ -1862,6 +2061,7 @@ class ArtistProfile {
   final double rating;
   final String city;
   final String state;
+  final String zip;
   final int budgetMin;
   final int budgetMax;
   final String credential;
@@ -1883,6 +2083,7 @@ class ArtistProfile {
     required this.rating,
     required this.city,
     required this.state,
+    required this.zip,
     required this.budgetMin,
     required this.budgetMax,
     required this.credential,
@@ -1903,30 +2104,6 @@ class ArtistProject {
   final String title;
 
   const ArtistProject({required this.imageUrl, required this.title});
-}
-
-class _NfcTag extends StatelessWidget {
-  const _NfcTag();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: const BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: const Text(
-        'Accepts NFC',
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: AppColors.blackCat,
-          height: 1.1,
-        ),
-      ),
-    );
-  }
 }
 
 Widget _buildAnyImage(
@@ -2257,6 +2434,30 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                               fontFamily: 'Arial',
                             ),
                           ),
+                        if (artist.acceptsNfcRequests) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.nfc_rounded,
+                                size: 16,
+                                color: AppColors.blackCat,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Accepts NFC',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.blackCat,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         if (yearsExperience.isNotEmpty)
                           Semantics(

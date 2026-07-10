@@ -20,10 +20,10 @@ import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
 import '../utils/scenario_4_1.dart';
 import '../utils/scenario_4_3.dart';
+import '../utils/request_nfc_details_loader.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/company_client_request_card.dart';
-
 
 // Supabase database compatibility helpers for this page.
 // These keep the existing UI and business-flow code intact while routing reads/writes to Supabase tables.
@@ -67,7 +67,9 @@ class DocumentSnapshot<T extends Map<String, dynamic>> {
   bool get exists => _data != null;
   T? data() {
     final data = _data;
-    return data == null ? null : Map<String, dynamic>.from(_withAliases(data)) as T;
+    return data == null
+        ? null
+        : Map<String, dynamic>.from(_withAliases(data)) as T;
   }
 }
 
@@ -94,7 +96,8 @@ class CollectionReference<T extends Map<String, dynamic>> {
   int? _limit;
   final List<_Filter> _filters = <_Filter>[];
 
-  DocumentReference<T> doc(String id) => DocumentReference<T>(table, id, parent: parent);
+  DocumentReference<T> doc(String id) =>
+      DocumentReference<T>(table, id, parent: parent);
 
   CollectionReference<T> limit(int value) {
     _limit = value;
@@ -114,15 +117,18 @@ class CollectionReference<T extends Map<String, dynamic>> {
       }
       final rows = _limit == null ? await query : await query.limit(_limit!);
       final list = rows as List;
-      final docs = list.whereType<Map>().map((raw) {
-        final data = Map<String, dynamic>.from(raw);
-        final id = (data['id'] ?? '').toString();
-        return DocumentSnapshot<T>(
-          id: id,
-          reference: DocumentReference<T>(table, id, parent: parent),
-          data: data,
-        );
-      }).toList(growable: false);
+      final docs = list
+          .whereType<Map>()
+          .map((raw) {
+            final data = Map<String, dynamic>.from(raw);
+            final id = (data['id'] ?? '').toString();
+            return DocumentSnapshot<T>(
+              id: id,
+              reference: DocumentReference<T>(table, id, parent: parent),
+              data: data,
+            );
+          })
+          .toList(growable: false);
       return QuerySnapshot<T>(docs);
     } catch (_) {
       return QuerySnapshot<T>(<DocumentSnapshot<T>>[]);
@@ -132,18 +138,21 @@ class CollectionReference<T extends Map<String, dynamic>> {
   Stream<QuerySnapshot<T>> snapshots() async* {
     yield await get();
     try {
-      await for (final rows in Supabase.instance.client
-          .from(table)
-          .stream(primaryKey: const ['id'])) {
-        final docs = rows.map((raw) {
-          final data = Map<String, dynamic>.from(raw);
-          final id = (data['id'] ?? '').toString();
-          return DocumentSnapshot<T>(
-            id: id,
-            reference: DocumentReference<T>(table, id, parent: parent),
-            data: data,
-          );
-        }).toList(growable: false);
+      await for (final rows
+          in Supabase.instance.client
+              .from(table)
+              .stream(primaryKey: const ['id'])) {
+        final docs = rows
+            .map((raw) {
+              final data = Map<String, dynamic>.from(raw);
+              final id = (data['id'] ?? '').toString();
+              return DocumentSnapshot<T>(
+                id: id,
+                reference: DocumentReference<T>(table, id, parent: parent),
+                data: data,
+              );
+            })
+            .toList(growable: false);
         yield QuerySnapshot<T>(docs);
       }
     } catch (_) {}
@@ -158,7 +167,10 @@ class DocumentReference<T extends Map<String, dynamic>> {
 
   CollectionReference<Map<String, dynamic>> collection(String name) {
     final childTable = _detailsTableFor(table);
-    return CollectionReference<Map<String, dynamic>>(childTable, parent: this as DocumentReference<Map<String, dynamic>>);
+    return CollectionReference<Map<String, dynamic>>(
+      childTable,
+      parent: this as DocumentReference<Map<String, dynamic>>,
+    );
   }
 
   Future<DocumentSnapshot<T>> get() async {
@@ -181,11 +193,14 @@ class DocumentReference<T extends Map<String, dynamic>> {
   Future<Map<String, dynamic>?> _fetchOne() async {
     if (parent != null && _isDetailsTable(table)) {
       final parentId = parent!.id;
+      final isClientDetailsTable = table == 'client_custom_requests_details';
       final attempts = <Future<Map<String, dynamic>?>>[
-        _selectMaybe({'request_id': parentId, 'doc_id': id}),
-        _selectMaybe({'request_id': parentId, 'detail_id': id}),
+        if (isClientDetailsTable)
+          _selectMaybe({'request_id': parentId, 'detail_key': id}),
+        if (!isClientDetailsTable)
+          _selectMaybe({'request_id': parentId, 'doc_id': id}),
         _selectMaybe({'request_id': parentId}),
-        _selectMaybe({'parent_id': parentId, 'doc_id': id}),
+        _selectMaybe({'id': '$parentId:$id'}),
         _selectMaybe({'id': parentId}),
       ];
       for (final attempt in attempts) {
@@ -197,11 +212,17 @@ class DocumentReference<T extends Map<String, dynamic>> {
       return null;
     }
 
-    final row = await Supabase.instance.client.from(table).select().eq('id', id).maybeSingle();
+    final row = await Supabase.instance.client
+        .from(table)
+        .select()
+        .eq('id', id)
+        .maybeSingle();
     return row == null ? null : Map<String, dynamic>.from(row);
   }
 
-  Future<Map<String, dynamic>?> _selectMaybe(Map<String, Object?> filters) async {
+  Future<Map<String, dynamic>?> _selectMaybe(
+    Map<String, Object?> filters,
+  ) async {
     var query = Supabase.instance.client.from(table).select();
     filters.forEach((key, value) {
       query = query.eq(key, value as Object);
@@ -210,19 +231,29 @@ class DocumentReference<T extends Map<String, dynamic>> {
     return row == null ? null : Map<String, dynamic>.from(row);
   }
 
-  Future<void> _write(Map<String, dynamic> values, {required bool merge}) async {
+  Future<void> _write(
+    Map<String, dynamic> values, {
+    required bool merge,
+  }) async {
     if (parent != null && _isDetailsTable(table)) {
       await _writeDetails(values);
       return;
     }
 
-    final encoded = await _prepareValues(values, existing: merge ? await _fetchOne() : null);
+    final encoded = await _prepareValues(
+      values,
+      existing: merge ? await _fetchOne() : null,
+    );
     encoded['id'] = id;
     try {
-      await Supabase.instance.client.from(table).upsert(encoded, onConflict: 'id');
+      await Supabase.instance.client
+          .from(table)
+          .upsert(encoded, onConflict: 'id');
     } catch (_) {
       final dataPayload = <String, dynamic>{'id': id, 'data': encoded};
-      await Supabase.instance.client.from(table).upsert(dataPayload, onConflict: 'id');
+      await Supabase.instance.client
+          .from(table)
+          .upsert(dataPayload, onConflict: 'id');
     }
   }
 
@@ -237,16 +268,13 @@ class DocumentReference<T extends Map<String, dynamic>> {
     // This keeps accept/decline writes from failing with PGRST204.
     final isClientDetailsTable = table == 'client_custom_requests_details';
     if (isClientDetailsTable) {
-      await Supabase.instance.client.from(table).upsert(
-        <String, dynamic>{
-          'id': '$parentId:$id',
-          'request_id': parentId,
-          'detail_key': id,
-          'data': encoded,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        },
-        onConflict: 'id',
-      );
+      await Supabase.instance.client.from(table).upsert(<String, dynamic>{
+        'id': '$parentId:$id',
+        'request_id': parentId,
+        'detail_key': id,
+        'data': encoded,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'id');
       return;
     }
 
@@ -269,18 +297,10 @@ class DocumentReference<T extends Map<String, dynamic>> {
         if (!isClientDetailsTable) 'payload': encoded,
         'data': encoded,
       },
-      <String, dynamic>{
-        'id': parentId,
-        'details': encoded,
-      },
+      <String, dynamic>{'id': parentId, 'details': encoded},
     ];
 
-    final conflicts = <String>[
-      'request_id,doc_id',
-      'request_id',
-      'id',
-      'id',
-    ];
+    final conflicts = <String>['request_id,doc_id', 'request_id', 'id', 'id'];
 
     Object? lastError;
     for (var i = 0; i < detailRows.length; i += 1) {
@@ -301,7 +321,11 @@ class DocumentReference<T extends Map<String, dynamic>> {
 class WriteBatch {
   final List<Future<void> Function()> _ops = <Future<void> Function()>[];
 
-  void set(DocumentReference<dynamic> ref, Map<String, dynamic> values, [SetOptions? options]) {
+  void set(
+    DocumentReference<dynamic> ref,
+    Map<String, dynamic> values, [
+    SetOptions? options,
+  ]) {
     _ops.add(() => ref.set(values, options));
   }
 
@@ -335,8 +359,10 @@ String _tableForCollection(String name) {
 }
 
 String _detailsTableFor(String parentTable) {
-  if (parentTable == 'company_custom_requests') return 'company_custom_requests_details';
-  if (parentTable == 'client_custom_requests') return 'client_custom_requests_details';
+  if (parentTable == 'company_custom_requests')
+    return 'company_custom_requests_details';
+  if (parentTable == 'client_custom_requests')
+    return 'client_custom_requests_details';
   return '${parentTable}_details';
 }
 
@@ -355,7 +381,11 @@ String _columnName(String input) => _snakeName(input);
 String _camelName(String input) {
   final parts = input.split('_');
   if (parts.isEmpty) return input;
-  return parts.first + parts.skip(1).map((p) => p.isEmpty ? p : p[0].toUpperCase() + p.substring(1)).join();
+  return parts.first +
+      parts
+          .skip(1)
+          .map((p) => p.isEmpty ? p : p[0].toUpperCase() + p.substring(1))
+          .join();
 }
 
 Map<String, dynamic> _withAliases(Map<String, dynamic> row) {
@@ -378,7 +408,18 @@ Map<String, dynamic> _flattenDetailRow(Map<String, dynamic> row) {
   final out = _withAliases(row);
   for (final key in const ['payload', 'data', 'details']) {
     final value = row[key];
-    if (value is Map) out.addAll(_withAliases(Map<String, dynamic>.from(value)));
+    if (value is Map) {
+      out.addAll(_withAliases(Map<String, dynamic>.from(value)));
+      continue;
+    }
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) {
+          out.addAll(_withAliases(Map<String, dynamic>.from(decoded)));
+        }
+      } catch (_) {}
+    }
   }
   return out;
 }
@@ -400,10 +441,7 @@ Object _encodeValue(Object? value) {
 
   if (value is Map) {
     return value.map(
-      (k, v) => MapEntry(
-        _columnName(k.toString()),
-        _encodeValue(v),
-      ),
+      (k, v) => MapEntry(_columnName(k.toString()), _encodeValue(v)),
     );
   }
 
@@ -414,7 +452,10 @@ Object _encodeValue(Object? value) {
   return value;
 }
 
-Future<Map<String, dynamic>> _prepareValues(Map<String, dynamic> values, {Map<String, dynamic>? existing}) async {
+Future<Map<String, dynamic>> _prepareValues(
+  Map<String, dynamic> values, {
+  Map<String, dynamic>? existing,
+}) async {
   final out = <String, dynamic>{};
   values.forEach((key, value) {
     final col = _columnName(key);
@@ -422,7 +463,8 @@ Future<Map<String, dynamic>> _prepareValues(Map<String, dynamic> values, {Map<St
       final current = existing?[col] ?? existing?[key];
       final list = current is List ? List<Object?>.from(current) : <Object?>[];
       for (final item in value.values) {
-        if (!list.map((e) => e.toString()).contains(item.toString())) list.add(item);
+        if (!list.map((e) => e.toString()).contains(item.toString()))
+          list.add(item);
       }
       out[col] = list;
     } else {
@@ -463,14 +505,10 @@ class SupabaseDocumentChange<T extends Map<String, dynamic>> {
 extension SupabaseQuerySnapshotDocChangesCompat<T extends Map<String, dynamic>>
     on QuerySnapshot<T> {
   List<SupabaseDocumentChange<T>> get docChanges => docs
-      .map(
-        (doc) => SupabaseDocumentChange<T>(
-          DocumentChangeType.modified,
-          doc,
-        ),
-      )
+      .map((doc) => SupabaseDocumentChange<T>(DocumentChangeType.modified, doc))
       .toList(growable: false);
 }
+
 class StorageUrlResolver {
   static Future<String?> resolve(String value) async {
     final raw = value.trim();
@@ -656,6 +694,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   bool _currentArtistIsLicensed = true;
   bool _currentArtistBrandEligible = false;
   bool _currentClientAmbassadorEligible = false;
+  bool _currentArtistAcceptsNfc = false;
   TextStyle _t(
     double size, {
     FontWeight w = FontWeight.w700,
@@ -821,12 +860,31 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         final profile = parseMap(data['profile']);
         final credentials = parseMap(data['credentials']);
         final nestedCredentials = parseMap(profile['credentials']);
+        final artist = parseMap(data['artist']);
+        final artistCredentials = parseMap(artist['credentials']);
+        final artistProfile = parseMap(data['artist_profile']);
+        final artistProfileCredentials = parseMap(artistProfile['credentials']);
         final candidateValues = <Object?>[
           credentials['nailTechType'],
+          credentials['nail_tech_type'],
           nestedCredentials['nailTechType'],
+          nestedCredentials['nail_tech_type'],
           profile['nailTechType'],
+          profile['nail_tech_type'],
+          artistProfileCredentials['nailTechType'],
+          artistProfileCredentials['nail_tech_type'],
+          artistCredentials['nailTechType'],
+          artistCredentials['nail_tech_type'],
+          artistProfile['nailTechType'],
+          artistProfile['nail_tech_type'],
+          artist['nailTechType'],
+          artist['nail_tech_type'],
+          data['panel_artist_nailTechType'],
+          data['panel_artist_nail_tech_type'],
           data['panel_nailTechType'],
+          data['panel_nail_tech_type'],
           data['nailTechType'],
+          data['nail_tech_type'],
           data['credential'],
         ];
         for (final raw in candidateValues) {
@@ -871,6 +929,40 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           ? pointsRaw.toInt()
           : int.tryParse((pointsRaw ?? '').toString()) ?? 0;
       return points >= AscensionService.goldsmithMin;
+    }
+
+    bool readAcceptsNfc(Map<String, dynamic> data) {
+      bool? maybeBool(Object? raw) {
+        if (raw is bool) return raw;
+        if (raw is num) return raw != 0;
+        final value = (raw ?? '').toString().trim().toLowerCase();
+        if (value == 'true' || value == '1' || value == 'yes') return true;
+        if (value == 'false' || value == '0' || value == 'no') return false;
+        return null;
+      }
+
+      final profile = parseMap(data['profile']);
+      final availability = parseMap(data['availability']);
+      final artist = parseMap(data['artist']);
+      final artistAvailability = parseMap(artist['availability']);
+      for (final raw in <Object?>[
+        data['panel_nfcRequestEnabled'],
+        data['panel_nfc_request_enabled'],
+        data['nfcRequestEnabled'],
+        data['nfc_request_enabled'],
+        availability['nfcRequestEnabled'],
+        availability['nfc_request_enabled'],
+        profile['nfcRequestEnabled'],
+        profile['nfc_request_enabled'],
+        artist['nfcRequestEnabled'],
+        artist['nfc_request_enabled'],
+        artistAvailability['nfcRequestEnabled'],
+        artistAvailability['nfc_request_enabled'],
+      ]) {
+        final value = maybeBool(raw);
+        if (value != null) return value;
+      }
+      return false;
     }
 
     bool readAmbassadorEligibility(Map<String, dynamic> data) {
@@ -960,6 +1052,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           _currentArtistNameLower = readName(artistData);
           _currentArtistIsLicensed = readIsLicensed(artistData);
           _currentArtistBrandEligible = readBrandEligibility(artistData);
+          _currentArtistAcceptsNfc = readAcceptsNfc(artistData);
           _currentClientAmbassadorEligible = readAmbassadorEligibility(
             artistData,
           );
@@ -1135,11 +1228,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
   }
 
-
-  bool _rowWasDeclinedByArtist(
-    Map<String, dynamic> row,
-    String artistEmail,
-  ) {
+  bool _rowWasDeclinedByArtist(Map<String, dynamic> row, String artistEmail) {
     final email = artistEmail.trim().toLowerCase();
     if (email.isEmpty) return false;
 
@@ -1198,15 +1287,18 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final selectedArtist = text(row['selected_artist_email']);
     final selectedArtistData = text(data['selectedArtistEmail']);
-    final assignedToCurrent = acceptedBy == email ||
+    final assignedToCurrent =
+        acceptedBy == email ||
         selectedArtist == email ||
         selectedArtistData == email;
 
-    final rootStatusDeclined = text(row['status']) == 'declined' ||
+    final rootStatusDeclined =
+        text(row['status']) == 'declined' ||
         text(row['artist_status']) == 'declined' ||
         text(row['direct_artist_status']) == 'declined' ||
         text(row['artist_pool_status']) == 'declined';
-    final dataStatusDeclined = text(data['status']) == 'declined' ||
+    final dataStatusDeclined =
+        text(data['status']) == 'declined' ||
         text(data['artistStatus']) == 'declined' ||
         text(data['artist_status']) == 'declined' ||
         text(data['directArtistStatus']) == 'declined' ||
@@ -1266,7 +1358,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       try {
         final rows = await Supabase.instance.client
             .from(table)
-            .select('id,order_number,request_number,status,artist_status,updated_at')
+            .select(
+              'id,order_number,request_number,status,artist_status,updated_at',
+            )
             .order('updated_at', ascending: false)
             .limit(500);
         for (final raw in rows.whereType<Map>()) {
@@ -1278,11 +1372,15 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     await scan('client_custom_requests');
     await scan('company_custom_requests');
 
-    return requests.map((request) {
-      final rootStatus = byId[request.id] ?? byOrderNumber[request.orderNumber];
-      if (rootStatus == null || rootStatus == request.status) return request;
-      return request.copyWith(status: rootStatus);
-    }).toList(growable: false);
+    return requests
+        .map((request) {
+          final rootStatus =
+              byId[request.id] ?? byOrderNumber[request.orderNumber];
+          if (rootStatus == null || rootStatus == request.status)
+            return request;
+          return request.copyWith(status: rootStatus);
+        })
+        .toList(growable: false);
   }
 
   Future<Set<String>> _fetchPersistedArtistDeclinedRequestIds(
@@ -1296,7 +1394,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       try {
         final rows = await Supabase.instance.client
             .from(table)
-            .select('id,status,artist_status,direct_artist_status,artist_pool_status,accepted_by_artist_email,selected_artist_email,declined_by_artist_email,declined_by_artist_emails,data,updated_at')
+            .select(
+              'id,status,artist_status,direct_artist_status,artist_pool_status,accepted_by_artist_email,selected_artist_email,declined_by_artist_email,declined_by_artist_emails,data,updated_at',
+            )
             .order('updated_at', ascending: false)
             .limit(1000);
         for (final raw in rows.whereType<Map>()) {
@@ -1309,7 +1409,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         try {
           final rows = await Supabase.instance.client
               .from(table)
-              .select('id,status,artist_status,accepted_by_artist_email,selected_artist_email,data,updated_at')
+              .select(
+                'id,status,artist_status,accepted_by_artist_email,selected_artist_email,data,updated_at',
+              )
               .order('updated_at', ascending: false)
               .limit(1000);
           for (final raw in rows.whereType<Map>()) {
@@ -1346,12 +1448,15 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         rootStatusCorrectedRequests,
       );
       final currentArtistEmail =
-          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
+          (Supabase.instance.client.auth.currentUser?.email ?? '')
+              .trim()
+              .toLowerCase();
       final currentClientEmail =
-          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
-      final persistedDeclinedIds = await _fetchPersistedArtistDeclinedRequestIds(
-        currentArtistEmail,
-      );
+          (Supabase.instance.client.auth.currentUser?.email ?? '')
+              .trim()
+              .toLowerCase();
+      final persistedDeclinedIds =
+          await _fetchPersistedArtistDeclinedRequestIds(currentArtistEmail);
       if (!mounted) return;
 
       setState(() {
@@ -1363,7 +1468,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           ..addAll(
             hydratedRequests.where((r) {
               if (_locallyDeclinedRequestIds.contains(r.id)) return false;
-              if (_persistedArtistDeclinedRequestIds.contains(r.id)) return false;
+              if (_persistedArtistDeclinedRequestIds.contains(r.id))
+                return false;
               if (widget.showOnlyCompanyRequests &&
                   r.sourceCollection != 'Company_Custom_Requests') {
                 return false;
@@ -1479,9 +1585,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }) {
     if (_locallyDeclinedRequestIds.contains(request.id)) return false;
     if (_persistedArtistDeclinedRequestIds.contains(request.id)) return false;
-    if (widget.clientArtistMenuStyle &&
-        artistEmail.isNotEmpty &&
-        request.clientEmail.trim().toLowerCase() == artistEmail) {
+    if (_isClientArtistViewingOwnRequest(
+      request: request,
+      viewerEmail: artistEmail,
+    )) {
       return false;
     }
     final isCompanyRequest =
@@ -1506,6 +1613,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final ownedBy = request.acceptedByArtistEmail.trim().toLowerCase();
     final isOwnedByCurrentArtist =
         artistEmail.isNotEmpty && ownedBy == artistEmail;
+    if (request.nfcRequested &&
+        !_currentArtistAcceptsNfc &&
+        !isOwnedByCurrentArtist) {
+      return false;
+    }
     final declinedByCurrentArtist =
         artistEmail.isNotEmpty &&
         request.declinedByArtistEmails.contains(artistEmail);
@@ -1553,6 +1665,42 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       case RequestStatusV2.expired:
         return ownedBy.isEmpty || isOwnedByCurrentArtist;
     }
+  }
+
+  bool _isClientArtistViewingOwnRequest({
+    required ClientRequestV2 request,
+    required String viewerEmail,
+  }) {
+    if (!widget.clientArtistMenuStyle) return false;
+    final normalizedViewer = viewerEmail.trim().toLowerCase();
+    if (normalizedViewer.isEmpty) return false;
+
+    final requestClientEmail = request.clientEmail.trim().toLowerCase();
+    final selectedClientEmail = request.selectedClientEmail
+        .trim()
+        .toLowerCase();
+    final acceptedByClientEmail = request.acceptedByClientEmail
+        .trim()
+        .toLowerCase();
+    final selectedGroupClientEmails = request.selectedGroupClientEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    final acceptedGroupClientEmails = request.acceptedGroupClientEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    final groupClientEmails = request.groupClients
+        .map((client) => client.clientEmail.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+
+    return requestClientEmail == normalizedViewer ||
+        selectedClientEmail == normalizedViewer ||
+        acceptedByClientEmail == normalizedViewer ||
+        selectedGroupClientEmails.contains(normalizedViewer) ||
+        acceptedGroupClientEmails.contains(normalizedViewer) ||
+        groupClientEmails.contains(normalizedViewer);
   }
 
   bool _isVisibleToCurrentClient({
@@ -1767,7 +1915,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
+          child: const ArtistProfileAvatarIcon(
+            size: JntHeaderMetrics.avatarSize,
+          ),
         ),
       ),
       itemBuilder: (_) => [
@@ -1926,7 +2076,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         ],
       ),
       child: TextField(
-        style: _t(13, w: FontWeight.w800, c: AppColors.blackCat.withValues(alpha: 0.9)),
+        style: _t(
+          13,
+          w: FontWeight.w800,
+          c: AppColors.blackCat.withValues(alpha: 0.9),
+        ),
         controller: _searchCtrl,
         onChanged: (_) => setState(() {}),
         decoration: InputDecoration(
@@ -2452,7 +2606,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     _replaceById(id, r.copyWith(status: status));
   }
 
-
   Future<void> _forcePersistArtistAcceptedDesigning(
     ClientRequestV2 request,
     double normalizedTotal,
@@ -2472,7 +2625,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final nowIso = DateTime.now().toUtc().toIso8601String();
 
     Map<String, dynamic> asMap(Object? value) {
-      if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+      if (value is Map<String, dynamic>)
+        return Map<String, dynamic>.from(value);
       if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
       return <String, dynamic>{};
     }
@@ -2488,7 +2642,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     Map<String, dynamic>? row;
     try {
-      row = await Supabase.instance.client.from(table).select().eq('id', request.id).maybeSingle();
+      row = await Supabase.instance.client
+          .from(table)
+          .select()
+          .eq('id', request.id)
+          .maybeSingle();
       if (row == null && orderRef.isNotEmpty) {
         row = await Supabase.instance.client
             .from(table)
@@ -2525,7 +2683,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         text(dataOrder['artistPoolStatus']).toLowerCase() == 'open';
 
     Map<String, dynamic> mergeRoleStatuses(Map<String, dynamic> source) {
-      final roleStatuses = asMap(source['roleStatuses'] ?? source['role_statuses']);
+      final roleStatuses = asMap(
+        source['roleStatuses'] ?? source['role_statuses'],
+      );
       return <String, dynamic>{
         ...source,
         'status': 'designing',
@@ -2590,14 +2750,18 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       'artist_name': artistName,
       'artist_final_amount': normalizedTotal,
       'final_amount_by_artist': normalizedTotal,
-      'direct_artist_status': wasReleasedToPool ? 'released_to_pool' : 'accepted',
+      'direct_artist_status': wasReleasedToPool
+          ? 'released_to_pool'
+          : 'accepted',
       'artist_pool_status': 'accepted',
       'updated_at': nowIso,
       'details': nextDetails,
-      if (payload.isNotEmpty || table == 'client_custom_requests') 'payload': nextPayload,
+      if (payload.isNotEmpty || table == 'client_custom_requests')
+        'payload': nextPayload,
       if (requestDetails.isNotEmpty || table == 'client_custom_requests')
         'request_details': nextRequestDetails,
-      if (data.isNotEmpty || table == 'client_custom_requests') 'data': nextData,
+      if (data.isNotEmpty || table == 'client_custom_requests')
+        'data': nextData,
       if (wasReleasedToPool) 'request_type': 'Standard',
       if (wasReleasedToPool) 'open_to_artist_pool': false,
       if (wasReleasedToPool) 'is_direct_request': false,
@@ -2629,7 +2793,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           'accepted_by_artist_email': artistEmail,
           'accepted_by_artist_name': artistName,
           'artist_final_amount': normalizedTotal,
-          'direct_artist_status': wasReleasedToPool ? 'released_to_pool' : 'accepted',
+          'direct_artist_status': wasReleasedToPool
+              ? 'released_to_pool'
+              : 'accepted',
           'artist_pool_status': 'accepted',
           'updated_at': nowIso,
         });
@@ -2709,7 +2875,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         }
 
         Map<String, dynamic> asMap(Object? value) {
-          if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+          if (value is Map<String, dynamic>)
+            return Map<String, dynamic>.from(value);
           if (value is Map) {
             return value.map(
               (key, mapValue) => MapEntry(key.toString(), mapValue),
@@ -2854,13 +3021,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
   }
 
-
   Future<void> _persistDeliveredRootStatus(ClientRequestV2 request) async {
     final now = DateTime.now().toUtc().toIso8601String();
     final orderNumber = request.orderNumber.trim();
 
     Map<String, dynamic> asMap(Object? value) {
-      if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+      if (value is Map<String, dynamic>)
+        return Map<String, dynamic>.from(value);
       if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
       return <String, dynamic>{};
     }
@@ -2884,29 +3051,34 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         if (id.isEmpty) return;
         final data = asMap(row['data']);
         final roleStatuses = asMap(data['roleStatuses']);
-        await Supabase.instance.client.from('client_custom_requests').update({
-          'status': 'delivered',
-          'client_status': 'delivered',
-          'artist_status': 'delivered',
-          'delivered_at': now,
-          'order_delivered_at': now,
-          'updated_at': now,
-          'data': <String, dynamic>{
-            ...data,
-            'status': 'delivered',
-            'clientStatus': 'delivered',
-            'artistStatus': 'delivered',
-            'deliveredAt': now,
-            'orderDeliveredAt': now,
-            'roleStatuses': <String, dynamic>{
-              ...roleStatuses,
-              'client': 'delivered',
-              'artist': 'delivered',
-            },
-          },
-        }).eq('id', id);
+        await Supabase.instance.client
+            .from('client_custom_requests')
+            .update({
+              'status': 'delivered',
+              'client_status': 'delivered',
+              'artist_status': 'delivered',
+              'delivered_at': now,
+              'order_delivered_at': now,
+              'updated_at': now,
+              'data': <String, dynamic>{
+                ...data,
+                'status': 'delivered',
+                'clientStatus': 'delivered',
+                'artistStatus': 'delivered',
+                'deliveredAt': now,
+                'orderDeliveredAt': now,
+                'roleStatuses': <String, dynamic>{
+                  ...roleStatuses,
+                  'client': 'delivered',
+                  'artist': 'delivered',
+                },
+              },
+            })
+            .eq('id', id);
       } catch (e) {
-        debugPrint('[Artist Delivered] client_custom_requests update failed: $e');
+        debugPrint(
+          '[Artist Delivered] client_custom_requests update failed: $e',
+        );
       }
     }
 
@@ -2931,45 +3103,50 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         final details = asMap(row['details']);
         final payloadRoleStatuses = asMap(payload['roleStatuses']);
         final detailsRoleStatuses = asMap(details['roleStatuses']);
-        await Supabase.instance.client.from('company_custom_requests').update({
-          'status': 'delivered',
-          'brand_status': 'delivered',
-          'client_status': 'delivered',
-          'artist_status': 'delivered',
-          'updated_at': now,
-          'payload': <String, dynamic>{
-            ...payload,
-            'status': 'delivered',
-            'brandStatus': 'delivered',
-            'clientStatus': 'delivered',
-            'artistStatus': 'delivered',
-            'deliveredAt': now,
-            'orderDeliveredAt': now,
-            'roleStatuses': <String, dynamic>{
-              ...payloadRoleStatuses,
-              'brand': 'delivered',
-              'client': 'delivered',
-              'artist': 'delivered',
-            },
-          },
-          'details': <String, dynamic>{
-            ...details,
-            'status': 'delivered',
-            'brandStatus': 'delivered',
-            'clientStatus': 'delivered',
-            'artistStatus': 'delivered',
-            'deliveredAt': now,
-            'orderDeliveredAt': now,
-            'roleStatuses': <String, dynamic>{
-              ...detailsRoleStatuses,
-              'brand': 'delivered',
-              'client': 'delivered',
-              'artist': 'delivered',
-            },
-          },
-        }).eq('id', id);
+        await Supabase.instance.client
+            .from('company_custom_requests')
+            .update({
+              'status': 'delivered',
+              'brand_status': 'delivered',
+              'client_status': 'delivered',
+              'artist_status': 'delivered',
+              'updated_at': now,
+              'payload': <String, dynamic>{
+                ...payload,
+                'status': 'delivered',
+                'brandStatus': 'delivered',
+                'clientStatus': 'delivered',
+                'artistStatus': 'delivered',
+                'deliveredAt': now,
+                'orderDeliveredAt': now,
+                'roleStatuses': <String, dynamic>{
+                  ...payloadRoleStatuses,
+                  'brand': 'delivered',
+                  'client': 'delivered',
+                  'artist': 'delivered',
+                },
+              },
+              'details': <String, dynamic>{
+                ...details,
+                'status': 'delivered',
+                'brandStatus': 'delivered',
+                'clientStatus': 'delivered',
+                'artistStatus': 'delivered',
+                'deliveredAt': now,
+                'orderDeliveredAt': now,
+                'roleStatuses': <String, dynamic>{
+                  ...detailsRoleStatuses,
+                  'brand': 'delivered',
+                  'client': 'delivered',
+                  'artist': 'delivered',
+                },
+              },
+            })
+            .eq('id', id);
       } catch (e) {
-        debugPrint('[Artist Delivered] company_custom_requests update failed: $e');
+        debugPrint(
+          '[Artist Delivered] company_custom_requests update failed: $e',
+        );
       }
     }
 
@@ -2985,22 +3162,25 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           if (id.isEmpty) continue;
           final data = asMap(row['data']);
           final roleStatuses = asMap(data['roleStatuses']);
-          await Supabase.instance.client.from(table).update({
-            'data': <String, dynamic>{
-              ...data,
-              'status': 'delivered',
-              'clientStatus': 'delivered',
-              'artistStatus': 'delivered',
-              'deliveredAt': now,
-              'orderDeliveredAt': now,
-              'roleStatuses': <String, dynamic>{
-                ...roleStatuses,
-                'client': 'delivered',
-                'artist': 'delivered',
-              },
-            },
-            'updated_at': now,
-          }).eq('id', id);
+          await Supabase.instance.client
+              .from(table)
+              .update({
+                'data': <String, dynamic>{
+                  ...data,
+                  'status': 'delivered',
+                  'clientStatus': 'delivered',
+                  'artistStatus': 'delivered',
+                  'deliveredAt': now,
+                  'orderDeliveredAt': now,
+                  'roleStatuses': <String, dynamic>{
+                    ...roleStatuses,
+                    'client': 'delivered',
+                    'artist': 'delivered',
+                  },
+                },
+                'updated_at': now,
+              })
+              .eq('id', id);
         }
       } catch (_) {}
     }
@@ -3245,7 +3425,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       request.selectedArtistEmail,
     ]).toLowerCase();
 
-    final shouldReleaseClientDirectToPool = releaseDirectClientRequestToArtistPool;
+    final shouldReleaseClientDirectToPool =
+        releaseDirectClientRequestToArtistPool;
 
     final existingDeclined = <String>{
       if (existingMap['declined_by_artist_emails'] is List)
@@ -3284,7 +3465,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       'completionDeclinedAt': declinedAtIso,
       'completionDeclineReason': artistCancelReason,
       'completionDeclineDescription': artistCancelReason,
-      'roleStatuses': <String, dynamic>{'client': 'pending', 'artist': 'declined'},
+      'roleStatuses': <String, dynamic>{
+        'client': 'pending',
+        'artist': 'declined',
+      },
       'artistDecline': <String, dynamic>{
         'artistEmail': artistEmail,
         'artistName': originallySelectedArtistName,
@@ -3297,9 +3481,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final updatedDetailsOrder = <String, dynamic>{
       ...existingDetailsOrder,
       'directArtistStatus': 'declined',
-      'artistPoolStatus': shouldReleaseClientDirectToPool
-          ? 'open'
-          : 'declined',
+      'artistPoolStatus': shouldReleaseClientDirectToPool ? 'open' : 'declined',
       if (shouldReleaseClientDirectToPool) 'openToArtistPool': true,
       if (shouldReleaseClientDirectToPool) 'isDirectRequest': false,
       if (shouldReleaseClientDirectToPool)
@@ -3340,58 +3522,62 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
 
     try {
-      await Supabase.instance.client.from(table).update(<String, dynamic>{
-        'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
-        'client_status': 'pending',
-        'artist_status': shouldReleaseClientDirectToPool
-            ? 'pending'
-            : 'declined',
-        'direct_artist_status': 'declined',
-        'artist_pool_status': shouldReleaseClientDirectToPool
-            ? 'in_review'
-            : 'declined',
-        if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
-        if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
-        if (shouldReleaseClientDirectToPool) 'selected_artist': '',
-        if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
-        if (shouldReleaseClientDirectToPool)
-          'accepted_by_artist_email': '',
-        if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
-        if (shouldReleaseClientDirectToPool)
-          'declined_artist_name': originallySelectedArtistName,
-        if (shouldReleaseClientDirectToPool)
-          'declined_artist_email': originallySelectedArtistEmail,
-        'declined_by_artist_emails': existingDeclined,
-        'declined_by_artist_email': artistEmail,
-        'artist_declined_at': declinedAtIso,
-        'completion_declined_at': declinedAtIso,
-        'completion_decline_reason': artistCancelReason,
-        'completion_decline_description': artistCancelReason,
-        'updated_at': declinedAtIso,
-        'data': updatedData,
-        'details': updatedDetails,
-      }).eq('id', request.id);
+      await Supabase.instance.client
+          .from(table)
+          .update(<String, dynamic>{
+            'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
+            'client_status': 'pending',
+            'artist_status': shouldReleaseClientDirectToPool
+                ? 'pending'
+                : 'declined',
+            'direct_artist_status': 'declined',
+            'artist_pool_status': shouldReleaseClientDirectToPool
+                ? 'in_review'
+                : 'declined',
+            if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
+            if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
+            if (shouldReleaseClientDirectToPool) 'selected_artist': '',
+            if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
+            if (shouldReleaseClientDirectToPool) 'accepted_by_artist_email': '',
+            if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
+            if (shouldReleaseClientDirectToPool)
+              'declined_artist_name': originallySelectedArtistName,
+            if (shouldReleaseClientDirectToPool)
+              'declined_artist_email': originallySelectedArtistEmail,
+            'declined_by_artist_emails': existingDeclined,
+            'declined_by_artist_email': artistEmail,
+            'artist_declined_at': declinedAtIso,
+            'completion_declined_at': declinedAtIso,
+            'completion_decline_reason': artistCancelReason,
+            'completion_decline_description': artistCancelReason,
+            'updated_at': declinedAtIso,
+            'data': updatedData,
+            'details': updatedDetails,
+          })
+          .eq('id', request.id);
     } catch (_) {
-      await Supabase.instance.client.from(table).update(<String, dynamic>{
-        'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
-        'artist_status': shouldReleaseClientDirectToPool
-            ? 'pending'
-            : 'declined',
-        if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
-        if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
-        if (shouldReleaseClientDirectToPool) 'selected_artist': '',
-        if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
-        if (shouldReleaseClientDirectToPool)
-          'accepted_by_artist_email': '',
-        if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
-        if (shouldReleaseClientDirectToPool)
-          'declined_artist_name': originallySelectedArtistName,
-        if (shouldReleaseClientDirectToPool)
-          'declined_artist_email': originallySelectedArtistEmail,
-        'updated_at': declinedAtIso,
-        'data': updatedData,
-        'details': updatedDetails,
-      }).eq('id', request.id);
+      await Supabase.instance.client
+          .from(table)
+          .update(<String, dynamic>{
+            'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
+            'artist_status': shouldReleaseClientDirectToPool
+                ? 'pending'
+                : 'declined',
+            if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
+            if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
+            if (shouldReleaseClientDirectToPool) 'selected_artist': '',
+            if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
+            if (shouldReleaseClientDirectToPool) 'accepted_by_artist_email': '',
+            if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
+            if (shouldReleaseClientDirectToPool)
+              'declined_artist_name': originallySelectedArtistName,
+            if (shouldReleaseClientDirectToPool)
+              'declined_artist_email': originallySelectedArtistEmail,
+            'updated_at': declinedAtIso,
+            'data': updatedData,
+            'details': updatedDetails,
+          })
+          .eq('id', request.id);
     }
 
     final detailTable = _detailsTableFor(table);
@@ -3432,7 +3618,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           (Supabase.instance.client.auth.currentUser?.displayName ?? '')
               .trim()
               .isNotEmpty
-          ? (Supabase.instance.client.auth.currentUser?.displayName ?? '').trim()
+          ? (Supabase.instance.client.auth.currentUser?.displayName ?? '')
+                .trim()
           : artistEmail.split('@').first;
       final acceptedClientName = firstNonEmpty(<Object?>[
         rootData['acceptedClientName'],
@@ -3501,11 +3688,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     if (cancelDirectRequest && request.clientEmail.trim().isNotEmpty) {
       final artistName =
-          (Supabase.instance.client.auth.currentUser?.displayName ?? '').trim().isEmpty
+          (Supabase.instance.client.auth.currentUser?.displayName ?? '')
+              .trim()
+              .isEmpty
           ? (Supabase.instance.client.auth.currentUser?.email ?? 'Artist')
                 .split('@')
                 .first
-          : (Supabase.instance.client.auth.currentUser?.displayName ?? '').trim();
+          : (Supabase.instance.client.auth.currentUser?.displayName ?? '')
+                .trim();
       await NotificationsService.createUserNotification(
         receiverEmail: request.clientEmail.trim().toLowerCase(),
         title: 'Request Cancelled',
@@ -3919,7 +4109,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           (Supabase.instance.client.auth.currentUser?.displayName ?? '')
               .trim()
               .isNotEmpty
-          ? (Supabase.instance.client.auth.currentUser?.displayName ?? '').trim()
+          ? (Supabase.instance.client.auth.currentUser?.displayName ?? '')
+                .trim()
           : (Supabase.instance.client.auth.currentUser?.email ?? 'Artist')
                 .split('@')
                 .first;
@@ -4097,18 +4288,18 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   Future<void> _mirrorCompletedPhotosToArtistPortfolio(
-  ClientRequestV2 request,
-  List<String> photos,
-    ) async {
-      final cleaned = photos
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList(growable: false);
+    ClientRequestV2 request,
+    List<String> photos,
+  ) async {
+    final cleaned = photos
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
 
-      debugPrint('Portfolio mirror received ${cleaned.length} photos');
-      debugPrint(cleaned.toString());
+    debugPrint('Portfolio mirror received ${cleaned.length} photos');
+    debugPrint(cleaned.toString());
 
-      if (cleaned.isEmpty) return;
+    if (cleaned.isEmpty) return;
 
     final currentUser = Supabase.instance.client.auth.currentUser;
     final artistId = (currentUser?.id ?? '').trim();
@@ -4174,41 +4365,44 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         'targetTable=$table targetRowId=$rowId photoCount=${cleaned.length}',
       );
 
-      await Supabase.instance.client.from(table).update({
-        'portfolio_images': nextPortfolioImages,
-        'panel_portfolio_images': nextPortfolioImages,
-        'panel_artist_portfolio_images': nextPortfolioImages,
-        'portfolio_items': nextPortfolioItems,
-        'portfolio': {
-          ...portfolio,
-          'images': _mergeUniquePortfolioList(
-            _portfolioAsList(portfolio['images']),
-            cleaned,
-          ),
-          'items': _mergeUniquePortfolioList(
-            _portfolioAsList(portfolio['items']),
-            itemMaps,
-          ),
-        },
-        'artist': {
-          ...artist,
-          'portfolioImages': nextPortfolioImages,
-          'portfolioItems': nextPortfolioItems,
-          'portfolio': {
-            ...artistPortfolio,
-            'images': _mergeUniquePortfolioList(
-              _portfolioAsList(artistPortfolio['images']),
-              cleaned,
-            ),
-            'items': _mergeUniquePortfolioList(
-              _portfolioAsList(artistPortfolio['items']),
-              itemMaps,
-            ),
-          },
-        },
-        'updated_at': nowIso,
-        'updatedAt': nowIso,
-      }).eq('id', rowId);
+      await Supabase.instance.client
+          .from(table)
+          .update({
+            'portfolio_images': nextPortfolioImages,
+            'panel_portfolio_images': nextPortfolioImages,
+            'panel_artist_portfolio_images': nextPortfolioImages,
+            'portfolio_items': nextPortfolioItems,
+            'portfolio': {
+              ...portfolio,
+              'images': _mergeUniquePortfolioList(
+                _portfolioAsList(portfolio['images']),
+                cleaned,
+              ),
+              'items': _mergeUniquePortfolioList(
+                _portfolioAsList(portfolio['items']),
+                itemMaps,
+              ),
+            },
+            'artist': {
+              ...artist,
+              'portfolioImages': nextPortfolioImages,
+              'portfolioItems': nextPortfolioItems,
+              'portfolio': {
+                ...artistPortfolio,
+                'images': _mergeUniquePortfolioList(
+                  _portfolioAsList(artistPortfolio['images']),
+                  cleaned,
+                ),
+                'items': _mergeUniquePortfolioList(
+                  _portfolioAsList(artistPortfolio['items']),
+                  itemMaps,
+                ),
+              },
+            },
+            'updated_at': nowIso,
+            'updatedAt': nowIso,
+          })
+          .eq('id', rowId);
       debugPrint('Portfolio updated for $table : $rowId');
     }
   }
@@ -4441,7 +4635,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 (Supabase.instance.client.auth.currentUser?.displayName ?? '')
                     .trim()
                     .isNotEmpty
-                ? (Supabase.instance.client.auth.currentUser?.displayName ?? '').trim()
+                ? (Supabase.instance.client.auth.currentUser?.displayName ?? '')
+                      .trim()
                 : (Supabase.instance.client.auth.currentUser?.email ?? 'Artist')
                       .split('@')
                       .first;
@@ -4567,9 +4762,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         final acceptedClientEmail = (brandCtx['acceptedClientEmail'] ?? '')
             .trim()
             .toLowerCase();
-        final artistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-            .trim()
-            .toLowerCase();
+        final artistEmail =
+            (Supabase.instance.client.auth.currentUser?.email ?? '')
+                .trim()
+                .toLowerCase();
         brandEmails.remove(acceptedClientEmail);
         if (isBrandRequest) {
           for (final receiver in brandEmails) {
@@ -4776,9 +4972,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 accepted.yourPrice + accepted.shipping + accepted.extra;
             final optimistic = request.copyWith(
               status: RequestStatusV2.designing,
-              artistFinalAmount: double.parse(
-                acceptedTotal.toStringAsFixed(2),
-              ),
+              artistFinalAmount: double.parse(acceptedTotal.toStringAsFixed(2)),
             );
 
             if (!mounted) return;
@@ -4962,6 +5156,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final normalized = key.trim().toLowerCase();
     return normalized == 'nfcrequested' ||
         normalized == 'nfcselected' ||
+        normalized == 'nfcrequest' ||
+        normalized == 'nfcenabled' ||
+        normalized == 'hasnfc' ||
+        normalized == 'requiresnfceligibleclient' ||
         normalized == 'lthumbnfc' ||
         normalized == 'lindexnfc' ||
         normalized == 'lmiddlenfc' ||
@@ -5442,7 +5640,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         future: _resolveClientProfileImageForRequest(r),
         builder: (_, snap) {
           final resolved = (snap.data ?? photo).trim();
-          return resolved.isNotEmpty ? imageFromPath(resolved) : initialFallback();
+          return resolved.isNotEmpty
+              ? imageFromPath(resolved)
+              : initialFallback();
         },
       ),
     );
@@ -5450,10 +5650,12 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   Future<String> _resolveClientProfileImageForRequest(ClientRequestV2 r) async {
     final existing = r.clientProfileImage.trim();
-    if (existing.isNotEmpty && existing.toLowerCase() != 'null') return existing;
+    if (existing.isNotEmpty && existing.toLowerCase() != 'null')
+      return existing;
 
     final accepted = r.acceptedClientProfileImage.trim();
-    if (accepted.isNotEmpty && accepted.toLowerCase() != 'null') return accepted;
+    if (accepted.isNotEmpty && accepted.toLowerCase() != 'null')
+      return accepted;
 
     return _lookupClientProfileImage(
       email: r.clientEmail.trim(),
@@ -5560,7 +5762,12 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       }
     }
     for (final table in const <String>['client', 'clients', 'client_artist']) {
-      for (final column in const <String>['name', 'displayName', 'display_name', 'client_name']) {
+      for (final column in const <String>[
+        'name',
+        'displayName',
+        'display_name',
+        'client_name',
+      ]) {
         final byName = await lookupBy(table, column, name);
         if (byName.isNotEmpty) return byName;
       }
@@ -5771,8 +5978,7 @@ class InReviewDetailsSheet extends StatelessWidget {
   final String acceptLabel;
 
   static final Map<String, Future<_ArtistRequestDisplayContext>>
-      _displayContextFutureCache =
-      <String, Future<_ArtistRequestDisplayContext>>{};
+  _displayContextFutureCache = <String, Future<_ArtistRequestDisplayContext>>{};
 
   String get _displayContextCacheKey =>
       '${request.sourceCollection}:${request.id}:${request.orderNumber}';
@@ -5855,11 +6061,42 @@ class InReviewDetailsSheet extends StatelessWidget {
         row['avatar_url'],
         row['photoUrl'],
         row['photo_url'],
-        profile['profileImageUrl'], profile['profile_image_url'], profile['profile_picture_url'], profile['avatarUrl'], profile['avatar_url'], profile['photoUrl'], profile['photo_url'],
-        basic['profileImageUrl'], basic['profile_image_url'], basic['profile_picture_url'], basic['avatarUrl'], basic['avatar_url'], basic['photoUrl'], basic['photo_url'],
-        client['profileImageUrl'], client['profile_image_url'], client['profile_picture_url'], client['avatarUrl'], client['avatar_url'], client['photoUrl'], client['photo_url'],
-        clientProfile['profileImageUrl'], clientProfile['profile_image_url'], clientProfile['profile_picture_url'], clientProfile['avatarUrl'], clientProfile['avatar_url'], clientProfile['photoUrl'], clientProfile['photo_url'],
-        data['clientProfileImage'], data['client_profile_image'], data['profileImageUrl'], data['profile_image_url'], data['avatarUrl'], data['avatar_url'], data['photoUrl'], data['photo_url'],
+        profile['profileImageUrl'],
+        profile['profile_image_url'],
+        profile['profile_picture_url'],
+        profile['avatarUrl'],
+        profile['avatar_url'],
+        profile['photoUrl'],
+        profile['photo_url'],
+        basic['profileImageUrl'],
+        basic['profile_image_url'],
+        basic['profile_picture_url'],
+        basic['avatarUrl'],
+        basic['avatar_url'],
+        basic['photoUrl'],
+        basic['photo_url'],
+        client['profileImageUrl'],
+        client['profile_image_url'],
+        client['profile_picture_url'],
+        client['avatarUrl'],
+        client['avatar_url'],
+        client['photoUrl'],
+        client['photo_url'],
+        clientProfile['profileImageUrl'],
+        clientProfile['profile_image_url'],
+        clientProfile['profile_picture_url'],
+        clientProfile['avatarUrl'],
+        clientProfile['avatar_url'],
+        clientProfile['photoUrl'],
+        clientProfile['photo_url'],
+        data['clientProfileImage'],
+        data['client_profile_image'],
+        data['profileImageUrl'],
+        data['profile_image_url'],
+        data['avatarUrl'],
+        data['avatar_url'],
+        data['photoUrl'],
+        data['photo_url'],
       ]);
     }
 
@@ -5887,7 +6124,12 @@ class InReviewDetailsSheet extends StatelessWidget {
       }
     }
     for (final table in const <String>['client', 'clients', 'client_artist']) {
-      for (final column in const <String>['name', 'displayName', 'display_name', 'client_name']) {
+      for (final column in const <String>[
+        'name',
+        'displayName',
+        'display_name',
+        'client_name',
+      ]) {
         final byName = await lookupBy(table, column, name);
         if (byName.isNotEmpty) return byName;
       }
@@ -5903,8 +6145,10 @@ class InReviewDetailsSheet extends StatelessWidget {
       if (text.isEmpty) return const <String, dynamic>{};
       try {
         final decoded = jsonDecode(text);
-        if (decoded is Map<String, dynamic>) return Map<String, dynamic>.from(decoded);
-        if (decoded is Map) return decoded.map((k, v) => MapEntry(k.toString(), v));
+        if (decoded is Map<String, dynamic>)
+          return Map<String, dynamic>.from(decoded);
+        if (decoded is Map)
+          return decoded.map((k, v) => MapEntry(k.toString(), v));
       } catch (_) {}
     }
     return const <String, dynamic>{};
@@ -5978,9 +6222,9 @@ class InReviewDetailsSheet extends StatelessWidget {
       final detailRows = requestId.isEmpty
           ? const <dynamic>[]
           : await Supabase.instance.client
-              .from(detailTable)
-              .select()
-              .eq('request_id', requestId);
+                .from(detailTable)
+                .select()
+                .eq('request_id', requestId);
       final mergedDetails = <String, dynamic>{};
       for (final raw in detailRows.whereType<Map>()) {
         final row = Map<String, dynamic>.from(raw);
@@ -6084,7 +6328,8 @@ class InReviewDetailsSheet extends StatelessWidget {
       request.selectedArtist,
     ]);
 
-    final directFlag = _displayTruthy(rootData['is_direct_request']) ||
+    final directFlag =
+        _displayTruthy(rootData['is_direct_request']) ||
         _displayTruthy(rootData['isDirectRequest']) ||
         _displayTruthy(rootData['direct_request']) ||
         _displayTruthy(rootDetails['isDirectRequest']) ||
@@ -6101,7 +6346,8 @@ class InReviewDetailsSheet extends StatelessWidget {
         _displayTruthy(detailsDataJson['is_direct_request']) ||
         _displayTruthy(orderData['isDirectRequest']) ||
         _displayTruthy(orderData['is_direct_request']);
-    final openToArtistPool = _displayTruthy(rootData['open_to_artist_pool']) ||
+    final openToArtistPool =
+        _displayTruthy(rootData['open_to_artist_pool']) ||
         _displayTruthy(rootData['openToArtistPool']) ||
         _displayTruthy(rootDetails['openToArtistPool']) ||
         _displayTruthy(rootDetails['open_to_artist_pool']) ||
@@ -6118,20 +6364,22 @@ class InReviewDetailsSheet extends StatelessWidget {
         _displayTruthy(orderData['openToArtistPool']) ||
         _displayTruthy(orderData['open_to_artist_pool']);
 
-    final requestTypeSaysDirect = requestTypeText.contains('direct') &&
+    final requestTypeSaysDirect =
+        requestTypeText.contains('direct') &&
         !requestTypeText.contains('standard');
-    final requestTypeSaysStandard = requestTypeText.contains('standard') &&
+    final requestTypeSaysStandard =
+        requestTypeText.contains('standard') &&
         !requestTypeText.contains('direct');
-    final hasSelectedArtist = selectedArtistEmail.isNotEmpty ||
-        selectedArtistName.isNotEmpty;
+    final hasSelectedArtist =
+        selectedArtistEmail.isNotEmpty || selectedArtistName.isNotEmpty;
     final isDirectRequest = openToArtistPool
         ? false
         : requestTypeSaysStandard
         ? false
         : (request.isDirectRequest ||
-            directFlag ||
-            requestTypeSaysDirect ||
-            hasSelectedArtist);
+              directFlag ||
+              requestTypeSaysDirect ||
+              hasSelectedArtist);
 
     final orderTypeText = first(<Object?>[
       rootData['order_type'],
@@ -6176,7 +6424,8 @@ class InReviewDetailsSheet extends StatelessWidget {
       ...safeList(orderData['selectedGroupClientEmails']),
       ...safeList(orderData['selected_group_client_emails']),
     ];
-    final isGroupOrder = request.orderType == RequestOrderTypeV2.group ||
+    final isGroupOrder =
+        request.orderType == RequestOrderTypeV2.group ||
         orderTypeText.contains('group') ||
         groupClients.isNotEmpty ||
         request.groupClients.isNotEmpty ||
@@ -6287,7 +6536,9 @@ class InReviewDetailsSheet extends StatelessWidget {
       if (candidate.isEmpty) return false;
       if (_displayIsRequestDescription(candidate)) return false;
       final lower = candidate.toLowerCase();
-      return lower != 'null' && lower != '-' && lower != 'no company bio available';
+      return lower != 'null' &&
+          lower != '-' &&
+          lower != 'no company bio available';
     }
 
     String bioFromCompanyRow(Map<String, dynamic> row) {
@@ -6318,8 +6569,9 @@ class InReviewDetailsSheet extends StatelessWidget {
     }
 
     String bioFromSnapshot(Map<String, dynamic> source) {
-      final snapshot = safeMap(source['companyProfileSnapshot'] ??
-          source['company_profile_snapshot']);
+      final snapshot = safeMap(
+        source['companyProfileSnapshot'] ?? source['company_profile_snapshot'],
+      );
       final company = safeMap(snapshot['company']);
       final candidates = <Object?>[
         company['bio'],
@@ -6488,9 +6740,20 @@ class InReviewDetailsSheet extends StatelessWidget {
       if (value is Map) {
         final map = value.map((k, v) => MapEntry(k.toString(), v));
         for (final key in const <String>[
-          'url', 'downloadUrl', 'downloadURL', 'photoUrl', 'imageUrl',
-          'image', 'path', 'storagePath', 'fullPath', 'ref', 'photo',
-          'src', 'uri', 'value',
+          'url',
+          'downloadUrl',
+          'downloadURL',
+          'photoUrl',
+          'imageUrl',
+          'image',
+          'path',
+          'storagePath',
+          'fullPath',
+          'ref',
+          'photo',
+          'src',
+          'uri',
+          'value',
         ]) {
           if (map.containsKey(key)) addRaw(map[key], target);
         }
@@ -6520,7 +6783,10 @@ class InReviewDetailsSheet extends StatelessWidget {
           .doc(request.id);
       final rootSnap = await docRef.get();
       final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef.collection('details').doc('payload').get();
+      final detailsSnap = await docRef
+          .collection('details')
+          .doc('payload')
+          .get();
       final detailsData = detailsSnap.data() ?? const <String, dynamic>{};
 
       void addFromSource(Map<String, dynamic> source) {
@@ -6539,9 +6805,17 @@ class InReviewDetailsSheet extends StatelessWidget {
         addRaw(source['preview_image_asset'], rawCandidates);
 
         final payload = asMap(source['payload']);
-        final requestDetails = asMap(source['requestDetails'] ?? source['request_details']);
-        final orderData = asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
-        for (final nested in <Map<String, dynamic>>[payload, requestDetails, orderData]) {
+        final requestDetails = asMap(
+          source['requestDetails'] ?? source['request_details'],
+        );
+        final orderData = asMap(
+          source['order'] ?? source['orderData'] ?? source['order_data'],
+        );
+        for (final nested in <Map<String, dynamic>>[
+          payload,
+          requestDetails,
+          orderData,
+        ]) {
           addRaw(nested['clientImages'], rawCandidates);
           addRaw(nested['client_images'], rawCandidates);
           addRaw(nested['inspirationPhotos'], rawCandidates);
@@ -6561,14 +6835,24 @@ class InReviewDetailsSheet extends StatelessWidget {
           asMap(source['groupOrder'] ?? source['group_order'])['clients'],
           source['groupClients'],
           source['group_clients'],
+          source['selectedGroupClients'],
+          source['selected_group_clients'],
           payload['groupClients'],
           payload['group_clients'],
+          payload['selectedGroupClients'],
+          payload['selected_group_clients'],
           asMap(payload['groupOrder'] ?? payload['group_order'])['clients'],
           requestDetails['groupClients'],
           requestDetails['group_clients'],
-          asMap(requestDetails['groupOrder'] ?? requestDetails['group_order'])['clients'],
+          requestDetails['selectedGroupClients'],
+          requestDetails['selected_group_clients'],
+          asMap(
+            requestDetails['groupOrder'] ?? requestDetails['group_order'],
+          )['clients'],
           orderData['groupClients'],
           orderData['group_clients'],
+          orderData['selectedGroupClients'],
+          orderData['selected_group_clients'],
           asMap(orderData['groupOrder'] ?? orderData['group_order'])['clients'],
         ];
         for (final groupSource in groupSources) {
@@ -6594,7 +6878,8 @@ class InReviewDetailsSheet extends StatelessWidget {
       final normalized = _normalizeImagePath(raw).trim();
       if (normalized.isEmpty) continue;
       final lower = normalized.toLowerCase();
-      if (lower == 'null' || lower == '-' || lower == '[]' || lower == '{}') continue;
+      if (lower == 'null' || lower == '-' || lower == '[]' || lower == '{}')
+        continue;
       if (lower.startsWith('assets/images/order_thumb') ||
           lower.startsWith('assets/images/placeholder') ||
           lower.startsWith('assets/icons/')) {
@@ -6616,24 +6901,147 @@ class InReviewDetailsSheet extends StatelessWidget {
 
   Future<_RequestNfcDetails> _loadRequestedNfcDetails() async {
     try {
-      final docRef = SupabaseCompatDatabase.instance
-          .collection(request.sourceCollection)
-          .doc(request.id);
-      final rootSnap = await docRef.get();
-      final rootData = rootSnap.data() ?? const <String, dynamic>{};
-      final detailsSnap = await docRef
-          .collection('details')
-          .doc('payload')
-          .get();
-      final detailsData = detailsSnap.data() ?? const <String, dynamic>{};
+      RequestNfcDetails sharedNfc = RequestNfcDetails.emptyConst;
+      try {
+        sharedNfc = await loadRequestNfcDetails(
+          sourceCollection: request.sourceCollection,
+          requestId: request.id,
+          requestOrderNumber: request.orderNumber,
+        );
+      } catch (e, st) {
+        debugPrint(
+          'IN_REVIEW_GROUP_SHARED_NFC_ERROR request=${request.id} '
+          'order=${request.orderNumber} error=$e',
+        );
+        debugPrintStack(stackTrace: st);
+      }
+      final table = request.sourceCollection == 'Client_Custom_Requests'
+          ? 'client_custom_requests'
+          : (request.sourceCollection == 'Company_Custom_Requests'
+                ? 'company_custom_requests'
+                : request.sourceCollection);
+      final detailsTable = table == 'client_custom_requests'
+          ? 'client_custom_requests_details'
+          : (table == 'company_custom_requests'
+                ? 'company_custom_requests_details'
+                : '${table}_details');
+      final supabase = Supabase.instance.client;
+
+      Map<String, dynamic> rootData =
+          await supabase
+              .from(table)
+              .select()
+              .eq('id', request.id)
+              .maybeSingle() ??
+          const <String, dynamic>{};
+      if (rootData.isEmpty && request.orderNumber.trim().isNotEmpty) {
+        rootData =
+            await supabase
+                .from(table)
+                .select()
+                .or(
+                  'order_number.eq.${request.orderNumber.trim()},request_number.eq.${request.orderNumber.trim()},client_request_number.eq.${request.orderNumber.trim()}',
+                )
+                .maybeSingle() ??
+            const <String, dynamic>{};
+      }
+
+      final resolvedRequestId = (rootData['id'] ?? request.id)
+          .toString()
+          .trim();
+      List<dynamic> detailRows = const <dynamic>[];
+      try {
+        detailRows = await supabase
+            .from(detailsTable)
+            .select()
+            .eq('request_id', resolvedRequestId);
+      } catch (e, st) {
+        debugPrint(
+          'IN_REVIEW_GROUP_DETAIL_ROWS_ERROR request=${request.id} '
+          'table=$detailsTable resolvedRequestId=$resolvedRequestId error=$e',
+        );
+        debugPrintStack(stackTrace: st);
+      }
+
+      Map<String, dynamic> mergedDetailRows(List<dynamic> rows) {
+        Map<String, dynamic> payloadDoc = <String, dynamic>{};
+        final merged = <String, dynamic>{};
+
+        bool isPayloadRow(Map<String, dynamic> row) {
+          final docId = (row['doc_id'] ?? row['detail_key'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          final id = (row['id'] ?? '').toString().trim().toLowerCase();
+          return docId == 'payload' || id.endsWith(':payload');
+        }
+
+        for (final raw in rows) {
+          final row = raw is Map<String, dynamic>
+              ? raw
+              : (raw is Map
+                    ? raw.map((key, value) => MapEntry(key.toString(), value))
+                    : <String, dynamic>{});
+          if (row.isEmpty) continue;
+          final payload = row['payload'] is Map<String, dynamic>
+              ? Map<String, dynamic>.from(
+                  row['payload'] as Map<String, dynamic>,
+                )
+              : (row['payload'] is Map
+                    ? (row['payload'] as Map).map(
+                        (key, value) => MapEntry(key.toString(), value),
+                      )
+                    : <String, dynamic>{});
+          final data = row['data'] is Map<String, dynamic>
+              ? Map<String, dynamic>.from(row['data'] as Map<String, dynamic>)
+              : (row['data'] is Map
+                    ? (row['data'] as Map).map(
+                        (key, value) => MapEntry(key.toString(), value),
+                      )
+                    : <String, dynamic>{});
+          final effective = data.isNotEmpty
+              ? data
+              : (payload.isNotEmpty ? payload : row);
+          merged.addAll(effective);
+          if (isPayloadRow(row)) {
+            payloadDoc = effective;
+          }
+        }
+
+        return payloadDoc.isNotEmpty ? payloadDoc : merged;
+      }
+
+      final detailsData = mergedDetailRows(detailRows);
 
       Map<String, dynamic> asMap(Object? value) {
+        if (value is String) {
+          final text = value.trim();
+          if (text.startsWith('{') && text.endsWith('}')) {
+            try {
+              final decoded = jsonDecode(text);
+              if (decoded is Map) {
+                return decoded.map(
+                  (key, value) => MapEntry(key.toString(), value),
+                );
+              }
+            } catch (_) {}
+          }
+        }
         if (value is Map<String, dynamic>) return value;
         if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
         return const <String, dynamic>{};
       }
 
       List<dynamic> asList(Object? value) {
+        if (value is String) {
+          final text = value.trim();
+          if (text.startsWith('[') && text.endsWith(']')) {
+            try {
+              final decoded = jsonDecode(text);
+              if (decoded is List) return decoded;
+            } catch (_) {}
+          }
+        }
         if (value is List) return value;
         return const <dynamic>[];
       }
@@ -6672,12 +7080,29 @@ class InReviewDetailsSheet extends StatelessWidget {
         };
       }
 
-      Map<String, String> firstDims(List<Object?> sources, {required bool left}) {
+      Map<String, String> firstDims(
+        List<Object?> sources, {
+        required bool left,
+      }) {
         for (final source in sources) {
           final dims = dimsFrom(source, left: left);
           if (dims.values.any((v) => v.trim().isNotEmpty)) return dims;
         }
         return const <String, String>{};
+      }
+
+      NailDimensionsV2 nailDimsFromMap(Map<String, String> source) {
+        return NailDimensionsV2(
+          thumb: (source['thumb'] ?? '').trim(),
+          index: (source['index'] ?? '').trim(),
+          middle: (source['middle'] ?? '').trim(),
+          ring: (source['ring'] ?? '').trim(),
+          pinky: (source['pinky'] ?? '').trim(),
+        );
+      }
+
+      bool hasDims(Map<String, String> source) {
+        return source.values.any((value) => value.trim().isNotEmpty);
       }
 
       final detailsPayload = asMap(detailsData['payload']);
@@ -6687,7 +7112,9 @@ class InReviewDetailsSheet extends StatelessWidget {
         detailsData['requestDetails'] ?? detailsData['request_details'],
       );
       final detailsOrderData = asMap(
-        detailsData['order'] ?? detailsData['orderData'] ?? detailsData['order_data'],
+        detailsData['order'] ??
+            detailsData['orderData'] ??
+            detailsData['order_data'],
       );
       final rootPayload = asMap(rootData['payload']);
       final rootDetails = asMap(rootData['details']);
@@ -6698,11 +7125,93 @@ class InReviewDetailsSheet extends StatelessWidget {
       final rootOrderData = asMap(
         rootData['order'] ?? rootData['orderData'] ?? rootData['order_data'],
       );
+
+      // Fast path for Supabase client_custom_requests rows.
+      // Client submissions store the selected NFC checkboxes under:
+      // details.nailPreferences.dimensions.nfc and/or details.nailPreferences.dimensions.*Nfc.
+      // Parse that exact submitted snapshot before any profile fallback data,
+      // because profile snapshots can contain the same dimensions with all NFC flags false.
+      final submittedDetails = asMap(rootData['details']);
+      final submittedNailPrefs = asMap(
+        submittedDetails['nailPreferences'] ??
+            submittedDetails['nail_preferences'],
+      );
+      final submittedDims = asMap(submittedNailPrefs['dimensions']);
+      final submittedNfc = _FingerNfcSelection.fromDimensionsMap(submittedDims);
+      final hasGroupClientsInPayload =
+          request.groupClients.isNotEmpty ||
+          asList(
+            asMap(rootData['groupOrder'] ?? rootData['group_order'])['clients'],
+          ).isNotEmpty ||
+          asList(
+            asMap(
+              rootDetails['groupOrder'] ?? rootDetails['group_order'],
+            )['clients'],
+          ).isNotEmpty ||
+          asList(
+            rootData['groupClients'] ?? rootData['group_clients'],
+          ).isNotEmpty ||
+          asList(
+            rootDetails['groupClients'] ?? rootDetails['group_clients'],
+          ).isNotEmpty ||
+          asList(
+            asMap(
+              detailsData['groupOrder'] ?? detailsData['group_order'],
+            )['clients'],
+          ).isNotEmpty ||
+          asList(
+            asMap(
+              detailsDetails['groupOrder'] ?? detailsDetails['group_order'],
+            )['clients'],
+          ).isNotEmpty ||
+          asList(
+            detailsData['groupClients'] ?? detailsData['group_clients'],
+          ).isNotEmpty ||
+          asList(
+            detailsDetails['groupClients'] ?? detailsDetails['group_clients'],
+          ).isNotEmpty;
+      if (submittedNfc.anySelected && !hasGroupClientsInPayload) {
+        final submittedLeft = dimsFrom(submittedDims, left: true);
+        final submittedRight = dimsFrom(submittedDims, left: false);
+        final submittedShape = firstNonEmpty(<Object?>[
+          submittedNailPrefs['shape'],
+          rootData['nail_shape'],
+          rootData['nailShape'],
+          request.nailShape,
+        ]);
+        final submittedLength = firstNonEmpty(<Object?>[
+          submittedNailPrefs['length'],
+          rootData['nail_length'],
+          rootData['nailLength'],
+          request.nailLength,
+        ]);
+        return _RequestNfcDetails(
+          main: submittedNfc,
+          groupBySlotIndex: const <int, _FingerNfcSelection>{},
+          groupTabs: const <_OrderClientTabData>[],
+          submittedClient: _OrderClientTabData(
+            name: request.clientName.trim().isEmpty
+                ? 'Client'
+                : request.clientName.trim(),
+            nailShape: submittedShape,
+            nailLength: submittedLength,
+            leftHand: hasDims(submittedLeft)
+                ? nailDimsFromMap(submittedLeft)
+                : request.leftHand,
+            rightHand: hasDims(submittedRight)
+                ? nailDimsFromMap(submittedRight)
+                : request.rightHand,
+            nfc: submittedNfc,
+          ),
+        );
+      }
       final detailsSnapshot = asMap(
-        detailsData['clientProfileSnapshot'] ?? detailsData['client_profile_snapshot'],
+        detailsData['clientProfileSnapshot'] ??
+            detailsData['client_profile_snapshot'],
       );
       final rootSnapshot = asMap(
-        rootData['clientProfileSnapshot'] ?? rootData['client_profile_snapshot'],
+        rootData['clientProfileSnapshot'] ??
+            rootData['client_profile_snapshot'],
       );
       final detailsDetailsPayload = asMap(detailsDetails['payload']);
       final rootDetailsPayload = asMap(rootDetails['payload']);
@@ -6718,7 +7227,9 @@ class InReviewDetailsSheet extends StatelessWidget {
             detailsDetails['order_data'],
       );
       final rootDetailsOrderData = asMap(
-        rootDetails['order'] ?? rootDetails['orderData'] ?? rootDetails['order_data'],
+        rootDetails['order'] ??
+            rootDetails['orderData'] ??
+            rootDetails['order_data'],
       );
       final detailsDataJsonRequestDetails = asMap(
         detailsDataJson['requestDetails'] ?? detailsDataJson['request_details'],
@@ -6732,14 +7243,17 @@ class InReviewDetailsSheet extends StatelessWidget {
             detailsDataJson['order_data'],
       );
       final rootDataJsonOrderData = asMap(
-        rootDataJson['order'] ?? rootDataJson['orderData'] ?? rootDataJson['order_data'],
+        rootDataJson['order'] ??
+            rootDataJson['orderData'] ??
+            rootDataJson['order_data'],
       );
       final detailsDetailsSnapshot = asMap(
         detailsDetails['clientProfileSnapshot'] ??
             detailsDetails['client_profile_snapshot'],
       );
       final rootDetailsSnapshot = asMap(
-        rootDetails['clientProfileSnapshot'] ?? rootDetails['client_profile_snapshot'],
+        rootDetails['clientProfileSnapshot'] ??
+            rootDetails['client_profile_snapshot'],
       );
       final detailsDataJsonSnapshot = asMap(
         detailsDataJson['clientProfileSnapshot'] ??
@@ -6751,40 +7265,234 @@ class InReviewDetailsSheet extends StatelessWidget {
       );
 
       final mainCandidates = <Map<String, dynamic>>[
-        asMap(asMap(detailsData['nailPreferences'] ?? detailsData['nail_preferences'])['dimensions']),
-        asMap(asMap(rootData['nailPreferences'] ?? rootData['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDetails['nailPreferences'] ?? detailsDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDetails['nailPreferences'] ?? rootDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDataJson['nailPreferences'] ?? detailsDataJson['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDataJson['nailPreferences'] ?? rootDataJson['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsRequestDetails['nailPreferences'] ?? detailsRequestDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(rootRequestDetails['nailPreferences'] ?? rootRequestDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDetailsRequestDetails['nailPreferences'] ?? detailsDetailsRequestDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDetailsRequestDetails['nailPreferences'] ?? rootDetailsRequestDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDataJsonRequestDetails['nailPreferences'] ?? detailsDataJsonRequestDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDataJsonRequestDetails['nailPreferences'] ?? rootDataJsonRequestDetails['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsPayload['nailPreferences'] ?? detailsPayload['nail_preferences'])['dimensions']),
-        asMap(asMap(rootPayload['nailPreferences'] ?? rootPayload['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDetailsPayload['nailPreferences'] ?? detailsDetailsPayload['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDetailsPayload['nailPreferences'] ?? rootDetailsPayload['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsSnapshot['nailPreferences'] ?? detailsSnapshot['nail_preferences'])['dimensions']),
-        asMap(asMap(rootSnapshot['nailPreferences'] ?? rootSnapshot['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDetailsSnapshot['nailPreferences'] ?? detailsDetailsSnapshot['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDetailsSnapshot['nailPreferences'] ?? rootDetailsSnapshot['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDataJsonSnapshot['nailPreferences'] ?? detailsDataJsonSnapshot['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDataJsonSnapshot['nailPreferences'] ?? rootDataJsonSnapshot['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsOrderData['nailPreferences'] ?? detailsOrderData['nail_preferences'])['dimensions']),
-        asMap(asMap(rootOrderData['nailPreferences'] ?? rootOrderData['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDetailsOrderData['nailPreferences'] ?? detailsDetailsOrderData['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDetailsOrderData['nailPreferences'] ?? rootDetailsOrderData['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsDataJsonOrderData['nailPreferences'] ?? detailsDataJsonOrderData['nail_preferences'])['dimensions']),
-        asMap(asMap(rootDataJsonOrderData['nailPreferences'] ?? rootDataJsonOrderData['nail_preferences'])['dimensions']),
-        asMap(asMap(detailsData['apiNailMeasurements'] ?? detailsData['api_nail_measurements'])['dimensions']),
-        asMap(asMap(rootData['apiNailMeasurements'] ?? rootData['api_nail_measurements'])['dimensions']),
-        asMap(asMap(detailsDetails['apiNailMeasurements'] ?? detailsDetails['api_nail_measurements'])['dimensions']),
-        asMap(asMap(rootDetails['apiNailMeasurements'] ?? rootDetails['api_nail_measurements'])['dimensions']),
-        asMap(asMap(detailsDataJson['apiNailMeasurements'] ?? detailsDataJson['api_nail_measurements'])['dimensions']),
-        asMap(asMap(rootDataJson['apiNailMeasurements'] ?? rootDataJson['api_nail_measurements'])['dimensions']),
+        rootData,
+        detailsData,
+        rootPayload,
+        detailsPayload,
+        rootDetails,
+        detailsDetails,
+        rootDataJson,
+        detailsDataJson,
+        rootRequestDetails,
+        detailsRequestDetails,
+        rootOrderData,
+        detailsOrderData,
+        asMap(rootData['nfc']),
+        asMap(detailsData['nfc']),
+        asMap(rootPayload['nfc']),
+        asMap(detailsPayload['nfc']),
+        asMap(rootDetails['nfc']),
+        asMap(detailsDetails['nfc']),
+        asMap(rootDataJson['nfc']),
+        asMap(detailsDataJson['nfc']),
+        asMap(rootRequestDetails['nfc']),
+        asMap(detailsRequestDetails['nfc']),
+        asMap(rootOrderData['nfc']),
+        asMap(detailsOrderData['nfc']),
+        asMap(rootData['nfcSelection'] ?? rootData['nfc_selection']),
+        asMap(detailsData['nfcSelection'] ?? detailsData['nfc_selection']),
+        asMap(rootPayload['nfcSelection'] ?? rootPayload['nfc_selection']),
+        asMap(
+          detailsPayload['nfcSelection'] ?? detailsPayload['nfc_selection'],
+        ),
+        asMap(
+          asMap(
+            detailsData['nailPreferences'] ?? detailsData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootData['nailPreferences'] ?? rootData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDetails['nailPreferences'] ??
+                detailsDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDetails['nailPreferences'] ?? rootDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDataJson['nailPreferences'] ??
+                detailsDataJson['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDataJson['nailPreferences'] ?? rootDataJson['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsRequestDetails['nailPreferences'] ??
+                detailsRequestDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootRequestDetails['nailPreferences'] ??
+                rootRequestDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDetailsRequestDetails['nailPreferences'] ??
+                detailsDetailsRequestDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDetailsRequestDetails['nailPreferences'] ??
+                rootDetailsRequestDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDataJsonRequestDetails['nailPreferences'] ??
+                detailsDataJsonRequestDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDataJsonRequestDetails['nailPreferences'] ??
+                rootDataJsonRequestDetails['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsPayload['nailPreferences'] ??
+                detailsPayload['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootPayload['nailPreferences'] ?? rootPayload['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDetailsPayload['nailPreferences'] ??
+                detailsDetailsPayload['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDetailsPayload['nailPreferences'] ??
+                rootDetailsPayload['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsSnapshot['nailPreferences'] ??
+                detailsSnapshot['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootSnapshot['nailPreferences'] ?? rootSnapshot['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDetailsSnapshot['nailPreferences'] ??
+                detailsDetailsSnapshot['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDetailsSnapshot['nailPreferences'] ??
+                rootDetailsSnapshot['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDataJsonSnapshot['nailPreferences'] ??
+                detailsDataJsonSnapshot['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDataJsonSnapshot['nailPreferences'] ??
+                rootDataJsonSnapshot['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsOrderData['nailPreferences'] ??
+                detailsOrderData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootOrderData['nailPreferences'] ??
+                rootOrderData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDetailsOrderData['nailPreferences'] ??
+                detailsDetailsOrderData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDetailsOrderData['nailPreferences'] ??
+                rootDetailsOrderData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDataJsonOrderData['nailPreferences'] ??
+                detailsDataJsonOrderData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDataJsonOrderData['nailPreferences'] ??
+                rootDataJsonOrderData['nail_preferences'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsData['apiNailMeasurements'] ??
+                detailsData['api_nail_measurements'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootData['apiNailMeasurements'] ??
+                rootData['api_nail_measurements'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDetails['apiNailMeasurements'] ??
+                detailsDetails['api_nail_measurements'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDetails['apiNailMeasurements'] ??
+                rootDetails['api_nail_measurements'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            detailsDataJson['apiNailMeasurements'] ??
+                detailsDataJson['api_nail_measurements'],
+          )['dimensions'],
+        ),
+        asMap(
+          asMap(
+            rootDataJson['apiNailMeasurements'] ??
+                rootDataJson['api_nail_measurements'],
+          )['dimensions'],
+        ),
         asMap(detailsData['dimensions']),
         asMap(rootData['dimensions']),
         asMap(detailsDetails['dimensions']),
@@ -6805,28 +7513,92 @@ class InReviewDetailsSheet extends StatelessWidget {
             text == 'enabled';
       }
 
+      bool containsSelectedNfcCheckbox(Object? value) {
+        bool isNfcCheckboxKey(String key) {
+          final normalized = key.trim().toLowerCase();
+          return normalized == 'nfcrequested' ||
+              normalized == 'nfcselected' ||
+              normalized == 'hasnfc' ||
+              normalized == 'lthumbnfc' ||
+              normalized == 'lindexnfc' ||
+              normalized == 'lmiddlenfc' ||
+              normalized == 'lringnfc' ||
+              normalized == 'lpinkynfc' ||
+              normalized == 'rthumbnfc' ||
+              normalized == 'rindexnfc' ||
+              normalized == 'rmiddlenfc' ||
+              normalized == 'rringnfc' ||
+              normalized == 'rpinkynfc' ||
+              normalized == 'thumbnfc' ||
+              normalized == 'indexnfc' ||
+              normalized == 'middlenfc' ||
+              normalized == 'ringnfc' ||
+              normalized == 'pinkynfc';
+        }
+
+        if (value == null) return false;
+        if (value is Map) {
+          for (final entry in value.entries) {
+            final key = entry.key.toString();
+            final entryValue = entry.value;
+            if (isNfcCheckboxKey(key) && truthy(entryValue)) return true;
+            if (entryValue is Map || entryValue is List) {
+              if (containsSelectedNfcCheckbox(entryValue)) return true;
+            }
+          }
+          return false;
+        }
+        if (value is List) {
+          for (final item in value) {
+            if (containsSelectedNfcCheckbox(item)) return true;
+          }
+        }
+        return false;
+      }
+
       bool requestHasNfc(Map<String, dynamic> source) {
         final summary = asMap(source['summary']);
         final nfc = asMap(source['nfc']);
         return truthy(source['nfcRequested']) ||
             truthy(source['nfcSelected']) ||
             truthy(source['hasNfc']) ||
+            truthy(source['nfcRequest']) ||
+            truthy(source['nfcEnabled']) ||
+            truthy(source['requiresNfcEligibleClient']) ||
+            truthy(source['nfc_request']) ||
+            truthy(source['nfc_enabled']) ||
+            truthy(source['requires_nfc_eligible_client']) ||
             truthy(source['nfc_requested']) ||
             truthy(source['nfc_selected']) ||
             truthy(source['has_nfc']) ||
             truthy(summary['nfcRequested']) ||
             truthy(summary['nfcSelected']) ||
             truthy(summary['hasNfc']) ||
+            truthy(summary['nfcRequest']) ||
+            truthy(summary['nfcEnabled']) ||
+            truthy(summary['requiresNfcEligibleClient']) ||
+            truthy(summary['nfc_request']) ||
+            truthy(summary['nfc_enabled']) ||
+            truthy(summary['requires_nfc_eligible_client']) ||
             truthy(summary['nfc_requested']) ||
             truthy(summary['nfc_selected']) ||
             truthy(summary['has_nfc']) ||
             truthy(nfc['requested']) ||
             truthy(nfc['selected']) ||
             truthy(nfc['hasNfc']) ||
-            truthy(nfc['has_nfc']);
+            truthy(nfc['nfcRequest']) ||
+            truthy(nfc['nfcEnabled']) ||
+            truthy(nfc['requiresNfcEligibleClient']) ||
+            truthy(nfc['nfc_request']) ||
+            truthy(nfc['nfc_enabled']) ||
+            truthy(nfc['requires_nfc_eligible_client']) ||
+            truthy(nfc['has_nfc']) ||
+            containsSelectedNfcCheckbox(source);
       }
 
-      var main = _FingerNfcSelection.empty();
+      var main = submittedNfc.anySelected
+          ? submittedNfc
+          : _FingerNfcSelection.empty();
       for (final candidate in mainCandidates) {
         final parsed = _FingerNfcSelection.fromDimensionsMap(candidate);
         if (parsed.anySelected) {
@@ -6834,13 +7606,34 @@ class InReviewDetailsSheet extends StatelessWidget {
           break;
         }
       }
-      if (!main.anySelected && (requestHasNfc(rootData) || requestHasNfc(detailsData))) {
+      if (!main.anySelected &&
+          (requestHasNfc(rootData) || requestHasNfc(detailsData))) {
         for (final candidate in mainCandidates) {
-          final parsed = _FingerNfcSelection.fromEligibleDimensionsMap(candidate);
+          final parsed = _FingerNfcSelection.fromEligibleDimensionsMap(
+            candidate,
+          );
           if (parsed.anySelected) {
             main = parsed;
             break;
           }
+        }
+        if (!main.anySelected) {
+          final modelDims = <String, dynamic>{
+            'lThumb': request.leftHand.thumb,
+            'lIndex': request.leftHand.index,
+            'lMiddle': request.leftHand.middle,
+            'lRing': request.leftHand.ring,
+            'lPinky': request.leftHand.pinky,
+            'rThumb': request.rightHand.thumb,
+            'rIndex': request.rightHand.index,
+            'rMiddle': request.rightHand.middle,
+            'rRing': request.rightHand.ring,
+            'rPinky': request.rightHand.pinky,
+          };
+          final parsed = _FingerNfcSelection.fromEligibleDimensionsMap(
+            modelDims,
+          );
+          if (parsed.anySelected) main = parsed;
         }
       }
 
@@ -6883,9 +7676,13 @@ class InReviewDetailsSheet extends StatelessWidget {
       }
 
       Map<String, dynamic> profileNailSource(Map<String, dynamic> profileRow) {
-        final saved = asMap(profileRow['savedNails'] ?? profileRow['saved_nails']);
+        final saved = asMap(
+          profileRow['savedNails'] ?? profileRow['saved_nails'],
+        );
         if (saved.isNotEmpty) return saved;
-        final draft = asMap(profileRow['draftNails'] ?? profileRow['draft_nails']);
+        final draft = asMap(
+          profileRow['draftNails'] ?? profileRow['draft_nails'],
+        );
         if (draft.isNotEmpty) return draft;
         final nailPrefs = asMap(
           profileRow['nailPreferences'] ?? profileRow['nail_preferences'],
@@ -6900,12 +7697,16 @@ class InReviewDetailsSheet extends StatelessWidget {
       }
 
       Future<_OrderClientTabData?> buildProfileTab({
+        required int slotIndex,
         required String fallbackName,
         required String email,
         required String clientId,
         required _FingerNfcSelection nfc,
       }) async {
-        final profileRow = await loadClientProfile(email: email, clientId: clientId);
+        final profileRow = await loadClientProfile(
+          email: email,
+          clientId: clientId,
+        );
         if (profileRow.isEmpty) return null;
         final basic = asMap(profileRow['basic']);
         final profile = asMap(profileRow['profile']);
@@ -6926,7 +7727,8 @@ class InReviewDetailsSheet extends StatelessWidget {
           profileRow['dimensions'],
           client['dimensions'],
         ], left: false);
-        final hasDimensions = left.values.any((v) => v.trim().isNotEmpty) ||
+        final hasDimensions =
+            left.values.any((v) => v.trim().isNotEmpty) ||
             right.values.any((v) => v.trim().isNotEmpty);
         final shape = firstNonEmpty(<Object?>[
           nailSource['shape'],
@@ -6948,6 +7750,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         ]);
         if (!hasDimensions && shape.isEmpty && length.isEmpty) return null;
         return _OrderClientTabData(
+          slotIndex: slotIndex,
           name: firstNonEmpty(<Object?>[
             fallbackName,
             basic['name'],
@@ -6961,26 +7764,36 @@ class InReviewDetailsSheet extends StatelessWidget {
           ], fallback: 'Client'),
           nailShape: shape,
           nailLength: length,
-          leftHand: left,
-          rightHand: right,
+          leftHand: nailDimsFromMap(left),
+          rightHand: nailDimsFromMap(right),
           nfc: nfc,
         );
       }
 
       Future<void> addGroupClientsFrom(Map<String, dynamic> source) async {
         final payload = asMap(source['payload']);
-        final requestDetails = asMap(source['requestDetails'] ?? source['request_details']);
-        final orderData = asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
+        final details = asMap(source['details']);
+        final requestDetails = asMap(
+          source['requestDetails'] ?? source['request_details'],
+        );
+        final orderData = asMap(
+          source['order'] ?? source['orderData'] ?? source['order_data'],
+        );
         final groupSources = <Object?>[
           asMap(source['groupOrder'] ?? source['group_order'])['clients'],
           source['groupClients'],
           source['group_clients'],
+          asMap(details['groupOrder'] ?? details['group_order'])['clients'],
+          details['groupClients'],
+          details['group_clients'],
           payload['groupClients'],
           payload['group_clients'],
           asMap(payload['groupOrder'] ?? payload['group_order'])['clients'],
           requestDetails['groupClients'],
           requestDetails['group_clients'],
-          asMap(requestDetails['groupOrder'] ?? requestDetails['group_order'])['clients'],
+          asMap(
+            requestDetails['groupOrder'] ?? requestDetails['group_order'],
+          )['clients'],
           orderData['groupClients'],
           orderData['group_clients'],
           asMap(orderData['groupOrder'] ?? orderData['group_order'])['clients'],
@@ -6989,9 +7802,54 @@ class InReviewDetailsSheet extends StatelessWidget {
         for (final sourceList in groupSources) {
           for (final rawClient in asList(sourceList)) {
             final client = asMap(rawClient);
-            if (client.isEmpty) continue;
+            if (client.isEmpty) {
+              final text = (rawClient ?? '').toString().trim();
+              if (text.isEmpty || text.toLowerCase() == 'null') continue;
+              final slotIndex = groupTabs.length + 1;
+              final email = text.contains('@') ? text.toLowerCase() : '';
+              final key = email.isNotEmpty
+                  ? email
+                  : 'label:${text.toLowerCase()}';
+              if (!seenClientKeys.add(key)) continue;
+              final tab = await buildProfileTab(
+                slotIndex: slotIndex,
+                fallbackName: text,
+                email: email,
+                clientId: '',
+                nfc: groupBySlot[slotIndex] ?? _FingerNfcSelection.empty(),
+              );
+              if (tab != null) {
+                groupTabs.add(tab);
+              } else {
+                groupTabs.add(
+                  _OrderClientTabData(
+                    slotIndex: slotIndex,
+                    name: text,
+                    nailShape: '',
+                    nailLength: '',
+                    leftHand: const NailDimensionsV2(
+                      thumb: '',
+                      index: '',
+                      middle: '',
+                      ring: '',
+                      pinky: '',
+                    ),
+                    rightHand: const NailDimensionsV2(
+                      thumb: '',
+                      index: '',
+                      middle: '',
+                      ring: '',
+                      pinky: '',
+                    ),
+                    nfc: groupBySlot[slotIndex] ?? _FingerNfcSelection.empty(),
+                  ),
+                );
+              }
+              continue;
+            }
 
-            final slotIndex = _parseInt(
+            final slotIndex =
+                _parseInt(
                   client['slotIndex'] ??
                       client['slot_index'] ??
                       client['index'] ??
@@ -7010,20 +7868,33 @@ class InReviewDetailsSheet extends StatelessWidget {
               client['id'],
               client['uid'],
             ]);
-            final key = email.isNotEmpty ? email : (clientId.isNotEmpty ? clientId : 'slot_$slotIndex');
+            final key = email.isNotEmpty
+                ? email
+                : (clientId.isNotEmpty ? clientId : 'slot_$slotIndex');
             if (!seenClientKeys.add(key)) continue;
 
-            final profileRow = await loadClientProfile(email: email, clientId: clientId);
+            final profileRow = await loadClientProfile(
+              email: email,
+              clientId: clientId,
+            );
             final profileNails = profileNailSource(profileRow);
 
-            final savedNails = asMap(client['savedNails'] ?? client['saved_nails']);
-            final draftNails = asMap(client['draftNails'] ?? client['draft_nails']);
-            final nailPreferences = asMap(client['nailPreferences'] ?? client['nail_preferences']);
+            final savedNails = asMap(
+              client['savedNails'] ?? client['saved_nails'],
+            );
+            final draftNails = asMap(
+              client['draftNails'] ?? client['draft_nails'],
+            );
+            final nailPreferences = asMap(
+              client['nailPreferences'] ?? client['nail_preferences'],
+            );
             final nailSource = savedNails.isNotEmpty
                 ? savedNails
                 : (draftNails.isNotEmpty
-                    ? draftNails
-                    : (nailPreferences.isNotEmpty ? nailPreferences : profileNails));
+                      ? draftNails
+                      : (nailPreferences.isNotEmpty
+                            ? nailPreferences
+                            : profileNails));
 
             final left = firstDims(<Object?>[
               client['leftHandDimensions'],
@@ -7058,12 +7929,45 @@ class InReviewDetailsSheet extends StatelessWidget {
               client['order'] ?? client['orderData'] ?? client['order_data'],
             );
             final candidateMaps = <Map<String, dynamic>>[
-              asMap(asMap(client['savedNails'] ?? client['saved_nails'])['dimensions']),
-              asMap(asMap(client['draftNails'] ?? client['draft_nails'])['dimensions']),
-              asMap(asMap(client['nailPreferences'] ?? client['nail_preferences'])['dimensions']),
-              asMap(asMap(requestDetailsMap['nailPreferences'] ?? requestDetailsMap['nail_preferences'])['dimensions']),
-              asMap(asMap(requestPayload['nailPreferences'] ?? requestPayload['nail_preferences'])['dimensions']),
-              asMap(asMap(orderMap['nailPreferences'] ?? orderMap['nail_preferences'])['dimensions']),
+              client,
+              asMap(client['savedNails'] ?? client['saved_nails']),
+              asMap(client['draftNails'] ?? client['draft_nails']),
+              asMap(client['nailPreferences'] ?? client['nail_preferences']),
+              requestDetailsMap,
+              requestPayload,
+              orderMap,
+              asMap(
+                asMap(
+                  client['savedNails'] ?? client['saved_nails'],
+                )['dimensions'],
+              ),
+              asMap(
+                asMap(
+                  client['draftNails'] ?? client['draft_nails'],
+                )['dimensions'],
+              ),
+              asMap(
+                asMap(
+                  client['nailPreferences'] ?? client['nail_preferences'],
+                )['dimensions'],
+              ),
+              asMap(
+                asMap(
+                  requestDetailsMap['nailPreferences'] ??
+                      requestDetailsMap['nail_preferences'],
+                )['dimensions'],
+              ),
+              asMap(
+                asMap(
+                  requestPayload['nailPreferences'] ??
+                      requestPayload['nail_preferences'],
+                )['dimensions'],
+              ),
+              asMap(
+                asMap(
+                  orderMap['nailPreferences'] ?? orderMap['nail_preferences'],
+                )['dimensions'],
+              ),
               asMap(client['dimensions']),
               asMap(profileNails['dimensions']),
             ];
@@ -7081,8 +7985,9 @@ class InReviewDetailsSheet extends StatelessWidget {
                     requestHasNfc(rootData) ||
                     requestHasNfc(detailsData))) {
               for (final candidate in candidateMaps) {
-                final parsed =
-                    _FingerNfcSelection.fromEligibleDimensionsMap(candidate);
+                final parsed = _FingerNfcSelection.fromEligibleDimensionsMap(
+                  candidate,
+                );
                 if (parsed.anySelected) {
                   nfc = parsed;
                   groupBySlot[slotIndex] = parsed;
@@ -7107,6 +8012,7 @@ class InReviewDetailsSheet extends StatelessWidget {
 
             groupTabs.add(
               _OrderClientTabData(
+                slotIndex: slotIndex,
                 name: name,
                 nailShape: firstNonEmpty(<Object?>[
                   nailSource['shape'],
@@ -7128,8 +8034,8 @@ class InReviewDetailsSheet extends StatelessWidget {
                   profileNails['nailLength'],
                   profileNails['nail_length'],
                 ]),
-                leftHand: left,
-                rightHand: right,
+                leftHand: nailDimsFromMap(left),
+                rightHand: nailDimsFromMap(right),
                 nfc: nfc,
               ),
             );
@@ -7163,12 +8069,11 @@ class InReviewDetailsSheet extends StatelessWidget {
           if (!seenClientKeys.add(key)) continue;
 
           final profileTab = await buildProfileTab(
+            slotIndex: slotIndex,
             fallbackName: client.clientName,
             email: email,
             clientId: clientId,
-            nfc:
-                groupBySlot[slotIndex] ??
-                _FingerNfcSelection.empty(),
+            nfc: groupBySlot[slotIndex] ?? _FingerNfcSelection.empty(),
           );
 
           final hasModelDimensions =
@@ -7187,6 +8092,7 @@ class InReviewDetailsSheet extends StatelessWidget {
 
           groupTabs.add(
             _OrderClientTabData(
+              slotIndex: slotIndex,
               name: firstNonEmpty(<Object?>[
                 client.clientName,
                 profileTab?.name,
@@ -7201,8 +8107,12 @@ class InReviewDetailsSheet extends StatelessWidget {
                 client.nailLength,
                 profileTab?.nailLength,
               ]),
-              leftHand: hasModelDimensions ? client.leftHand : profileTab?.leftHand,
-              rightHand: hasModelDimensions ? client.rightHand : profileTab?.rightHand,
+              leftHand: hasModelDimensions
+                  ? client.leftHand
+                  : profileTab?.leftHand,
+              rightHand: hasModelDimensions
+                  ? client.rightHand
+                  : profileTab?.rightHand,
               nfc:
                   groupBySlot[slotIndex] ??
                   profileTab?.nfc ??
@@ -7213,21 +8123,53 @@ class InReviewDetailsSheet extends StatelessWidget {
       }
 
       Future<void> addSelectedGroupClientEmails() async {
-        for (final rawEmail in request.selectedGroupClientEmails) {
-          final email = rawEmail.trim().toLowerCase();
-          if (email.isEmpty) continue;
+        final selectedEmailSources = <Object?>[
+          request.selectedGroupClientEmails,
+          rootData['selectedGroupClientEmails'],
+          rootData['selected_group_client_emails'],
+          detailsData['selectedGroupClientEmails'],
+          detailsData['selected_group_client_emails'],
+          rootPayload['selectedGroupClientEmails'],
+          rootPayload['selected_group_client_emails'],
+          detailsPayload['selectedGroupClientEmails'],
+          detailsPayload['selected_group_client_emails'],
+          rootOrderData['selectedGroupClientEmails'],
+          rootOrderData['selected_group_client_emails'],
+          detailsOrderData['selectedGroupClientEmails'],
+          detailsOrderData['selected_group_client_emails'],
+        ];
+        final selectedEmails = <String>{
+          for (final source in selectedEmailSources)
+            for (final raw in asList(source))
+              (raw ?? '').toString().trim().toLowerCase(),
+        }..removeWhere((value) => value.isEmpty || value == 'null');
+
+        for (final email in selectedEmails) {
           if (!seenClientKeys.add(email)) continue;
+          final matchedClient = request.groupClients
+              .cast<GroupOrderClientV2?>()
+              .firstWhere(
+                (client) =>
+                    client != null &&
+                    client.clientEmail.trim().toLowerCase() == email,
+                orElse: () => null,
+              );
+          final slotIndex = matchedClient?.slotIndex ?? 0;
           final tab = await buildProfileTab(
+            slotIndex: slotIndex,
             fallbackName: email,
             email: email,
             clientId: '',
-            nfc: _FingerNfcSelection.empty(),
+            nfc: slotIndex > 0
+                ? (groupBySlot[slotIndex] ?? _FingerNfcSelection.empty())
+                : _FingerNfcSelection.empty(),
           );
           if (tab != null) {
             groupTabs.add(tab);
           } else {
             groupTabs.add(
               _OrderClientTabData(
+                slotIndex: slotIndex,
                 name: email,
                 nailShape: '',
                 nailLength: '',
@@ -7256,20 +8198,25 @@ class InReviewDetailsSheet extends StatelessWidget {
       await addSelectedGroupClientEmails();
 
       final submittedRequestNailSources = <Map<String, dynamic>>[
-        asMap(detailsData['nailPreferences'] ?? detailsData['nail_preferences']),
+        asMap(
+          detailsData['nailPreferences'] ?? detailsData['nail_preferences'],
+        ),
         asMap(
           detailsRequestDetails['nailPreferences'] ??
               detailsRequestDetails['nail_preferences'],
         ),
         asMap(
-          detailsPayload['nailPreferences'] ?? detailsPayload['nail_preferences'],
+          detailsPayload['nailPreferences'] ??
+              detailsPayload['nail_preferences'],
         ),
         asMap(rootData['nailPreferences'] ?? rootData['nail_preferences']),
         asMap(
           rootRequestDetails['nailPreferences'] ??
               rootRequestDetails['nail_preferences'],
         ),
-        asMap(rootPayload['nailPreferences'] ?? rootPayload['nail_preferences']),
+        asMap(
+          rootPayload['nailPreferences'] ?? rootPayload['nail_preferences'],
+        ),
       ].where((entry) => entry.isNotEmpty).toList(growable: false);
 
       final submittedLeft = firstDims(<Object?>[
@@ -7357,14 +8304,63 @@ class InReviewDetailsSheet extends StatelessWidget {
         request.nailLength,
       ]);
 
-      final hasSubmittedSnapshotDimensions = submittedLeft.values.any(
-            (v) => v.trim().isNotEmpty,
-          ) ||
+      final rootDetailsContainer = asMap(rootData['details']);
+      final directRootSubmittedNfc = _FingerNfcSelection.fromDimensionsMap(
+        asMap(
+          asMap(
+            rootDetailsContainer['nailPreferences'] ??
+                rootDetailsContainer['nail_preferences'],
+          )['dimensions'],
+        ),
+      );
+      final directRootGroupBySlot = <int, _FingerNfcSelection>{};
+      for (final rawClient in asList(
+        asMap(
+          rootDetailsContainer['groupOrder'] ??
+              rootDetailsContainer['group_order'],
+        )['clients'],
+      )) {
+        final client = asMap(rawClient);
+        if (client.isEmpty) continue;
+        final slotIndex =
+            _parseInt(
+              client['slotIndex'] ??
+                  client['slot_index'] ??
+                  client['index'] ??
+                  client['position'],
+            ) ??
+            0;
+        if (slotIndex <= 0) continue;
+        final clientNfc = _FingerNfcSelection.fromDimensionsMap(
+          asMap(
+                asMap(
+                  client['savedNails'] ?? client['saved_nails'],
+                )['dimensions'],
+              ).isNotEmpty
+              ? asMap(
+                  asMap(
+                    client['savedNails'] ?? client['saved_nails'],
+                  )['dimensions'],
+                )
+              : asMap(
+                  asMap(
+                    client['draftNails'] ?? client['draft_nails'],
+                  )['dimensions'],
+                ),
+        );
+        if (clientNfc.anySelected) {
+          directRootGroupBySlot[slotIndex] = clientNfc;
+        }
+      }
+
+      final hasSubmittedSnapshotDimensions =
+          submittedLeft.values.any((v) => v.trim().isNotEmpty) ||
           submittedRight.values.any((v) => v.trim().isNotEmpty);
       final hasSubmittedSnapshotShapeLength =
           submittedShape.trim().isNotEmpty || submittedLength.trim().isNotEmpty;
 
       final submittedProfileTab = await buildProfileTab(
+        slotIndex: 0,
         fallbackName: request.clientName,
         email: request.clientEmail,
         clientId: '',
@@ -7396,6 +8392,7 @@ class InReviewDetailsSheet extends StatelessWidget {
       final submittedSnapshotTab =
           hasSubmittedSnapshotDimensions || hasSubmittedSnapshotShapeLength
           ? _OrderClientTabData(
+              slotIndex: 0,
               name: firstNonEmpty(<Object?>[
                 request.clientName,
                 rootRequestDetails['clientName'],
@@ -7422,14 +8419,55 @@ class InReviewDetailsSheet extends StatelessWidget {
             )
           : null;
 
+      final sharedMain = _FingerNfcSelection.fromShared(sharedNfc.main);
+      final mergedMain = directRootSubmittedNfc.anySelected
+          ? directRootSubmittedNfc
+          : (sharedMain.anySelected ? sharedMain : main);
+      final mergedGroupBySlot = <int, _FingerNfcSelection>{
+        ...groupBySlot,
+        for (final entry in sharedNfc.groupBySlotIndex.entries)
+          if (_FingerNfcSelection.fromShared(entry.value).anySelected)
+            entry.key: _FingerNfcSelection.fromShared(entry.value),
+        ...directRootGroupBySlot,
+      };
+      final normalizedGroupTabs = groupTabs
+          .map(
+            (tab) => _OrderClientTabData(
+              slotIndex: tab.slotIndex,
+              name: tab.name,
+              nailShape: tab.nailShape,
+              nailLength: tab.nailLength,
+              leftHand: tab.leftHand,
+              rightHand: tab.rightHand,
+              nfc: tab.slotIndex > 0
+                  ? (mergedGroupBySlot[tab.slotIndex] ?? tab.nfc)
+                  : (mergedMain.anySelected ? mergedMain : tab.nfc),
+            ),
+          )
+          .toList(growable: false);
+
+      _OrderClientTabData? normalizedSubmittedClient;
+      final sourceSubmittedClient = submittedSnapshotTab ?? submittedProfileTab;
+      if (sourceSubmittedClient != null) {
+        normalizedSubmittedClient = _OrderClientTabData(
+          slotIndex: sourceSubmittedClient.slotIndex,
+          name: sourceSubmittedClient.name,
+          nailShape: sourceSubmittedClient.nailShape,
+          nailLength: sourceSubmittedClient.nailLength,
+          leftHand: sourceSubmittedClient.leftHand,
+          rightHand: sourceSubmittedClient.rightHand,
+          nfc: mergedMain.anySelected ? mergedMain : sourceSubmittedClient.nfc,
+        );
+      }
+
       return _RequestNfcDetails(
-        main: main,
-        groupBySlotIndex: groupBySlot,
-        groupTabs: groupTabs,
+        main: mergedMain,
+        groupBySlotIndex: mergedGroupBySlot,
+        groupTabs: normalizedGroupTabs,
         submittedClient:
-            submittedSnapshotTab ??
-            submittedProfileTab ??
+            normalizedSubmittedClient ??
             _OrderClientTabData(
+              slotIndex: 0,
               name: request.clientName.trim().isEmpty
                   ? 'Client'
                   : request.clientName.trim(),
@@ -7437,11 +8475,30 @@ class InReviewDetailsSheet extends StatelessWidget {
               nailLength: request.nailLength,
               leftHand: request.leftHand,
               rightHand: request.rightHand,
-              nfc: main,
+              nfc: mergedMain,
             ),
       );
-    } catch (_) {
-      return _RequestNfcDetails.empty();
+    } catch (e, st) {
+      debugPrint(
+        'IN_REVIEW_GROUP_LOAD_ERROR request=${request.id} '
+        'order=${request.orderNumber} error=$e',
+      );
+      debugPrintStack(stackTrace: st);
+      return _RequestNfcDetails(
+        main: _FingerNfcSelection.empty(),
+        groupBySlotIndex: const <int, _FingerNfcSelection>{},
+        submittedClient: _OrderClientTabData(
+          slotIndex: 0,
+          name: request.clientName.trim().isEmpty
+              ? 'Client'
+              : request.clientName.trim(),
+          nailShape: request.nailShape,
+          nailLength: request.nailLength,
+          leftHand: request.leftHand,
+          rightHand: request.rightHand,
+          nfc: _FingerNfcSelection.empty(),
+        ),
+      );
     }
   }
 
@@ -7514,8 +8571,23 @@ class InReviewDetailsSheet extends StatelessWidget {
                           FutureBuilder<_RequestNfcDetails>(
                             future: _loadRequestedNfcDetails(),
                             builder: (context, snapshot) {
-                              return _groupOrderClientsTabs(
-                                snapshot.data ?? _RequestNfcDetails.empty(),
+                              if (snapshot.connectionState !=
+                                      ConnectionState.done &&
+                                  !snapshot.hasData) {
+                                return const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 24),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                );
+                              }
+                              final details =
+                                  snapshot.data ?? _RequestNfcDetails.empty();
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [_groupOrderClientsTabs(details)],
                               );
                             },
                           ),
@@ -7531,6 +8603,15 @@ class InReviewDetailsSheet extends StatelessWidget {
                     FutureBuilder<_RequestNfcDetails>(
                       future: _loadRequestedNfcDetails(),
                       builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done &&
+                            !snapshot.hasData) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        }
                         final nfc = snapshot.data ?? _RequestNfcDetails.empty();
                         final submittedClient =
                             nfc.submittedClient ??
@@ -7584,16 +8665,17 @@ class InReviewDetailsSheet extends StatelessWidget {
                                         Text(
                                           'Shape',
                                           style: TextStyle(
-                                            color: AppColors.blackCat.withValues(
-                                              alpha: 0.78,
-                                            ),
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.78),
                                             fontWeight: FontWeight.w400,
                                             fontSize: 14.5,
                                           ),
                                         ),
                                         const Spacer(),
                                         Text(
-                                          submittedClient.nailShape.trim().isEmpty
+                                          submittedClient.nailShape
+                                                  .trim()
+                                                  .isEmpty
                                               ? '-'
                                               : submittedClient.nailShape,
                                           style: const TextStyle(
@@ -7614,16 +8696,17 @@ class InReviewDetailsSheet extends StatelessWidget {
                                         Text(
                                           'Length',
                                           style: TextStyle(
-                                            color: AppColors.blackCat.withValues(
-                                              alpha: 0.78,
-                                            ),
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.78),
                                             fontWeight: FontWeight.w400,
                                             fontSize: 14.5,
                                           ),
                                         ),
                                         const Spacer(),
                                         Text(
-                                          submittedClient.nailLength.trim().isEmpty
+                                          submittedClient.nailLength
+                                                  .trim()
+                                                  .isEmpty
                                               ? '-'
                                               : _prettyLength(
                                                   submittedClient.nailLength,
@@ -7660,19 +8743,25 @@ class InReviewDetailsSheet extends StatelessWidget {
                         FutureBuilder<List<String>>(
                           future: _modalPhotoCandidates(),
                           builder: (context, snapshot) {
-                            if (snapshot.connectionState != ConnectionState.done) {
+                            if (snapshot.connectionState !=
+                                ConnectionState.done) {
                               return const SizedBox(
                                 height: 120,
-                                child: Center(child: CircularProgressIndicator()),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               );
                             }
-                            final modalPhotos = snapshot.data ?? const <String>[];
+                            final modalPhotos =
+                                snapshot.data ?? const <String>[];
                             if (modalPhotos.isEmpty) {
                               return Row(
                                 children: [
                                   Icon(
                                     Icons.image_outlined,
-                                    color: AppColors.blackCat.withValues(alpha: 0.45),
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.45,
+                                    ),
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
@@ -7681,7 +8770,9 @@ class InReviewDetailsSheet extends StatelessWidget {
                                         ? 'No photos uploaded by Brand'
                                         : 'No images uploaded',
                                     style: TextStyle(
-                                      color: AppColors.blackCat.withValues(alpha: 0.82),
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.82,
+                                      ),
                                       fontWeight: FontWeight.w400,
                                     ),
                                   ),
@@ -7708,7 +8799,9 @@ class InReviewDetailsSheet extends StatelessWidget {
                     height: 52,
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat.withValues(alpha: 0.16),
+                        backgroundColor: AppColors.blackCat.withValues(
+                          alpha: 0.16,
+                        ),
                         foregroundColor: AppColors.blackCat,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.zero,
@@ -7780,11 +8873,31 @@ class InReviewDetailsSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          _dimRow('Thumb', _dimensionText(d, 'thumb'), nfcRequested: nfc['thumb'] == true),
-          _dimRow('Index', _dimensionText(d, 'index'), nfcRequested: nfc['index'] == true),
-          _dimRow('Middle', _dimensionText(d, 'middle'), nfcRequested: nfc['middle'] == true),
-          _dimRow('Ring', _dimensionText(d, 'ring'), nfcRequested: nfc['ring'] == true),
-          _dimRow('Pinky', _dimensionText(d, 'pinky'), nfcRequested: nfc['pinky'] == true),
+          _dimRow(
+            'Thumb',
+            _dimensionText(d, 'thumb'),
+            nfcRequested: nfc['thumb'] == true,
+          ),
+          _dimRow(
+            'Index',
+            _dimensionText(d, 'index'),
+            nfcRequested: nfc['index'] == true,
+          ),
+          _dimRow(
+            'Middle',
+            _dimensionText(d, 'middle'),
+            nfcRequested: nfc['middle'] == true,
+          ),
+          _dimRow(
+            'Ring',
+            _dimensionText(d, 'ring'),
+            nfcRequested: nfc['ring'] == true,
+          ),
+          _dimRow(
+            'Pinky',
+            _dimensionText(d, 'pinky'),
+            nfcRequested: nfc['pinky'] == true,
+          ),
         ],
       ),
     );
@@ -7877,13 +8990,8 @@ class InReviewDetailsSheet extends StatelessWidget {
     Map<String, bool> leftNfc = const <String, bool>{},
     Map<String, bool> rightNfc = const <String, bool>{},
   }) {
-    return Container(
-      width: double.infinity,
+    return Padding(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -7899,39 +9007,60 @@ class InReviewDetailsSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _handCardCentered(
-                  'Left Hand',
-                  leftHand,
-                  nfc: leftNfc,
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _plainHandColumn('Left Hand', leftHand, nfc: leftNfc),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _handCardCentered(
-                  'Right Hand',
-                  rightHand,
-                  nfc: rightNfc,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: AppColors.blackCatBorderLight,
+                  ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: _plainHandColumn(
+                    'Right Hand',
+                    rightHand,
+                    nfc: rightNfc,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: AppColors.blackCatBorderLight,
           ),
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _measurementSummaryItem(
+                child: _plainSummaryItem(
                   'Shape',
                   nailShape.trim().isEmpty ? '-' : nailShape,
                 ),
               ),
-              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: SizedBox(
+                  height: 24,
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: AppColors.blackCatBorderLight,
+                  ),
+                ),
+              ),
               Expanded(
-                child: _measurementSummaryItem(
+                child: _plainSummaryItem(
                   'Length',
                   nailLength.trim().isEmpty ? '-' : _prettyLength(nailLength),
                 ),
@@ -7943,9 +9072,137 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
+  static Widget _plainHandColumn(
+    String title,
+    dynamic dimensions, {
+    Map<String, bool> nfc = const <String, bool>{},
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Center(
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14.5,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _plainDimensionRow(
+          'Thumb',
+          _dimensionText(dimensions, 'thumb'),
+          nfcRequested: nfc['thumb'] == true,
+        ),
+        _plainDimensionRow(
+          'Index',
+          _dimensionText(dimensions, 'index'),
+          nfcRequested: nfc['index'] == true,
+        ),
+        _plainDimensionRow(
+          'Middle',
+          _dimensionText(dimensions, 'middle'),
+          nfcRequested: nfc['middle'] == true,
+        ),
+        _plainDimensionRow(
+          'Ring',
+          _dimensionText(dimensions, 'ring'),
+          nfcRequested: nfc['ring'] == true,
+        ),
+        _plainDimensionRow(
+          'Pinky',
+          _dimensionText(dimensions, 'pinky'),
+          nfcRequested: nfc['pinky'] == true,
+        ),
+      ],
+    );
+  }
+
+  static Widget _plainDimensionRow(
+    String label,
+    String value, {
+    bool nfcRequested = false,
+  }) {
+    final formatted = _formatDimensionMm(value);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 48,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.82),
+                fontWeight: FontWeight.w400,
+                fontSize: 13.5,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 34,
+            child: nfcRequested
+                ? Center(child: _nfcDimensionChip())
+                : const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                formatted,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13.5,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _plainSummaryItem(String label, String value) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.blackCat.withValues(alpha: 0.78),
+            fontWeight: FontWeight.w400,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   static Widget _measurementSummaryItem(String label, String value) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      constraints: const BoxConstraints(minHeight: 42),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.blackCatBorderLight),
         borderRadius: BorderRadius.zero,
@@ -7954,8 +9211,8 @@ class InReviewDetailsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Flexible(
-            flex: 0,
+          SizedBox(
+            width: 42,
             child: Text(
               label,
               maxLines: 1,
@@ -8011,10 +9268,14 @@ class InReviewDetailsSheet extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
+          SizedBox(
+            width: 40,
             child: Text(
               k,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: AppColors.blackCat.withValues(alpha: 0.82),
                 fontWeight: FontWeight.w400,
@@ -8022,13 +9283,30 @@ class InReviewDetailsSheet extends StatelessWidget {
               ),
             ),
           ),
-          if (showNfcChip) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 13.5,
-              color: AppColors.blackCat,
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (showNfcChip) ...[
+                    _nfcDimensionChip(),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13.5,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -8366,7 +9644,8 @@ class InReviewDetailsSheet extends StatelessWidget {
       builder: (context, snapshot) {
         final display = snapshot.data;
         final isDirect = display?.isDirectRequest ?? request.isDirectRequest;
-        final isGroup = display?.isGroupOrder ??
+        final isGroup =
+            display?.isGroupOrder ??
             (request.orderType == RequestOrderTypeV2.group);
         final s = _reqScale(context);
         return Row(
@@ -8452,6 +9731,11 @@ class InReviewDetailsSheet extends StatelessWidget {
     }
 
     return DefaultTabController(
+      key: ValueKey(
+        tabs
+            .map((tab) => '${tab.slotIndex}:${tab.name.trim().toLowerCase()}')
+            .join('|'),
+      ),
       length: tabs.length,
       child: Container(
         decoration: BoxDecoration(
@@ -8517,7 +9801,8 @@ class InReviewDetailsSheet extends StatelessWidget {
     _RequestNfcDetails nfcDetails,
   ) {
     final submittedClientName = request.clientName.trim();
-    final submittedClient = nfcDetails.submittedClient ??
+    final submittedClient =
+        nfcDetails.submittedClient ??
         _OrderClientTabData(
           name: submittedClientName.isEmpty ? 'Client' : submittedClientName,
           nailShape: request.nailShape,
@@ -8527,40 +9812,28 @@ class InReviewDetailsSheet extends StatelessWidget {
           nfc: nfcDetails.main,
         );
 
-    String handKey(Object? hand) {
-      if (hand is NailDimensionsV2) {
-        return <String>[hand.thumb, hand.index, hand.middle, hand.ring, hand.pinky]
-            .join('|')
-            .trim()
-            .toLowerCase();
-      }
-      if (hand is Map) {
-        final map = hand.map((k, v) => MapEntry(k.toString(), v));
-        return <String>[
-          (map['thumb'] ?? map['lThumb'] ?? map['rThumb'] ?? '').toString(),
-          (map['index'] ?? map['lIndex'] ?? map['rIndex'] ?? '').toString(),
-          (map['middle'] ?? map['lMiddle'] ?? map['rMiddle'] ?? '').toString(),
-          (map['ring'] ?? map['lRing'] ?? map['rRing'] ?? '').toString(),
-          (map['pinky'] ?? map['lPinky'] ?? map['rPinky'] ?? '').toString(),
-        ].join('|').trim().toLowerCase();
-      }
-      return '';
-    }
-
-    String keyFor(_OrderClientTabData client) {
+    String identityFor(_OrderClientTabData client) {
+      if (client.slotIndex > 0) return 'slot:${client.slotIndex}';
       final nameKey = client.name.trim().toLowerCase();
-      final leftKey = handKey(client.leftHand);
-      final rightKey = handKey(client.rightHand);
-      return '$nameKey::$leftKey::$rightKey::${client.nailShape.trim().toLowerCase()}::${client.nailLength.trim().toLowerCase()}';
+      if (nameKey.isNotEmpty) return 'name:$nameKey';
+      return 'submitted';
     }
 
     if (nfcDetails.groupTabs.isNotEmpty) {
       final ordered = <_OrderClientTabData>[submittedClient];
-      final seen = <String>{keyFor(submittedClient)};
-      for (final client in nfcDetails.groupTabs) {
-        final key = keyFor(client);
+      final seen = <String>{'submitted'};
+      final submittedNameKey = submittedClient.name.trim().toLowerCase();
+      for (final tab in nfcDetails.groupTabs) {
+        final tabNameKey = tab.name.trim().toLowerCase();
+        final isSubmittedDuplicate =
+            tab.slotIndex <= 0 &&
+            tabNameKey.isNotEmpty &&
+            tabNameKey == submittedNameKey;
+        if (isSubmittedDuplicate) continue;
+
+        final key = identityFor(tab);
         if (seen.add(key)) {
-          ordered.add(client);
+          ordered.add(tab);
         }
       }
       return ordered;
@@ -8568,7 +9841,7 @@ class InReviewDetailsSheet extends StatelessWidget {
 
     if (request.groupClients.isNotEmpty) {
       final ordered = <_OrderClientTabData>[submittedClient];
-      final seen = <String>{keyFor(submittedClient)};
+      final seen = <String>{identityFor(submittedClient)};
       for (final c in request.groupClients) {
         final name = c.clientName.trim().isNotEmpty
             ? c.clientName.trim()
@@ -8576,6 +9849,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                   ? c.clientId.trim()
                   : 'Client ${c.slotIndex}');
         final tab = _OrderClientTabData(
+          slotIndex: c.slotIndex,
           name: name,
           nailShape: c.nailShape,
           nailLength: c.nailLength,
@@ -8585,7 +9859,7 @@ class InReviewDetailsSheet extends StatelessWidget {
               nfcDetails.groupBySlotIndex[c.slotIndex] ??
               _FingerNfcSelection.empty(),
         );
-        final key = keyFor(tab);
+        final key = identityFor(tab);
         if (seen.add(key)) {
           ordered.add(tab);
         }
@@ -8593,9 +9867,7 @@ class InReviewDetailsSheet extends StatelessWidget {
       return ordered;
     }
 
-    return <_OrderClientTabData>[
-      submittedClient,
-    ];
+    return <_OrderClientTabData>[submittedClient];
   }
 
   Widget _heroAvatar(double s, [String? overridePhoto]) {
@@ -8768,40 +10040,59 @@ class InReviewDetailsSheet extends StatelessWidget {
     }
 
     Widget broken() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.05),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-          ),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: AppColors.blackCat.withValues(alpha: 0.35),
+      ),
+    );
 
     Widget loading() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.05),
-          alignment: Alignment.center,
-          child: const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
 
     Widget imageFor(String raw) {
       final path = _normalizeImagePath(raw).trim();
       final dataBytes = _decodeDataImageBytes(path);
       if (dataBytes != null) {
-        return Image.memory(dataBytes, fit: BoxFit.cover, errorBuilder: (_, _, _) => broken());
+        return Image.memory(
+          dataBytes,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => broken(),
+        );
       }
       if ((path.startsWith('http://') || path.startsWith('https://')) &&
           !path.contains('/storage/v1/object/')) {
-        return Image.network(path, fit: BoxFit.cover, errorBuilder: (_, _, _) => broken());
+        return Image.network(
+          path,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => broken(),
+        );
       }
       if (path.startsWith('assets/')) {
-        return Image.asset(path, fit: BoxFit.cover, errorBuilder: (_, _, _) => broken());
+        return Image.asset(
+          path,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => broken(),
+        );
       }
-      if (path.startsWith('file://') || (!kIsWeb && (path.startsWith('/') || path.contains(':\\')))) {
-        final localPath = path.startsWith('file://') ? path.replaceFirst('file://', '') : path;
-        return Image.file(File(localPath), fit: BoxFit.cover, errorBuilder: (_, _, _) => broken());
+      if (path.startsWith('file://') ||
+          (!kIsWeb && (path.startsWith('/') || path.contains(':\\')))) {
+        final localPath = path.startsWith('file://')
+            ? path.replaceFirst('file://', '')
+            : path;
+        return Image.file(
+          File(localPath),
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => broken(),
+        );
       }
 
       return FutureBuilder<String?>(
@@ -8816,10 +10107,15 @@ class InReviewDetailsSheet extends StatelessWidget {
               errorBuilder: (_, _, _) => FutureBuilder<Uint8List?>(
                 future: _readStorageBytes(path),
                 builder: (_, bytesSnap) {
-                  if (bytesSnap.connectionState != ConnectionState.done) return loading();
+                  if (bytesSnap.connectionState != ConnectionState.done)
+                    return loading();
                   final bytes = bytesSnap.data;
                   if (bytes == null || bytes.isEmpty) return broken();
-                  return Image.memory(bytes, fit: BoxFit.cover, errorBuilder: (_, _, _) => broken());
+                  return Image.memory(
+                    bytes,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => broken(),
+                  );
                 },
               ),
             );
@@ -8827,10 +10123,15 @@ class InReviewDetailsSheet extends StatelessWidget {
           return FutureBuilder<Uint8List?>(
             future: _readStorageBytes(path),
             builder: (_, bytesSnap) {
-              if (bytesSnap.connectionState != ConnectionState.done) return loading();
+              if (bytesSnap.connectionState != ConnectionState.done)
+                return loading();
               final bytes = bytesSnap.data;
               if (bytes == null || bytes.isEmpty) return broken();
-              return Image.memory(bytes, fit: BoxFit.cover, errorBuilder: (_, _, _) => broken());
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => broken(),
+              );
             },
           );
         },
@@ -8895,33 +10196,52 @@ class InReviewDetailsSheet extends StatelessWidget {
     final dataBytes = _decodeDataImageBytes(path);
 
     Widget broken() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.05),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-          ),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: AppColors.blackCat.withValues(alpha: 0.35),
+      ),
+    );
 
     Widget loading() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.05),
-          alignment: Alignment.center,
-          child: const CircularProgressIndicator(strokeWidth: 2),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: const CircularProgressIndicator(strokeWidth: 2),
+    );
 
     if (dataBytes != null) {
-      return Image.memory(dataBytes, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+      return Image.memory(
+        dataBytes,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => broken(),
+      );
     }
     if ((path.startsWith('http://') || path.startsWith('https://')) &&
         !path.contains('/storage/v1/object/')) {
-      return Image.network(path, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+      return Image.network(
+        path,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => broken(),
+      );
     }
     if (path.startsWith('assets/')) {
-      return Image.asset(path, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+      return Image.asset(
+        path,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => broken(),
+      );
     }
-    if (path.startsWith('file://') || (!kIsWeb && (path.startsWith('/') || path.contains(':\\')))) {
-      final localPath = path.startsWith('file://') ? path.replaceFirst('file://', '') : path;
-      return Image.file(File(localPath), fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+    if (path.startsWith('file://') ||
+        (!kIsWeb && (path.startsWith('/') || path.contains(':\\')))) {
+      final localPath = path.startsWith('file://')
+          ? path.replaceFirst('file://', '')
+          : path;
+      return Image.file(
+        File(localPath),
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => broken(),
+      );
     }
 
     return FutureBuilder<String?>(
@@ -8936,10 +10256,15 @@ class InReviewDetailsSheet extends StatelessWidget {
             errorBuilder: (_, _, _) => FutureBuilder<Uint8List?>(
               future: _readStorageBytes(path),
               builder: (_, bytesSnap) {
-                if (bytesSnap.connectionState != ConnectionState.done) return loading();
+                if (bytesSnap.connectionState != ConnectionState.done)
+                  return loading();
                 final bytes = bytesSnap.data;
                 if (bytes == null || bytes.isEmpty) return broken();
-                return Image.memory(bytes, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+                return Image.memory(
+                  bytes,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => broken(),
+                );
               },
             ),
           );
@@ -8947,10 +10272,15 @@ class InReviewDetailsSheet extends StatelessWidget {
         return FutureBuilder<Uint8List?>(
           future: _readStorageBytes(path),
           builder: (_, bytesSnap) {
-            if (bytesSnap.connectionState != ConnectionState.done) return loading();
+            if (bytesSnap.connectionState != ConnectionState.done)
+              return loading();
             final bytes = bytesSnap.data;
             if (bytes == null || bytes.isEmpty) return broken();
-            return Image.memory(bytes, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+            return Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => broken(),
+            );
           },
         );
       },
@@ -9008,7 +10338,6 @@ bool _looksLikeStorageRef(String value) {
   if (v.contains(':\\')) return false;
   return v.contains('/');
 }
-
 
 class _SupabasePhotoRef {
   const _SupabasePhotoRef({required this.bucket, required this.path});
@@ -9073,7 +10402,10 @@ _SupabasePhotoRef? _parseSupabasePhotoRef(String raw) {
   for (final bucket in knownBuckets) {
     if (value == bucket) return null;
     if (value.startsWith('$bucket/')) {
-      return _SupabasePhotoRef(bucket: bucket, path: value.substring(bucket.length + 1));
+      return _SupabasePhotoRef(
+        bucket: bucket,
+        path: value.substring(bucket.length + 1),
+      );
     }
   }
 
@@ -9106,7 +10438,10 @@ Future<Uint8List?> _readStorageBytes(String value) async {
   final candidateRefs = <_SupabasePhotoRef>[
     parsed,
     if (parsed.bucket != 'request-inspiration-photos')
-      _SupabasePhotoRef(bucket: 'request-inspiration-photos', path: parsed.path),
+      _SupabasePhotoRef(
+        bucket: 'request-inspiration-photos',
+        path: parsed.path,
+      ),
     if (parsed.bucket != 'company-request-photos')
       _SupabasePhotoRef(bucket: 'company-request-photos', path: parsed.path),
     if (parsed.bucket != 'client-request-photos')
@@ -9145,6 +10480,7 @@ Uint8List? _decodeDataImageBytes(String value) {
 
 class _OrderClientTabData {
   const _OrderClientTabData({
+    this.slotIndex = 0,
     required this.name,
     required this.nailShape,
     required this.nailLength,
@@ -9153,6 +10489,7 @@ class _OrderClientTabData {
     required this.nfc,
   });
 
+  final int slotIndex;
   final String name;
   final String nailShape;
   final String nailLength;
@@ -9198,37 +10535,293 @@ class _FingerNfcSelection {
   factory _FingerNfcSelection.empty() => const _FingerNfcSelection();
 
   factory _FingerNfcSelection.fromDimensionsMap(Map<String, dynamic> map) {
-    bool b(Object? value) {
+    bool truthyFlag(Object? value) {
       if (value is bool) return value;
-      if (value is num) return value != 0;
+      if (value is num) return value == 1;
       final text = (value ?? '').toString().trim().toLowerCase();
       return text == 'true' ||
           text == 'yes' ||
           text == '1' ||
           text == 'selected' ||
-          text == 'requested' ||
-          text == 'enabled';
+          text == 'enabled' ||
+          text == 'nfc';
     }
 
-    Object? nfcValue(String key) {
-      final nfc = map['nfc'];
-      if (nfc is Map) {
-        return map['${key}Nfc'] ?? nfc[key] ?? nfc['${key}Nfc'];
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+      return const <String, dynamic>{};
+    }
+
+    bool requestLevelNfcSelected(Map<String, dynamic> source) {
+      if (source.isEmpty) return false;
+      final summary = asMap(source['summary']);
+      final nfc = asMap(source['nfc']);
+      final nfcSelection = asMap(source['nfcSelection']).isNotEmpty
+          ? asMap(source['nfcSelection'])
+          : asMap(source['nfc_selection']);
+      for (final raw in <Object?>[
+        source['nfcRequested'],
+        source['nfcSelected'],
+        source['hasNfc'],
+        source['nfcRequest'],
+        source['nfcEnabled'],
+        source['requiresNfcEligibleClient'],
+        source['nfc_requested'],
+        source['nfc_selected'],
+        source['has_nfc'],
+        source['nfc_request'],
+        source['nfc_enabled'],
+        source['requires_nfc_eligible_client'],
+        summary['nfcRequested'],
+        summary['nfcSelected'],
+        summary['hasNfc'],
+        summary['nfcRequest'],
+        summary['nfcEnabled'],
+        summary['requiresNfcEligibleClient'],
+        summary['nfc_requested'],
+        summary['nfc_selected'],
+        summary['has_nfc'],
+        summary['nfc_request'],
+        summary['nfc_enabled'],
+        summary['requires_nfc_eligible_client'],
+        nfc['requested'],
+        nfc['selected'],
+        nfc['hasNfc'],
+        nfc['nfcRequest'],
+        nfc['nfcEnabled'],
+        nfc['requiresNfcEligibleClient'],
+        nfc['requested_finger'],
+        nfcSelection['requested'],
+        nfcSelection['selected'],
+        nfcSelection['hasNfc'],
+      ]) {
+        if (truthyFlag(raw)) return true;
       }
-      return map['${key}Nfc'] ?? map[key];
+      return false;
+    }
+
+    String normalize(Object? value) {
+      return (value ?? '').toString().trim().toLowerCase().replaceAll(
+        RegExp(r'[^a-z0-9]+'),
+        '',
+      );
+    }
+
+    bool selectedByText(String key, String genericFinger) {
+      final normalizedKey = normalize(key);
+      final normalizedGeneric = normalize(genericFinger);
+      final nfc = asMap(map['nfc']);
+      final nfcSelection = asMap(map['nfcSelection']).isNotEmpty
+          ? asMap(map['nfcSelection'])
+          : asMap(map['nfc_selection']);
+      final selectedValues = <Object?>[
+        map['nfcFinger'],
+        map['nfc_finger'],
+        map['selectedNfcFinger'],
+        map['selected_nfc_finger'],
+        map['nfcPlacement'],
+        map['nfc_placement'],
+        map['nfcNail'],
+        map['nfc_nail'],
+        map['selectedNail'],
+        map['selected_nail'],
+        map['finger'],
+        nfc['finger'],
+        nfc['selectedFinger'],
+        nfc['selected_finger'],
+        nfc['placement'],
+        nfc['nail'],
+        nfcSelection['finger'],
+        nfcSelection['selectedFinger'],
+        nfcSelection['selected_finger'],
+      ];
+      bool matchesSelectedText(Object? raw) {
+        if (raw is List) {
+          for (final item in raw) {
+            if (matchesSelectedText(item)) return true;
+          }
+          return false;
+        }
+        if (raw is Map) {
+          for (final entry in raw.entries) {
+            final entryKey = normalize(entry.key);
+            final entryValue = entry.value;
+            if ((entryKey == normalizedKey ||
+                    entryKey == '${normalizedKey}nfc') &&
+                truthyFlag(entryValue)) {
+              return true;
+            }
+            if (matchesSelectedText(entryValue)) return true;
+          }
+          return false;
+        }
+        final text = normalize(raw);
+        if (text.isEmpty) return false;
+        if (text == normalizedKey || text == '${normalizedKey}nfc') {
+          return true;
+        }
+        // Only use generic names like "thumb" when no left/right side was saved.
+        if (text == normalizedGeneric &&
+            !map.containsKey('l${key.substring(1)}Nfc') &&
+            !map.containsKey('r${key.substring(1)}Nfc')) {
+          return true;
+        }
+        return false;
+      }
+
+      for (final raw in selectedValues) {
+        if (matchesSelectedText(raw)) return true;
+      }
+      return false;
+    }
+
+    bool hasExplicitSideFlags(Map<String, dynamic> source) {
+      const keys = <String>[
+        'lThumb',
+        'lThumbNfc',
+        'lThumb_nfc',
+        'lIndex',
+        'lIndexNfc',
+        'lIndex_nfc',
+        'lMiddle',
+        'lMiddleNfc',
+        'lMiddle_nfc',
+        'lRing',
+        'lRingNfc',
+        'lRing_nfc',
+        'lPinky',
+        'lPinkyNfc',
+        'lPinky_nfc',
+        'rThumb',
+        'rThumbNfc',
+        'rThumb_nfc',
+        'rIndex',
+        'rIndexNfc',
+        'rIndex_nfc',
+        'rMiddle',
+        'rMiddleNfc',
+        'rMiddle_nfc',
+        'rRing',
+        'rRingNfc',
+        'rRing_nfc',
+        'rPinky',
+        'rPinkyNfc',
+        'rPinky_nfc',
+      ];
+      return keys.any(source.containsKey);
+    }
+
+    bool selected(String key, String genericFinger) {
+      final nfc = asMap(map['nfc']);
+      final nfcSelection = asMap(map['nfcSelection']).isNotEmpty
+          ? asMap(map['nfcSelection'])
+          : asMap(map['nfc_selection']);
+      bool eligibleForKey() {
+        final dimensions = map['dimensions'] is Map
+            ? (map['dimensions'] as Map).map(
+                (k, v) => MapEntry(k.toString(), v),
+              )
+            : map;
+        final raw = dimensions[key];
+        final text = (raw ?? '').toString().trim();
+        if (text.isEmpty || text.toLowerCase() == 'null') return false;
+        final cleaned = text.replaceAll(RegExp(r'[^0-9.]'), '');
+        final parsed = double.tryParse(cleaned);
+        return parsed != null && parsed.isFinite && parsed >= 8;
+      }
+
+      Object? valueByNormalizedKey(
+        Map<String, dynamic> source,
+        List<String> aliases,
+      ) {
+        if (source.isEmpty) return null;
+        final normalizedAliases = aliases.map(normalize).toSet();
+        for (final entry in source.entries) {
+          if (normalizedAliases.contains(normalize(entry.key))) {
+            return entry.value;
+          }
+        }
+        return null;
+      }
+
+      final upper = key.length > 1 ? key.substring(1) : key;
+      final side = key.startsWith('l')
+          ? 'left'
+          : (key.startsWith('r') ? 'right' : '');
+      final shortSide = key.startsWith('l')
+          ? 'l'
+          : (key.startsWith('r') ? 'r' : '');
+      final sideAliases = <String>[
+        '${key}Nfc',
+        '${key}_nfc',
+        '${shortSide}_${upper}_nfc',
+        '${shortSide}${upper}Nfc',
+        '${side}${upper}Nfc',
+        '${side}_${upper}_nfc',
+      ];
+      final sideValueAliases = <String>[
+        key,
+        '${shortSide}_${upper}',
+        '${side}${upper}',
+        '${side}_${upper}',
+      ];
+
+      final explicitCandidates = <Object?>[
+        valueByNormalizedKey(map, sideAliases),
+        valueByNormalizedKey(nfc, <String>[
+          ...sideAliases,
+          ...sideValueAliases,
+        ]),
+        valueByNormalizedKey(nfcSelection, <String>[
+          ...sideAliases,
+          ...sideValueAliases,
+        ]),
+      ];
+      for (final value in explicitCandidates) {
+        if (truthyFlag(value)) return true;
+      }
+
+      // Legacy support: generic thumb/index flags only when no side-specific
+      // left/right NFC flags exist. Never treat numeric dimensions as NFC.
+      if (!hasExplicitSideFlags(map) &&
+          !hasExplicitSideFlags(nfc) &&
+          !hasExplicitSideFlags(nfcSelection)) {
+        final genericCandidates = <Object?>[
+          map['${genericFinger}Nfc'],
+          map['${genericFinger}_nfc'],
+          nfc[genericFinger],
+          nfc['${genericFinger}Nfc'],
+          nfc['${genericFinger}_nfc'],
+          nfcSelection[genericFinger],
+          nfcSelection['${genericFinger}Nfc'],
+          nfcSelection['${genericFinger}_nfc'],
+        ];
+        for (final value in genericCandidates) {
+          if (truthyFlag(value)) return true;
+        }
+      }
+
+      if (requestLevelNfcSelected(map) ||
+          requestLevelNfcSelected(nfc) ||
+          requestLevelNfcSelected(nfcSelection)) {
+        if (eligibleForKey()) return true;
+      }
+
+      return selectedByText(key, genericFinger);
     }
 
     return _FingerNfcSelection(
-      lThumb: b(nfcValue('lThumb')),
-      lIndex: b(nfcValue('lIndex')),
-      lMiddle: b(nfcValue('lMiddle')),
-      lRing: b(nfcValue('lRing')),
-      lPinky: b(nfcValue('lPinky')),
-      rThumb: b(nfcValue('rThumb')),
-      rIndex: b(nfcValue('rIndex')),
-      rMiddle: b(nfcValue('rMiddle')),
-      rRing: b(nfcValue('rRing')),
-      rPinky: b(nfcValue('rPinky')),
+      lThumb: selected('lThumb', 'thumb'),
+      lIndex: selected('lIndex', 'index'),
+      lMiddle: selected('lMiddle', 'middle'),
+      lRing: selected('lRing', 'ring'),
+      lPinky: selected('lPinky', 'pinky'),
+      rThumb: selected('rThumb', 'thumb'),
+      rIndex: selected('rIndex', 'index'),
+      rMiddle: selected('rMiddle', 'middle'),
+      rRing: selected('rRing', 'ring'),
+      rPinky: selected('rPinky', 'pinky'),
     );
   }
 
@@ -9301,6 +10894,22 @@ class _FingerNfcSelection {
     'ring': rRing,
     'pinky': rPinky,
   };
+
+  static _FingerNfcSelection fromShared(RequestFingerNfcSelection value) {
+    bool pick(Map<String, bool> source, String key) => source[key] == true;
+    return _FingerNfcSelection(
+      lThumb: pick(value.left, 'thumb'),
+      lIndex: pick(value.left, 'index'),
+      lMiddle: pick(value.left, 'middle'),
+      lRing: pick(value.left, 'ring'),
+      lPinky: pick(value.left, 'pinky'),
+      rThumb: pick(value.right, 'thumb'),
+      rIndex: pick(value.right, 'index'),
+      rMiddle: pick(value.right, 'middle'),
+      rRing: pick(value.right, 'ring'),
+      rPinky: pick(value.right, 'pinky'),
+    );
+  }
 }
 
 class _RequestFilterResult {
@@ -9432,7 +11041,9 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
                         height: 48,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat.withValues(alpha: 0.16),
+                            backgroundColor: AppColors.blackCat.withValues(
+                              alpha: 0.16,
+                            ),
                             foregroundColor: AppColors.blackCat,
                             side: BorderSide(
                               color: AppColors.blackCat.withValues(alpha: 0.30),
@@ -9621,6 +11232,3 @@ class _HeaderMenuRow extends StatelessWidget {
     );
   }
 }
-
-
-

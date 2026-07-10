@@ -1,13 +1,14 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
+import '../utils/registration_input_utils.dart';
 
 class PersonalInfoEditResult {
   const PersonalInfoEditResult({
@@ -51,7 +52,11 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
     super.initState();
     nameCtrl = TextEditingController(text: widget.profile.basic.name);
     emailCtrl = TextEditingController(text: widget.profile.basic.email);
-    phoneCtrl = TextEditingController(text: widget.profile.basic.phone);
+    phoneCtrl = TextEditingController(
+      text: RegistrationInputUtils.formatUsPhoneLocal(
+        widget.profile.basic.phone,
+      ),
+    );
     _photoUrl = widget.profile.basic.profileImageUrl.trim();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -77,7 +82,10 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
     final mediaQuery = MediaQuery.maybeOf(context);
     return mediaQuery?.accessibleNavigation ??
         WidgetsBinding
-            .instance.platformDispatcher.accessibilityFeatures.accessibleNavigation;
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
   }
 
   void _announce(String message) {
@@ -111,9 +119,9 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
     } catch (_) {
       if (!mounted) return;
       const message = 'Unable to pick profile photo.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(message)));
       _announce(message);
     } finally {
       if (mounted) setState(() => _pickingPhoto = false);
@@ -147,8 +155,9 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
     var resolvedPhotoUrl = _photoUrl.trim();
     if (_selectedPhotoBytes != null) {
       try {
-        resolvedPhotoUrl =
-            await EditProfileSupabaseSave.uploadProfilePhoto(_selectedPhotoBytes!);
+        resolvedPhotoUrl = await EditProfileSupabaseSave.uploadProfilePhoto(
+          _selectedPhotoBytes!,
+        );
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -360,6 +369,7 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
     FocusNode? focusNode,
     String? semanticLabel,
   }) {
+    final isPhoneField = keyboardType == TextInputType.phone;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -383,6 +393,13 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
             controller: c,
             focusNode: focusNode,
             keyboardType: keyboardType,
+            inputFormatters: isPhoneField
+                ? <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                    UsPhoneTextInputFormatter(),
+                  ]
+                : null,
             style: const TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
@@ -474,17 +491,17 @@ class _ProfileUploadPicker extends StatelessWidget {
                           height: 88,
                         )
                       : imageProvider != null
-                          ? Image(
-                              image: imageProvider!,
-                              fit: BoxFit.cover,
-                              width: 88,
-                              height: 88,
-                            )
-                          : Icon(
-                              Icons.camera_alt_outlined,
-                              size: 26,
-                              color: AppColors.blackCat,
-                            ),
+                      ? Image(
+                          image: imageProvider!,
+                          fit: BoxFit.cover,
+                          width: 88,
+                          height: 88,
+                        )
+                      : Icon(
+                          Icons.camera_alt_outlined,
+                          size: 26,
+                          color: AppColors.blackCat,
+                        ),
                 ),
               ),
               Positioned(

@@ -22,7 +22,9 @@ class RequestFingerNfcSelection {
   factory RequestFingerNfcSelection.fromDimensions(Map<String, dynamic> map) {
     bool truthy(dynamic value) {
       if (value == true) return true;
-      if (value is num) return value != 0;
+      // IMPORTANT: do not treat nail dimension values such as 10 or 3 as NFC.
+      // Numeric support is only for explicit boolean-like DB flags stored as 1.
+      if (value is num) return value == 1;
       final text = (value ?? '').toString().trim().toLowerCase();
       return text == 'true' ||
           text == 'yes' ||
@@ -37,7 +39,9 @@ class RequestFingerNfcSelection {
       if (nfc is Map) {
         return map['${key}Nfc'] ?? nfc[key] ?? nfc['${key}Nfc'];
       }
-      return map['${key}Nfc'] ?? map[key];
+      // IMPORTANT: only read explicit NFC flags. Do not fall back to map[key],
+      // because map[key] is the nail dimension (for example lThumb = 10).
+      return map['${key}Nfc'];
     }
 
     return RequestFingerNfcSelection(
@@ -115,6 +119,7 @@ class RequestNfcDetails {
 Future<RequestNfcDetails> loadRequestNfcDetails({
   required String sourceCollection,
   required String requestId,
+  String requestOrderNumber = '',
 }) async {
   try {
     final table = _tableForCollection(sourceCollection);
@@ -135,26 +140,39 @@ Future<RequestNfcDetails> loadRequestNfcDetails({
           } catch (_) {}
         }
       }
-      if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+      if (value is Map<String, dynamic>)
+        return Map<String, dynamic>.from(value);
       if (value is Map) {
         return value.map((key, value) => MapEntry(key.toString(), value));
       }
       return <String, dynamic>{};
     }
 
-    final rootRow = await supabase
-            .from(table)
-            .select()
-            .eq('id', requestId)
-            .maybeSingle() ??
+    Map<String, dynamic> rootRow =
+        await supabase.from(table).select().eq('id', requestId).maybeSingle() ??
         const <String, dynamic>{};
+
+    if (rootRow.isEmpty && requestOrderNumber.trim().isNotEmpty) {
+      rootRow =
+          await supabase
+              .from(table)
+              .select()
+              .or(
+                'order_number.eq.${requestOrderNumber.trim()},request_number.eq.${requestOrderNumber.trim()},client_request_number.eq.${requestOrderNumber.trim()}',
+              )
+              .maybeSingle() ??
+          const <String, dynamic>{};
+    }
 
     Map<String, dynamic> mergedDetailRows(List<dynamic> rows) {
       Map<String, dynamic> payloadDoc = <String, dynamic>{};
       final merged = <String, dynamic>{};
 
       bool isPayloadRow(Map<String, dynamic> row) {
-        final docId = (row['doc_id'] ?? row['detail_key'] ?? '').toString().trim().toLowerCase();
+        final docId = (row['doc_id'] ?? row['detail_key'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
         final id = (row['id'] ?? '').toString().trim().toLowerCase();
         return docId == 'payload' || id.endsWith(':payload');
       }
@@ -176,12 +194,13 @@ Future<RequestNfcDetails> loadRequestNfcDetails({
       return payloadDoc.isNotEmpty ? payloadDoc : merged;
     }
 
+    final resolvedRequestId = (rootRow['id'] ?? requestId).toString().trim();
     List<dynamic> detailRows = const <dynamic>[];
     try {
       detailRows = await supabase
           .from(detailsTable)
           .select()
-          .eq('request_id', requestId);
+          .eq('request_id', resolvedRequestId);
     } catch (_) {}
 
     final detailsRow = mergedDetailRows(detailRows);
@@ -202,9 +221,7 @@ RequestNfcDetails _parseRequestNfc({
         try {
           final decoded = jsonDecode(text);
           if (decoded is Map) {
-            return decoded.map(
-              (key, value) => MapEntry(key.toString(), value),
-            );
+            return decoded.map((key, value) => MapEntry(key.toString(), value));
           }
         } catch (_) {}
       }
@@ -216,7 +233,8 @@ RequestNfcDetails _parseRequestNfc({
     return <String, dynamic>{};
   }
 
-  List<dynamic> asList(dynamic value) => value is List ? value : const <dynamic>[];
+  List<dynamic> asList(dynamic value) =>
+      value is List ? value : const <dynamic>[];
 
   Map<String, dynamic> payloadOf(Map<String, dynamic> source) {
     final payload = asMap(source['payload']);
@@ -229,23 +247,37 @@ RequestNfcDetails _parseRequestNfc({
 
   Map<String, dynamic> requestDetailsOf(Map<String, dynamic> source) {
     final payload = payloadOf(source);
-    return asMap(payload['requestDetails'] ?? payload['request_details']).isNotEmpty
+    return asMap(
+          payload['requestDetails'] ?? payload['request_details'],
+        ).isNotEmpty
         ? asMap(payload['requestDetails'] ?? payload['request_details'])
-        : asMap(source['requestDetails'] ?? source['request_details']).isNotEmpty
-            ? asMap(source['requestDetails'] ?? source['request_details'])
-            : asMap(asMap(source['details'])['requestDetails'] ??
-                asMap(source['details'])['request_details']);
+        : asMap(
+            source['requestDetails'] ?? source['request_details'],
+          ).isNotEmpty
+        ? asMap(source['requestDetails'] ?? source['request_details'])
+        : asMap(
+            asMap(source['details'])['requestDetails'] ??
+                asMap(source['details'])['request_details'],
+          );
   }
 
   Map<String, dynamic> orderOf(Map<String, dynamic> source) {
     final payload = payloadOf(source);
-    return asMap(payload['order'] ?? payload['orderData'] ?? payload['order_data']).isNotEmpty
-        ? asMap(payload['order'] ?? payload['orderData'] ?? payload['order_data'])
-        : asMap(source['order'] ?? source['orderData'] ?? source['order_data']).isNotEmpty
-            ? asMap(source['order'] ?? source['orderData'] ?? source['order_data'])
-            : asMap(asMap(source['details'])['order'] ??
+    return asMap(
+          payload['order'] ?? payload['orderData'] ?? payload['order_data'],
+        ).isNotEmpty
+        ? asMap(
+            payload['order'] ?? payload['orderData'] ?? payload['order_data'],
+          )
+        : asMap(
+            source['order'] ?? source['orderData'] ?? source['order_data'],
+          ).isNotEmpty
+        ? asMap(source['order'] ?? source['orderData'] ?? source['order_data'])
+        : asMap(
+            asMap(source['details'])['order'] ??
                 asMap(source['details'])['orderData'] ??
-                asMap(source['details'])['order_data']);
+                asMap(source['details'])['order_data'],
+          );
   }
 
   Map<String, dynamic> snapshotOf(Map<String, dynamic> source) {
@@ -260,7 +292,9 @@ RequestNfcDetails _parseRequestNfc({
     );
   }
 
-  Iterable<Map<String, dynamic>> containersOf(Map<String, dynamic> source) sync* {
+  Iterable<Map<String, dynamic>> containersOf(
+    Map<String, dynamic> source,
+  ) sync* {
     final detailsMap = asMap(source['details']);
     final dataMap = asMap(source['data']);
     final payload = payloadOf(source);
@@ -272,15 +306,20 @@ RequestNfcDetails _parseRequestNfc({
       detailsMap['requestDetails'] ?? detailsMap['request_details'],
     );
     final detailsOrder = asMap(
-      detailsMap['order'] ?? detailsMap['orderData'] ?? detailsMap['order_data'],
+      detailsMap['order'] ??
+          detailsMap['orderData'] ??
+          detailsMap['order_data'],
     );
     final detailsSnapshot = asMap(
-      detailsMap['clientProfileSnapshot'] ?? detailsMap['client_profile_snapshot'],
+      detailsMap['clientProfileSnapshot'] ??
+          detailsMap['client_profile_snapshot'],
     );
     final dataRequestDetails = asMap(
       dataMap['requestDetails'] ?? dataMap['request_details'],
     );
-    final dataOrder = asMap(dataMap['order'] ?? dataMap['orderData'] ?? dataMap['order_data']);
+    final dataOrder = asMap(
+      dataMap['order'] ?? dataMap['orderData'] ?? dataMap['order_data'],
+    );
     final dataSnapshot = asMap(
       dataMap['clientProfileSnapshot'] ?? dataMap['client_profile_snapshot'],
     );
@@ -303,7 +342,7 @@ RequestNfcDetails _parseRequestNfc({
 
   bool truthy(dynamic value) {
     if (value == true) return true;
-    if (value is num) return value != 0;
+    if (value is num) return value == 1;
     final text = (value ?? '').toString().trim().toLowerCase();
     return text == 'true' ||
         text == 'yes' ||
@@ -340,8 +379,20 @@ RequestNfcDetails _parseRequestNfc({
   }) {
     final candidates = <Map<String, dynamic>>[];
     for (final source in containers) {
-      candidates.add(asMap(asMap(source['nailPreferences'] ?? source['nail_preferences'])['dimensions']));
-      candidates.add(asMap(asMap(source['apiNailMeasurements'] ?? source['api_nail_measurements'])['dimensions']));
+      candidates.add(
+        asMap(
+          asMap(
+            source['nailPreferences'] ?? source['nail_preferences'],
+          )['dimensions'],
+        ),
+      );
+      candidates.add(
+        asMap(
+          asMap(
+            source['apiNailMeasurements'] ?? source['api_nail_measurements'],
+          )['dimensions'],
+        ),
+      );
       candidates.add(asMap(source['dimensions']));
     }
     for (final candidate in candidates) {
@@ -352,7 +403,9 @@ RequestNfcDetails _parseRequestNfc({
     if (allowEligibleFallback) {
       for (final candidate in candidates) {
         if (candidate.isEmpty) continue;
-        final parsed = RequestFingerNfcSelection.fromEligibleDimensions(candidate);
+        final parsed = RequestFingerNfcSelection.fromEligibleDimensions(
+          candidate,
+        );
         if (parsed.anySelected) return parsed;
       }
     }
@@ -368,21 +421,35 @@ RequestNfcDetails _parseRequestNfc({
 
   final groupBySlot = <int, RequestFingerNfcSelection>{};
 
-  Iterable<List<dynamic>> groupClientSources(Map<String, dynamic> source) sync* {
+  Iterable<List<dynamic>> groupClientSources(
+    Map<String, dynamic> source,
+  ) sync* {
     final payload = payloadOf(source);
     final requestDetails = requestDetailsOf(source);
     final order = orderOf(source);
     final detailsMap = asMap(source['details']);
 
-    yield asList(asMap(source['groupOrder'] ?? source['group_order'])['clients']);
+    yield asList(
+      asMap(source['groupOrder'] ?? source['group_order'])['clients'],
+    );
     yield asList(source['groupClients'] ?? source['group_clients']);
-    yield asList(asMap(payload['groupOrder'] ?? payload['group_order'])['clients']);
+    yield asList(
+      asMap(payload['groupOrder'] ?? payload['group_order'])['clients'],
+    );
     yield asList(payload['groupClients'] ?? payload['group_clients']);
-    yield asList(asMap(requestDetails['groupOrder'] ?? requestDetails['group_order'])['clients']);
-    yield asList(requestDetails['groupClients'] ?? requestDetails['group_clients']);
+    yield asList(
+      asMap(
+        requestDetails['groupOrder'] ?? requestDetails['group_order'],
+      )['clients'],
+    );
+    yield asList(
+      requestDetails['groupClients'] ?? requestDetails['group_clients'],
+    );
     yield asList(asMap(order['groupOrder'] ?? order['group_order'])['clients']);
     yield asList(order['groupClients'] ?? order['group_clients']);
-    yield asList(asMap(detailsMap['groupOrder'] ?? detailsMap['group_order'])['clients']);
+    yield asList(
+      asMap(detailsMap['groupOrder'] ?? detailsMap['group_order'])['clients'],
+    );
     yield asList(detailsMap['groupClients'] ?? detailsMap['group_clients']);
   }
 
@@ -397,13 +464,28 @@ RequestNfcDetails _parseRequestNfc({
       for (var i = 0; i < list.length; i++) {
         final client = asMap(list[i]);
         if (client.isEmpty) continue;
-        final slotIndex = parseInt(
+        final slotIndex =
+            parseInt(
               client['slotIndex'] ??
                   client['slot_index'] ??
                   client['index'] ??
                   client['position'],
             ) ??
             (i + 1);
+        final clientHasNfc =
+            requestHasNfc(client) ||
+            requestHasNfc(
+              asMap(client['savedNails'] ?? client['saved_nails']),
+            ) ||
+            requestHasNfc(
+              asMap(client['draftNails'] ?? client['draft_nails']),
+            ) ||
+            requestHasNfc(
+              asMap(client['nailPreferences'] ?? client['nail_preferences']),
+            ) ||
+            requestHasNfc(source) ||
+            rootHasNfc ||
+            detailsHasNfc;
         final parsed = firstSelectionFrom(<Map<String, dynamic>>[
           client,
           asMap(client['savedNails'] ?? client['saved_nails']),
@@ -412,7 +494,7 @@ RequestNfcDetails _parseRequestNfc({
           asMap(client['requestDetails'] ?? client['request_details']),
           asMap(client['payload']),
           asMap(client['order'] ?? client['orderData'] ?? client['order_data']),
-        ], allowEligibleFallback: requestHasNfc(client) || rootHasNfc || detailsHasNfc);
+        ], allowEligibleFallback: clientHasNfc);
         if (parsed.anySelected) {
           groupBySlot[slotIndex] = parsed;
         }

@@ -159,15 +159,53 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       final clientProfile = asMap(client['profile']);
       final data = asMap(row['data']);
       return firstNonEmpty(<Object?>[
-        row['client_profile_image'], row['clientProfileImage'],
-        row['profileImageUrl'], row['profile_image_url'], row['profile_picture_url'],
-        row['profilePhotoUrl'], row['profile_photo_url'],
-        row['avatarUrl'], row['avatar_url'], row['photoUrl'], row['photo_url'],
-        profile['profileImageUrl'], profile['profile_image_url'], profile['profile_picture_url'], profile['avatarUrl'], profile['avatar_url'], profile['photoUrl'], profile['photo_url'],
-        basic['profileImageUrl'], basic['profile_image_url'], basic['profile_picture_url'], basic['avatarUrl'], basic['avatar_url'], basic['photoUrl'], basic['photo_url'],
-        client['profileImageUrl'], client['profile_image_url'], client['profile_picture_url'], client['avatarUrl'], client['avatar_url'], client['photoUrl'], client['photo_url'],
-        clientProfile['profileImageUrl'], clientProfile['profile_image_url'], clientProfile['profile_picture_url'], clientProfile['avatarUrl'], clientProfile['avatar_url'], clientProfile['photoUrl'], clientProfile['photo_url'],
-        data['clientProfileImage'], data['client_profile_image'], data['profileImageUrl'], data['profile_image_url'], data['avatarUrl'], data['avatar_url'], data['photoUrl'], data['photo_url'],
+        row['client_profile_image'],
+        row['clientProfileImage'],
+        row['profileImageUrl'],
+        row['profile_image_url'],
+        row['profile_picture_url'],
+        row['profilePhotoUrl'],
+        row['profile_photo_url'],
+        row['avatarUrl'],
+        row['avatar_url'],
+        row['photoUrl'],
+        row['photo_url'],
+        profile['profileImageUrl'],
+        profile['profile_image_url'],
+        profile['profile_picture_url'],
+        profile['avatarUrl'],
+        profile['avatar_url'],
+        profile['photoUrl'],
+        profile['photo_url'],
+        basic['profileImageUrl'],
+        basic['profile_image_url'],
+        basic['profile_picture_url'],
+        basic['avatarUrl'],
+        basic['avatar_url'],
+        basic['photoUrl'],
+        basic['photo_url'],
+        client['profileImageUrl'],
+        client['profile_image_url'],
+        client['profile_picture_url'],
+        client['avatarUrl'],
+        client['avatar_url'],
+        client['photoUrl'],
+        client['photo_url'],
+        clientProfile['profileImageUrl'],
+        clientProfile['profile_image_url'],
+        clientProfile['profile_picture_url'],
+        clientProfile['avatarUrl'],
+        clientProfile['avatar_url'],
+        clientProfile['photoUrl'],
+        clientProfile['photo_url'],
+        data['clientProfileImage'],
+        data['client_profile_image'],
+        data['profileImageUrl'],
+        data['profile_image_url'],
+        data['avatarUrl'],
+        data['avatar_url'],
+        data['photoUrl'],
+        data['photo_url'],
       ]);
     }
 
@@ -195,7 +233,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       }
     }
     for (final table in const <String>['client', 'clients', 'client_artist']) {
-      for (final column in const <String>['name', 'displayName', 'display_name', 'client_name']) {
+      for (final column in const <String>[
+        'name',
+        'displayName',
+        'display_name',
+        'client_name',
+      ]) {
         final byName = await lookupBy(table, column, name);
         if (byName.isNotEmpty) return byName;
       }
@@ -210,13 +253,13 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
   String get _requestTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
-          ? 'company_custom_requests'
-          : 'client_custom_requests';
+      ? 'company_custom_requests'
+      : 'client_custom_requests';
 
   String get _requestDetailsTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
-          ? 'company_custom_requests_details'
-          : 'client_custom_requests_details';
+      ? 'company_custom_requests_details'
+      : 'client_custom_requests_details';
 
   Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
@@ -246,7 +289,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     return <dynamic>[];
   }
 
-
   double? _asAmount(Object? value) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
@@ -275,9 +317,15 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       final payment = _asMap(map['payment']);
       final payments = _asMap(map['payments']);
       final artistQuote = _asMap(map['artistQuote'] ?? map['artist_quote']);
-      final dataArtistQuote = _asMap(data['artistQuote'] ?? data['artist_quote']);
-      final payloadArtistQuote = _asMap(payload['artistQuote'] ?? payload['artist_quote']);
-      final detailsArtistQuote = _asMap(details['artistQuote'] ?? details['artist_quote']);
+      final dataArtistQuote = _asMap(
+        data['artistQuote'] ?? data['artist_quote'],
+      );
+      final payloadArtistQuote = _asMap(
+        payload['artistQuote'] ?? payload['artist_quote'],
+      );
+      final detailsArtistQuote = _asMap(
+        details['artistQuote'] ?? details['artist_quote'],
+      );
 
       final nestedMaps = <Map<String, dynamic>>[
         data,
@@ -390,7 +438,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     return '';
   }
 
-  Object? _firstPresent(Map<String, dynamic> source, String snakeKey, String camelKey) {
+  Object? _firstPresent(
+    Map<String, dynamic> source,
+    String snakeKey,
+    String camelKey,
+  ) {
     if (source.containsKey(snakeKey)) return source[snakeKey];
     return source[camelKey];
   }
@@ -422,16 +474,22 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final normalizedId = id.trim();
     if (normalizedId.isEmpty) return null;
     for (final table in tables) {
-      final row =
-          await _supabase.from(table).select().eq('id', normalizedId).maybeSingle();
+      final row = await _supabase
+          .from(table)
+          .select()
+          .eq('id', normalizedId)
+          .maybeSingle();
       if (row != null) {
         return <String, dynamic>{
           ...Map<String, dynamic>.from(row),
           '_table': table,
         };
       }
-      final byUid =
-          await _supabase.from(table).select().eq('uid', normalizedId).maybeSingle();
+      final byUid = await _supabase
+          .from(table)
+          .select()
+          .eq('uid', normalizedId)
+          .maybeSingle();
       if (byUid != null) {
         return <String, dynamic>{
           ...Map<String, dynamic>.from(byUid),
@@ -441,8 +499,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     }
     return null;
   }
-
-
 
   @override
   void initState() {
@@ -548,11 +604,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (!_isDesigningMode)
-                    _paymentSectionBox(widget.request),
-                  if (!_isDesigningMode) ...[
-                    const SizedBox(height: 10),
-                  ],
+                  if (!_isDesigningMode) _paymentSectionBox(widget.request),
+                  if (!_isDesigningMode) ...[const SizedBox(height: 10)],
                   if (_showClientDeclineInfo) ...[
                     _clientDeclineReasonSection(widget.request),
                     const SizedBox(height: 10),
@@ -600,13 +653,17 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                             children: [
                               Icon(
                                 Icons.image_outlined,
-                                color: AppColors.blackCat.withValues(alpha: 0.45),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.45,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 'No images uploaded',
                                 style: TextStyle(
-                                  color: AppColors.blackCat.withValues(alpha: 0.65),
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.65,
+                                  ),
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -631,9 +688,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                               height: 50,
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.blackCat.withValues(
-                                    alpha: 0.78,
-                                  ),
+                                  backgroundColor: AppColors.blackCat
+                                      .withValues(alpha: 0.78),
                                   foregroundColor: AppColors.snow,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.zero,
@@ -672,7 +728,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                             Text(
                               'Add photos of the finished nails before marking as completed.',
                               style: TextStyle(
-                                color: AppColors.blackCat.withValues(alpha: 0.60),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.60,
+                                ),
                                 fontWeight: FontWeight.w400,
                                 fontSize: 12,
                               ),
@@ -1143,14 +1201,18 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         .select()
         .eq('id', widget.request.id)
         .maybeSingle();
-    final data = row == null ? const <String, dynamic>{} : Map<String, dynamic>.from(row);
+    final data = row == null
+        ? const <String, dynamic>{}
+        : Map<String, dynamic>.from(row);
     final detailRow = await _supabase
         .from(_requestDetailsTable)
         .select()
         .eq('request_id', widget.request.id)
         .eq('detail_key', 'payload')
         .maybeSingle();
-    final detailData = detailRow == null ? const <String, dynamic>{} : _asMap(detailRow['data']);
+    final detailData = detailRow == null
+        ? const <String, dynamic>{}
+        : _asMap(detailRow['data']);
 
     if (_isBrandRequest(widget.request)) {
       // Brand request completion notifications are emitted by the centralized
@@ -1190,10 +1252,10 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final clientEmail = widget.request.clientEmail.trim().toLowerCase();
     if (clientEmail.isEmpty) return;
 
-    final clientRow = await _findUserRowByEmail(
-      const <String>['client_artist', 'client'],
-      clientEmail,
-    );
+    final clientRow = await _findUserRowByEmail(const <String>[
+      'client_artist',
+      'client',
+    ], clientEmail);
     if (clientRow == null) return;
     final table = (clientRow['_table'] ?? '').toString().trim();
     final rowId = (clientRow['id'] ?? '').toString().trim();
@@ -1230,29 +1292,38 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       _asList(_firstPresent(clientRow, 'portfolio_items', 'portfolioItems')),
       itemMaps,
     );
-    await _supabase.from(table).update({
-      'portfolio_images': nextPortfolioImages,
-      'panel_portfolio_images': nextPortfolioImages,
-      'panel_artist_portfolio_images': nextPortfolioImages,
-      'portfolio_items': nextPortfolioItems,
-      'portfolio': {
-        ...portfolio,
-        'images': _mergeUniqueList(_asList(portfolio['images']), cleaned),
-        'items': _mergeUniqueList(_asList(portfolio['items']), itemMaps),
-      },
-      'client': {
-        ...client,
-        'portfolioImages': nextPortfolioImages,
-        'portfolioItems': nextPortfolioItems,
-        'portfolio': {
-          ...clientPortfolio,
-          'images': _mergeUniqueList(_asList(clientPortfolio['images']), cleaned),
-          'items': _mergeUniqueList(_asList(clientPortfolio['items']), itemMaps),
-        },
-      },
-      'updated_at': nowIso,
-      'updatedAt': nowIso,
-    }).eq('id', rowId);
+    await _supabase
+        .from(table)
+        .update({
+          'portfolio_images': nextPortfolioImages,
+          'panel_portfolio_images': nextPortfolioImages,
+          'panel_artist_portfolio_images': nextPortfolioImages,
+          'portfolio_items': nextPortfolioItems,
+          'portfolio': {
+            ...portfolio,
+            'images': _mergeUniqueList(_asList(portfolio['images']), cleaned),
+            'items': _mergeUniqueList(_asList(portfolio['items']), itemMaps),
+          },
+          'client': {
+            ...client,
+            'portfolioImages': nextPortfolioImages,
+            'portfolioItems': nextPortfolioItems,
+            'portfolio': {
+              ...clientPortfolio,
+              'images': _mergeUniqueList(
+                _asList(clientPortfolio['images']),
+                cleaned,
+              ),
+              'items': _mergeUniqueList(
+                _asList(clientPortfolio['items']),
+                itemMaps,
+              ),
+            },
+          },
+          'updated_at': nowIso,
+          'updatedAt': nowIso,
+        })
+        .eq('id', rowId);
   }
 
   Future<void> _mirrorCompletedPhotosToArtistPortfolio(
@@ -1268,17 +1339,17 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             .toLowerCase();
     Map<String, dynamic>? artistRow;
     if (currentArtistId.isNotEmpty) {
-      artistRow = await _findUserRowById(
-        const <String>['artist', 'client_artist'],
-        currentArtistId,
-      );
+      artistRow = await _findUserRowById(const <String>[
+        'artist',
+        'client_artist',
+      ], currentArtistId);
     }
     if (artistRow == null) {
       if (artistEmail.isEmpty) return;
-      artistRow = await _findUserRowByEmail(
-        const <String>['artist', 'client_artist'],
-        artistEmail,
-      );
+      artistRow = await _findUserRowByEmail(const <String>[
+        'artist',
+        'client_artist',
+      ], artistEmail);
     }
     if (artistRow == null) return;
     final table = (artistRow['_table'] ?? '').toString().trim();
@@ -1321,29 +1392,38 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       'targetTable=$table targetRowId=$rowId currentArtistId=$currentArtistId '
       'photoCount=${cleaned.length}',
     );
-    await _supabase.from(table).update({
-      'portfolio_images': nextPortfolioImages,
-      'panel_portfolio_images': nextPortfolioImages,
-      'panel_artist_portfolio_images': nextPortfolioImages,
-      'portfolio_items': nextPortfolioItems,
-      'portfolio': {
-        ...portfolio,
-        'images': _mergeUniqueList(_asList(portfolio['images']), cleaned),
-        'items': _mergeUniqueList(_asList(portfolio['items']), itemMaps),
-      },
-      'artist': {
-        ...artist,
-        'portfolioImages': nextPortfolioImages,
-        'portfolioItems': nextPortfolioItems,
-        'portfolio': {
-          ...artistPortfolio,
-          'images': _mergeUniqueList(_asList(artistPortfolio['images']), cleaned),
-          'items': _mergeUniqueList(_asList(artistPortfolio['items']), itemMaps),
-        },
-      },
-      'updated_at': nowIso,
-      'updatedAt': nowIso,
-    }).eq('id', rowId);
+    await _supabase
+        .from(table)
+        .update({
+          'portfolio_images': nextPortfolioImages,
+          'panel_portfolio_images': nextPortfolioImages,
+          'panel_artist_portfolio_images': nextPortfolioImages,
+          'portfolio_items': nextPortfolioItems,
+          'portfolio': {
+            ...portfolio,
+            'images': _mergeUniqueList(_asList(portfolio['images']), cleaned),
+            'items': _mergeUniqueList(_asList(portfolio['items']), itemMaps),
+          },
+          'artist': {
+            ...artist,
+            'portfolioImages': nextPortfolioImages,
+            'portfolioItems': nextPortfolioItems,
+            'portfolio': {
+              ...artistPortfolio,
+              'images': _mergeUniqueList(
+                _asList(artistPortfolio['images']),
+                cleaned,
+              ),
+              'items': _mergeUniqueList(
+                _asList(artistPortfolio['items']),
+                itemMaps,
+              ),
+            },
+          },
+          'updated_at': nowIso,
+          'updatedAt': nowIso,
+        })
+        .eq('id', rowId);
     debugPrint(
       'ARTIST PORTFOLIO MIRROR success request=${widget.request.id} order=${widget.request.orderNumber} '
       'targetTable=$table targetRowId=$rowId',
@@ -1388,7 +1468,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               fileOptions: FileOptions(contentType: contentType, upsert: true),
             )
             .timeout(const Duration(seconds: 20));
-        uploadedUrl = _supabase.storage.from(storageFolder).getPublicUrl(objectPath);
+        uploadedUrl = _supabase.storage
+            .from(storageFolder)
+            .getPublicUrl(objectPath);
       } catch (e) {
         debugPrint('[ArtistPhotoUpload] upload failed for ${file.name}: $e');
       }
@@ -1822,10 +1904,23 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               ),
             ),
           ),
-          if (nfcRequested) ...[_nfcDimensionChip(), const SizedBox(width: 6)],
-          Text(
-            formatMm(v),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
+          SizedBox(
+            width: 34,
+            child: nfcRequested
+                ? Center(child: _nfcDimensionChip())
+                : const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: Text(
+              formatMm(v),
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 11.5,
+              ),
+            ),
           ),
         ],
       ),
@@ -1960,7 +2055,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           _asMap(rootMap['requestDetails'] ?? rootMap['request_details']),
         );
         sourceMaps.add(
-          _asMap(rootMap['order'] ?? rootMap['orderData'] ?? rootMap['order_data']),
+          _asMap(
+            rootMap['order'] ?? rootMap['orderData'] ?? rootMap['order_data'],
+          ),
         );
       }
 
@@ -1982,7 +2079,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
       final nailSources = <Map<String, dynamic>>[];
       for (final source in sourceMaps) {
-        final nail = _asMap(source['nailPreferences'] ?? source['nail_preferences']);
+        final nail = _asMap(
+          source['nailPreferences'] ?? source['nail_preferences'],
+        );
         if (nail.isNotEmpty) nailSources.add(nail);
       }
 
@@ -2030,7 +2129,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         widget.request.nailLength,
       ], fallback: widget.request.nailLength);
 
-      final hasDims = left.values.any((v) => v.trim().isNotEmpty) ||
+      final hasDims =
+          left.values.any((v) => v.trim().isNotEmpty) ||
           right.values.any((v) => v.trim().isNotEmpty);
       if (!hasDims && shape.trim().isEmpty && length.trim().isEmpty) {
         return _requestMeasurementFallback();
@@ -2070,7 +2170,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             future: _loadGroupMeasurementClients(),
             builder: (context, snapshot) {
               final clients = snapshot.data ?? _buildGroupMeasurementClients();
-              return _CompactGroupClientMeasurementsTabs(clients: clients);
+              return GroupClientMeasurementsTabs(
+                clients: clients,
+                compactRequestDetailsLayout: true,
+                tabViewHeight: 312,
+              );
             },
           ),
         ],
@@ -2084,120 +2188,130 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Center(
-                    child: Text(
-                      'Nail Dimensions',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        fontFamily: 'ArialBold',
-                        color: AppColors.blackCat,
-                      ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: Text(
+                    'Nail Dimensions',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      fontFamily: 'ArialBold',
+                      color: AppColors.blackCat,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _handCardCentered(
-                          'Left Hand',
-                          _dimsObject(client.leftHand),
-                          nfc: client.leftNfc,
-                        ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _handCardCentered(
+                        'Left Hand',
+                        _dimsObject(client.leftHand),
+                        nfc: client.leftNfc,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _handCardCentered(
-                          'Right Hand',
-                          _dimsObject(client.rightHand),
-                          nfc: client.rightNfc,
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _handCardCentered(
+                        'Right Hand',
+                        _dimsObject(client.rightHand),
+                        nfc: client.rightNfc,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _softBox(
-                          Row(
-                            children: [
-                              const Text(
-                                'Shape',
-                                style: TextStyle(
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _softBox(
+                        Row(
+                          children: [
+                            const Text(
+                              'Shape',
+                              style: TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                client.nailShape.trim().isEmpty
+                                    ? '-'
+                                    : client.nailShape,
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
                                   color: AppColors.blackCat,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                  fontFamily: 'Arial',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  fontFamily: 'ArialBold',
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  client.nailShape.trim().isEmpty
-                                      ? '-'
-                                      : client.nailShape,
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    color: AppColors.blackCat,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                    fontFamily: 'ArialBold',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _softBox(
-                          Row(
-                            children: [
-                              const Text(
-                                'Length',
-                                style: TextStyle(
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: SizedBox(
+                        height: 42,
+                        child: VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _softBox(
+                        Row(
+                          children: [
+                            const Text(
+                              'Length',
+                              style: TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _lengthLabel(client.nailLength).trim().isEmpty
+                                    ? '-'
+                                    : _lengthLabel(client.nailLength),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
                                   color: AppColors.blackCat,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                  fontFamily: 'Arial',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  fontFamily: 'ArialBold',
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _lengthLabel(client.nailLength).trim().isEmpty
-                                      ? '-'
-                                      : _lengthLabel(client.nailLength),
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    color: AppColors.blackCat,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                    fontFamily: 'ArialBold',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ],
         );
       },
     );
   }
 
-
-  Future<List<GroupClientMeasurementData>> _loadGroupMeasurementClients() async {
+  Future<List<GroupClientMeasurementData>>
+  _loadGroupMeasurementClients() async {
     final merged = <GroupClientMeasurementData>[];
     final seen = <String>{};
     final nfcDetails = await loadRequestNfcDetails(
@@ -2205,7 +2319,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       requestId: widget.request.id,
     );
 
-    void addClient(GroupClientMeasurementData client, {String email = '', String id = ''}) {
+    void addClient(
+      GroupClientMeasurementData client, {
+      String email = '',
+      String id = '',
+    }) {
       final name = client.name.trim();
       final normalizedEmail = email.trim().toLowerCase();
       final normalizedId = id.trim().toLowerCase();
@@ -2309,7 +2427,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
       final savedNails = _asMap(client['savedNails'] ?? client['saved_nails']);
       final draftNails = _asMap(client['draftNails'] ?? client['draft_nails']);
-      final nailPreferences = _asMap(client['nailPreferences'] ?? client['nail_preferences']);
+      final nailPreferences = _asMap(
+        client['nailPreferences'] ?? client['nail_preferences'],
+      );
       final nailSource = savedNails.isNotEmpty
           ? savedNails
           : (draftNails.isNotEmpty ? draftNails : nailPreferences);
@@ -2366,12 +2486,49 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       );
     }
 
+    void addGroupClientFromRaw(Object? rawClient, int index) {
+      final client = _asMap(rawClient);
+      if (client.isNotEmpty) {
+        addGroupClientFromMap(client, index);
+        return;
+      }
+
+      final text = (rawClient ?? '').toString().trim();
+      if (text.isEmpty || text.toLowerCase() == 'null') return;
+
+      final isEmail = text.contains('@');
+      addClient(
+        GroupClientMeasurementData(
+          name: isEmail ? 'Client $index' : text,
+          clientEmail: isEmail ? text.toLowerCase() : '',
+          nailShape: '',
+          nailLength: '',
+          leftHand: const <String, String>{},
+          rightHand: const <String, String>{},
+          leftNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .left,
+          rightNfc:
+              (nfcDetails.groupBySlotIndex[index] ??
+                      RequestFingerNfcSelection.emptyConst)
+                  .right,
+        ),
+        email: isEmail ? text.toLowerCase() : '',
+        id: '',
+      );
+    }
+
     void addGroupClientsFromSource(Map<String, dynamic> source) {
       final payload = _asMap(source['payload']);
       final details = _asMap(source['details']);
       final data = _asMap(source['data']);
-      final requestDetails = _asMap(source['requestDetails'] ?? source['request_details']);
-      final orderData = _asMap(source['order'] ?? source['orderData'] ?? source['order_data']);
+      final requestDetails = _asMap(
+        source['requestDetails'] ?? source['request_details'],
+      );
+      final orderData = _asMap(
+        source['order'] ?? source['orderData'] ?? source['order_data'],
+      );
 
       final nestedSources = <Map<String, dynamic>>[
         source,
@@ -2395,7 +2552,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         ];
         for (final groupSource in groupSources) {
           for (final rawClient in _asList(groupSource)) {
-            addGroupClientFromMap(_asMap(rawClient), index++);
+            addGroupClientFromRaw(rawClient, index++);
           }
         }
       }
@@ -2424,17 +2581,39 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       // Keep the sheet usable even if a migrated detail row is missing or RLS blocks it.
     }
 
-    for (final client in _buildGroupMeasurementClients()) {
+    final fallbackClients = _buildGroupMeasurementClients();
+    if (merged.length <= 1 &&
+        widget.request.selectedGroupClientEmails.length > 1) {
+      var index = fallbackClients.length + 1;
+      for (final email in widget.request.selectedGroupClientEmails) {
+        final normalized = email.trim().toLowerCase();
+        if (normalized.isEmpty ||
+            normalized == widget.request.clientEmail.trim().toLowerCase()) {
+          continue;
+        }
+        addClient(
+          GroupClientMeasurementData(
+            name: 'Client $index',
+            clientEmail: normalized,
+            nailShape: '',
+            nailLength: '',
+            leftHand: const <String, String>{},
+            rightHand: const <String, String>{},
+          ),
+          email: normalized,
+        );
+        index += 1;
+      }
+    }
+    for (final client in fallbackClients) {
       addClient(client);
     }
 
-    return merged.isEmpty ? _buildGroupMeasurementClients() : merged;
+    return merged.length > 1 ? merged : fallbackClients;
   }
 
   List<GroupClientMeasurementData> _buildGroupMeasurementClients() {
-    final clients = <GroupClientMeasurementData>[
-      _requestMeasurementFallback(),
-    ];
+    final clients = <GroupClientMeasurementData>[_requestMeasurementFallback()];
 
     final seen = <String>{
       if (widget.request.clientName.trim().isNotEmpty)
@@ -2569,10 +2748,10 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                   color: AppColors.blackCat.withValues(alpha: 0.60),
                 ),
               ),
-                  const SizedBox(height: 14),
-                  _requestTypeOrderRow(r),
-                  const SizedBox(height: 12),
-                  Row(
+              const SizedBox(height: 14),
+              _requestTypeOrderRow(r),
+              const SizedBox(height: 12),
+              Row(
                 children: [
                   Expanded(
                     child: Align(
@@ -2600,11 +2779,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     ),
                   ),
                 ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
               ),
-            ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
         Positioned(
           right: 6,
           top: 6,
@@ -2740,11 +2919,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           ),
         ),
         const SizedBox(width: 8),
-        Container(
-          width: 1,
-          height: 18,
-          color: AppColors.blackCatBorderLight,
-        ),
+        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
         const SizedBox(width: 8),
         Expanded(
           child: Align(
@@ -2760,6 +2935,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       ],
     );
   }
+
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -3046,8 +3222,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   }
 }
 
-
-
 class _CompactGroupClientMeasurementsTabs extends StatefulWidget {
   const _CompactGroupClientMeasurementsTabs({required this.clients});
 
@@ -3063,7 +3237,9 @@ class _CompactGroupClientMeasurementsTabsState
   int _selectedIndex = 0;
 
   @override
-  void didUpdateWidget(covariant _CompactGroupClientMeasurementsTabs oldWidget) {
+  void didUpdateWidget(
+    covariant _CompactGroupClientMeasurementsTabs oldWidget,
+  ) {
     super.didUpdateWidget(oldWidget);
     if (_selectedIndex >= widget.clients.length) {
       _selectedIndex = 0;
@@ -3089,10 +3265,14 @@ class _CompactGroupClientMeasurementsTabsState
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
+          SizedBox(
+            width: 40,
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -3100,13 +3280,30 @@ class _CompactGroupClientMeasurementsTabsState
               ),
             ),
           ),
-          if (nfcRequested) ...[_AcceptedRequestSheetState._nfcDimensionChip(), const SizedBox(width: 6)],
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (nfcRequested) ...[
+                    _AcceptedRequestSheetState._nfcDimensionChip(),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -3119,118 +3316,134 @@ class _CompactGroupClientMeasurementsTabsState
     Map<String, String> dims, {
     Map<String, bool> nfc = const <String, bool>{},
   }) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.blackCat,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: AppColors.blackCat,
           ),
-          const SizedBox(height: 10),
-          _dimRow('Thumb', _dim(dims, 'thumb'), nfcRequested: nfc['thumb'] == true),
-          _dimRow('Index', _dim(dims, 'index'), nfcRequested: nfc['index'] == true),
-          _dimRow('Middle', _dim(dims, 'middle'), nfcRequested: nfc['middle'] == true),
-          _dimRow('Ring', _dim(dims, 'ring'), nfcRequested: nfc['ring'] == true),
-          _dimRow('Pinky', _dim(dims, 'pinky'), nfcRequested: nfc['pinky'] == true),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        _dimRow(
+          'Thumb',
+          _dim(dims, 'thumb'),
+          nfcRequested: nfc['thumb'] == true,
+        ),
+        _dimRow(
+          'Index',
+          _dim(dims, 'index'),
+          nfcRequested: nfc['index'] == true,
+        ),
+        _dimRow(
+          'Middle',
+          _dim(dims, 'middle'),
+          nfcRequested: nfc['middle'] == true,
+        ),
+        _dimRow('Ring', _dim(dims, 'ring'), nfcRequested: nfc['ring'] == true),
+        _dimRow(
+          'Pinky',
+          _dim(dims, 'pinky'),
+          nfcRequested: nfc['pinky'] == true,
+        ),
+      ],
     );
   }
 
   Widget _summaryBox(String label, String value) {
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            label,
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.blackCat.withValues(alpha: 0.78),
+            fontWeight: FontWeight.w600,
+            fontSize: 12.5,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _value(value),
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
               color: AppColors.blackCat,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _value(value),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: AppColors.blackCat,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _tabBar() {
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.12)),
+        ),
+      ),
+      child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        itemCount: widget.clients.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 20),
-        itemBuilder: (context, index) {
-          final selected = index == _selectedIndex;
-          final name = _value(widget.clients[index].name);
-          return InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () => setState(() => _selectedIndex = index),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      color: AppColors.blackCat.withValues(
-                        alpha: selected ? 1 : 0.78,
+        child: Row(
+          children: List<Widget>.generate(widget.clients.length, (index) {
+            final selected = index == _selectedIndex;
+            final name = _value(widget.clients[index].name);
+            return Padding(
+              padding: EdgeInsets.only(
+                right: index == widget.clients.length - 1 ? 0 : 18,
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.zero,
+                onTap: () => setState(() => _selectedIndex = index),
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 68),
+                  padding: const EdgeInsets.fromLTRB(6, 0, 6, 11),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: selected
+                            ? AppColors.alabaster
+                            : Colors.transparent,
+                        width: 3,
+                      ),
+                    ),
+                  ),
+                  child: SizedBox(
+                    height: 38,
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.visible,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                          color: AppColors.blackCat.withValues(
+                            alpha: selected ? 1 : 0.78,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 11),
-                Container(
-                  height: 3,
-                  width: 44,
-                  color: selected ? AppColors.alabaster : Colors.transparent,
-                ),
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
@@ -3257,33 +3470,28 @@ class _CompactGroupClientMeasurementsTabsState
 
     final client = widget.clients[_selectedIndex];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _tabBar(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Nail Dimensions',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.blackCat,
-                  ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _tabBar(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Nail Dimensions',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.blackCat,
                 ),
-                const SizedBox(height: 14),
-                Row(
+              ),
+              const SizedBox(height: 14),
+              IntrinsicHeight(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
@@ -3293,7 +3501,14 @@ class _CompactGroupClientMeasurementsTabsState
                         nfc: client.leftNfc,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: AppColors.blackCat.withValues(alpha: 0.22),
+                      ),
+                    ),
                     Expanded(
                       child: _handBox(
                         'Right Hand',
@@ -3303,26 +3518,27 @@ class _CompactGroupClientMeasurementsTabsState
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _summaryBox('Shape', client.nailShape),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _summaryBox('Length', client.nailLength),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 10),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.blackCat.withValues(alpha: 0.22),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _summaryBox('Shape', client.nailShape)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _summaryBox('Length', client.nailLength)),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 enum _AcceptedSheetMode { accepted, designing }
-

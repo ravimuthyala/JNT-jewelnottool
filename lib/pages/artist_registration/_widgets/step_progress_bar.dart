@@ -49,7 +49,7 @@ class StepProgressBar extends StatelessWidget {
               final label = step <= stepLabels.length ? stepLabels[step - 1] : '';
 
               return SizedBox(
-                width: 40,
+                width: 48,
                 child: _StepNode(
                   step: step,
                   label: label,
@@ -58,12 +58,6 @@ class StepProgressBar extends StatelessWidget {
                 ),
               );
             }),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: 124,
-            height: 4,
-            color: AppColors.blackCat,
           ),
           if (sectionSubtitle.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -126,15 +120,19 @@ class _StepNode extends StatelessWidget {
                 ),
         ),
         const SizedBox(height: 8),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 11.5,
-            height: 1.45,
-            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-            fontFamily: 'Arial',
-            color: AppColors.blackCat.withValues(alpha: isActive ? 1 : 0.72),
+        SizedBox(
+          height: 40,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            softWrap: true,
+            style: TextStyle(
+              fontSize: 9,
+              height: 1.35,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              fontFamily: 'Arial',
+              color: AppColors.blackCat.withValues(alpha: isActive ? 1 : 0.72),
+            ),
           ),
         ),
       ],

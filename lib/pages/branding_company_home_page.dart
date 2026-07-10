@@ -10,6 +10,7 @@ class BrandingCompanyHomePage extends StatelessWidget {
   const BrandingCompanyHomePage({
     super.key,
     required this.companyName,
+    this.companyLogoUrl = '',
     required this.campaignCount,
     required this.cancelledCount,
     required this.inProgressCount,
@@ -22,6 +23,7 @@ class BrandingCompanyHomePage extends StatelessWidget {
   });
 
   final String companyName;
+  final String companyLogoUrl;
   final int campaignCount;
   final int cancelledCount;
   final int inProgressCount;
@@ -60,6 +62,7 @@ class BrandingCompanyHomePage extends StatelessWidget {
       backgroundColor: AppColors.snow,
       appBar: CompanyHeader(
         companyName: companyName,
+        imageUrl: companyLogoUrl,
         onOpenProfile: onOpenProfile,
         onLogout: onLogout,
       ),

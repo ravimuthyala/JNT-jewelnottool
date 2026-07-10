@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../constants/currency_options.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/registration_input_utils.dart';
 import '../../widgets/registration_profile_upload.dart';
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
@@ -21,50 +22,120 @@ class Step1Account extends StatefulWidget {
 class Step1AccountState extends State<Step1Account> {
   final _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _emailCtrl;
-  late final TextEditingController _passCtrl;
-  late final TextEditingController _confirmCtrl;
   late final TextEditingController _studioNameCtrl;
   late final TextEditingController _displayNameCtrl;
   late final TextEditingController _languageCtrl;
   late final TextEditingController _bioCtrl;
   late final TextEditingController _phoneCtrl;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _addressLine1Ctrl;
+  late final TextEditingController _addressCityCtrl;
+  late final TextEditingController _zipCtrl;
+  late final TextEditingController _manualStateCtrl;
 
-  bool _obscurePass = true;
-  bool _obscureConfirm = true;
-  bool _emailTouched = false;
   String? _currency;
   String _phoneAreaCode = '+1';
   Uint8List? _profileBytes;
   final ImagePicker _picker = ImagePicker();
 
+  String _country = 'United States';
+  String? _state;
+
+  bool get _isUS => _country == 'United States';
+
+  Widget _countryCodeDropdown({
+    required String value,
+    required ValueChanged<CountryCode> onChanged,
+    bool embedded = false,
+  }) {
+    return Localizations.override(
+      context: context,
+      locale: const Locale('en'),
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: embedded
+              ? null
+              : Border.all(color: AppColors.blackCatBorderLight),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: CountryCodePicker(
+          onChanged: onChanged,
+          initialSelection: value == '+1' ? 'US' : value,
+          favorite: const ['US', '+1', '+44', '+91'],
+          showFlag: false,
+          showFlagMain: false,
+          showFlagDialog: true,
+          showCountryOnly: true,
+          hideMainText: true,
+          alignLeft: true,
+          flagWidth: 20,
+          padding: EdgeInsets.zero,
+          builder: (code) {
+            final flagUri = code?.flagUri;
+            final countryAbbr = (code?.code ?? 'US').toUpperCase();
+            return Row(
+              children: [
+                if (flagUri != null)
+                  Image.asset(
+                    flagUri,
+                    package: 'country_code_picker',
+                    width: 20,
+                    height: 14,
+                    fit: BoxFit.cover,
+                  ),
+                const SizedBox(width: 8),
+                Text(
+                  countryAbbr,
+                  style: const TextStyle(
+                    fontFamily: 'Arial',
+                    fontSize: kInputFs,
+                    color: Colors.black,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     final draft = widget.draft;
-    _emailCtrl = TextEditingController(text: draft.email);
-    _passCtrl = TextEditingController(text: draft.password);
-    _confirmCtrl = TextEditingController();
     _studioNameCtrl = TextEditingController(text: draft.studioName);
     _displayNameCtrl = TextEditingController(text: draft.displayName);
     _languageCtrl = TextEditingController(text: draft.languageSpoken);
     _bioCtrl = TextEditingController(text: draft.bio);
     _phoneCtrl = TextEditingController(text: draft.phone);
+    _emailCtrl = TextEditingController(text: draft.email);
+    _addressLine1Ctrl = TextEditingController(text: draft.addressLine1);
+    _addressCityCtrl = TextEditingController(text: draft.addressCity);
+    _zipCtrl = TextEditingController(text: draft.zip);
+    _manualStateCtrl = TextEditingController(text: draft.manualState);
     _phoneAreaCode = draft.phoneAreaCode.isEmpty ? '+1' : draft.phoneAreaCode;
     _profileBytes = draft.profileBytes;
     _currency = draft.currency.isEmpty ? 'US Dollar (USD)' : draft.currency;
+    _country = draft.country.isEmpty ? 'United States' : draft.country;
+    _state = draft.state;
   }
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
-    _confirmCtrl.dispose();
     _studioNameCtrl.dispose();
     _displayNameCtrl.dispose();
     _languageCtrl.dispose();
     _bioCtrl.dispose();
     _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _addressLine1Ctrl.dispose();
+    _addressCityCtrl.dispose();
+    _zipCtrl.dispose();
+    _manualStateCtrl.dispose();
     super.dispose();
   }
 
@@ -79,31 +150,28 @@ class Step1AccountState extends State<Step1Account> {
     setState(() => _profileBytes = bytes);
   }
 
-  bool get _isEmailValid =>
-      _emailCtrl.text.contains('@') && _emailCtrl.text.contains('.');
-
   void autofill() {
     setState(() {
-      _emailCtrl.text = 'luna.nails@test.com';
-      _passCtrl.text = 'Test1234!';
-      _confirmCtrl.text = 'Test1234!';
       _studioNameCtrl.text = 'Luna Nails Studio';
       _displayNameCtrl.text = 'Luna Nails';
       _languageCtrl.text = 'English';
       _currency = 'US Dollar (USD)';
       _bioCtrl.text =
-          'Professional nail artist with 5+ years of experience. Specializing in intricate nail art, gel designs, and 3D nail sculptures. Based in LA.';
+          'Professional nail artist with 5+ years of experience. Specializing in intricate nail art, gel designs, and 3D nail sculptures.';
       _phoneCtrl.text = '5551234567';
       _phoneAreaCode = '+1';
-      _emailTouched = true;
+      _addressLine1Ctrl.text = '123 Sunset Blvd';
+      _addressCityCtrl.text = 'Los Angeles';
+      _state = 'California';
+      _manualStateCtrl.clear();
+      _zipCtrl.text = '90028';
+      _country = 'United States';
+      _emailCtrl.text = 'luna.nails@test.com';
     });
   }
 
   bool validateAndSave(RegistrationDraft draft) {
-    setState(() => _emailTouched = true);
     if (!(_formKey.currentState?.validate() ?? false)) return false;
-    draft.email = _emailCtrl.text.trim();
-    draft.password = _passCtrl.text;
     draft.studioName = _studioNameCtrl.text.trim();
     draft.displayName = _displayNameCtrl.text.trim();
     draft.languageSpoken = _languageCtrl.text.trim();
@@ -111,7 +179,15 @@ class Step1AccountState extends State<Step1Account> {
     draft.bio = _bioCtrl.text.trim();
     draft.phone = _phoneCtrl.text.trim();
     draft.phoneAreaCode = _phoneAreaCode;
+    draft.email = _emailCtrl.text.trim();
     draft.profileBytes = _profileBytes;
+    draft.addressLine1 = _addressLine1Ctrl.text.trim();
+    draft.addressLine2 = '';
+    draft.addressCity = _addressCityCtrl.text.trim();
+    draft.zip = _zipCtrl.text.trim();
+    draft.country = _country;
+    draft.state = _state;
+    draft.manualState = _manualStateCtrl.text.trim();
     return true;
   }
 
@@ -125,101 +201,12 @@ class Step1AccountState extends State<Step1Account> {
 
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
         children: [
           regSectionCard(
-            title: 'Account Credentials',
-            subtitle: "You'll use these to log in to JewelNotTool.",
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  onChanged: (_) {
-                    if (_emailTouched) setState(() {});
-                  },
-                  onEditingComplete: () {
-                    setState(() => _emailTouched = true);
-                    FocusScope.of(context).nextFocus();
-                  },
-                  validator: (_) {
-                    if (!_emailTouched) return null;
-                    if (_emailCtrl.text.trim().isEmpty)
-                      return 'Email is required';
-                    if (!_isEmailValid) return 'Enter a valid email address';
-                    return null;
-                  },
-                  decoration: regDec('Email', 'you@example.com'),
-                  style: fieldStyle,
-                ),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _passCtrl,
-                  obscureText: _obscurePass,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Password is required';
-                    }
-                    if (value.length < 8)
-                      return 'Must be at least 8 characters';
-                    return null;
-                  },
-                  decoration: regDec(
-                    'Password',
-                    'At least 8 characters',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePass ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.blackCatLight,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePass = !_obscurePass),
-                    ),
-                  ),
-                  style: fieldStyle,
-                ),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _confirmCtrl,
-                  obscureText: _obscureConfirm,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _passCtrl.text)
-                      return 'Passwords do not match';
-                    return null;
-                  },
-                  decoration: regDec(
-                    'Confirm password',
-                    '',
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscureConfirm
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: AppColors.blackCatLight,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscureConfirm = !_obscureConfirm),
-                    ),
-                  ),
-                  style: fieldStyle,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          regSectionCard(
             title: 'Artist Profile',
-            subtitle: 'This is how clients will see you.',
             child: Column(
               children: [
                 Center(
@@ -228,64 +215,7 @@ class Step1AccountState extends State<Step1Account> {
                     imageBytes: _profileBytes,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Localizations.override(
-                  context: context,
-                  locale: const Locale('en'),
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: AppColors.snow,
-                      border: Border.all(color: AppColors.blackCatBorderLight),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 100,
-                          child: CountryCodePicker(
-                            onChanged: (code) => setState(
-                              () => _phoneAreaCode = code.dialCode ?? '+1',
-                            ),
-                            initialSelection: _phoneAreaCode,
-                            favorite: const ['+1', '+44', '+91'],
-                            showFlag: false,
-                            showFlagMain: false,
-                            hideMainText: false,
-                            alignLeft: true,
-                            padding: EdgeInsets.zero,
-                            textStyle: fieldStyle,
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          color: AppColors.blackCatBorderLight,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _phoneCtrl,
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(10),
-                            ],
-                            validator: (value) =>
-                                (value == null || value.trim().length < 7)
-                                ? 'Enter a valid phone number'
-                                : null,
-                            decoration: const InputDecoration(
-                              hintText: 'Phone number',
-                              border: InputBorder.none,
-                            ),
-                            style: fieldStyle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 18),
                 TextFormField(
                   controller: _studioNameCtrl,
                   textInputAction: TextInputAction.next,
@@ -298,7 +228,7 @@ class Step1AccountState extends State<Step1Account> {
                   ),
                   style: fieldStyle,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: kFieldGap),
                 TextFormField(
                   controller: _displayNameCtrl,
                   textInputAction: TextInputAction.next,
@@ -308,7 +238,7 @@ class Step1AccountState extends State<Step1Account> {
                   decoration: regDec('Display Name', 'Display Name'),
                   style: fieldStyle,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: kFieldGap),
                 TextFormField(
                   controller: _languageCtrl,
                   textInputAction: TextInputAction.next,
@@ -321,7 +251,7 @@ class Step1AccountState extends State<Step1Account> {
                   ),
                   style: fieldStyle,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: kFieldGap),
                 RegTypeAheadField(
                   label: 'Currency *',
                   hint: 'Select currency',
@@ -332,7 +262,114 @@ class Step1AccountState extends State<Step1Account> {
                       ? 'Currency is required'
                       : null,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: kFieldGap),
+                FormField<String>(
+                  validator: (value) =>
+                      (RegistrationInputUtils.normalizePhone(
+                            _phoneCtrl.text,
+                          ).length <
+                          10)
+                      ? 'Enter a valid phone number'
+                      : null,
+                  builder: (field) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: AppColors.snow,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 132,
+                                child: _countryCodeDropdown(
+                                  value: _phoneAreaCode,
+                                  embedded: true,
+                                  onChanged: (code) => setState(
+                                    () =>
+                                        _phoneAreaCode = code.dialCode ?? '+1',
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                color: AppColors.blackCatBorderLight,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _phoneCtrl,
+                                  style: const TextStyle(fontSize: kInputFs),
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(10),
+                                    UsPhoneTextInputFormatter(),
+                                  ],
+                                  onChanged: field.didChange,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter 10-digit phone',
+                                    hintStyle: TextStyle(
+                                      fontSize: kHintFs - 0.5,
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                      fontFamily: 'Arial',
+                                    ),
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: kFieldVertPad,
+                                    ),
+                                    isDense: false,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                          ),
+                        ),
+                        if (field.hasError)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 4),
+                            child: Text(
+                              field.errorText!,
+                              style: const TextStyle(
+                                color: Color(0xFFB3261E),
+                                fontSize: 10.5,
+                                height: 1.1,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: kFieldGap),
+                TextFormField(
+                  controller: _emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  validator: (value) {
+                    final email = (value ?? '').trim();
+                    if (email.isEmpty) return 'Email is required';
+                    if (!email.contains('@') || !email.contains('.')) {
+                      return 'Enter a valid email address';
+                    }
+                    return null;
+                  },
+                  decoration: regDec('Email', 'you@example.com'),
+                  style: fieldStyle,
+                ),
+                const SizedBox(height: kFieldGap),
                 TextFormField(
                   controller: _bioCtrl,
                   textInputAction: TextInputAction.done,
@@ -342,6 +379,120 @@ class Step1AccountState extends State<Step1Account> {
                       : null,
                   decoration: regDec('Bio / About', 'Tell clients about you'),
                   style: fieldStyle,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          regSectionCard(
+            title: 'Address Information',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                regRequiredLabel('Street Address'),
+                const SizedBox(height: kFieldGap),
+                TextFormField(
+                  controller: _addressLine1Ctrl,
+                  style: const TextStyle(fontSize: kInputFs),
+                  decoration: regDec('Street Address', 'Enter Street Address'),
+                  validator: (v) => (v ?? '').trim().isEmpty
+                      ? 'Street Address is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                regRequiredLabel('City'),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _addressCityCtrl,
+                  style: const TextStyle(fontSize: kInputFs),
+                  decoration: regDec('City', 'Enter City'),
+                  validator: (v) =>
+                      (v ?? '').trim().isEmpty ? 'City is required' : null,
+                ),
+                const SizedBox(height: kFieldGap),
+                if (_isUS)
+                  regRequiredLabel('State')
+                else
+                  const Text(
+                    'State / Region',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                if (_isUS)
+                  RegTypeAheadField(
+                    label: 'State',
+                    hint: 'Select State',
+                    options: kUsStates,
+                    selectedValue: _state,
+                    onChanged: (v) => setState(() => _state = v),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'State is required'
+                        : null,
+                  )
+                else
+                  TextFormField(
+                    controller: _manualStateCtrl,
+                    style: const TextStyle(fontSize: kInputFs),
+                    decoration: regDec(
+                      'State / Region',
+                      'Enter State / Region',
+                    ),
+                    validator: (v) => (v ?? '').trim().isEmpty
+                        ? 'State / Region is required'
+                        : null,
+                  ),
+                const SizedBox(height: kFieldGap),
+                if (_isUS)
+                  regRequiredLabel('Zip Code')
+                else
+                  const Text(
+                    'Zip Code',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _zipCtrl,
+                  style: const TextStyle(fontSize: kInputFs),
+                  keyboardType: TextInputType.text,
+                  decoration: regDec('Zip Code', 'Enter Zip Code'),
+                  validator: (v) {
+                    final val = (v ?? '').trim();
+                    if (val.isEmpty) return 'Zip Code is required';
+                    if (!_isUS) return null;
+                    if (!RegExp(r'^\d{5}(-\d{4})?$').hasMatch(val)) {
+                      return 'Enter a valid ZIP code';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: kFieldGap),
+                regRequiredLabel('Country'),
+                const SizedBox(height: 6),
+                RegTypeAheadField(
+                  label: 'Country',
+                  hint: 'Select Country',
+                  options: kCountries,
+                  selectedValue: _country,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() {
+                      _country = v;
+                      if (_country != 'United States') {
+                        _state = null;
+                      }
+                    });
+                  },
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Country is required'
+                      : null,
                 ),
               ],
             ),

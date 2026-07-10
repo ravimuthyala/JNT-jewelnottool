@@ -13,6 +13,17 @@ import '../widgets/notification_bell_button.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
 
+String _artistLocationText(String city, String state, String zip) {
+  final left = <String>[
+    city.trim(),
+    state.trim(),
+  ].where((value) => value.isNotEmpty).join(', ');
+  final postal = zip.trim();
+  if (left.isEmpty) return postal;
+  if (postal.isEmpty) return left;
+  return '$left, $postal';
+}
+
 class ClientHomePage extends StatefulWidget {
   const ClientHomePage({
     super.key,
@@ -247,7 +258,10 @@ class _ClientHomePageState extends State<ClientHomePage> {
 
   Future<List<Map<String, dynamic>>> _readArtistRows(String table) async {
     try {
-      final rows = await Supabase.instance.client.from(table).select().limit(300);
+      final rows = await Supabase.instance.client
+          .from(table)
+          .select()
+          .limit(300);
 
       return rows
           .whereType<Map>()
@@ -270,7 +284,9 @@ class _ClientHomePageState extends State<ClientHomePage> {
     final portfolio = _asMap(data['portfolio']);
     final artistPortfolio = _asMap(artist['portfolio']);
     final pricing = _asMap(data['pricing']);
-    final artistPricing = _asMap(data['pricing'].toString().isEmpty ? null : data['pricing']);
+    final artistPricing = _asMap(
+      data['pricing'].toString().isEmpty ? null : data['pricing'],
+    );
     final credentials = _asMap(data['credentials']);
     final artistCredentials = _asMap(artist['credentials']);
     final availability = _asMap(data['availability']);
@@ -311,10 +327,9 @@ class _ClientHomePageState extends State<ClientHomePage> {
     _collectUrls(artistPortfolio['images'], urls);
     _collectUrls(artistPortfolio['items'], urls);
 
-    final imageUrls = _dedupeUrls(urls)
-        .where(_isDisplayableImageUrl)
-        .take(16)
-        .toList(growable: false);
+    final imageUrls = _dedupeUrls(
+      urls,
+    ).where(_isDisplayableImageUrl).take(16).toList(growable: false);
 
     if (imageUrls.isEmpty) return;
 
@@ -341,6 +356,8 @@ class _ClientHomePageState extends State<ClientHomePage> {
     final city = _firstNonEmpty([
       address['city'],
       profile['city'],
+      artistProfile['city'],
+      artist['city'],
       data['panel_city'],
       data['city'],
     ]);
@@ -348,20 +365,36 @@ class _ClientHomePageState extends State<ClientHomePage> {
     final state = _firstNonEmpty([
       address['state'],
       profile['state'],
+      artistProfile['state'],
+      artist['state'],
       data['panel_state'],
       data['state'],
     ]);
 
+    final zip = _firstNonEmpty([
+      address['zip'],
+      address['postal_code'],
+      profile['zip'],
+      profile['postal_code'],
+      artistProfile['zip'],
+      artistProfile['postal_code'],
+      artist['zip'],
+      artist['postal_code'],
+      data['panel_zip'],
+      data['zip'],
+      data['postal_code'],
+    ]);
+
     final credential =
         _firstNonEmpty([
-                  credentials['nailTechType'],
-                  artistCredentials['nailTechType'],
-                  data['panel_nailTechType'],
-                  profile['nailTechType'],
-                ]).toLowerCase() ==
-                'student'
-            ? 'Student/Unlicensed'
-            : 'Professional';
+              credentials['nailTechType'],
+              artistCredentials['nailTechType'],
+              data['panel_nailTechType'],
+              profile['nailTechType'],
+            ]).toLowerCase() ==
+            'student'
+        ? 'Student/Unlicensed'
+        : 'Professional';
 
     final tierLabel = _tierLabelFrom(data, profile);
     final rating = _asDouble(_asMap(data['stats'])['rating'] ?? data['rating']);
@@ -414,6 +447,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
           rating: rating,
           city: city,
           state: state,
+          zip: zip,
           budgetMin: budgetMin,
           budgetMax: budgetMax,
           credential: credential,
@@ -520,7 +554,10 @@ class _ClientHomePageState extends State<ClientHomePage> {
     return false;
   }
 
-  String _tierLabelFrom(Map<String, dynamic> data, Map<String, dynamic> profile) {
+  String _tierLabelFrom(
+    Map<String, dynamic> data,
+    Map<String, dynamic> profile,
+  ) {
     final ascension = _asMap(data['ascension']);
     final sponsorshipRequest = _asMap(data['sponsorshipRequest']);
 
@@ -544,6 +581,14 @@ class _ClientHomePageState extends State<ClientHomePage> {
     if (raw is Map<String, dynamic>) return raw;
     if (raw is Map) {
       return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {}
     }
     return const <String, dynamic>{};
   }
@@ -713,9 +758,9 @@ class _ClientHomePageState extends State<ClientHomePage> {
         widget.onOpenReviews?.call();
       } else {
         if (!mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ArtistReviewsPage()));
       }
       return;
     }
@@ -768,9 +813,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
                       Icons.close_rounded,
                       color: AppColors.blackCat,
                     ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white,
-                    ),
+                    style: IconButton.styleFrom(backgroundColor: Colors.white),
                   ),
                 ),
               ],
@@ -836,6 +879,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
                       imageUrl: _resolvedHeaderAvatarUrl,
                       displayName: widget.clientName,
                       size: JntHeaderMetrics.avatarSize,
+                      resolveCurrentUserFallback: true,
                     ),
                   ),
                 ),
@@ -947,11 +991,15 @@ class _ProductTile extends StatelessWidget {
     final ratingLabel = product.rating > 0
         ? product.rating.toStringAsFixed(1)
         : 'N/A';
-    final semanticsLabel =
-        'View artist details for ${product.artistName}. Tier ${product.tierLabel}. Rating $ratingLabel. Location ${product.city}, ${product.state}.';
+    final locationLabel = _artistLocationText(
+      product.city,
+      product.state,
+      product.zip,
+    );
 
     return _CustomSemanticAction(
-      label: semanticsLabel,
+      label:
+          'View artist details for ${product.artistName}. Tier ${product.tierLabel}. Rating $ratingLabel. Location $locationLabel.',
       onTap: onTap,
       focusRingColor: focusRingColor,
       child: Container(
@@ -1099,6 +1147,7 @@ class _Product {
     required this.rating,
     required this.city,
     required this.state,
+    required this.zip,
     required this.budgetMin,
     required this.budgetMax,
     required this.credential,
@@ -1116,6 +1165,7 @@ class _Product {
   final double rating;
   final String city;
   final String state;
+  final String zip;
   final int budgetMin;
   final int budgetMax;
   final String credential;
@@ -1321,12 +1371,19 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     product.city.trim().isEmpty &&
-                                            product.state.trim().isEmpty
+                                            product.state.trim().isEmpty &&
+                                            product.zip.trim().isEmpty
                                         ? ''
-                                        : '${product.city}, ${product.state}',
+                                        : _artistLocationText(
+                                            product.city,
+                                            product.state,
+                                            product.zip,
+                                          ),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.black.withValues(alpha: 0.6),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.6,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -1334,7 +1391,9 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                     'Budget: \$${product.budgetMin} - \$${product.budgetMax}',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.black.withValues(alpha: 0.7),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.7,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1422,7 +1481,9 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                     'No previous art uploaded yet',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.black.withValues(alpha: 0.55),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.55,
+                                      ),
                                     ),
                                   ),
                                 )
@@ -1449,7 +1510,9 @@ class _ArtistDetailsSheet extends StatelessWidget {
                                         fallback: Container(
                                           width: 120,
                                           height: 120,
-                                          color: Colors.black.withValues(alpha: 0.04),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.04,
+                                          ),
                                           alignment: Alignment.center,
                                           child: const Icon(
                                             Icons.image_not_supported_outlined,

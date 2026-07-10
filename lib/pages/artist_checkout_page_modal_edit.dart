@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
 import '../widgets/jnt_modal_app_bar.dart';
+import '../utils/registration_input_utils.dart';
 
 ThemeData _checkoutFormTheme(BuildContext context) {
   return Theme.of(context).copyWith(
@@ -168,31 +170,6 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   void initState() {
     super.initState();
     _info = widget.initial;
-    if (_info.isShippingAddressSame) {
-      _info = _info.copyWith(
-        shippingAddressLine1: _info.shippingAddressLine1.trim().isEmpty
-            ? _info.addressLine1
-            : _info.shippingAddressLine1,
-        shippingAddressLine2: _info.shippingAddressLine2.trim().isEmpty
-            ? _info.addressLine2
-            : _info.shippingAddressLine2,
-        shippingCity: _info.shippingCity.trim().isEmpty
-            ? _info.city
-            : _info.shippingCity,
-        shippingState: _info.shippingState.trim().isEmpty
-            ? _info.state
-            : _info.shippingState,
-        shippingZip: _info.shippingZip.trim().isEmpty
-            ? _info.zip
-            : _info.shippingZip,
-        shippingCountry: _info.shippingCountry.trim().isEmpty
-            ? _info.country
-            : _info.shippingCountry,
-        shippingTimeZone: _info.shippingTimeZone.trim().isEmpty
-            ? _info.timeZone
-            : _info.shippingTimeZone,
-      );
-    }
   }
 
   Future<T?> _showCheckoutEditModal<T>(Widget child) {
@@ -289,6 +266,32 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
     );
   }
 
+  Widget _shippingField({
+    required String label,
+    required String initialValue,
+    required ValueChanged<String> onChanged,
+    TextInputType? keyboardType,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextFormField(
+        initialValue: initialValue,
+        keyboardType: keyboardType,
+        onChanged: (value) => setState(() => onChanged(value)),
+        style: _valueStyle,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _editLink(VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
@@ -311,167 +314,217 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
         closeTooltip: 'Close checkout',
         closeIcon: const Icon(Icons.close),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-        children: [
-          _card(
-            title: 'Artist Profile',
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Container()),
-                    _editLink(_editArtistInfo),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _rowLine('Name', _info.artistName),
-                _rowLine('Email', _info.email),
-                _rowLine('Phone', _info.phone),
-              ],
+      body: Theme(
+        data: _checkoutFormTheme(context),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          children: [
+            _card(
+              title: 'Artist Profile',
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Container()),
+                      _editLink(_editArtistInfo),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _rowLine('Name', _info.artistName),
+                  _rowLine('Email', _info.email),
+                  _rowLine('Phone', _info.phone),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          _card(
-            title: 'Address Information',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Container()),
-                    _editLink(_editAddressInfo),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _rowLine('Address Line 1', _info.addressLine1),
-                _rowLine(
-                  'Address Line 2',
-                  _info.addressLine2.trim().isEmpty ? '—' : _info.addressLine2,
-                ),
-                _rowLine('City', _info.city),
-                _rowLine('State', _info.state),
-                _rowLine('ZIP', _info.zip),
-                _rowLine('Country', _info.country),
-                _rowLine('Time Zone', _info.timeZone),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: _info.isShippingAddressSame,
-                      activeColor: AppColors.blackCat,
-                      onChanged: (v) {
-                        setState(() {
-                          _info = _info.copyWith(
-                            isShippingAddressSame: v ?? true,
-                          );
-                        });
-                      },
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Is Shipping Address same as billing address?',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+            _card(
+              title: 'Address Information',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Container()),
+                      _editLink(_editAddressInfo),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _rowLine('Address Line 1', _info.addressLine1),
+                  _rowLine(
+                    'Address Line 2',
+                    _info.addressLine2.trim().isEmpty
+                        ? '—'
+                        : _info.addressLine2,
+                  ),
+                  _rowLine('City', _info.city),
+                  _rowLine('State', _info.state),
+                  _rowLine('ZIP', _info.zip),
+                  _rowLine('Country', _info.country),
+                  _rowLine('Time Zone', _info.timeZone),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _info.isShippingAddressSame,
+                        activeColor: AppColors.blackCat,
+                        onChanged: (v) {
+                          final isSame = v ?? true;
+                          setState(() {
+                            _info = _info.copyWith(
+                              isShippingAddressSame: isSame,
+                              shippingAddressLine1: isSame
+                                  ? _info.addressLine1
+                                  : '',
+                              shippingAddressLine2: isSame
+                                  ? _info.addressLine2
+                                  : '',
+                              shippingCity: isSame ? _info.city : '',
+                              shippingState: isSame ? _info.state : '',
+                              shippingZip: isSame ? _info.zip : '',
+                              shippingCountry: isSame ? _info.country : '',
+                              shippingTimeZone: isSame ? _info.timeZone : '',
+                            );
+                          });
+                        },
+                      ),
+                      const Expanded(
+                        child: Text(
+                          'Is shipping address same as above address',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                  if (!_info.isShippingAddressSame) ...[
+                    const SizedBox(height: 6),
+                    _shippingField(
+                      label: 'Ship Address 1',
+                      initialValue: _info.shippingAddressLine1,
+                      onChanged: (value) =>
+                          _info = _info.copyWith(shippingAddressLine1: value),
+                    ),
+                    _rowLine(
+                      'Ship Address 2',
+                      _info.shippingAddressLine2.trim().isEmpty
+                          ? '—'
+                          : _info.shippingAddressLine2,
+                    ),
+                    _shippingField(
+                      label: 'Ship City',
+                      initialValue: _info.shippingCity,
+                      onChanged: (value) =>
+                          _info = _info.copyWith(shippingCity: value),
+                    ),
+                    _shippingField(
+                      label: 'Ship State',
+                      initialValue: _info.shippingState,
+                      onChanged: (value) =>
+                          _info = _info.copyWith(shippingState: value),
+                    ),
+                    _shippingField(
+                      label: 'Ship ZIP',
+                      initialValue: _info.shippingZip,
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) =>
+                          _info = _info.copyWith(shippingZip: value),
+                    ),
+                    _shippingField(
+                      label: 'Ship Country',
+                      initialValue: _info.shippingCountry,
+                      onChanged: (value) =>
+                          _info = _info.copyWith(shippingCountry: value),
+                    ),
+                    _shippingField(
+                      label: 'Ship Time Zone',
+                      initialValue: _info.shippingTimeZone,
+                      onChanged: (value) =>
+                          _info = _info.copyWith(shippingTimeZone: value),
                     ),
                   ],
-                ),
-                if (!_info.isShippingAddressSame) ...[
-                  const SizedBox(height: 6),
-                  _rowLine('Ship Address 1', _info.shippingAddressLine1),
-                  _rowLine(
-                    'Ship Address 2',
-                    _info.shippingAddressLine2.trim().isEmpty
-                        ? '—'
-                        : _info.shippingAddressLine2,
-                  ),
-                  _rowLine('Ship City', _info.shippingCity),
-                  _rowLine('Ship State', _info.shippingState),
-                  _rowLine('Ship ZIP', _info.shippingZip),
-                  _rowLine('Ship Country', _info.shippingCountry),
-                  _rowLine('Ship Time Zone', _info.shippingTimeZone),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _card(
-            title: 'Payment Information',
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Container()),
-                    _editLink(_editPaymentInfo),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _rowLine('Method', _info.paymentMethod),
-                _rowLine(
-                  'Details',
-                  _info.paymentDetail.isEmpty ? '—' : _info.paymentDetail,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _card(
-            title: 'Product',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _info.productTitle,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _info.productSubtitle,
-                  style: TextStyle(
-                    color: AppColors.blackCat.withValues(alpha: 0.65),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _info.productPriceText,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                    fontSize: 11.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          SizedBox(
-            height: 54,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.blackCat,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              ),
-              onPressed: _completePurchase,
-              child: const Text(
-                'Complete Purchase',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+
+            _card(
+              title: 'Payment Information',
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Container()),
+                      _editLink(_editPaymentInfo),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _rowLine('Method', _info.paymentMethod),
+                  _rowLine(
+                    'Details',
+                    _info.paymentDetail.isEmpty ? '—' : _info.paymentDetail,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            _card(
+              title: 'Product',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _info.productTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _info.productSubtitle,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _info.productPriceText,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            SizedBox(
+              height: 54,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: _completePurchase,
+                child: const Text(
+                  'Complete Purchase',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -579,7 +632,9 @@ class _EditArtistInfoPageState extends State<_EditArtistInfoPage> {
     super.initState();
     _name = TextEditingController(text: widget.initial.artistName);
     _email = TextEditingController(text: widget.initial.email);
-    _phone = TextEditingController(text: widget.initial.phone);
+    _phone = TextEditingController(
+      text: RegistrationInputUtils.formatUsPhoneLocal(widget.initial.phone),
+    );
   }
 
   @override
@@ -612,6 +667,11 @@ class _EditArtistInfoPageState extends State<_EditArtistInfoPage> {
           controller: _phone,
           style: _modalInputTextStyle,
           keyboardType: TextInputType.phone,
+          inputFormatters: <TextInputFormatter>[
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(10),
+            UsPhoneTextInputFormatter(),
+          ],
           decoration: const InputDecoration(labelText: 'Phone', filled: true),
         ),
         const SizedBox(height: 16),
@@ -752,7 +812,7 @@ class _EditAddressInfoPageState extends State<_EditAddressInfoPage> {
           value: _isShippingSame,
           activeColor: AppColors.blackCat,
           title: const Text(
-            'Is Shipping Address same as billing address?',
+            'Is shipping address same as above address',
             style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w500,

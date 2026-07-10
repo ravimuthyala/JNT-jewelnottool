@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -15,10 +15,10 @@ import '../services/supabase_bootstrap.dart';
 import 'jnt_ascension_page.dart';
 import 'notifications_page.dart';
 import 'artist_reviews_page.dart';
-import '../widgets/artist_ascension_card.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import '../widgets/searchable_dropdown_field.dart';
+import '../utils/registration_input_utils.dart';
 
 String _storageBucketForReference(String raw) {
   final value = raw.trim();
@@ -87,6 +87,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   bool _savingNfcRequestPref = false;
   bool _allClientRequestNotificationsEnabled = true;
   bool _savingAllClientRequestNotifications = false;
+  bool _directRequestNotificationsEnabled = true;
+  bool _savingDirectRequestNotifications = false;
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   String _artistSupabaseTable = '';
   String _artistSupabaseId = '';
@@ -269,8 +271,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         row['studioName'],
         row['studio_name'],
       ]),
-      'panel_directRequestsEnabled': row['panel_directRequestsEnabled'] ?? row['panel_direct_requests_enabled'],
-      'panel_nfcRequestEnabled': row['panel_nfcRequestEnabled'] ?? row['panel_nfc_request_enabled'],
+      'panel_directRequestsEnabled':
+          row['panel_directRequestsEnabled'] ??
+          row['panel_direct_requests_enabled'],
+      'panel_nfcRequestEnabled':
+          row['panel_nfcRequestEnabled'] ?? row['panel_nfc_request_enabled'],
       'panel_allClientRequestNotificationsEnabled':
           row['panel_allClientRequestNotificationsEnabled'] ??
           row['panel_all_client_request_notifications_enabled'],
@@ -295,19 +300,26 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         ..._asMap(row['availability']),
         if (!_asMap(row['availability']).containsKey('directRequestsEnabled') &&
             _asMap(row['availability']).containsKey('direct_requests_enabled'))
-          'directRequestsEnabled':
-              _asMap(row['availability'])['direct_requests_enabled'],
+          'directRequestsEnabled': _asMap(
+            row['availability'],
+          )['direct_requests_enabled'],
         if (!_asMap(row['availability']).containsKey('nfcRequestEnabled') &&
             _asMap(row['availability']).containsKey('nfc_request_enabled'))
-          'nfcRequestEnabled':
-              _asMap(row['availability'])['nfc_request_enabled'],
+          'nfcRequestEnabled': _asMap(
+            row['availability'],
+          )['nfc_request_enabled'],
       },
       'notifications': <String, dynamic>{
         ..._asMap(row['notifications']),
-        if (!_asMap(row['notifications']).containsKey('allClientRequestsEnabled') &&
-            _asMap(row['notifications']).containsKey('all_client_requests_enabled'))
-          'allClientRequestsEnabled':
-              _asMap(row['notifications'])['all_client_requests_enabled'],
+        if (!_asMap(
+              row['notifications'],
+            ).containsKey('allClientRequestsEnabled') &&
+            _asMap(
+              row['notifications'],
+            ).containsKey('all_client_requests_enabled'))
+          'allClientRequestsEnabled': _asMap(
+            row['notifications'],
+          )['all_client_requests_enabled'],
       },
     };
   }
@@ -338,13 +350,24 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               as Map<String, dynamic>?)?['nfcRequestEnabled'],
         ) ??
         false;
-    final nextAllClientNotifications = _readBool(
-      compatData['panel_allClientRequestNotificationsEnabled'],
-      (compatData['notifications']
-          as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-      (compatData['profile']
-          as Map<String, dynamic>?)?['allClientRequestsEnabled'],
-    );
+    final nextAllClientNotifications =
+        _readMaybeBool(
+          compatData['panel_allClientRequestNotificationsEnabled'],
+          (compatData['notifications']
+              as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+          (compatData['profile']
+              as Map<String, dynamic>?)?['allClientRequestsEnabled'],
+        ) ??
+        nextDirect;
+    final nextDirectRequestNotifications =
+        _readMaybeBool(
+          compatData['panel_directRequestNotificationsEnabled'],
+          (compatData['notifications']
+              as Map<String, dynamic>?)?['directRequestNotificationsEnabled'],
+          (compatData['profile']
+              as Map<String, dynamic>?)?['directRequestNotificationsEnabled'],
+        ) ??
+        nextDirect;
 
     if (mounted) {
       setState(() {
@@ -352,6 +375,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         _directRequestsEnabled = nextDirect;
         _nfcRequestsEnabled = nextNfc;
         _allClientRequestNotificationsEnabled = nextAllClientNotifications;
+        _directRequestNotificationsEnabled = nextDirectRequestNotifications;
       });
     }
   }
@@ -513,6 +537,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   Future<void> _setDirectRequestsEnabled(bool value) async {
     setState(() {
       _directRequestsEnabled = value;
+      _directRequestNotificationsEnabled = value;
       _savingDirectRequestPref = true;
     });
     try {
@@ -521,6 +546,10 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         'profile': {
           ..._asMap(_artistData['profile']),
           'directRequestsEnabled': value,
+        },
+        'notifications': {
+          ..._asMap(_artistData['notifications']),
+          'directRequestNotificationsEnabled': value,
         },
       });
     } catch (_) {
@@ -533,6 +562,32 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     } finally {
       if (mounted) {
         setState(() => _savingDirectRequestPref = false);
+      }
+    }
+  }
+
+  Future<void> _setDirectRequestNotificationsEnabled(bool value) async {
+    setState(() {
+      _directRequestNotificationsEnabled = value;
+      _savingDirectRequestNotifications = true;
+    });
+    try {
+      await _syncSupabaseArtistFields({
+        'notifications': {
+          ..._asMap(_artistData['notifications']),
+          'directRequestNotificationsEnabled': value,
+        },
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update direct request notifications.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingDirectRequestNotifications = false);
       }
     }
   }
@@ -577,7 +632,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         'notifications': {
           ..._asMap(_artistData['notifications']),
           'allClientRequestsEnabled': value,
-          'directRequestNotificationsEnabled': true,
+          'directRequestNotificationsEnabled':
+              _directRequestNotificationsEnabled,
         },
       });
     } catch (_) {
@@ -723,8 +779,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           .select('portfolio')
           .eq('id', id)
           .limit(1);
-      final existing =
-          (rows.isNotEmpty && rows.first['portfolio'] is Map)
+      final existing = (rows.isNotEmpty && rows.first['portfolio'] is Map)
           ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
           : <String, dynamic>{};
       final images = List<dynamic>.from(existing['images'] as List? ?? []);
@@ -823,9 +878,10 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   bool _rowLooksPostCompletion(Map<String, dynamic> row) {
-    final status = _firstNonEmpty([row['status'], _asMap(row['data'])['status']])
-        .trim()
-        .toLowerCase();
+    final status = _firstNonEmpty([
+      row['status'],
+      _asMap(row['data'])['status'],
+    ]).trim().toLowerCase();
     if (status == 'completed' || status == 'shipped' || status == 'delivered') {
       return true;
     }
@@ -836,7 +892,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     if (_portfolioBackfillAttempted) return;
     _portfolioBackfillAttempted = true;
 
-    if (_artistSupabaseTable.trim().isEmpty || _artistSupabaseId.trim().isEmpty) {
+    if (_artistSupabaseTable.trim().isEmpty ||
+        _artistSupabaseId.trim().isEmpty) {
       await _bindArtistProfile();
     }
     final table = _artistSupabaseTable.trim();
@@ -849,7 +906,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
     try {
       final client = SupabaseBootstrap.client;
-      final currentRows = await client.from(table).select().eq('id', id).limit(1);
+      final currentRows = await client
+          .from(table)
+          .select()
+          .eq('id', id)
+          .limit(1);
       if (currentRows.isEmpty) return;
       final currentRow = Map<String, dynamic>.from(currentRows.first as Map);
       final currentCompat = _firestoreCompatArtistData(currentRow);
@@ -936,7 +997,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     await _backfillCompletedPortfolioForCurrentArtist();
     final supabaseId = _artistSupabaseId;
     final supabaseTable = _artistSupabaseTable;
-    showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -947,6 +1008,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           child: ArtistPortfolioModal(
             supabaseTable: supabaseTable,
             supabaseId: supabaseId,
+            initialData: _artistData,
             initialItems: _portfolioItemsFromData(_artistData),
             onUploadTap:
                 ({
@@ -1037,6 +1099,29 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         ),
       ),
     );
+    await _bindArtistProfile();
+  }
+
+  Future<void> _openSpecializationServiceArea() async {
+    if (_artistSupabaseId.isEmpty) await _bindArtistProfile();
+    if (_artistSupabaseId.isEmpty || !mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistSpecializationServiceAreaModal(
+            supabaseTable: _artistSupabaseTable,
+            supabaseId: _artistSupabaseId,
+            initialData: _artistData,
+          ),
+        ),
+      ),
+    );
+    await _bindArtistProfile();
   }
 
   Future<void> _openPayoutSettings() async {
@@ -1134,6 +1219,12 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     title: 'Portfolio',
                     subtitle: 'Upload designs & showcase your work.',
                     onTap: _openPortfolio,
+                  ),
+                  _menuTile(
+                    icon: Icons.tune_rounded,
+                    title: 'Specialization & Service Area',
+                    subtitle: 'Update services, pricing, and location.',
+                    onTap: _openSpecializationServiceArea,
                   ),
                   _menuTile(
                     icon: Icons.account_balance_wallet_outlined,
@@ -1292,10 +1383,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-      child: Column(
+      child: Stack(
         children: [
-          Stack(
-            alignment: Alignment.center,
+          Column(
             children: [
               SizedBox(
                 height: avatarSize,
@@ -1305,105 +1395,135 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   child: _avatarImage(),
                 ),
               ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          Text(
-            _artistName,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat.withValues(alpha: 0.90),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-          TierBadge(tier: _ascensionState.tier),
-
-          const SizedBox(height: 10),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_rating != null) ...[
-                _stars(_rating!),
-                const SizedBox(width: 10),
-              ] else ...[
-                Icon(
-                  Icons.star_border_rounded,
-                  size: 18,
-                  color: AppColors.blackCat.withValues(alpha: 0.45),
-                ),
-                const SizedBox(width: 8),
-              ],
+              const SizedBox(height: 12),
               Text(
-                _rating != null
-                    ? '${_rating!.toStringAsFixed(1)} | $_reviews Reviews'
-                    : 'N/A',
+                _artistName,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.blackCat.withValues(alpha: 0.70),
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat.withValues(alpha: 0.90),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_rating != null) ...[
+                    _stars(_rating!),
+                    const SizedBox(width: 10),
+                  ] else ...[
+                    Icon(
+                      Icons.star_border_rounded,
+                      size: 18,
+                      color: AppColors.blackCat.withValues(alpha: 0.45),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    _rating != null
+                        ? '${_rating!.toStringAsFixed(1)} | $_reviews Reviews'
+                        : 'N/A',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.blackCat.withValues(alpha: 0.70),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ArtistReviewsPage(),
+                    ),
+                  );
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Text(
+                    'View all reviews',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 46,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                  ),
+                  onPressed: _onEditProfile,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Edit Profile',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          fontSize: 14,
+                          fontFamily: 'Arial',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ArtistReviewsPage()),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Text(
-                'View all reviews',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          SizedBox(
-            height: 46,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.blackCat,
-                foregroundColor: AppColors.snow,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-              ),
-              onPressed: _onEditProfile,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Edit Profile',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
-                      fontFamily: 'Arial',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Icon(Icons.chevron_right_rounded, color: Colors.black.withValues(alpha: 0.55)),
-                ],
-              ),
-            ),
-          ),
+          Positioned(top: 0, right: 0, child: _heroTierTag()),
         ],
       ),
+    );
+  }
+
+  Widget _heroTierTag() {
+    final tier = _ascensionState.tier;
+    final color = switch (tier) {
+      ArtistAscensionTier.maker => const Color(0xFF8B7355),
+      ArtistAscensionTier.goldsmith => const Color(0xFFB08A28),
+      ArtistAscensionTier.crowned => const Color(0xFF4E4A7F),
+    };
+    final label = switch (tier) {
+      ArtistAscensionTier.maker => 'Maker',
+      ArtistAscensionTier.goldsmith => 'Goldsmith',
+      ArtistAscensionTier.crowned => 'Crowned',
+    };
+    final icon = switch (tier) {
+      ArtistAscensionTier.maker => Icons.auto_awesome_rounded,
+      ArtistAscensionTier.goldsmith => Icons.workspace_premium_rounded,
+      ArtistAscensionTier.crowned => Icons.emoji_events_rounded,
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1642,16 +1762,16 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   ),
                 ),
               ),
-              IgnorePointer(
-                child: Switch(
-                  value: true,
-                  activeThumbColor: AppColors.blackCat,
-                  inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withValues(
-                    alpha: 0.35,
-                  ),
-                  onChanged: (_) {},
+              Switch(
+                value: _directRequestNotificationsEnabled,
+                activeThumbColor: AppColors.blackCat,
+                inactiveThumbColor: AppColors.blackCatLight,
+                inactiveTrackColor: AppColors.blackCatLight.withValues(
+                  alpha: 0.35,
                 ),
+                onChanged: _savingDirectRequestNotifications
+                    ? null
+                    : (v) => _setDirectRequestNotificationsEnabled(v),
               ),
             ],
           ),
@@ -1659,7 +1779,6 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       ),
     );
   }
-
 
   void _openAscension() {
     showModalBottomSheet<void>(
@@ -1916,9 +2035,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       try {
         final listed = await SupabaseBootstrap.client.storage
             .from(_storageBucketForReference(folder))
-            .list(
-              path: _storageObjectPathForReference(folder),
-            )
+            .list(path: _storageObjectPathForReference(folder))
             .timeout(const Duration(seconds: 4));
         for (final item in listed) {
           final name = item.name.toLowerCase();
@@ -2049,12 +2166,14 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       panel['applePayEmail'],
       paymentDetails['applePayEmail'],
     ]);
-    _applePhoneCtrl.text = _firstNonEmpty([
-      apple['phone'],
-      payout['applePayPhone'],
-      panel['applePayPhone'],
-      paymentDetails['applePayPhone'],
-    ]);
+    _applePhoneCtrl.text = RegistrationInputUtils.formatUsPhoneLocal(
+      _firstNonEmpty([
+        apple['phone'],
+        payout['applePayPhone'],
+        panel['applePayPhone'],
+        paymentDetails['applePayPhone'],
+      ]),
+    );
 
     _paypalEmailCtrl.text = _firstNonEmpty([
       paypal['email'],
@@ -2112,7 +2231,9 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       paymentDetails['venmoHandle'],
       widget.initialData['venmoHandle'],
     ]);
-    _venmoPhoneCtrl.text = _firstNonEmpty([venmo['phone']]);
+    _venmoPhoneCtrl.text = RegistrationInputUtils.formatUsPhoneLocal(
+      _firstNonEmpty([venmo['phone']]),
+    );
 
     _applyDefaultExpandedMethod(method);
   }
@@ -2361,9 +2482,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                 size: 26,
                 color: AppColors.blackCat,
               ),
-              children: [
-                _field('PayPal Email', _paypalEmailCtrl),
-              ],
+              children: [_field('PayPal Email', _paypalEmailCtrl)],
             ),
             const SizedBox(height: 12),
             _methodCard(
@@ -2478,6 +2597,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
   }
 
   Widget _field(String label, TextEditingController c) {
+    final isPhoneField = label.trim().toLowerCase() == 'phone';
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -2494,6 +2614,14 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
           const SizedBox(height: 5),
           TextField(
             controller: c,
+            keyboardType: isPhoneField ? TextInputType.phone : null,
+            inputFormatters: isPhoneField
+                ? <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                    UsPhoneTextInputFormatter(),
+                  ]
+                : null,
             style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
             decoration: InputDecoration(
               filled: true,
@@ -2601,6 +2729,111 @@ class ArtistPortfolioItem {
   final String? storagePath;
 }
 
+const List<String> _artistServiceOptions = <String>[
+  'Custom Press-ons',
+  'Nail Art',
+  'Intricate Nail Art',
+  'Gel / Acrylic',
+  '3D Nail Art',
+  'Airbrush/Stamping',
+  'Encapsulation',
+  'Dip Powder',
+  'Sculptured',
+  'PolyGel',
+  'Chrome & Metallic',
+];
+
+const List<String> _artistTimeZones = <String>[
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+];
+
+const List<String> _artistExperienceOptions = <String>[
+  '0–1 years (Beginner)',
+  '1–3 years (Intermediate)',
+  '3–5 years (Skilled)',
+  '5–10 years (Advanced)',
+  '10+ years (Expert)',
+];
+
+const List<String> _artistPracticeDurationOptions = <String>[
+  '< 3 months',
+  '3-6 months',
+  '6-12 months',
+  '1-2 years',
+  '2+ years',
+];
+
+String _normalizeArtistPracticeDurationValue(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return '';
+  const aliases = <String, String>{
+    '3–6 months': '3-6 months',
+    '3â€“6 months': '3-6 months',
+    '6–12 months': '6-12 months',
+    '6â€“12 months': '6-12 months',
+    '1–2 years': '1-2 years',
+    '1â€“2 years': '1-2 years',
+  };
+  return aliases[value] ??
+      <String, String>{
+        '0 - 1 years (Beginner)': _artistExperienceOptions[0],
+        '1 - 3 years (Intermediate)': _artistExperienceOptions[1],
+        '3 - 5 years (Skilled)': _artistExperienceOptions[2],
+        '5 - 10 years (Advanced)': _artistExperienceOptions[3],
+        '10 + years (Expert)': _artistExperienceOptions[4],
+      }[value] ??
+      value;
+}
+
+String _normalizeArtistExperienceValue(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return '';
+  const aliases = <String, String>{
+    '0-1 years (Beginner)': '0–1 years (Beginner)',
+    '1-3 years (Intermediate)': '1–3 years (Intermediate)',
+    '3-5 years (Skilled)': '3–5 years (Skilled)',
+    '5-10 years (Advanced)': '5–10 years (Advanced)',
+  };
+  return aliases[value] ?? value;
+}
+
+Map<String, dynamic> _decodeJsonMap(Object? value) {
+  if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+  if (value is Map) {
+    return value.map((key, item) => MapEntry(key.toString(), item));
+  }
+  if (value is String) {
+    final text = value.trim();
+    if (text.isEmpty) return const <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      if (decoded is Map) {
+        return decoded.map((key, item) => MapEntry(key.toString(), item));
+      }
+    } catch (_) {}
+  }
+  return const <String, dynamic>{};
+}
+
+List<dynamic> _decodeJsonList(Object? value) {
+  if (value is List) return List<dynamic>.from(value);
+  if (value is String) {
+    final text = value.trim();
+    if (text.isEmpty) return const <dynamic>[];
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is List) return List<dynamic>.from(decoded);
+    } catch (_) {}
+  }
+  return const <dynamic>[];
+}
+
 bool _isPortfolioImageValue(String raw) {
   final value = raw.trim();
   if (value.isEmpty) return false;
@@ -2634,12 +2867,14 @@ class ArtistPortfolioModal extends StatefulWidget {
     super.key,
     required this.supabaseTable,
     required this.supabaseId,
+    required this.initialData,
     required this.initialItems,
     required this.onUploadTap,
   });
 
   final String supabaseTable;
   final String supabaseId;
+  final Map<String, dynamic> initialData;
   final List<ArtistPortfolioItem> initialItems;
   final Future<List<ArtistPortfolioItem>> Function({
     List<XFile>? selectedFiles,
@@ -2653,6 +2888,7 @@ class ArtistPortfolioModal extends StatefulWidget {
 
 class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   bool _uploading = false;
+  bool _savingDetails = false;
   bool _initialLoading = true;
   bool _loadingMore = false;
   bool _hasMore = false;
@@ -2661,23 +2897,169 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   String? _loadError;
   final Set<String> _deletingImages = <String>{};
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _licenseCtrl = TextEditingController();
+  final TextEditingController _jurisdictionCtrl = TextEditingController();
+  final TextEditingController _schoolCtrl = TextEditingController();
+  final TextEditingController _instagramCtrl = TextEditingController();
+  final TextEditingController _tiktokCtrl = TextEditingController();
   List<ArtistPortfolioItem> _seedItems = const <ArtistPortfolioItem>[];
   List<ArtistPortfolioItem> _pagedItems = const <ArtistPortfolioItem>[];
+  String _nailTechType = 'professional';
+  String? _yearsExperience;
+  String? _practiceDuration;
 
   @override
   void initState() {
     super.initState();
     _seedItems = List<ArtistPortfolioItem>.from(widget.initialItems);
+    _hydrateProfileFields();
     _scrollController.addListener(_onScroll);
     unawaited(_loadInitialPage());
   }
 
   @override
   void dispose() {
+    _licenseCtrl.dispose();
+    _jurisdictionCtrl.dispose();
+    _schoolCtrl.dispose();
+    _instagramCtrl.dispose();
+    _tiktokCtrl.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
     super.dispose();
+  }
+
+  void _hydrateProfileFields() {
+    final data = widget.initialData;
+    final profile = _asMap(data['profile']);
+    final credentials = _asMap(data['credentials']);
+    final artist = _asMap(data['artist']);
+    final artistProfile = _asMap(data['artist_profile']);
+    final artistCredentials = _asMap(artist['credentials']);
+    final artistProfileCredentials = _asMap(artistProfile['credentials']);
+
+    _licenseCtrl.text = _firstNonEmpty([
+      data['panel_licenseNumber'],
+      data['panel_license_number'],
+      profile['licenseNumber'],
+      profile['license_number'],
+      credentials['licenseNumber'],
+      credentials['license_number'],
+      artistProfileCredentials['licenseNumber'],
+      artistProfileCredentials['license_number'],
+      artistCredentials['licenseNumber'],
+      artistCredentials['license_number'],
+      artistProfile['licenseNumber'],
+      artistProfile['license_number'],
+      artist['licenseNumber'],
+      artist['license_number'],
+    ]);
+    _jurisdictionCtrl.text = _firstNonEmpty([
+      data['panel_jurisdiction'],
+      profile['jurisdiction'],
+      credentials['jurisdiction'],
+      artistProfileCredentials['jurisdiction'],
+      artistCredentials['jurisdiction'],
+      artistProfile['jurisdiction'],
+      artist['jurisdiction'],
+    ]);
+    _schoolCtrl.text = _firstNonEmpty([
+      data['panel_school'],
+      profile['school'],
+      credentials['school'],
+      artistProfileCredentials['school'],
+      artistCredentials['school'],
+      data['school'],
+      artistProfile['school'],
+      artist['school'],
+    ]);
+    _instagramCtrl.text = _firstNonEmpty([
+      profile['instagram'],
+      data['instagram'],
+      data['panel_instagram'],
+      artistProfile['instagram'],
+      artist['instagram'],
+    ]);
+    _tiktokCtrl.text = _firstNonEmpty([
+      profile['tiktok'],
+      data['tiktok'],
+      data['panel_tiktok'],
+      artistProfile['tiktok'],
+      artist['tiktok'],
+    ]);
+    _nailTechType = _normalizedNailTechType(
+      _firstNonEmpty([
+        data['panel_nailTechType'],
+        data['panel_artist_nailTechType'],
+        data['panel_nail_tech_type'],
+        data['panel_artist_nail_tech_type'],
+        credentials['nailTechType'],
+        credentials['nail_tech_type'],
+        artistProfileCredentials['nailTechType'],
+        artistProfileCredentials['nail_tech_type'],
+        artistCredentials['nailTechType'],
+        artistCredentials['nail_tech_type'],
+        profile['nailTechType'],
+        profile['nail_tech_type'],
+        data['nailTechType'],
+        data['nail_tech_type'],
+        artistProfile['nailTechType'],
+        artistProfile['nail_tech_type'],
+        artist['nailTechType'],
+        artist['nail_tech_type'],
+      ]),
+    );
+    final years = _firstNonEmpty([
+      data['panel_proYearsExperience'],
+      data['panel_pro_years_experience'],
+      profile['proYearsExperience'],
+      profile['pro_years_experience'],
+      credentials['proYearsExperience'],
+      credentials['pro_years_experience'],
+      artistProfileCredentials['proYearsExperience'],
+      artistProfileCredentials['pro_years_experience'],
+      artistCredentials['proYearsExperience'],
+      artistCredentials['pro_years_experience'],
+      data['proYearsExperience'],
+      data['pro_years_experience'],
+      artistProfile['proYearsExperience'],
+      artistProfile['pro_years_experience'],
+      artist['proYearsExperience'],
+      artist['pro_years_experience'],
+      data['yearsExperience'],
+      data['years_experience'],
+      artistProfile['yearsExperience'],
+      artistProfile['years_experience'],
+      artist['yearsExperience'],
+      artist['years_experience'],
+    ]);
+    final normalizedYears = _normalizeArtistExperienceValue(years);
+    _yearsExperience = normalizedYears.isEmpty ? null : normalizedYears;
+    final practiceDuration = _firstNonEmpty([
+      data['panel_practiceDuration'],
+      data['panel_practice_duration'],
+      profile['practiceDuration'],
+      profile['practice_duration'],
+      credentials['practiceDuration'],
+      credentials['practice_duration'],
+      artistProfileCredentials['practiceDuration'],
+      artistProfileCredentials['practice_duration'],
+      artistCredentials['practiceDuration'],
+      artistCredentials['practice_duration'],
+      data['practiceDuration'],
+      data['practice_duration'],
+      artistProfile['practiceDuration'],
+      artistProfile['practice_duration'],
+      artist['practiceDuration'],
+      artist['practice_duration'],
+    ]);
+    final normalizedPracticeDuration = _normalizeArtistPracticeDurationValue(
+      practiceDuration,
+    );
+    _practiceDuration = normalizedPracticeDuration.isEmpty
+        ? null
+        : normalizedPracticeDuration;
   }
 
   void _onScroll() {
@@ -2738,6 +3120,122 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       _loadError = e.toString();
     } finally {
       if (mounted) setState(() => _initialLoading = false);
+    }
+  }
+
+  Map<String, dynamic> _asMap(Object? value) {
+    return _decodeJsonMap(value);
+  }
+
+  String _normalizedNailTechType(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value.contains('student') || value.contains('unlicensed')) {
+      return 'student';
+    }
+    return 'professional';
+  }
+
+  Object _encodeLikeOriginal(Object? original, Object value) {
+    return original is String ? jsonEncode(value) : value;
+  }
+
+  Future<void> _saveArtistDetails() async {
+    if (_savingDetails) return;
+    setState(() => _savingDetails = true);
+    try {
+      final profile = _asMap(widget.initialData['profile']);
+      final credentials = _asMap(widget.initialData['credentials']);
+      final artist = _asMap(widget.initialData['artist']);
+      final instagram = _instagramCtrl.text.trim();
+      final tiktok = _tiktokCtrl.text.trim();
+      final licenseNumber = _licenseCtrl.text.trim();
+      final jurisdiction = _jurisdictionCtrl.text.trim();
+      final yearsExperience = (_yearsExperience ?? '').trim();
+      final school = _schoolCtrl.text.trim();
+      final practiceDuration = (_practiceDuration ?? '').trim();
+      final nailTechType = _nailTechType == 'student'
+          ? 'student'
+          : 'professional';
+
+      await SupabaseBootstrap.client
+          .from(widget.supabaseTable)
+          .update({
+            'instagram': instagram,
+            'tiktok': tiktok,
+            'panel_instagram': instagram,
+            'panel_tiktok': tiktok,
+            'panel_nailTechType': nailTechType,
+            'panel_artist_nailTechType': nailTechType,
+            'panel_nail_tech_type': nailTechType,
+            'panel_artist_nail_tech_type': nailTechType,
+            'panel_licenseNumber': licenseNumber,
+            'panel_license_number': licenseNumber,
+            'panel_jurisdiction': jurisdiction,
+            'panel_proYearsExperience': yearsExperience,
+            'panel_pro_years_experience': yearsExperience,
+            'panel_school': school,
+            'panel_practiceDuration': practiceDuration,
+            'panel_practice_duration': practiceDuration,
+            'profile': _encodeLikeOriginal(widget.initialData['profile'], {
+              ...profile,
+              'instagram': instagram,
+              'tiktok': tiktok,
+              'nailTechType': nailTechType,
+              'nail_tech_type': nailTechType,
+              'licenseNumber': licenseNumber,
+              'license_number': licenseNumber,
+              'jurisdiction': jurisdiction,
+              'proYearsExperience': yearsExperience,
+              'pro_years_experience': yearsExperience,
+              'school': school,
+              'practiceDuration': practiceDuration,
+              'practice_duration': practiceDuration,
+            }),
+            'credentials':
+                _encodeLikeOriginal(widget.initialData['credentials'], {
+                  ...credentials,
+                  'nailTechType': nailTechType,
+                  'nail_tech_type': nailTechType,
+                  'licenseNumber': licenseNumber,
+                  'license_number': licenseNumber,
+                  'jurisdiction': jurisdiction,
+                  'proYearsExperience': yearsExperience,
+                  'pro_years_experience': yearsExperience,
+                  'school': school,
+                  'practiceDuration': practiceDuration,
+                  'practice_duration': practiceDuration,
+                }),
+            'artist': _encodeLikeOriginal(widget.initialData['artist'], {
+              ...artist,
+              'instagram': instagram,
+              'tiktok': tiktok,
+              'nailTechType': nailTechType,
+              'nail_tech_type': nailTechType,
+              'licenseNumber': licenseNumber,
+              'license_number': licenseNumber,
+              'jurisdiction': jurisdiction,
+              'proYearsExperience': yearsExperience,
+              'pro_years_experience': yearsExperience,
+              'school': school,
+              'practiceDuration': practiceDuration,
+              'practice_duration': practiceDuration,
+            }),
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', widget.supabaseId);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Portfolio details updated.')),
+      );
+      Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to save portfolio details.')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingDetails = false);
     }
   }
 
@@ -2866,89 +3364,110 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Text(
-                      'Showcase your nail art designs.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.blackCat.withValues(alpha: 0.6),
-                        fontWeight: FontWeight.w400,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Showcase your nail art designs.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.blackCat.withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 38,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
+                  const SizedBox(height: 12),
+                  _detailsSection(),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Upload Design',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
                         ),
                       ),
-                      onPressed: _uploading
-                          ? null
-                          : () async {
-                              final picker = ImagePicker();
-                              final picked = await picker.pickMultiImage(
-                                imageQuality: 78,
-                                maxWidth: 1600,
-                                maxHeight: 1600,
-                              );
-                              if (picked.isEmpty) return;
-                              setState(() => _uploading = true);
-                              try {
-                                setState(() {
-                                  _uploadCompleted = 0;
-                                  _uploadTotal = picked.length;
-                                });
-                                final uploaded = await widget.onUploadTap(
-                                  selectedFiles: picked,
-                                  onProgress: (completed, total) {
-                                    if (!mounted) return;
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        height: 38,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: _uploading
+                              ? null
+                              : () async {
+                                  final picker = ImagePicker();
+                                  final picked = await picker.pickMultiImage(
+                                    imageQuality: 78,
+                                    maxWidth: 1600,
+                                    maxHeight: 1600,
+                                  );
+                                  if (picked.isEmpty) return;
+                                  setState(() => _uploading = true);
+                                  try {
                                     setState(() {
-                                      _uploadCompleted = completed;
-                                      _uploadTotal = total;
+                                      _uploadCompleted = 0;
+                                      _uploadTotal = picked.length;
                                     });
-                                  },
-                                );
-                                if (!mounted) return;
-                                if (uploaded.isNotEmpty) {
-                                  setState(() {
-                                    _seedItems = <ArtistPortfolioItem>[
-                                      ...uploaded,
-                                      ..._seedItems,
-                                    ];
-                                  });
-                                  await _loadInitialPage();
-                                }
-                              } finally {
-                                if (mounted) {
-                                  setState(() {
-                                    _uploading = false;
-                                    _uploadCompleted = 0;
-                                    _uploadTotal = 0;
-                                  });
-                                }
-                              }
-                            },
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text(
-                        _uploading
-                            ? (_uploadTotal > 0
-                                  ? 'Uploading $_uploadCompleted/$_uploadTotal'
-                                  : 'Uploading...')
-                            : 'Upload Design',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          fontFamily: 'Arial',
+                                    final uploaded = await widget.onUploadTap(
+                                      selectedFiles: picked,
+                                      onProgress: (completed, total) {
+                                        if (!mounted) return;
+                                        setState(() {
+                                          _uploadCompleted = completed;
+                                          _uploadTotal = total;
+                                        });
+                                      },
+                                    );
+                                    if (!mounted) return;
+                                    if (uploaded.isNotEmpty) {
+                                      setState(() {
+                                        _seedItems = <ArtistPortfolioItem>[
+                                          ...uploaded,
+                                          ..._seedItems,
+                                        ];
+                                      });
+                                      await _loadInitialPage();
+                                    }
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _uploading = false;
+                                        _uploadCompleted = 0;
+                                        _uploadTotal = 0;
+                                      });
+                                    }
+                                  }
+                                },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: Text(
+                            _uploading
+                                ? (_uploadTotal > 0
+                                      ? 'Uploading $_uploadCompleted/$_uploadTotal'
+                                      : 'Uploading...')
+                                : 'Upload Design',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -2978,8 +3497,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                           );
                         }
 
-                        final displayItems =
-                            _pagedItems.isNotEmpty ? _pagedItems : _seedItems;
+                        final displayItems = _pagedItems.isNotEmpty
+                            ? _pagedItems
+                            : _seedItems;
                         if (displayItems.isEmpty) {
                           return Center(
                             child: Text(
@@ -3023,6 +3543,232 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       distinct.add(item);
     }
     return distinct;
+  }
+
+  Widget _detailsSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'License Information',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _techTypeOption(
+                  label: 'Professional Nail Technician',
+                  value: 'professional',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _techTypeOption(
+                  label: 'Student / Unlicensed Nail Tech',
+                  value: 'student',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_nailTechType == 'professional') ...[
+            _detailsField('License #', _licenseCtrl),
+            _detailsField('Jurisdiction', _jurisdictionCtrl),
+            _detailsDropdown(
+              label: 'Years of Experience',
+              value: _yearsExperience,
+              items: _artistExperienceOptions,
+              onChanged: (value) => setState(() => _yearsExperience = value),
+            ),
+          ] else ...[
+            _detailsField('School / Program', _schoolCtrl),
+            _detailsDropdown(
+              label: 'Practice Duration',
+              value: _practiceDuration,
+              items: _artistPracticeDurationOptions,
+              onChanged: (value) => setState(() => _practiceDuration = value),
+            ),
+          ],
+          const SizedBox(height: 4),
+          const Text(
+            'Social Media',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _detailsField('Instagram', _instagramCtrl),
+          _detailsField('TikTok', _tiktokCtrl),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              height: 38,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: _savingDetails ? null : _saveArtistDetails,
+                child: Text(
+                  _savingDetails ? 'Saving...' : 'Save',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontFamily: 'Arial',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _techTypeOption({required String label, required String value}) {
+    final selected = _nailTechType == value;
+    return InkWell(
+      onTap: () => setState(() => _nailTechType = value),
+      borderRadius: BorderRadius.zero,
+      child: Container(
+        height: 74,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          border: Border.all(
+            color: selected
+                ? AppColors.blackCat
+                : AppColors.blackCatBorderLight,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.blackCat,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            Icon(
+              selected ? Icons.check_circle : Icons.circle_outlined,
+              size: 18,
+              color: selected
+                  ? AppColors.blackCat
+                  : AppColors.blackCat.withValues(alpha: 0.35),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailsField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
+        decoration: InputDecoration(
+          labelText: '$label *',
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          filled: true,
+          fillColor: AppColors.snow,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+          ),
+          labelStyle: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.blackCat.withValues(alpha: 0.72),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailsDropdown({
+    required String label,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DropdownButtonFormField<String>(
+        initialValue: items.contains(value) ? value : null,
+        dropdownColor: AppColors.snow,
+        iconEnabledColor: AppColors.blackCat,
+        style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
+        decoration: InputDecoration(
+          labelText: '$label *',
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          filled: true,
+          fillColor: AppColors.snow,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+          ),
+          labelStyle: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.blackCat.withValues(alpha: 0.72),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+        items: items
+            .map(
+              (item) =>
+                  DropdownMenuItem<String>(value: item, child: Text(item)),
+            )
+            .toList(growable: false),
+        onChanged: onChanged,
+      ),
+    );
   }
 
   Widget _buildPortfolioGrid(List<ArtistPortfolioItem> displayItems) {
@@ -3116,8 +3862,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           .eq('id', widget.supabaseId)
           .limit(1);
       if (rows.isNotEmpty) {
-        final portfolio =
-            (rows.first['portfolio'] is Map)
+        final portfolio = (rows.first['portfolio'] is Map)
             ? Map<String, dynamic>.from(rows.first['portfolio'] as Map)
             : <String, dynamic>{};
         final images = List<dynamic>.from(portfolio['images'] as List? ?? []);
@@ -3292,6 +4037,764 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   }
 }
 
+class ArtistSpecializationServiceAreaModal extends StatefulWidget {
+  const ArtistSpecializationServiceAreaModal({
+    super.key,
+    required this.supabaseTable,
+    required this.supabaseId,
+    required this.initialData,
+  });
+
+  final String supabaseTable;
+  final String supabaseId;
+  final Map<String, dynamic> initialData;
+
+  @override
+  State<ArtistSpecializationServiceAreaModal> createState() =>
+      _ArtistSpecializationServiceAreaModalState();
+}
+
+class _ArtistSpecializationServiceAreaModalState
+    extends State<ArtistSpecializationServiceAreaModal> {
+  final TextEditingController _minPriceCtrl = TextEditingController();
+  final TextEditingController _maxPriceCtrl = TextEditingController();
+  final TextEditingController _cityCtrl = TextEditingController();
+  final TextEditingController _countryCtrl = TextEditingController();
+  final TextEditingController _stateCtrl = TextEditingController();
+  final Set<String> _services = <String>{};
+  bool _saving = false;
+  bool _rushAvailable = false;
+  String _timeZone = 'America/New_York';
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.initialData;
+    final profile = _asMap(data['profile']);
+    final address = _asMap(data['address']);
+    final artist = _asMap(data['artist']);
+    final artistAddress = _asMap(artist['address']);
+    final nestedArtistPricing = _asMap(artist['pricing']);
+    final pricing = _asMap(data['pricing']);
+    final artistPricing = _asMap(data['artistPricing']);
+
+    _services.addAll(_readServices(data, artist));
+    _minPriceCtrl.text = _firstNonEmpty([
+      data['panel_artist_minPrice'],
+      data['panel_minPrice'],
+      data['panel_artist_min_price'],
+      data['panel_min_price'],
+      pricing['minPrice'],
+      pricing['min_price'],
+      artistPricing['minPrice'],
+      artistPricing['min_price'],
+      nestedArtistPricing['minPrice'],
+      nestedArtistPricing['min_price'],
+      data['minPrice'],
+      data['min_price'],
+      artist['minPrice'],
+      artist['min_price'],
+    ]);
+    _maxPriceCtrl.text = _firstNonEmpty([
+      data['panel_artist_maxPrice'],
+      data['panel_maxPrice'],
+      data['panel_artist_max_price'],
+      data['panel_max_price'],
+      pricing['maxPrice'],
+      pricing['max_price'],
+      artistPricing['maxPrice'],
+      artistPricing['max_price'],
+      nestedArtistPricing['maxPrice'],
+      nestedArtistPricing['max_price'],
+      data['maxPrice'],
+      data['max_price'],
+      artist['maxPrice'],
+      artist['max_price'],
+    ]);
+    _rushAvailable =
+        _readMaybeBool(data['panel_rushAvailable']) ??
+        _readMaybeBool(data['panel_artist_rushAvailable']) ??
+        _readMaybeBool(data['panel_rush_available']) ??
+        _readMaybeBool(data['panel_artist_rush_available']) ??
+        _readMaybeBool(pricing['rushAvailability']) ??
+        _readMaybeBool(pricing['rushAvailable']) ??
+        _readMaybeBool(pricing['rush_available']) ??
+        _readMaybeBool(artistPricing['rushAvailability']) ??
+        _readMaybeBool(artistPricing['rushAvailable']) ??
+        _readMaybeBool(artistPricing['rush_available']) ??
+        _readMaybeBool(nestedArtistPricing['rushAvailability']) ??
+        _readMaybeBool(nestedArtistPricing['rushAvailable']) ??
+        _readMaybeBool(nestedArtistPricing['rush_available']) ??
+        _readMaybeBool(artist['rushAvailability']) ??
+        _readMaybeBool(artist['rushAvailable']) ??
+        _readMaybeBool(artist['rush_available']) ??
+        false;
+    _cityCtrl.text = _firstNonEmpty([
+      address['city'],
+      artistAddress['city'],
+      profile['city'],
+      data['panel_city'],
+      data['city'],
+      artist['city'],
+    ]);
+    _stateCtrl.text = _firstNonEmpty([
+      address['state'],
+      artistAddress['state'],
+      profile['state'],
+      data['panel_state'],
+      data['state'],
+      artist['state'],
+    ]);
+    _countryCtrl.text = _firstNonEmpty([
+      address['country'],
+      artistAddress['country'],
+      profile['country'],
+      data['panel_country'],
+      data['country'],
+      artist['country'],
+      'United States',
+    ]);
+    _timeZone = _firstNonEmpty([
+      data['panel_timeZone'],
+      data['panel_time_zone'],
+      address['timeZone'],
+      address['time_zone'],
+      artistAddress['timeZone'],
+      artistAddress['time_zone'],
+      profile['timeZone'],
+      profile['time_zone'],
+      data['timeZone'],
+      data['time_zone'],
+      artist['timeZone'],
+      artist['time_zone'],
+      'America/New_York',
+    ]);
+  }
+
+  @override
+  void dispose() {
+    _minPriceCtrl.dispose();
+    _maxPriceCtrl.dispose();
+    _cityCtrl.dispose();
+    _countryCtrl.dispose();
+    _stateCtrl.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _asMap(Object? value) {
+    return _decodeJsonMap(value);
+  }
+
+  bool? _readMaybeBool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final text = (value ?? '').toString().trim().toLowerCase();
+    if (text == 'true') return true;
+    if (text == 'false') return false;
+    return null;
+  }
+
+  List<String> _readServices(
+    Map<String, dynamic> data,
+    Map<String, dynamic> artist,
+  ) {
+    final output = <String>{};
+    void addFrom(Object? raw) {
+      for (final item in _decodeJsonList(raw)) {
+        final value = item.toString().trim();
+        if (value.isEmpty) continue;
+        if (value == 'Encapsulation ') {
+          output.add('Encapsulation');
+        } else {
+          output.add(value);
+        }
+      }
+    }
+
+    addFrom(data['panel_services']);
+    addFrom(data['panel_artist_services']);
+    addFrom(data['services']);
+    addFrom(artist['services']);
+    addFrom(_asMap(artist['profile'])['services']);
+    return output.toList(growable: false);
+  }
+
+  Object _encodeLikeOriginal(Object? original, Object value) {
+    return original is String ? jsonEncode(value) : value;
+  }
+
+  Set<String> get _existingColumnNames {
+    return widget.initialData.keys.map((key) => key.toString()).toSet();
+  }
+
+  Map<String, dynamic> _onlyExistingColumns(Map<String, dynamic> payload) {
+    final existing = _existingColumnNames;
+    final filtered = <String, dynamic>{};
+
+    payload.forEach((key, value) {
+      if (existing.contains(key)) {
+        filtered[key] = value;
+      }
+    });
+
+    // updated_at exists on both artist and client_artist in the current app data.
+    if (existing.contains('updated_at') &&
+        !filtered.containsKey('updated_at')) {
+      filtered['updated_at'] = DateTime.now().toIso8601String();
+    }
+
+    return filtered;
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+
+    try {
+      final profile = _asMap(widget.initialData['profile']);
+      final address = _asMap(widget.initialData['address']);
+      final artist = _asMap(widget.initialData['artist']);
+      final pricing = _asMap(widget.initialData['pricing']);
+      final artistPricing = _asMap(widget.initialData['artistPricing']);
+      final nestedArtistPricing = _asMap(artist['pricing']);
+
+      final services = _services.toList(growable: false);
+      final minPrice = _minPriceCtrl.text.trim();
+      final maxPrice = _maxPriceCtrl.text.trim();
+      final city = _cityCtrl.text.trim();
+      final state = _stateCtrl.text.trim();
+      final country = _countryCtrl.text.trim().isEmpty
+          ? 'United States'
+          : _countryCtrl.text.trim();
+
+      final nextPricing = <String, dynamic>{
+        ...pricing,
+        'minPrice': minPrice,
+        'min_price': minPrice,
+        'maxPrice': maxPrice,
+        'max_price': maxPrice,
+        'rushAvailability': _rushAvailable,
+        'rushAvailable': _rushAvailable,
+        'rush_available': _rushAvailable,
+      };
+
+      final nextArtistPricing = <String, dynamic>{
+        ...artistPricing,
+        'minPrice': minPrice,
+        'min_price': minPrice,
+        'maxPrice': maxPrice,
+        'max_price': maxPrice,
+        'rushAvailability': _rushAvailable,
+        'rushAvailable': _rushAvailable,
+        'rush_available': _rushAvailable,
+      };
+
+      final nextNestedArtistPricing = <String, dynamic>{
+        ...nestedArtistPricing,
+        'minPrice': minPrice,
+        'min_price': minPrice,
+        'maxPrice': maxPrice,
+        'max_price': maxPrice,
+        'rushAvailability': _rushAvailable,
+        'rushAvailable': _rushAvailable,
+        'rush_available': _rushAvailable,
+      };
+
+      final nextAddress = <String, dynamic>{
+        ...address,
+        'city': city,
+        'state': state,
+        'country': country,
+        'timeZone': _timeZone,
+        'time_zone': _timeZone,
+      };
+
+      final nextProfile = <String, dynamic>{
+        ...profile,
+        'services': services,
+        'city': city,
+        'state': state,
+        'country': country,
+        'timeZone': _timeZone,
+        'time_zone': _timeZone,
+        'minPrice': minPrice,
+        'min_price': minPrice,
+        'maxPrice': maxPrice,
+        'max_price': maxPrice,
+        'rushAvailability': _rushAvailable,
+        'rushAvailable': _rushAvailable,
+        'rush_available': _rushAvailable,
+      };
+
+      final nextArtist = <String, dynamic>{
+        ...artist,
+        'services': services,
+        'minPrice': minPrice,
+        'min_price': minPrice,
+        'maxPrice': maxPrice,
+        'max_price': maxPrice,
+        'rushAvailability': _rushAvailable,
+        'rushAvailable': _rushAvailable,
+        'rush_available': _rushAvailable,
+        'pricing': nextNestedArtistPricing,
+        'city': city,
+        'state': state,
+        'country': country,
+        'timeZone': _timeZone,
+        'time_zone': _timeZone,
+      };
+
+      // Build a complete normalized payload, then remove columns that do not
+      // exist on the current table. This prevents Supabase/PostgREST failures
+      // when the logged-in row is from artist vs client_artist and one table
+      // does not have all the panel_* compatibility columns.
+      final requestedPayload = <String, dynamic>{
+        'panel_services': _encodeLikeOriginal(
+          widget.initialData['panel_services'],
+          services,
+        ),
+        'panel_artist_services': _encodeLikeOriginal(
+          widget.initialData['panel_artist_services'],
+          services,
+        ),
+        'services': _encodeLikeOriginal(
+          widget.initialData['services'],
+          services,
+        ),
+
+        'panel_min_price': minPrice,
+        'panel_max_price': maxPrice,
+        'panel_minPrice': minPrice,
+        'panel_maxPrice': maxPrice,
+        'panel_artist_minPrice': minPrice,
+        'panel_artist_maxPrice': maxPrice,
+        'panel_artist_min_price': minPrice,
+        'panel_artist_max_price': maxPrice,
+        'minPrice': minPrice,
+        'maxPrice': maxPrice,
+        'min_price': minPrice,
+        'max_price': maxPrice,
+
+        'panel_rush_available': _rushAvailable,
+        'panel_rushAvailable': _rushAvailable,
+        'panel_artist_rushAvailable': _rushAvailable,
+        'panel_artist_rush_available': _rushAvailable,
+        'rushAvailable': _rushAvailable,
+        'rush_availability': _rushAvailable,
+        'rush_available': _rushAvailable,
+
+        'panel_city': city,
+        'panel_state': state,
+        'panel_country': country,
+        'panel_time_zone': _timeZone,
+        'panel_timeZone': _timeZone,
+        'city': city,
+        'state': state,
+        'country': country,
+        'time_zone': _timeZone,
+        'timeZone': _timeZone,
+
+        'pricing': _encodeLikeOriginal(
+          widget.initialData['pricing'],
+          nextPricing,
+        ),
+        'artistPricing': _encodeLikeOriginal(
+          widget.initialData['artistPricing'],
+          nextArtistPricing,
+        ),
+        'artist_pricing': _encodeLikeOriginal(
+          widget.initialData['artist_pricing'],
+          nextArtistPricing,
+        ),
+        'address': _encodeLikeOriginal(
+          widget.initialData['address'],
+          nextAddress,
+        ),
+        'profile': _encodeLikeOriginal(
+          widget.initialData['profile'],
+          nextProfile,
+        ),
+        'artist': _encodeLikeOriginal(widget.initialData['artist'], nextArtist),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      final updatePayload = _onlyExistingColumns(requestedPayload);
+
+      if (updatePayload.isEmpty) {
+        throw StateError(
+          'No writable specialization columns found on ${widget.supabaseTable}.',
+        );
+      }
+
+      final updated = await SupabaseBootstrap.client
+          .from(widget.supabaseTable)
+          .update(updatePayload)
+          .eq('id', widget.supabaseId)
+          .select('id')
+          .maybeSingle();
+
+      if (updated == null) {
+        throw StateError(
+          'No ${widget.supabaseTable} row updated for id ${widget.supabaseId}.',
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Specialization & service area updated.')),
+      );
+      Navigator.pop(context);
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Artist specialization save failed for ${widget.supabaseTable}'
+        ' (${widget.supabaseId}): $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to save specialization details. ${error.toString()}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: AppColors.blackCatBorderLight),
+        ),
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'Specialization & Service Area',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                          color: AppColors.blackCat,
+                          fontFamily: 'ArialBold',
+                        ),
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.zero,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 22,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Specialization & Pricing',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Select services and set your range.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _artistServiceOptions
+                    .map((service) {
+                      final selected = _services.contains(service);
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (selected) {
+                              _services.remove(service);
+                            } else {
+                              _services.add(service);
+                            }
+                          });
+                        },
+                        borderRadius: BorderRadius.zero,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? AppColors.blackCat.withValues(alpha: 0.12)
+                                : AppColors.snow,
+                            border: Border.all(
+                              color: selected
+                                  ? AppColors.blackCat.withValues(alpha: 0.75)
+                                  : AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (selected) ...[
+                                const Icon(
+                                  Icons.check,
+                                  size: 16,
+                                  color: AppColors.blackCat,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                service,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: selected
+                                      ? AppColors.blackCat
+                                      : AppColors.blackCat.withValues(
+                                          alpha: 0.88,
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    })
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _field('Min Price (\$) *', _minPriceCtrl)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _field('Max Price (\$) *', _maxPriceCtrl)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Rush availability',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Enable if you can take expedited requests.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _rushAvailable,
+                    activeThumbColor: AppColors.blackCat,
+                    inactiveThumbColor: AppColors.blackCatLight,
+                    inactiveTrackColor: AppColors.blackCatLight.withValues(
+                      alpha: 0.35,
+                    ),
+                    onChanged: (value) =>
+                        setState(() => _rushAvailable = value),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const Divider(color: AppColors.blackCatBorderLight, height: 1),
+              const SizedBox(height: 18),
+              const Text(
+                'Location & Service Area',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Set where you offer services.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _field('City *', _cityCtrl),
+              _field('State *', _stateCtrl),
+              _field('Country *', _countryCtrl),
+              _dropdown(
+                label: 'Time Zone *',
+                value: _timeZone,
+                items: _artistTimeZones,
+                onChanged: (value) =>
+                    setState(() => _timeZone = value ?? _timeZone),
+              ),
+              const SizedBox(height: 14),
+              Center(
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    onPressed: _saving ? null : _save,
+                    child: Text(
+                      _saving ? 'Saving...' : 'Save',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
+        decoration: InputDecoration(
+          labelText: label,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          filled: true,
+          fillColor: AppColors.snow,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+          ),
+          labelStyle: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.blackCat.withValues(alpha: 0.72),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dropdown({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final selected = items.contains(value) ? value : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DropdownButtonFormField<String>(
+        initialValue: selected,
+        dropdownColor: AppColors.snow,
+        iconEnabledColor: AppColors.blackCat,
+        style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
+        decoration: InputDecoration(
+          labelText: label,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          filled: true,
+          fillColor: AppColors.snow,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: const BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+          ),
+          labelStyle: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.blackCat.withValues(alpha: 0.72),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+        ),
+        items: items
+            .map(
+              (item) =>
+                  DropdownMenuItem<String>(value: item, child: Text(item)),
+            )
+            .toList(growable: false),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  String _firstNonEmpty(List<Object?> values) {
+    for (final raw in values) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+}
+
 class ArtistAvailabilityModal extends StatefulWidget {
   const ArtistAvailabilityModal({
     super.key,
@@ -3393,8 +4896,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
           .select('availability')
           .eq('id', widget.supabaseId)
           .limit(1);
-      final avail =
-          (rows.isNotEmpty && rows.first['availability'] is Map)
+      final avail = (rows.isNotEmpty && rows.first['availability'] is Map)
           ? Map<String, dynamic>.from(rows.first['availability'] as Map)
           : <String, dynamic>{};
       avail['dayStates'] = _dayStates;

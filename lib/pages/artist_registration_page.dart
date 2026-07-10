@@ -102,6 +102,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   final _addressLine1Ctrl = TextEditingController();
   final _addressLine2Ctrl = TextEditingController();
   final _zipCtrl = TextEditingController();
+  Timer? _streetAutocompleteDebounce;
+  List<AddressSuggestion> _streetSuggestions = const [];
+  bool _streetSuggestionsLoading = false;
   final bool _isShippingAddressSame = true;
   final _shippingAddressLine1Ctrl = TextEditingController();
   final _shippingAddressLine2Ctrl = TextEditingController();
@@ -147,6 +150,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   // Year Calendar Availability (NEW)
   // -----------------------
   bool _directRequestsEnabled = true;
+  bool _nfcRequestEnabled = true;
   bool _showYearCalendar = false;
   int _yearCalendarNonce = 0;
 
@@ -440,6 +444,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       'panel_maxPrice': _maxPriceCtrl.text.trim(),
       'panel_rushAvailable': _rush,
       'panel_directRequestsEnabled': _directRequestsEnabled,
+      'panel_nfcRequestEnabled': _nfcRequestEnabled,
       'panel_directRequestYear': _directRequestYear,
       'panel_blockedDates': _blockedDates
           .map((d) => d.toIso8601String())
@@ -489,6 +494,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         'city': _cityCtrl.text.trim(),
         'state': _resolvedState,
         'country': billingCountry,
+        'nfcRequestEnabled': _nfcRequestEnabled,
         'addressLine1': _addressLine1Ctrl.text.trim(),
         'addressCity': _addressCityCtrl.text.trim(),
         'addressLine2': _addressLine2Ctrl.text.trim(),
@@ -515,6 +521,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       },
       'availability': {
         'directRequestsEnabled': _directRequestsEnabled,
+        'nfcRequestEnabled': _nfcRequestEnabled,
         'blockedDates': _blockedDates.map((d) => d.toIso8601String()).toList(),
         'directRequestYear': _directRequestYear,
       },
@@ -681,6 +688,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
 
   @override
   void dispose() {
+    _streetAutocompleteDebounce?.cancel();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
@@ -738,6 +746,49 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     _cardZipCtrl.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _autofillAddressFromStreet() async {
+    _streetAutocompleteDebounce?.cancel();
+    final query = _addressLine1Ctrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _streetSuggestionsLoading = false;
+        _streetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _streetSuggestionsLoading = true);
+    _streetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _streetSuggestionsLoading = false;
+          _streetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _addressLine1Ctrl.text = selected.street;
+      _addressCityCtrl.text = selected.city;
+      _zipCtrl.text = selected.zip;
+      _selectedCountry = 'United States';
+      final resolved =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      final matched = usStates.where((s) => s == resolved).toList();
+      _state = matched.isNotEmpty ? matched.first : null;
+      _manualStateCtrl.clear();
+      _streetSuggestions = const [];
+    });
   }
 
   // -----------------------
@@ -1559,6 +1610,18 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       return;
     }
 
+    if (_services.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select at least one specialization before continuing.',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (_instagramCtrl.text.trim().isEmpty && _tiktokCtrl.text.trim().isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1662,8 +1725,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         supabaseUser = await SupabaseAuthService.signup(
           email: email,
           password: password,
-        )
-            .timeout(const Duration(seconds: 20));
+        ).timeout(const Duration(seconds: 20));
       } on AuthException catch (e) {
         final message = e.message.toLowerCase();
         if (!message.contains('already')) {
@@ -1832,6 +1894,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         body: SafeArea(
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
               children: [
@@ -2245,6 +2308,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           'Street Address',
                           'Enter Street Address',
                         ),
+                        onChanged: (_) => _autofillAddressFromStreet(),
                         validator: (v) {
                           final value = (v ?? '').trim();
                           if (value.isEmpty) {
@@ -2253,6 +2317,58 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           return null;
                         },
                       ),
+                      if (_streetSuggestionsLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (_streetSuggestions.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            final suggestionCount = _streetSuggestions.length;
+                            final menuHeight =
+                                AutocompleteDropdownSizing.menuHeight(
+                                  itemCount: suggestionCount,
+                                  itemExtent: 40,
+                                );
+                            return Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                color: _artistRegSnow,
+                                borderRadius: BorderRadius.zero,
+                                border: Border.all(
+                                  color: _artistRegInk.withValues(alpha: 0.20),
+                                ),
+                              ),
+                              constraints: BoxConstraints(
+                                maxHeight: menuHeight,
+                              ),
+                              child: ListView.separated(
+                                shrinkWrap:
+                                    AutocompleteDropdownSizing.shrinkWrap(
+                                      suggestionCount,
+                                    ),
+                                physics:
+                                    AutocompleteDropdownSizing.scrollPhysics(
+                                      suggestionCount,
+                                    ),
+                                itemCount: suggestionCount,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (_, i) => ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    _streetSuggestions[i].displayLabel,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () => _applyStreetSuggestion(
+                                    _streetSuggestions[i],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: 16),
                       _requiredFieldLabel('City'),
                       const SizedBox(height: 6),
@@ -2597,6 +2713,47 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                             ? 'Clients can send Direct Requests on unblocked dates.'
                             : 'Direct Requests are currently turned OFF.',
                         style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Arial',
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Text(
+                            'Accepts NFC',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'ArialBold',
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                          const Spacer(),
+                          Transform.scale(
+                            scale: 0.88,
+                            child: Switch(
+                              value: _nfcRequestEnabled,
+                              onChanged: (v) =>
+                                  setState(() => _nfcRequestEnabled = v),
+                              activeThumbColor: const Color(0xFF1F1B24),
+                              activeTrackColor: const Color(
+                                0xFF1F1B24,
+                              ).withValues(alpha: 0.45),
+                              inactiveThumbColor: AppColors.blackCatLight,
+                              inactiveTrackColor: AppColors.blackCatLight
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        _nfcRequestEnabled
+                            ? 'Clients can send NFC upgrade requests.'
+                            : 'NFC upgrade requests are currently turned OFF.',
+                        style: const TextStyle(
                           color: AppColors.blackCat,
                           fontWeight: FontWeight.w500,
                           fontFamily: 'Arial',

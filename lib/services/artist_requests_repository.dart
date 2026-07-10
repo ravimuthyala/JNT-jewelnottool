@@ -26,12 +26,14 @@ class ArtistRequestsRepository {
     );
 
     final items = await Future.wait(
-      rows.map((row) => _fromSupabaseRowLiteWithDetailsHints(
-        row,
-        sourceCollection: _sourceCollectionFor(
-          (row['__sourceCollection'] ?? '').toString(),
+      rows.map(
+        (row) => _fromSupabaseRowLiteWithDetailsHints(
+          row,
+          sourceCollection: _sourceCollectionFor(
+            (row['__sourceCollection'] ?? '').toString(),
+          ),
         ),
-      )),
+      ),
     );
 
     final merged = items.whereType<ClientRequestV2>().toList(growable: false);
@@ -45,12 +47,16 @@ class ArtistRequestsRepository {
       preferRecentOnly: true,
     );
 
-    final items = await Future.wait(rows.map((row) => _fromSupabaseRowWithDetails(
-        row,
-        sourceCollection: _sourceCollectionFor(
-          (row['__sourceCollection'] ?? '').toString(),
+    final items = await Future.wait(
+      rows.map(
+        (row) => _fromSupabaseRowWithDetails(
+          row,
+          sourceCollection: _sourceCollectionFor(
+            (row['__sourceCollection'] ?? '').toString(),
+          ),
         ),
-      )));
+      ),
+    );
 
     final merged = items.whereType<ClientRequestV2>().toList(growable: false);
     merged.sort((a, b) => b.neededBy.compareTo(a.neededBy));
@@ -78,7 +84,10 @@ class ArtistRequestsRepository {
 
       if (row == null) return null;
 
-      final mapped = Map<String, dynamic>.from(row);
+      final mapped = await _mergeRowWithDetails(
+        Map<String, dynamic>.from(row),
+        sourceCollection: normalizedSource,
+      );
       mapped['__sourceCollection'] = normalizedSource;
 
       return _fromSupabaseRowWithDetails(
@@ -112,11 +121,18 @@ class ArtistRequestsRepository {
 
         if (rows is! List) return const <Map<String, dynamic>>[];
 
-        return rows.whereType<Map>().map((row) {
-          final mapped = Map<String, dynamic>.from(row);
-          mapped['__sourceCollection'] = sourceCollection;
-          return mapped;
-        }).toList(growable: false);
+        final mergedRows = await Future.wait(
+          rows.whereType<Map>().map((row) async {
+            final mapped = await _mergeRowWithDetails(
+              Map<String, dynamic>.from(row),
+              sourceCollection: sourceCollection,
+            );
+            mapped['__sourceCollection'] = sourceCollection;
+            return mapped;
+          }),
+        );
+
+        return mergedRows.toList(growable: false);
       } catch (e, st) {
         debugPrint('ARTIST REQUESTS Supabase fetch $tableName failed: $e');
         debugPrint(st.toString());
@@ -135,17 +151,16 @@ class ArtistRequestsRepository {
       ),
     ]);
 
-    final merged = <Map<String, dynamic>>[
-      ...results[0],
-      ...results[1],
-    ];
+    final merged = <Map<String, dynamic>>[...results[0], ...results[1]];
 
     if (preferRecentOnly) {
       merged.sort((a, b) {
-        final aDate = _toDate(a['created_at']) ??
+        final aDate =
+            _toDate(a['created_at']) ??
             _toDate(a['createdAt']) ??
             DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = _toDate(b['created_at']) ??
+        final bDate =
+            _toDate(b['created_at']) ??
             _toDate(b['createdAt']) ??
             DateTime.fromMillisecondsSinceEpoch(0);
         return bDate.compareTo(aDate);
@@ -168,6 +183,65 @@ class ArtistRequestsRepository {
     }
     if (value.isNotEmpty) return value;
     return 'Client_Custom_Requests';
+  }
+
+  static Future<Map<String, dynamic>> _mergeRowWithDetails(
+    Map<String, dynamic> row, {
+    required String sourceCollection,
+  }) async {
+    final requestId = (row['id'] ?? '').toString().trim();
+    if (requestId.isEmpty) return row;
+
+    final detailsTable = sourceCollection == 'Company_Custom_Requests'
+        ? 'company_custom_requests_details'
+        : 'client_custom_requests_details';
+
+    try {
+      final detailRows = await _supabase
+          .from(detailsTable)
+          .select()
+          .eq('request_id', requestId);
+      final mergedDetails = _mergeDetailRows(detailRows);
+      if (mergedDetails.isEmpty) return row;
+
+      return <String, dynamic>{...row, 'details': mergedDetails};
+    } catch (e) {
+      debugPrint(
+        'ARTIST REQUESTS detail merge failed for $detailsTable/$requestId: $e',
+      );
+      return row;
+    }
+  }
+
+  static Map<String, dynamic> _mergeDetailRows(dynamic rows) {
+    if (rows is! List) return const <String, dynamic>{};
+
+    bool isPayloadRow(Map<String, dynamic> row) {
+      final docId = (row['doc_id'] ?? row['detail_key'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      final id = (row['id'] ?? '').toString().trim().toLowerCase();
+      return docId == 'payload' || id.endsWith(':payload');
+    }
+
+    Map<String, dynamic> payloadDoc = <String, dynamic>{};
+    final merged = <String, dynamic>{};
+
+    for (final raw in rows.whereType<Map>()) {
+      final row = Map<String, dynamic>.from(raw);
+      final payload = _asMap(row['payload']);
+      final data = _asMap(row['data']);
+      final effective = data.isNotEmpty
+          ? data
+          : (payload.isNotEmpty ? payload : row);
+      merged.addAll(effective);
+      if (isPayloadRow(row)) {
+        payloadDoc = effective;
+      }
+    }
+
+    return payloadDoc.isNotEmpty ? payloadDoc : merged;
   }
 
   static Future<ClientRequestV2?> _fromSupabaseRowLiteWithDetailsHints(
@@ -196,15 +270,18 @@ class ArtistRequestsRepository {
 
     final selectedGroupClientEmails = <String>{
       ...lite.selectedGroupClientEmails,
-      ..._stringList(detailData['selectedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(orderData['selectedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['selectedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        orderData['selectedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ...groupClientsRaw
           .whereType<Map>()
-          .map((item) => (item['clientEmail'] ?? '').toString().trim().toLowerCase())
+          .map(
+            (item) =>
+                (item['clientEmail'] ?? '').toString().trim().toLowerCase(),
+          )
           .where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
@@ -227,20 +304,20 @@ class ArtistRequestsRepository {
     );
 
     final acceptedGroupClientEmails = <String>{
-      ..._stringList(data['acceptedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(detailData['acceptedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['acceptedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['acceptedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     };
     final declinedByClientEmails = <String>{
-      ..._stringList(data['declinedByClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(detailData['declinedByClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['declinedByClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['declinedByClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     };
     final respondedClientEmails = <String>{
       ...acceptedGroupClientEmails,
@@ -256,8 +333,9 @@ class ArtistRequestsRepository {
     return lite.copyWith(
       orderType: orderType,
       selectedGroupClientEmails: selectedGroupClientEmails,
-      acceptedGroupClientEmails:
-          acceptedGroupClientEmails.toList(growable: false),
+      acceptedGroupClientEmails: acceptedGroupClientEmails.toList(
+        growable: false,
+      ),
       groupClientsAllResponded: groupClientsAllResponded,
       declinedByClientEmails: declinedByClientEmails.toList(growable: false),
     );
@@ -270,8 +348,10 @@ class ArtistRequestsRepository {
     final data = _flattenSupabaseRequestRow(row);
 
     final status =
-        _mapStatus(data['artistStatus'] ?? data['artist_status'] ?? data['status']) ??
-            RequestStatusV2.inReview;
+        _mapStatus(
+          data['artistStatus'] ?? data['artist_status'] ?? data['status'],
+        ) ??
+        RequestStatusV2.inReview;
 
     final brandName = _firstNonEmptyString(
       data['clientName'],
@@ -304,7 +384,10 @@ class ArtistRequestsRepository {
         _toDate(data['updated_at']) ??
         DateTime.now();
 
-    final selectedArtist = _firstNonEmptyString(data['selectedArtist'], data['selected_artist']);
+    final selectedArtist = _firstNonEmptyString(
+      data['selectedArtist'],
+      data['selected_artist'],
+    );
     final selectedArtistEmail = _firstNonEmptyString(
       data['selectedArtistEmail'],
       data['selected_artist_email'],
@@ -315,15 +398,18 @@ class ArtistRequestsRepository {
     final orderData = _asMap(data['order']);
     final groupOrder = _asMap(data['groupOrder']);
     final selectedGroupClientEmails = <String>{
-      ..._stringList(data['selectedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(orderData['selectedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['selectedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        orderData['selectedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ..._asList(groupOrder['clients'])
           .whereType<Map>()
-          .map((item) => (item['clientEmail'] ?? '').toString().trim().toLowerCase())
+          .map(
+            (item) =>
+                (item['clientEmail'] ?? '').toString().trim().toLowerCase(),
+          )
           .where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
@@ -352,7 +438,9 @@ class ArtistRequestsRepository {
         ? budgetMax
         : (safeBudgetMin > 0 ? safeBudgetMin : 0);
 
-    final rootNailPrefs = _asMap(data['nailPreferences']);
+    final rootNailPrefs = _asMap(data['nailPreferences']).isNotEmpty
+        ? _asMap(data['nailPreferences'])
+        : _asMap(data['nail_preferences']);
     final rootDims = _asMap(rootNailPrefs['dimensions']).isNotEmpty
         ? _asMap(rootNailPrefs['dimensions'])
         : _asMap(data['dimensions']);
@@ -394,8 +482,9 @@ class ArtistRequestsRepository {
       clientRefs: photosRaw,
       artistRefs: artistPhotosRaw,
     ).take(_maxResolvedPhotosPerRequest).toList(growable: false);
-    final safeArtistPhotos =
-        artistPhotosRaw.take(_maxResolvedPhotosPerRequest).toList(growable: false);
+    final safeArtistPhotos = artistPhotosRaw
+        .take(_maxResolvedPhotosPerRequest)
+        .toList(growable: false);
     final previewImage = _firstNonEmptyString(
       safeClientPhotos.isNotEmpty ? safeClientPhotos.first : '',
       data['previewImageAsset'],
@@ -405,8 +494,14 @@ class ArtistRequestsRepository {
     return ClientRequestV2(
       id: (row['id'] ?? '').toString(),
       sourceCollection: sourceCollection,
-      orderNumber: _firstNonEmptyString(data['orderNumber'], data['order_number']),
-      clientEmail: _firstNonEmptyString(data['clientEmail'], data['client_email']).toLowerCase(),
+      orderNumber: _firstNonEmptyString(
+        data['orderNumber'],
+        data['order_number'],
+      ),
+      clientEmail: _firstNonEmptyString(
+        data['clientEmail'],
+        data['client_email'],
+      ).toLowerCase(),
       clientName: brandName,
       title: title,
       subtitle: subtitle,
@@ -418,7 +513,10 @@ class ArtistRequestsRepository {
       isDirectRequest: directFlag,
       fallbackToPool: _asNullableBool(data['fallbackToPool']) ?? true,
       openToClientPool: _asNullableBool(data['openToClientPool']) ?? true,
-      allowNonLicensed: _asNullableBool(data['allowNonLicensed']) ?? true,
+      allowNonLicensed:
+          _asNullableBool(data['allowNonLicensed']) ??
+          _asNullableBool(data['allow_non_licensed']) ??
+          true,
       orderType: orderType,
       selectedArtist: directFlag ? selectedArtist : '',
       selectedArtistEmail: directFlag ? selectedArtistEmail : '',
@@ -429,11 +527,22 @@ class ArtistRequestsRepository {
           _asInt(data['photoCount']) > 0 ||
           _asInt(data['photo_count']) > 0 ||
           safeClientPhotos.isNotEmpty,
+      nfcRequested:
+          _asBool(data['nfcRequested']) || _asBool(data['nfc_requested']),
       clientLocation: _locationFromData(data),
       previewImageAsset: previewImage,
-      bio: _firstNonEmptyString(data['descriptionPreview'], data['description']),
-      nailShape: _firstNonEmptyString(rootNailPrefs['shape'], data['nailShape']),
-      nailLength: _firstNonEmptyString(rootNailPrefs['length'], data['nailLength']),
+      bio: _firstNonEmptyString(
+        data['descriptionPreview'],
+        data['description'],
+      ),
+      nailShape: _firstNonEmptyString(
+        rootNailPrefs['shape'],
+        data['nailShape'],
+      ),
+      nailLength: _firstNonEmptyString(
+        rootNailPrefs['length'],
+        data['nailLength'],
+      ),
       leftHand: NailDimensionsV2(
         thumb: leftHand['thumb'] ?? '',
         index: leftHand['index'] ?? '',
@@ -449,13 +558,20 @@ class ArtistRequestsRepository {
         pinky: rightHand['pinky'] ?? '',
       ),
       clientImages: safeClientPhotos,
-      paymentStatus: _firstNonEmptyString(data['paymentStatus'], data['payment_status']),
+      paymentStatus: _firstNonEmptyString(
+        data['paymentStatus'],
+        data['payment_status'],
+      ),
       acceptedByArtistEmail: _firstNonEmptyString(
         data['acceptedByArtistEmail'],
         data['accepted_by_artist_email'],
       ).toLowerCase(),
-      acceptedByClientEmail: _firstNonEmptyString(data['acceptedByClientEmail']).toLowerCase(),
-      clientResponseStatus: _firstNonEmptyString(data['clientResponseStatus']).toLowerCase(),
+      acceptedByClientEmail: _firstNonEmptyString(
+        data['acceptedByClientEmail'],
+      ).toLowerCase(),
+      clientResponseStatus: _firstNonEmptyString(
+        data['clientResponseStatus'],
+      ).toLowerCase(),
       declinedByArtistEmails: _stringList(data['declinedByArtistEmails'])
           .map((e) => e.trim().toLowerCase())
           .where((e) => e.isNotEmpty)
@@ -523,10 +639,16 @@ class ArtistRequestsRepository {
         _toDate(data['updated_at']) ??
         neededBy;
 
-    final orderData = _asMap(detailData['order']);
+    final orderData = _asMap(detailData['order']).isNotEmpty
+        ? _asMap(detailData['order'])
+        : _asMap(data['order']);
     final groupOrder = _asMap(detailData['groupOrder']).isNotEmpty
         ? _asMap(detailData['groupOrder'])
-        : _asMap(data['groupOrder']);
+        : _asMap(detailData['group_order']).isNotEmpty
+        ? _asMap(detailData['group_order'])
+        : _asMap(data['groupOrder']).isNotEmpty
+        ? _asMap(data['groupOrder'])
+        : _asMap(data['group_order']);
 
     final selectedArtistRaw = _firstNonEmptyString(
       data['selectedArtist'],
@@ -568,20 +690,36 @@ class ArtistRequestsRepository {
       _asMap(detailData['acceptance'])['selectedClientEmail'],
     ).toLowerCase();
 
-    final groupClientsRaw = _asList(groupOrder['clients']).isNotEmpty
-        ? _asList(groupOrder['clients'])
-        : _asList(orderData['clients']);
+    final groupClientsRaw = <dynamic>[
+      ..._asList(groupOrder['clients']),
+      ..._asList(groupOrder['groupClients']),
+      ..._asList(groupOrder['group_clients']),
+      ..._asList(detailData['groupClients']),
+      ..._asList(detailData['group_clients']),
+      ..._asList(detailData['selectedGroupClients']),
+      ..._asList(detailData['selected_group_clients']),
+      ..._asList(orderData['clients']),
+      ..._asList(orderData['groupClients']),
+      ..._asList(orderData['group_clients']),
+      ..._asList(data['groupClients']),
+      ..._asList(data['group_clients']),
+      ..._asList(data['selectedGroupClients']),
+      ..._asList(data['selected_group_clients']),
+    ];
 
     final selectedGroupClientEmails = <String>{
-      ..._stringList(data['selectedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(orderData['selectedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['selectedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        orderData['selectedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ...groupClientsRaw
           .whereType<Map>()
-          .map((item) => (item['clientEmail'] ?? '').toString().trim().toLowerCase())
+          .map(
+            (item) =>
+                (item['clientEmail'] ?? '').toString().trim().toLowerCase(),
+          )
           .where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
@@ -600,8 +738,8 @@ class ArtistRequestsRepository {
     );
     clientName = sourceCollection == 'Company_Custom_Requests'
         ? (acceptedClientNameRaw.trim().isNotEmpty
-            ? acceptedClientNameRaw
-            : brandName)
+              ? acceptedClientNameRaw
+              : brandName)
         : brandName;
 
     final photosRaw = _collectPhotoRefs(<Object?>[
@@ -682,17 +820,22 @@ class ArtistRequestsRepository {
         true;
     final allowNonLicensed =
         _asNullableBool(data['allowNonLicensed']) ??
+        _asNullableBool(data['allow_non_licensed']) ??
         _asNullableBool(orderData['allowNonLicensed']) ??
+        _asNullableBool(orderData['allow_non_licensed']) ??
         _asNullableBool(detailData['allowNonLicensed']) ??
+        _asNullableBool(detailData['allow_non_licensed']) ??
         true;
 
     final nailPrefs = _asMap(detailData['nailPreferences']).isNotEmpty
         ? _asMap(detailData['nailPreferences'])
-        : _asMap(_asMap(detailData['requestDetails'])['nailPreferences']).isNotEmpty
-            ? _asMap(_asMap(detailData['requestDetails'])['nailPreferences'])
-            : _asMap(data['nailPreferences']).isNotEmpty
-                ? _asMap(data['nailPreferences'])
-                : _asMap(_asMap(data['requestDetails'])['nailPreferences']);
+        : _asMap(
+            _asMap(detailData['requestDetails'])['nailPreferences'],
+          ).isNotEmpty
+        ? _asMap(_asMap(detailData['requestDetails'])['nailPreferences'])
+        : _asMap(data['nailPreferences']).isNotEmpty
+        ? _asMap(data['nailPreferences'])
+        : _asMap(_asMap(data['requestDetails'])['nailPreferences']);
     final dims = _asMap(nailPrefs['dimensions']);
     final budgetMap = _asMap(detailData['budget']);
     final artistQuote = _asMap(detailData['artistQuote']).isNotEmpty
@@ -718,7 +861,9 @@ class ArtistRequestsRepository {
       data['artist_completed_photos'],
     ]);
     final artistPhotos = await _resolvePhotoRefs(
-      artistPhotosRaw.take(_maxResolvedPhotosPerRequest).toList(growable: false),
+      artistPhotosRaw
+          .take(_maxResolvedPhotosPerRequest)
+          .toList(growable: false),
     );
     final safeClientPhotos = await _resolvePhotoRefs(
       _removeArtistRefsFromClientPhotos(
@@ -738,30 +883,30 @@ class ArtistRequestsRepository {
     ).toLowerCase();
 
     final acceptedGroupClientEmails = <String>{
-      ..._stringList(data['acceptedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(detailData['acceptedGroupClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['acceptedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['acceptedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
     final declinedByArtistEmails = <String>{
-      ..._stringList(data['declinedByArtistEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(detailData['declinedByArtistEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['declinedByArtistEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['declinedByArtistEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
     final declinedByClientEmails = <String>{
-      ..._stringList(data['declinedByClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
-      ..._stringList(detailData['declinedByClientEmails'])
-          .map((e) => e.trim().toLowerCase())
-          .where((e) => e.isNotEmpty),
+      ..._stringList(
+        data['declinedByClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['declinedByClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
     final respondedClientEmails = <String>{
@@ -855,7 +1000,8 @@ class ArtistRequestsRepository {
         _toDate(data['shippingLabelCreatedAt']) ??
         _toDate(shippingLabelMap['createdAt']);
     final shippingLabelReady =
-        _asBool(data['shippingLabelReady']) || _asBool(shippingLabelMap['ready']);
+        _asBool(data['shippingLabelReady']) ||
+        _asBool(shippingLabelMap['ready']);
     final shippingLabelPdfUrl = _firstNonEmptyString(
       data['shippingLabelPdfUrl'],
       shippingLabelMap['pdfUrl'],
@@ -952,7 +1098,9 @@ class ArtistRequestsRepository {
     final shippingCreatedAt = _toDate(shippingMap['createdAt']);
     final shippingLastUpdatedAt = _toDate(shippingMap['lastUpdatedAt']);
     final shippingRegeneratedAt = _toDate(shippingMap['regeneratedAt']);
-    final shippingRegeneratedBy = _firstNonEmptyString(shippingMap['regeneratedBy']);
+    final shippingRegeneratedBy = _firstNonEmptyString(
+      shippingMap['regeneratedBy'],
+    );
 
     final shippedByCourier = _firstNonEmptyString(
       data['shippedByCourier'],
@@ -978,12 +1126,15 @@ class ArtistRequestsRepository {
         _toDate(data['delivered_at']) ??
         _toDate(shipmentMap['deliveredAt']);
 
-    final rawBudgetMin =
-        _asInt(data['budgetMin']) > 0 ? _asInt(data['budgetMin']) : _asInt(budgetMap['min']);
-    final rawBudgetMax =
-        _asInt(data['budgetMax']) > 0 ? _asInt(data['budgetMax']) : _asInt(budgetMap['max']);
-    final fallbackBudget =
-        _asInt(data['artistFinalAmount']) > 0 ? _asInt(data['artistFinalAmount']) : _asInt(data['artist_final_amount']);
+    final rawBudgetMin = _asInt(data['budgetMin']) > 0
+        ? _asInt(data['budgetMin'])
+        : _asInt(budgetMap['min']);
+    final rawBudgetMax = _asInt(data['budgetMax']) > 0
+        ? _asInt(data['budgetMax'])
+        : _asInt(budgetMap['max']);
+    final fallbackBudget = _asInt(data['artistFinalAmount']) > 0
+        ? _asInt(data['artistFinalAmount'])
+        : _asInt(data['artist_final_amount']);
     final budgetMin = rawBudgetMin > 0
         ? rawBudgetMin
         : (rawBudgetMax > 0 ? rawBudgetMax : fallbackBudget);
@@ -995,20 +1146,28 @@ class ArtistRequestsRepository {
     final artistBudgetMap = _asMap(detailData['artistBudget']);
     final clientBudgetMin = _asInt(data['clientBudgetMin']) > 0
         ? _asInt(data['clientBudgetMin'])
-        : (_asInt(clientBudgetMap['min']) > 0 ? _asInt(clientBudgetMap['min']) : null);
+        : (_asInt(clientBudgetMap['min']) > 0
+              ? _asInt(clientBudgetMap['min'])
+              : null);
     final clientBudgetMax = _asInt(data['clientBudgetMax']) > 0
         ? _asInt(data['clientBudgetMax'])
-        : (_asInt(clientBudgetMap['max']) > 0 ? _asInt(clientBudgetMap['max']) : null);
+        : (_asInt(clientBudgetMap['max']) > 0
+              ? _asInt(clientBudgetMap['max'])
+              : null);
     final artistBudgetMin = _asInt(data['artistBudgetMin']) > 0
         ? _asInt(data['artistBudgetMin'])
         : (_asInt(artistBudgetMap['min']) > 0
-            ? _asInt(artistBudgetMap['min'])
-            : (_asInt(budgetMap['min']) > 0 ? _asInt(budgetMap['min']) : null));
+              ? _asInt(artistBudgetMap['min'])
+              : (_asInt(budgetMap['min']) > 0
+                    ? _asInt(budgetMap['min'])
+                    : null));
     final artistBudgetMax = _asInt(data['artistBudgetMax']) > 0
         ? _asInt(data['artistBudgetMax'])
         : (_asInt(artistBudgetMap['max']) > 0
-            ? _asInt(artistBudgetMap['max'])
-            : (_asInt(budgetMap['max']) > 0 ? _asInt(budgetMap['max']) : null));
+              ? _asInt(artistBudgetMap['max'])
+              : (_asInt(budgetMap['max']) > 0
+                    ? _asInt(budgetMap['max'])
+                    : null));
     final artistFinalAmount =
         _asDouble(artistQuote['total']) ??
         _asDouble(data['artistFinalAmount']) ??
@@ -1045,7 +1204,9 @@ class ArtistRequestsRepository {
       _asMap(detailData['acceptance'])['acceptedClientProfilePic'],
       _asMap(detailData['acceptance'])['profileImageUrl'],
       _asMap(detailData['acceptance'])['avatarUrl'],
-      _asMap(_asMap(detailData['clientProfileSnapshot'])['basic'])['profileImageUrl'],
+      _asMap(
+        _asMap(detailData['clientProfileSnapshot'])['basic'],
+      )['profileImageUrl'],
       _asMap(_asMap(detailData['clientProfileSnapshot'])['basic'])['avatarUrl'],
     );
 
@@ -1055,8 +1216,9 @@ class ArtistRequestsRepository {
     }
     String acceptedClientProfileImage = acceptedClientProfileImageRaw.trim();
     if (acceptedClientProfileImage.isNotEmpty) {
-      acceptedClientProfileImage =
-          (await _resolvePhotoRef(acceptedClientProfileImage)).trim();
+      acceptedClientProfileImage = (await _resolvePhotoRef(
+        acceptedClientProfileImage,
+      )).trim();
     }
 
     String dim(dynamic v) {
@@ -1142,6 +1304,11 @@ class ArtistRequestsRepository {
       selectedClientEmail: selectedClientEmail,
       selectedGroupClientEmails: selectedGroupClientEmails,
       hasInspo: hasInspo,
+      nfcRequested:
+          _asBool(data['nfcRequested']) ||
+          _asBool(data['nfc_requested']) ||
+          _asBool(detailData['nfcRequested']) ||
+          _asBool(detailData['nfc_requested']),
       clientLocation: location,
       previewImageAsset: preview,
       clientProfileImage: clientProfileImage,
@@ -1263,15 +1430,61 @@ class ArtistRequestsRepository {
     final designApproval = _asMap(details['designApproval']);
     final artistCompletion = _asMap(details['artistCompletion']);
 
-    data['requestDetails'] ??=
-        requestDetails.isNotEmpty
-            ? requestDetails
-            : (payloadRequestDetails.isNotEmpty
-                  ? payloadRequestDetails
-                  : rootRequestDetails);
+    data['requestDetails'] ??= requestDetails.isNotEmpty
+        ? requestDetails
+        : (payloadRequestDetails.isNotEmpty
+              ? payloadRequestDetails
+              : rootRequestDetails);
     data['budget'] ??= budget.isNotEmpty ? budget : _asMap(payload['budget']);
     data['order'] ??= order.isNotEmpty ? order : _asMap(payload['order']);
-    data['nailPreferences'] ??= nailPrefs;
+    // Prefer populated nail preferences from details/payload over empty root
+    // JSON columns created during migration. Client NFC placement is stored
+    // under details.nailPreferences.dimensions.nfc and lThumbNfc/rThumbNfc...
+    // so this must survive repository flattening.
+    final payloadNailPrefs = _asMap(payload['nailPreferences']).isNotEmpty
+        ? _asMap(payload['nailPreferences'])
+        : _asMap(payload['nail_preferences']);
+    final rootNailPrefs = _asMap(row['nailPreferences']).isNotEmpty
+        ? _asMap(row['nailPreferences'])
+        : _asMap(row['nail_preferences']);
+    if (nailPrefs.isNotEmpty) {
+      data['nailPreferences'] = nailPrefs;
+    } else if (payloadNailPrefs.isNotEmpty) {
+      data['nailPreferences'] = payloadNailPrefs;
+    } else if (rootNailPrefs.isNotEmpty) {
+      data['nailPreferences'] = rootNailPrefs;
+    } else {
+      data['nailPreferences'] ??= nailPrefs;
+    }
+
+    final detailsNfc = _asMap(details['nfc']);
+    if (detailsNfc.isNotEmpty) data['nfc'] = detailsNfc;
+    data['nfcRequested'] ??=
+        details['nfcRequested'] ??
+        details['nfc_requested'] ??
+        row['nfc_requested'] ??
+        row['nfcRequested'];
+    data['nfcSelected'] ??=
+        details['nfcSelected'] ??
+        details['nfc_selected'] ??
+        row['nfc_selected'] ??
+        row['nfcSelected'];
+    data['hasNfc'] ??=
+        details['hasNfc'] ??
+        details['has_nfc'] ??
+        row['has_nfc'] ??
+        row['hasNfc'];
+    data['nfcEligible'] ??=
+        details['nfcEligible'] ??
+        details['nfc_eligible'] ??
+        row['nfc_eligible'] ??
+        row['nfcEligible'];
+    data['nfcCount'] ??=
+        details['nfcCount'] ??
+        details['nfc_count'] ??
+        row['nfc_count'] ??
+        row['nfcCount'];
+
     data['payment'] ??= payment;
     data['artistQuote'] ??= artistQuote;
     data['designApproval'] ??= designApproval;
@@ -1397,23 +1610,52 @@ class ArtistRequestsRepository {
     String Function(dynamic v) dim, {
     List<dynamic>? clients,
   }) async {
-    final raw =
-        clients ?? _asList(groupOrder['clients']);
+    final raw = clients ?? _asList(groupOrder['clients']);
     if (raw.isEmpty) return const <GroupOrderClientV2>[];
 
     final parsed = <GroupOrderClientV2>[];
     for (final item in raw) {
-      if (item is! Map) continue;
+      if (item is! Map) {
+        final text = (item ?? '').toString().trim();
+        if (text.isEmpty || text.toLowerCase() == 'null') continue;
+        final isEmail = text.contains('@');
+        parsed.add(
+          GroupOrderClientV2(
+            slotIndex: parsed.length + 1,
+            clientId: '',
+            clientName: isEmail ? '' : text,
+            clientEmail: isEmail ? text.toLowerCase() : '',
+            nailShape: '',
+            nailLength: '',
+            leftHand: const NailDimensionsV2(
+              thumb: '',
+              index: '',
+              middle: '',
+              ring: '',
+              pinky: '',
+            ),
+            rightHand: const NailDimensionsV2(
+              thumb: '',
+              index: '',
+              middle: '',
+              ring: '',
+              pinky: '',
+            ),
+          ),
+        );
+        continue;
+      }
       final map = Map<String, dynamic>.from(item);
       final clientId = _firstNonEmptyString(map['clientId']).trim();
       final savedName = _firstNonEmptyString(map['clientName'], map['name']);
-      final clientEmail =
-          _firstNonEmptyString(map['clientEmail']).trim().toLowerCase();
+      final clientEmail = _firstNonEmptyString(
+        map['clientEmail'],
+      ).trim().toLowerCase();
       final nail = _asMap(map['savedNails']).isNotEmpty
           ? _asMap(map['savedNails'])
           : _asMap(map['draftNails']).isNotEmpty
-              ? _asMap(map['draftNails'])
-              : _asMap(map['nailPreferences']);
+          ? _asMap(map['draftNails'])
+          : _asMap(map['nailPreferences']);
       final dims = _asMap(nail['dimensions']).isNotEmpty
           ? _asMap(nail['dimensions'])
           : _asMap(map['dimensions']);
@@ -1515,6 +1757,7 @@ class ArtistRequestsRepository {
     }
     return '';
   }
+
   static String _firstNonEmptyFromList(Iterable<Object?> values) {
     for (final candidate in values) {
       final text = (candidate ?? '').toString().trim();
@@ -1572,7 +1815,8 @@ class ArtistRequestsRepository {
           .where((e) => e.isNotEmpty)
           .toList(growable: false);
     }
-    if (value is String && value.trim().isNotEmpty) return <String>[value.trim()];
+    if (value is String && value.trim().isNotEmpty)
+      return <String>[value.trim()];
     return const <String>[];
   }
 
@@ -1725,8 +1969,10 @@ class ArtistRequestsRepository {
       if (v.startsWith('artists/') ||
           v.startsWith('client_artists/') ||
           v.startsWith('portfolio/')) {
-        final resolved =
-            _supabase.storage.from('portfolio-images').getPublicUrl(v).trim();
+        final resolved = _supabase.storage
+            .from('portfolio-images')
+            .getPublicUrl(v)
+            .trim();
         _resolvedPhotoRefCache[v] = resolved;
         return resolved;
       }

@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/ambassador_role_service.dart';
+import '../services/auth_email_alias_service.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -22,7 +23,6 @@ import 'edit_shipping_address_page.dart';
 import 'edit_measurements_page.dart';
 import 'client_artist_home_page.dart';
 import 'artist_profile_page.dart';
-import '../services/supabase_bootstrap.dart';
 import 'jnt_ascension_page.dart';
 import 'client_artist_communication_preferences_page.dart';
 
@@ -69,11 +69,17 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   User? get _currentUser => _supabase.auth.currentUser;
 
-  Future<({String uid, String email})> _resolveIdentity() async {
+  Future<({String uid, String email, String aliasUid})>
+  _resolveIdentity() async {
     final user = _currentUser;
+    final email = (user?.email ?? '').trim().toLowerCase();
+    final aliasUid = email.isNotEmpty
+        ? await AuthEmailAliasService.resolveUidForLogin(email)
+        : null;
     return (
       uid: (user?.id ?? '').trim(),
-      email: (user?.email ?? '').trim().toLowerCase(),
+      email: email,
+      aliasUid: (aliasUid ?? '').trim(),
     );
   }
 
@@ -113,21 +119,386 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     return null;
   }
 
+  Map<String, dynamic> _normalizeArtistProfileData(Map<String, dynamic> row) {
+    final profile = _asMap(row['profile']);
+    final address = _asMap(row['address']);
+    final artist = _asMap(row['artist']);
+    final artistProfile = _asMap(row['artist_profile']);
+    final artistAvailability = _asMap(artist['availability']);
+    final artistPricing = _asMap(artist['pricing']);
+    final artistCredentials = _asMap(artist['credentials']);
+    final artistPortfolio = _asMap(artist['portfolio']);
+    final rowCredentials = _asMap(row['credentials']);
+    final artistProfileCredentials = _asMap(artistProfile['credentials']);
+
+    final mergedCredentials = <String, dynamic>{
+      ...rowCredentials,
+      ...artistProfileCredentials,
+      ...artistCredentials,
+    };
+
+    final yearsExperience = _normalizeArtistYearsExperienceForModal(
+      _firstNonEmpty([
+        row['panel_proYearsExperience'],
+        row['panel_pro_years_experience'],
+        row['panel_yearsExperience'],
+        row['panel_years_experience'],
+        row['proYearsExperience'],
+        row['pro_years_experience'],
+        row['yearsExperience'],
+        row['years_experience'],
+        row['experience'],
+        profile['proYearsExperience'],
+        profile['pro_years_experience'],
+        profile['yearsExperience'],
+        profile['years_experience'],
+        artistProfile['proYearsExperience'],
+        artistProfile['pro_years_experience'],
+        artistProfile['yearsExperience'],
+        artistProfile['years_experience'],
+        artistProfile['experience'],
+        mergedCredentials['proYearsExperience'],
+        mergedCredentials['pro_years_experience'],
+        mergedCredentials['yearsExperience'],
+        mergedCredentials['years_experience'],
+        mergedCredentials['experience'],
+        artist['proYearsExperience'],
+        artist['pro_years_experience'],
+        artist['yearsExperience'],
+        artist['years_experience'],
+        artist['experience'],
+      ]),
+    );
+
+    final practiceDuration = _normalizeArtistPracticeDurationForModal(
+      _firstNonEmpty([
+        row['panel_practiceDuration'],
+        row['panel_practice_duration'],
+        row['practiceDuration'],
+        row['practice_duration'],
+        profile['practiceDuration'],
+        profile['practice_duration'],
+        artistProfile['practiceDuration'],
+        artistProfile['practice_duration'],
+        mergedCredentials['practiceDuration'],
+        mergedCredentials['practice_duration'],
+        artist['practiceDuration'],
+        artist['practice_duration'],
+      ]),
+    );
+
+    final nailTechType = _firstNonEmpty([
+      row['panel_nailTechType'],
+      row['panel_artist_nailTechType'],
+      row['panel_nail_tech_type'],
+      row['panel_artist_nail_tech_type'],
+      row['nailTechType'],
+      row['nail_tech_type'],
+      profile['nailTechType'],
+      profile['nail_tech_type'],
+      artistProfile['nailTechType'],
+      artistProfile['nail_tech_type'],
+      mergedCredentials['nailTechType'],
+      mergedCredentials['nail_tech_type'],
+      artist['nailTechType'],
+      artist['nail_tech_type'],
+    ]);
+
+    final licenseNumber = _firstNonEmpty([
+      row['panel_licenseNumber'],
+      row['panel_license_number'],
+      row['licenseNumber'],
+      row['license_number'],
+      profile['licenseNumber'],
+      profile['license_number'],
+      artistProfile['licenseNumber'],
+      artistProfile['license_number'],
+      mergedCredentials['licenseNumber'],
+      mergedCredentials['license_number'],
+      artist['licenseNumber'],
+      artist['license_number'],
+    ]);
+
+    final jurisdiction = _firstNonEmpty([
+      row['panel_jurisdiction'],
+      row['jurisdiction'],
+      profile['jurisdiction'],
+      artistProfile['jurisdiction'],
+      mergedCredentials['jurisdiction'],
+      artist['jurisdiction'],
+    ]);
+
+    final school = _firstNonEmpty([
+      row['panel_school'],
+      row['school'],
+      profile['school'],
+      artistProfile['school'],
+      mergedCredentials['school'],
+      artist['school'],
+    ]);
+
+    return <String, dynamic>{
+      ...row,
+      if (yearsExperience.isNotEmpty) ...{
+        'panel_proYearsExperience': yearsExperience,
+        'panel_pro_years_experience': yearsExperience,
+        'proYearsExperience': yearsExperience,
+        'pro_years_experience': yearsExperience,
+        'yearsExperience': yearsExperience,
+        'years_experience': yearsExperience,
+      },
+      if (practiceDuration.isNotEmpty) ...{
+        'panel_practiceDuration': practiceDuration,
+        'panel_practice_duration': practiceDuration,
+        'practiceDuration': practiceDuration,
+        'practice_duration': practiceDuration,
+      },
+      if (nailTechType.isNotEmpty) ...{
+        'panel_nailTechType': nailTechType,
+        'panel_artist_nailTechType': nailTechType,
+        'panel_nail_tech_type': nailTechType,
+        'panel_artist_nail_tech_type': nailTechType,
+        'nailTechType': nailTechType,
+        'nail_tech_type': nailTechType,
+      },
+      if (licenseNumber.isNotEmpty) ...{
+        'panel_licenseNumber': licenseNumber,
+        'panel_license_number': licenseNumber,
+        'licenseNumber': licenseNumber,
+        'license_number': licenseNumber,
+      },
+      if (jurisdiction.isNotEmpty) ...{
+        'panel_jurisdiction': jurisdiction,
+        'jurisdiction': jurisdiction,
+      },
+      if (school.isNotEmpty) ...{'panel_school': school, 'school': school},
+      'artist': {
+        ...artistProfile,
+        ...artist,
+        'availability': {
+          ..._asMap(artistProfile['availability']),
+          ...artistAvailability,
+        },
+        'pricing': {..._asMap(artistProfile['pricing']), ...artistPricing},
+        'credentials': {
+          ..._asMap(artistProfile['credentials']),
+          ...artistCredentials,
+        },
+        'portfolio': {
+          ..._asMap(artistProfile['portfolio']),
+          ...artistPortfolio,
+        },
+      },
+      'artist_profile': {...artist, ...artistProfile},
+      'availability': {
+        ..._asMap(row['availability']),
+        ..._asMap(artistProfile['availability']),
+        ...artistAvailability,
+      },
+      'pricing': {
+        ..._asMap(row['pricing']),
+        ..._asMap(artistProfile['pricing']),
+        ...artistPricing,
+      },
+      'credentials': {
+        ...mergedCredentials,
+        if (yearsExperience.isNotEmpty) ...{
+          'proYearsExperience': yearsExperience,
+          'pro_years_experience': yearsExperience,
+          'yearsExperience': yearsExperience,
+          'years_experience': yearsExperience,
+        },
+        if (practiceDuration.isNotEmpty) ...{
+          'practiceDuration': practiceDuration,
+          'practice_duration': practiceDuration,
+        },
+        if (nailTechType.isNotEmpty) ...{
+          'nailTechType': nailTechType,
+          'nail_tech_type': nailTechType,
+        },
+        if (licenseNumber.isNotEmpty) ...{
+          'licenseNumber': licenseNumber,
+          'license_number': licenseNumber,
+        },
+        if (jurisdiction.isNotEmpty) 'jurisdiction': jurisdiction,
+        if (school.isNotEmpty) 'school': school,
+      },
+      'portfolio': {
+        ..._asMap(row['portfolio']),
+        ..._asMap(artistProfile['portfolio']),
+        ...artistPortfolio,
+      },
+      'services': [
+        ..._asStringList(row['services']),
+        ..._asStringList(artistProfile['services']),
+        ..._asStringList(artist['services']),
+      ].toSet().toList(growable: false),
+      'city': _firstNonEmpty([
+        row['city'],
+        address['city'],
+        profile['city'],
+        artistProfile['city'],
+        artist['city'],
+      ]),
+      'state': _firstNonEmpty([
+        row['state'],
+        address['state'],
+        profile['state'],
+        artistProfile['state'],
+        artist['state'],
+      ]),
+      'country': _firstNonEmpty([
+        row['country'],
+        address['country'],
+        profile['country'],
+        artistProfile['country'],
+        artist['country'],
+      ]),
+    };
+  }
+
   Future<({String table, String id, Map<String, dynamic> data})?>
   _resolveArtistRow() async {
     final identity = await _resolveIdentity();
+    final candidateUids = <String>{identity.uid, identity.aliasUid}
+      ..removeWhere((value) => value.trim().isEmpty);
     for (final table in const <String>['client_artist', 'artist']) {
-      final row = await _readProfileRow(
+      for (final uid in candidateUids) {
+        final row = await _readProfileRow(
+          table: table,
+          uid: uid,
+          email: identity.email,
+        );
+        if (row == null) continue;
+        final id = _firstNonEmpty([row['id'], row['uid'], uid]);
+        if (id.isEmpty) continue;
+        return (table: table, id: id, data: _normalizeArtistProfileData(row));
+      }
+
+      final byEmail = await _readProfileRow(
         table: table,
-        uid: identity.uid,
+        uid: '',
         email: identity.email,
       );
-      if (row == null) continue;
-      final id = _firstNonEmpty([row['id'], row['uid'], identity.uid]);
+      if (byEmail == null) continue;
+      final id = _firstNonEmpty([
+        byEmail['id'],
+        byEmail['uid'],
+        identity.uid,
+        identity.aliasUid,
+      ]);
       if (id.isEmpty) continue;
-      return (table: table, id: id, data: row);
+      return (table: table, id: id, data: _normalizeArtistProfileData(byEmail));
     }
     return null;
+  }
+
+  Future<({String table, String id, Map<String, dynamic> data})?>
+  _ensureArtistRow() async {
+    final existing = await _resolveArtistRow();
+    if (existing != null) return existing;
+
+    final identity = await _resolveIdentity();
+    final id = _firstNonEmpty([identity.uid, identity.aliasUid]);
+    final email = _firstNonEmpty([
+      identity.email,
+      _profile.basic.email,
+    ]).toLowerCase();
+    if (id.isEmpty && email.isEmpty) return null;
+
+    final currentProfile = _asMap(_profileData['profile']);
+    final currentAddress = _asMap(_profileData['address']);
+    final currentArtist = _asMap(_profileData['artist']);
+    final currentArtistProfile = _asMap(_profileData['artist_profile']);
+    final currentAvailability = _asMap(_profileData['availability']);
+    final currentPricing = _asMap(_profileData['pricing']);
+    final currentCredentials = _asMap(_profileData['credentials']);
+    final resolvedId = id.isNotEmpty ? id : email;
+
+    await _upsertArtistRow('client_artist', resolvedId, {
+      'account_type': 'client_artist',
+      'displayName': _profile.basic.name.trim(),
+      'name': _profile.basic.name.trim(),
+      'profileImageUrl': _profile.basic.profileImageUrl.trim(),
+      'photoUrl': _profile.basic.profileImageUrl.trim(),
+      'avatarUrl': _profile.basic.profileImageUrl.trim(),
+      'profile': {
+        ...currentProfile,
+        'displayName': _profile.basic.name.trim(),
+        'name': _profile.basic.name.trim(),
+        'photoUrl': _profile.basic.profileImageUrl.trim(),
+        'avatarUrl': _profile.basic.profileImageUrl.trim(),
+        'profileImageUrl': _profile.basic.profileImageUrl.trim(),
+      },
+      'address': {
+        ...currentAddress,
+        'street': _profile.address.street.trim(),
+        'city': _profile.address.city.trim(),
+        'state': _profile.address.state.trim(),
+        'zip': _profile.address.zip.trim(),
+        'country': _profile.address.country.trim(),
+      },
+      'artist': {...currentArtist, ...currentArtistProfile},
+      'artist_profile': {...currentArtistProfile, ...currentArtist},
+      'availability': currentAvailability,
+      'pricing': currentPricing,
+      'credentials': currentCredentials,
+    }, email: email);
+
+    return _resolveArtistRow();
+  }
+
+  Future<({String table, String id, Map<String, dynamic> data})?>
+  _artistModalRef() async {
+    final ensured = await _ensureArtistRow();
+    if (ensured != null) return ensured;
+
+    final identity = await _resolveIdentity();
+    final fallbackId = _firstNonEmpty([
+      identity.uid,
+      identity.aliasUid,
+      _profileData['id'],
+      _profileData['uid'],
+    ]);
+    final fallbackEmail = _firstNonEmpty([
+      identity.email,
+      _profile.basic.email,
+      _profileData['email'],
+    ]).toLowerCase();
+
+    if (fallbackId.isEmpty && fallbackEmail.isEmpty) return null;
+
+    final data = <String, dynamic>{
+      ..._normalizeArtistProfileData(_profileData),
+      if (fallbackId.isNotEmpty) 'id': fallbackId,
+      if (fallbackEmail.isNotEmpty) 'email': fallbackEmail,
+      'profile': {
+        ..._asMap(_profileData['profile']),
+        'displayName': _profile.basic.name.trim(),
+        'name': _profile.basic.name.trim(),
+        'email': fallbackEmail,
+        'photoUrl': _profile.basic.profileImageUrl.trim(),
+        'avatarUrl': _profile.basic.profileImageUrl.trim(),
+        'profileImageUrl': _profile.basic.profileImageUrl.trim(),
+        'city': _profile.address.city.trim(),
+        'state': _profile.address.state.trim(),
+        'country': _profile.address.country.trim(),
+      },
+      'address': {
+        ..._asMap(_profileData['address']),
+        'street': _profile.address.street.trim(),
+        'city': _profile.address.city.trim(),
+        'state': _profile.address.state.trim(),
+        'zip': _profile.address.zip.trim(),
+        'country': _profile.address.country.trim(),
+      },
+    };
+
+    return (
+      table: 'client_artist',
+      id: fallbackId.isNotEmpty ? fallbackId : fallbackEmail,
+      data: data,
+    );
   }
 
   Future<void> _upsertArtistRow(
@@ -141,7 +512,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       ...payload,
       'updated_at': DateTime.now().toIso8601String(),
     };
-    final normalizedEmail = (email ?? _currentUser?.email ?? '').trim().toLowerCase();
+    final normalizedEmail = (email ?? _currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
     if (normalizedEmail.isNotEmpty && !row.containsKey('email')) {
       row['email'] = normalizedEmail;
     }
@@ -193,7 +566,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   double? _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
-    return double.tryParse((value ?? '').toString().replaceAll(RegExp(r'[^0-9.]'), ''));
+    return double.tryParse(
+      (value ?? '').toString().replaceAll(RegExp(r'[^0-9.]'), ''),
+    );
   }
 
   Map<String, dynamic> _asMap(dynamic value) {
@@ -370,10 +745,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final profileFromClient = _asMap(client['profile']);
     final address = _asMap(data['address']);
     final addressFromClient = _asMap(client['address']);
-    final payment = _firstMap([
-      data['payment'],
-      client['payment'],
-    ]);
+    final artist = _asMap(data['artist']);
+    final artistProfile = _asMap(data['artist_profile']);
+    final payment = _firstMap([data['payment'], client['payment']]);
     final nail = _firstMap([
       data['nailPreferences'],
       data['nail_preferences'],
@@ -417,17 +791,48 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                     ? profile['phone']
                     : profileFromClient['phone'] ?? data['panel_phone'] ?? '')
                 .toString(),
-        profileImageUrl:
-            ((profile['profileImageUrl'] ?? '').toString().trim().isNotEmpty
-                    ? profile['profileImageUrl']
-                    : profile['photoUrl'] ??
-                          profile['avatarUrl'] ??
-                          data['panel_profileImageUrl'] ??
-                          data['profileImageUrl'] ??
-                          data['photoUrl'] ??
-                          data['avatarUrl'] ??
-                          '')
-                .toString(),
+        profileImageUrl: _firstNonEmpty([
+          profile['profileImageUrl'],
+          profile['profile_image_url'],
+          profile['profilePhotoUrl'],
+          profile['profile_photo_url'],
+          profile['photoUrl'],
+          profile['photo_url'],
+          profile['avatarUrl'],
+          profile['avatar_url'],
+          profileFromClient['profileImageUrl'],
+          profileFromClient['profile_image_url'],
+          profileFromClient['photoUrl'],
+          profileFromClient['photo_url'],
+          profileFromClient['avatarUrl'],
+          profileFromClient['avatar_url'],
+          artistProfile['profileImageUrl'],
+          artistProfile['profile_image_url'],
+          artistProfile['profilePhotoUrl'],
+          artistProfile['profile_photo_url'],
+          artistProfile['photoUrl'],
+          artistProfile['photo_url'],
+          artistProfile['avatarUrl'],
+          artistProfile['avatar_url'],
+          artist['profileImageUrl'],
+          artist['profile_image_url'],
+          artist['profilePhotoUrl'],
+          artist['profile_photo_url'],
+          artist['photoUrl'],
+          artist['photo_url'],
+          artist['avatarUrl'],
+          artist['avatar_url'],
+          data['panel_profileImageUrl'],
+          data['panel_profile_image_url'],
+          data['profileImageUrl'],
+          data['profile_image_url'],
+          data['profilePhotoUrl'],
+          data['profile_photo_url'],
+          data['photoUrl'],
+          data['photo_url'],
+          data['avatarUrl'],
+          data['avatar_url'],
+        ]),
       ),
       address: AddressInfo(
         street:
@@ -490,7 +895,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   Future<void> _loadProfileFromSupabase() async {
     try {
-      final resolved = await _resolveArtistRow();
+      final resolved = await _ensureArtistRow();
       final data = resolved?.data;
       if (!mounted || data == null) return;
       final availability =
@@ -518,7 +923,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       _directRequestsOn = value;
       _savingDirectRequestPref = true;
     });
-    final ref = await _resolveArtistRow();
+    final ref = await _ensureArtistRow();
     if (!mounted) return;
     if (ref == null) {
       setState(() => _savingDirectRequestPref = false);
@@ -529,6 +934,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         'panel_directRequestsEnabled': value,
         'availability': {'directRequestsEnabled': value},
         'profile': {'directRequestsEnabled': value},
+        'communicationPreferences': _communicationPreferences.toMap(),
+        'client': {
+          'communicationPreferences': _communicationPreferences.toMap(),
+        },
       });
     } catch (_) {
       if (!mounted) return;
@@ -547,7 +956,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       _nfcRequestsOn = value;
       _savingNfcRequestPref = true;
     });
-    final ref = await _resolveArtistRow();
+    final ref = await _ensureArtistRow();
     if (!mounted) return;
     if (ref == null) {
       setState(() => _savingNfcRequestPref = false);
@@ -699,13 +1108,16 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       final doc = Map<String, dynamic>.from(raw as Map);
       final requestId = (doc['id'] ?? '').toString().trim();
       if (requestId.isEmpty) continue;
-      await _supabase.from('client_custom_requests').update({
-        'clientName': next.name.trim(),
-        'clientEmail': next.email.trim(),
-        'clientProfileImage': profileImage,
-        'clientProfilePic': profileImage,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', requestId);
+      await _supabase
+          .from('client_custom_requests')
+          .update({
+            'clientName': next.name.trim(),
+            'clientEmail': next.email.trim(),
+            'clientProfileImage': profileImage,
+            'clientProfilePic': profileImage,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', requestId);
 
       await _updateRequestDetails('client_custom_requests_details', requestId, {
         'clientProfileSnapshot': {
@@ -835,7 +1247,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   Future<void> _loadCommunicationPreferences() async {
     try {
-      final data = (await _resolveArtistRow())?.data;
+      final data = (await _ensureArtistRow())?.data;
       if (!mounted || data == null) return;
 
       final topPrefs =
@@ -847,11 +1259,16 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
               as Map<String, dynamic>?) ??
           const {};
       final source = topPrefs.isNotEmpty ? topPrefs : nestedPrefs;
-      if (source.isEmpty) return;
 
       setState(() {
-        _communicationPreferences =
-            ClientArtistCommunicationPreferences.fromMap(source);
+        _communicationPreferences = source.isEmpty
+            ? ClientArtistCommunicationPreferences.defaults(
+                pushNotifications: _directRequestsOn,
+              )
+            : ClientArtistCommunicationPreferences.fromMap(
+                source,
+                fallbackPushNotifications: _directRequestsOn,
+              );
       });
     } catch (_) {}
   }
@@ -899,6 +1316,60 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     return '';
   }
 
+  String _normalizeArtistYearsExperienceForModal(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    final lower = value.toLowerCase().replaceAll('–', '-').replaceAll('—', '-');
+    if (lower.contains('10+') ||
+        lower.contains('10 +') ||
+        lower.contains('expert')) {
+      return '10+ years (Expert)';
+    }
+    if (lower.contains('5-10') ||
+        lower.contains('5 to 10') ||
+        lower.contains('advanced')) {
+      return '5–10 years (Advanced)';
+    }
+    if (lower.contains('3-5') ||
+        lower.contains('3 to 5') ||
+        lower.contains('skilled')) {
+      return '3–5 years (Skilled)';
+    }
+    if (lower.contains('1-3') ||
+        lower.contains('1 to 3') ||
+        lower.contains('intermediate')) {
+      return '1–3 years (Intermediate)';
+    }
+    if (lower.contains('0-1') ||
+        lower.contains('0 to 1') ||
+        lower.contains('beginner')) {
+      return '0–1 years (Beginner)';
+    }
+    final number = int.tryParse(lower.replaceAll(RegExp(r'[^0-9]'), ''));
+    if (number != null) {
+      if (number <= 1) return '0–1 years (Beginner)';
+      if (number <= 3) return '1–3 years (Intermediate)';
+      if (number <= 5) return '3–5 years (Skilled)';
+      if (number <= 10) return '5–10 years (Advanced)';
+      return '10+ years (Expert)';
+    }
+    return value;
+  }
+
+  String _normalizeArtistPracticeDurationForModal(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    final lower = value.toLowerCase().replaceAll('–', '-').replaceAll('—', '-');
+    if (lower.contains('2+') || lower.contains('2 +')) return '2+ years';
+    if (lower.contains('1-2') || lower.contains('1 to 2')) return '1-2 years';
+    if (lower.contains('6-12') || lower.contains('6 to 12'))
+      return '6-12 months';
+    if (lower.contains('3-6') || lower.contains('3 to 6')) return '3-6 months';
+    if (lower.contains('< 3') || lower.contains('less than 3'))
+      return '< 3 months';
+    return value;
+  }
+
   List<String> _asStringList(Object? raw) {
     if (raw is! List) return const <String>[];
     return raw
@@ -912,9 +1383,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     return raw
         .whereType<Map>()
         .map(
-          (value) => value.map(
-            (key, item) => MapEntry(key.toString(), item),
-          ),
+          (value) => value.map((key, item) => MapEntry(key.toString(), item)),
         )
         .toList(growable: false);
   }
@@ -998,7 +1467,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _openPortfolioModal() async {
-    final ref = await _resolveArtistRow();
+    final ref = await _artistModalRef();
     if (!mounted) return;
     if (ref == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1027,7 +1496,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
           borderRadius: BorderRadius.zero,
           child: ArtistPortfolioModal(
             supabaseTable: ref.table,
-            supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
+            supabaseId: ref.id,
+            initialData: ref.data,
             initialItems: initialItems,
             onUploadTap:
                 ({
@@ -1043,6 +1513,36 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         ),
       ),
     );
+    await _loadProfileFromSupabase();
+  }
+
+  Future<void> _openSpecializationServiceArea() async {
+    final ref = await _artistModalRef();
+    if (!mounted) return;
+    if (ref == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Specialization settings not found.')),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistSpecializationServiceAreaModal(
+            supabaseTable: ref.table,
+            supabaseId: ref.id,
+            initialData: ref.data,
+          ),
+        ),
+      ),
+    );
+    await _loadProfileFromSupabase();
   }
 
   Future<void> _backfillCompletedRequestPhotosToPortfolio(
@@ -1075,13 +1575,18 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     }) async {
       try {
         final snap = await _supabase
-            .from(collection == 'Client_Custom_Requests'
-                ? 'client_custom_requests'
-                : 'company_custom_requests')
+            .from(
+              collection == 'Client_Custom_Requests'
+                  ? 'client_custom_requests'
+                  : 'company_custom_requests',
+            )
             .select()
-            .eq(ownerField == 'acceptedByArtistEmail'
-                ? 'accepted_by_artist_email'
-                : 'artist_email', email)
+            .eq(
+              ownerField == 'acceptedByArtistEmail'
+                  ? 'accepted_by_artist_email'
+                  : 'artist_email',
+              email,
+            )
             .limit(200);
         for (final raw in snap) {
           final data = Map<String, dynamic>.from(raw as Map);
@@ -1099,9 +1604,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             final requestId = (data['id'] ?? '').toString().trim();
             if (requestId.isEmpty) continue;
             final detailRows = await _supabase
-                .from(collection == 'Client_Custom_Requests'
-                    ? 'client_custom_requests_details'
-                    : 'company_custom_requests_details')
+                .from(
+                  collection == 'Client_Custom_Requests'
+                      ? 'client_custom_requests_details'
+                      : 'company_custom_requests_details',
+                )
                 .select()
                 .eq('request_id', requestId)
                 .limit(1);
@@ -1122,9 +1629,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     Future<void> collectWithFallbackScan(String collection) async {
       try {
         final snap = await _supabase
-            .from(collection == 'Client_Custom_Requests'
-                ? 'client_custom_requests'
-                : 'company_custom_requests')
+            .from(
+              collection == 'Client_Custom_Requests'
+                  ? 'client_custom_requests'
+                  : 'company_custom_requests',
+            )
             .select()
             .order('updated_at', ascending: false)
             .limit(200);
@@ -1264,10 +1773,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   Future<List<ArtistPortfolioItem>> _recoverPortfolioFromStorageAndPersist(
     ({String table, String id, Map<String, dynamic> data}) ref,
   ) async {
-    final ownerIds = <String>{
-      ref.id.trim(),
-      (_currentUser?.id ?? '').trim(),
-    }..removeWhere((e) => e.isEmpty);
+    final ownerIds = <String>{ref.id.trim(), (_currentUser?.id ?? '').trim()}
+      ..removeWhere((e) => e.isEmpty);
 
     final urls = <String>[];
     final seen = <String>{};
@@ -1322,17 +1829,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         'panel_portfolioImages': urls,
         'panel_artist_portfolioImages': urls,
         'portfolioItems': itemMaps,
-        'portfolio': {
-          'images': urls,
-          'items': itemMaps,
-        },
+        'portfolio': {'images': urls, 'items': itemMaps},
         'artist': {
           'portfolioImages': urls,
           'portfolioItems': itemMaps,
-          'portfolio': {
-            'images': urls,
-            'items': itemMaps,
-          },
+          'portfolio': {'images': urls, 'items': itemMaps},
         },
       });
     } catch (_) {}
@@ -1376,7 +1877,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     List<XFile>? selectedFiles,
     void Function(int completed, int total)? onProgress,
   }) async {
-    final ref = await _resolveArtistRow();
+    final ref = await _artistModalRef();
     if (ref == null) return const <ArtistPortfolioItem>[];
 
     final picked =
@@ -1407,12 +1908,20 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       try {
         final objectPath =
             '$ownerId/portfolio/${now}_${index + 1}_a$attempt.jpg';
-        await _supabase.storage.from(base).uploadBinary(
-          objectPath,
-          bytes,
-          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
-        );
-        final url = _supabase.storage.from(base).getPublicUrl(objectPath).trim();
+        await _supabase.storage
+            .from(base)
+            .uploadBinary(
+              objectPath,
+              bytes,
+              fileOptions: const FileOptions(
+                contentType: 'image/jpeg',
+                upsert: true,
+              ),
+            );
+        final url = _supabase.storage
+            .from(base)
+            .getPublicUrl(objectPath)
+            .trim();
         final trimmed = url.trim();
         if (trimmed.isEmpty) return null;
         return <String, String>{'url': trimmed, 'path': '$base/$objectPath'};
@@ -1490,17 +1999,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         'panel_portfolioImages': existingImages,
         'panel_artist_portfolioImages': existingImages,
         'portfolioItems': existingItems,
-        'portfolio': {
-          'images': existingImages,
-          'items': existingItems,
-        },
+        'portfolio': {'images': existingImages, 'items': existingItems},
         'artist': {
           'portfolioImages': existingImages,
           'portfolioItems': existingItems,
-          'portfolio': {
-            'images': existingImages,
-            'items': existingItems,
-          },
+          'portfolio': {'images': existingImages, 'items': existingItems},
         },
       });
     } catch (_) {}
@@ -1511,7 +2014,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _openPayoutSettings() async {
-    final ref = await _resolveArtistRow();
+    final ref = await _artistModalRef();
     if (!mounted) return;
     if (ref == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1535,7 +2038,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
           borderRadius: BorderRadius.zero,
           child: ArtistPayoutSettingsPage(
             supabaseTable: ref.table,
-            supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
+            supabaseId: ref.id,
             initialData: initialData,
           ),
         ),
@@ -1589,7 +2092,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   }
 
   Future<void> _openAvailability() async {
-    final ref = await _resolveArtistRow();
+    final ref = await _artistModalRef();
     if (!mounted) return;
     if (ref == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1620,7 +2123,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
           borderRadius: BorderRadius.zero,
           child: ArtistAvailabilityModal(
             supabaseTable: ref.table,
-            supabaseId: SupabaseBootstrap.client.auth.currentUser?.id ?? '',
+            supabaseId: ref.id,
             initialDirectRequestsEnabled: initialDirect,
             initialDayStates: states,
             onDirectRequestChanged: (value) async {
@@ -1707,7 +2210,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                           child: ClientProfileAvatarIcon(
                             imageUrl: _profile.basic.profileImageUrl,
                             displayName: _profile.basic.name,
-                            size: 30,
+                            size: 92,
+                            resolveCurrentUserFallback: true,
                           ),
                         ),
                       ),
@@ -1760,18 +2264,17 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             ),
 
             const SizedBox(height: 16),
-            _menuTile(
-              icon: Icons.person_outline,
-              title: 'Personal Information',
-              onTap: _editBasic,
-            ),
-            _menuTile(
-              icon: Icons.credit_card_outlined,
-              title: 'Payment Methods',
-              onTap: _editPayment,
-            ),
-
             if (_showClientTab) ...[
+              _menuTile(
+                icon: Icons.person_outline,
+                title: 'Personal Information',
+                onTap: _editBasic,
+              ),
+              _menuTile(
+                icon: Icons.credit_card_outlined,
+                title: 'Payment Methods',
+                onTap: _editPayment,
+              ),
               _menuTile(
                 icon: Icons.location_on_outlined,
                 title: 'Shipping Address',
@@ -1792,6 +2295,13 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                 icon: Icons.image_outlined,
                 title: 'Portfolio',
                 onTap: _openPortfolio,
+              ),
+              _menuTile(
+                icon: Icons.tune_rounded,
+                title: 'Specialization & Service Area',
+                onTap: () {
+                  unawaited(_openSpecializationServiceArea());
+                },
               ),
               _menuTile(
                 icon: Icons.payments_outlined,
@@ -1855,7 +2365,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                       value: _directRequestsOn,
                       activeThumbColor: AppColors.blackCat,
                       inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
+                      inactiveTrackColor: AppColors.blackCatLight.withValues(
+                        alpha: 0.35,
+                      ),
                       onChanged: _savingDirectRequestPref
                           ? null
                           : (v) => _setDirectRequestsEnabled(v),
@@ -1910,7 +2422,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                       value: _nfcRequestsOn,
                       activeThumbColor: AppColors.blackCat,
                       inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
+                      inactiveTrackColor: AppColors.blackCatLight.withValues(
+                        alpha: 0.35,
+                      ),
                       onChanged: _savingNfcRequestPref
                           ? null
                           : (v) => _setNfcRequestsEnabled(v),
@@ -2370,7 +2884,9 @@ class _CommunicationPreferencePopupState
               value: value,
               activeThumbColor: AppColors.blackCat,
               inactiveThumbColor: AppColors.blackCatLight,
-              inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
+              inactiveTrackColor: AppColors.blackCatLight.withValues(
+                alpha: 0.35,
+              ),
               onChanged: onChanged,
             ),
           ),
