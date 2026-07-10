@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -66,9 +67,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   void initState() {
     super.initState();
     _profile = widget.profile;
-    unawaited(_loadProfileFromSupabase());
-    _loadCommunicationPreferences();
-    _listenAmbassadorStatus();
+    unawaited(_bootstrapFromSupabase());
     if (widget.isActiveTab) {
       _requestNotificationFocus();
     }
@@ -217,16 +216,17 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     if (uid.isEmpty && email.isEmpty) return null;
 
     for (final table in const <String>['client', 'client_artist']) {
+      final columns = columnsForProfileTable(table) ?? '*';
       try {
         if (uid.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('id', uid).limit(1);
+          final rows = await supabase.from(table).select(columns).eq('id', uid).limit(1);
           if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
         }
 
         if (email.isNotEmpty) {
-          final rows = await supabase.from(table).select().eq('email', email).limit(1);
+          final rows = await supabase.from(table).select(columns).eq('email', email).limit(1);
           if (rows.isNotEmpty) {
             return Map<String, dynamic>.from(rows.first as Map);
           }
@@ -239,10 +239,15 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     return null;
   }
 
-  Future<void> _loadProfileFromSupabase() async {
+  Future<void> _bootstrapFromSupabase() async {
     final data = await _readClientRowFromSupabase();
     if (data == null || !mounted) return;
+    _applyProfileFromSupabase(data);
+    _applyCommunicationPreferences(data);
+    _applyAmbassadorStatus(data);
+  }
 
+  void _applyProfileFromSupabase(Map<String, dynamic> data) {
     final profile = _asMap(data['profile']);
     final basic = _asMap(data['basic']);
     final client = _asMap(data['client']);
@@ -346,10 +351,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   }
 
 
-  Future<void> _loadCommunicationPreferences() async {
-    final data = await _readClientRowFromSupabase();
-    if (!mounted || data == null) return;
-
+  void _applyCommunicationPreferences(Map<String, dynamic> data) {
     final rootPrefs = _asMap(data['communicationPreferences']);
     final nestedPrefs = _asMap(_asMap(data['client'])['communicationPreferences']);
     final source = rootPrefs.isNotEmpty ? rootPrefs : nestedPrefs;
@@ -400,9 +402,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     return statusCandidates.any(isAmbassadorStatus);
   }
 
-  Future<void> _listenAmbassadorStatus() async {
-    final data = await _readClientRowFromSupabase();
-    if (!mounted || data == null) return;
+  void _applyAmbassadorStatus(Map<String, dynamic> data) {
     setState(() => _isAmbassador = _docIsAmbassador(data));
   }
 

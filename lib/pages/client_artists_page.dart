@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import 'client_custom_request_with_artist_page.dart';
 import 'notifications_page.dart';
@@ -197,9 +198,10 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
 
   Future<List<Map<String, dynamic>>> _readArtistRows(String table) async {
     try {
+      final columns = columnsForProfileTable(table) ?? '*';
       final rows = await Supabase.instance.client
           .from(table)
-          .select()
+          .select(columns)
           .limit(500);
 
       debugPrint('ClientArtistsPage Supabase rows [$table] = ${rows.length}');
