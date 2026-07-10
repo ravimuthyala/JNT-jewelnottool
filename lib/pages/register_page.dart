@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -67,9 +65,9 @@ class _RegisterPageState extends State<RegisterPage> {
         if (!mounted) return;
         _focusClientTile();
         SemanticsService.sendAnnouncement(
-          'Client. Collaborate with top artists on personalized designs.' as FlutterView,
-          Directionality.of(context) as String,
-          WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
+          View.of(context),
+          'Client. Collaborate with top artists on personalized designs.',
+          Directionality.of(context),
         );
         await Future<void>.delayed(const Duration(milliseconds: 350));
         if (!mounted) return;
@@ -94,10 +92,10 @@ class _RegisterPageState extends State<RegisterPage> {
       client = !client;
       if (client || artist) branding = false;
     });
-    SemanticsService.sendAnnouncement (
-      (client ? 'Client selected' : 'Client not selected') as FlutterView,
-      Directionality.of(context) as String,
-      WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      client ? 'Client selected' : 'Client not selected',
+      Directionality.of(context),
     );
   }
 
@@ -107,7 +105,11 @@ class _RegisterPageState extends State<RegisterPage> {
       if (client || artist) branding = false;
     });
     if (artist) {
-      SemanticsService.sendAnnouncement('Artist selected' as FlutterView, Directionality.of(context) as String, WidgetsBinding.instance.platformDispatcher.views.first as TextDirection);
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        'Artist selected',
+        Directionality.of(context),
+      );
     }
   }
 
@@ -123,9 +125,9 @@ class _RegisterPageState extends State<RegisterPage> {
     });
     if (!wasBranding && branding) {
       SemanticsService.sendAnnouncement(
-        'Brands selected. Client and Artist cleared.' as FlutterView,
-        Directionality.of(context) as String,
-        WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
+        View.of(context),
+        'Brands selected. Client and Artist cleared.',
+        Directionality.of(context),
       );
     }
   }
@@ -204,9 +206,9 @@ class _RegisterPageState extends State<RegisterPage> {
                 if (!mounted) return;
                 _focusClientTile();
                 SemanticsService.sendAnnouncement(
-                  'Client. Collaborate with top artists on personalized designs.' as FlutterView,
-                  Directionality.of(context) as String,
-                  WidgetsBinding.instance.platformDispatcher.views.first as TextDirection,
+                  View.of(context),
+                  'Client. Collaborate with top artists on personalized designs.',
+                  Directionality.of(context),
                 );
               });
             },
