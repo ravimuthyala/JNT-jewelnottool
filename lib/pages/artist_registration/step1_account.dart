@@ -260,6 +260,26 @@ class Step1AccountState extends State<Step1Account> {
                       alignLeft: true,
                       padding: EdgeInsets.zero,
                       textStyle: const TextStyle(color: AppColors.blackCat, fontSize: 14),
+                      builder: (code) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const SizedBox(width: 4),
+                            Text(
+                              code?.dialCode ?? '+1',
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_drop_down,
+                              color: AppColors.blackCat,
+                              size: 20,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   Container(width: 1, color: AppColors.blackCatBorderLight),

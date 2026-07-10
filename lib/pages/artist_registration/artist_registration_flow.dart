@@ -18,7 +18,6 @@ import 'step3_specialization.dart';
 import 'step4_credentials.dart';
 import '_widgets/step_progress_bar.dart';
 import '_widgets/continue_button.dart';
-import '_widgets/reg_helpers.dart';
 
 class ArtistRegistrationFlow extends StatefulWidget {
   const ArtistRegistrationFlow({super.key});
