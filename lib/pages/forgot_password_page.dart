@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -114,24 +112,22 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
   }
 
   Future<void> _onSend() async {
-    final view = WidgetsBinding.instance.platformDispatcher.views.first;
-
     if (_formKey.currentState?.validate() != true) {
       final error = _emailValidator(_emailCtrl.text);
       if (error != null) {
-        SemanticsService.sendAnnouncement(error as FlutterView, view as String, Directionality.of(context));
+        SemanticsService.sendAnnouncement(View.of(context), error, Directionality.of(context));
       }
       return;
     }
 
     final email = _emailCtrl.text.trim();
     setState(() => _loading = true);
-    SemanticsService.sendAnnouncement('Sending reset link' as FlutterView, view as String, Directionality.of(context));
+    SemanticsService.sendAnnouncement(View.of(context), 'Sending reset link', Directionality.of(context));
 
     try {
       await _sendResetEmail(email);
       if (!mounted) return;
-      SemanticsService.sendAnnouncement('Reset link sent' as FlutterView, view as String, Directionality.of(context));
+      SemanticsService.sendAnnouncement(View.of(context), 'Reset link sent', Directionality.of(context));
 
       await showDialog<void>(
         context: context,
@@ -144,7 +140,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     } catch (e) {
       if (!mounted) return;
       final message = 'Failed to send reset link: $e';
-      SemanticsService.sendAnnouncement(message as FlutterView, view as String, Directionality.of(context));
+      SemanticsService.sendAnnouncement(View.of(context), message, Directionality.of(context));
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
