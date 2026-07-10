@@ -14,7 +14,6 @@ import 'client_campaign_details_page.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
-import '../services/shipping_qr_helper.dart';
 import 'artist_profile_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -3846,26 +3845,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         .toList(growable: false);
     try {
       _moveToStatus(r.id, RequestStatusV2.completed);
-      final currentUser = Supabase.instance.client.auth.currentUser;
-      final artistId = (currentUser?.id ?? '').trim();
-      final artistEmail = (currentUser?.email ?? '').trim();
       final orderNumber = r.orderNumber.trim().isNotEmpty
           ? r.orderNumber
           : r.id;
-      final shipping = buildShippingPayload(
-        collectionName: r.sourceCollection,
-        orderDocId: r.id,
-        orderNumber: orderNumber,
-        artistId: artistId,
-        artistEmail: artistEmail,
-        shippingAddressDifferentFromProfile:
-            r.shippingAddressDifferentFromProfile,
-        shippingStreet: r.shippingStreet,
-        shippingCity: r.shippingCity,
-        shippingState: r.shippingState,
-        shippingZip: r.shippingZip,
-        shippingCountry: r.shippingCountry,
-      );
       // Completion is persisted in Supabase by artist_mark_request_completed()
       // before the sheet closes. Keep this parent handler for local UI movement
       // and best-effort notifications only, so a secondary write cannot make
@@ -5785,10 +5767,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  bool _hasHeroProfileImage() {
-    final path = _heroPhotoSource().trim();
-    return path.isNotEmpty;
-  }
 
   String _heroPhotoSource() {
     final profile = request.clientProfileImage.trim();
@@ -5930,8 +5908,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     return text == 'true' || text == 'yes' || text == '1' || text == 'direct';
   }
 
-  String _displayNormalized(Object? value) =>
-      (value ?? '').toString().trim().toLowerCase().replaceAll(' ', '_');
 
   bool _displayIsRequestDescription(String value) {
     final candidate = value.trim().toLowerCase();
