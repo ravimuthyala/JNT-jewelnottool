@@ -1391,7 +1391,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
           ] else if (isCancelledStatus) ...[
             _Card(
               child: Column(
@@ -2825,9 +2825,7 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(
-          color: AppColors.blackCat.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
       ),
       child: child,
     );
@@ -3094,6 +3092,56 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   final bool enableFirestoreFallback;
   final bool showAll;
 
+  static bool _isImageLikePath(String raw) {
+    final noQuery = raw.trim().toLowerCase().split('?').first.split('#').first;
+    return noQuery.endsWith('.jpg') ||
+        noQuery.endsWith('.jpeg') ||
+        noQuery.endsWith('.png') ||
+        noQuery.endsWith('.webp') ||
+        noQuery.endsWith('.gif') ||
+        noQuery.endsWith('.heic') ||
+        noQuery.endsWith('.heif');
+  }
+
+  static bool _isUsablePhotoRef(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return false;
+    final lower = s.toLowerCase();
+
+    if (lower == '-' || lower == 'null' || lower == 'none') return false;
+    if (lower == '[]' || lower == '{}') return false;
+    if (lower.startsWith('blob:')) return false;
+    if (lower.startsWith('content://')) return false;
+    if (lower.startsWith('data:') && !lower.startsWith('data:image/')) {
+      return false;
+    }
+    if (lower.contains('order_thumb')) return false;
+    if (lower.contains('placeholder')) return false;
+    if (lower.contains('default_image')) return false;
+    if (lower.contains('default-image')) return false;
+    if (lower.contains('empty_image')) return false;
+    if (lower.contains('empty-image')) return false;
+    if (lower.contains('blank')) return false;
+    if (lower.contains('spacer')) return false;
+    if (lower.contains('transparent')) return false;
+    if (lower.contains('no_image')) return false;
+    if (lower.contains('no-image')) return false;
+    if (lower.contains('no_photo')) return false;
+    if (lower.contains('no-photo')) return false;
+    if (lower.endsWith('/')) return false;
+
+    if (lower.startsWith('data:image/')) return true;
+    if (lower.startsWith('assets/')) return _isImageLikePath(lower);
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return _isImageLikePath(lower);
+    }
+    if (lower.startsWith('gs://')) return _isImageLikePath(lower);
+
+    return _isImageLikePath(lower);
+  }
+
+  bool _isAllowedForDisplay(String raw) => _isUsablePhotoRef(raw);
+
   static List<String> _collectPhotoRefs(List<dynamic> values) {
     final out = <String>[];
     final seen = <String>{};
@@ -3101,7 +3149,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       if (value == null) return;
       if (value is String) {
         final s = value.trim();
-        if (s.isNotEmpty && seen.add(s)) out.add(s);
+        if (_isUsablePhotoRef(s) && seen.add(s)) out.add(s);
         return;
       }
       if (value is Iterable) {
@@ -3255,8 +3303,16 @@ class _SubmittedPhotosStrip extends StatelessWidget {
             })(),
           ]);
           if (name.isEmpty) continue;
+          try {
+            final metadata = (item as dynamic).metadata;
+            final sizeRaw = metadata is Map ? metadata['size'] : null;
+            final sizeText = (sizeRaw ?? '').toString().trim();
+            final size = int.tryParse(sizeText);
+            if (size != null && size <= 0) continue;
+          } catch (_) {}
           final fullPath = '$folder/$name';
-          folderRefs.add(_normalizeStorageUrl(fullPath));
+          final normalized = _normalizeStorageUrl(fullPath);
+          if (_isUsablePhotoRef(normalized)) folderRefs.add(normalized);
         }
       } catch (_) {}
     }
@@ -3268,7 +3324,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final renderable = paths
         .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
+        .where(_isAllowedForDisplay)
         .toList(growable: false);
 
     if (enableFirestoreFallback && fallbackOrderId.trim().isNotEmpty) {
@@ -3277,7 +3333,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
         builder: (context, snap) {
           final fetched = (snap.data ?? const <String>[])
               .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)
+              .where(_isAllowedForDisplay)
               .toList(growable: false);
           final merged = <String>{
             ...renderable,
@@ -3324,11 +3380,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
           }
         } catch (_) {}
       }
-      if (p.startsWith('http://') ||
-          p.startsWith('https://') ||
-          p.startsWith('blob:') ||
-          p.startsWith('data:') ||
-          p.startsWith('content://')) {
+      if (p.startsWith('http://') || p.startsWith('https://')) {
         return NetworkImage(p);
       }
       if (p.startsWith('assets/')) return AssetImage(p);
@@ -3348,14 +3400,13 @@ class _SubmittedPhotosStrip extends StatelessWidget {
         if (decoded == p) break;
         p = decoded.trim();
       }
-      if (p.isEmpty) return '';
+      if (p.isEmpty || !_isAllowedForDisplay(p)) return '';
       if (p.startsWith('http://') ||
           p.startsWith('https://') ||
           p.startsWith('assets/') ||
-          p.startsWith('blob:') ||
-          p.startsWith('data:') ||
-          p.startsWith('content://') ||
+          p.startsWith('data:image/') ||
           p.startsWith('file://')) {
+        if (!_isAllowedForDisplay(p)) return '';
         return p;
       }
       final looksStoragePath =
@@ -3370,128 +3421,144 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       if (looksStoragePath) {
         final resolved = await StorageUrlResolver.resolve(p);
         final text = (resolved ?? '').trim();
-        if (text.startsWith('http://') ||
-            text.startsWith('https://') ||
-            text.startsWith('assets/') ||
-            text.startsWith('data:image/') ||
-            text.startsWith('file://')) {
+        if (_isAllowedForDisplay(text) &&
+            (text.startsWith('http://') ||
+                text.startsWith('https://') ||
+                text.startsWith('assets/') ||
+                text.startsWith('data:image/') ||
+                text.startsWith('file://'))) {
           return text;
         }
       }
       final resolved = await StorageUrlResolver.resolve(p);
       final text = (resolved ?? '').trim();
-      if (text.startsWith('http://') ||
-          text.startsWith('https://') ||
-          text.startsWith('assets/') ||
-          text.startsWith('data:image/') ||
-          text.startsWith('file://')) {
+      if (_isAllowedForDisplay(text) &&
+          (text.startsWith('http://') ||
+              text.startsWith('https://') ||
+              text.startsWith('assets/') ||
+              text.startsWith('data:image/') ||
+              text.startsWith('file://'))) {
         return text;
       }
       return '';
     }
 
-    Widget buildTile(String raw, {required double size}) {
-      return FutureBuilder<String>(
-        future: resolveDisplayPath(raw),
-        builder: (context, snap) {
-          final resolved = (snap.data ?? '').trim();
-          if (resolved.isEmpty) return const SizedBox.shrink();
-          final provider = providerFor(resolved);
-          return FutureBuilder<void>(
-            future: precacheImage(provider, context),
-            builder: (context, imageSnap) {
-              if (imageSnap.connectionState != ConnectionState.done) {
-                return const SizedBox.shrink();
-              }
-              if (imageSnap.hasError) return const SizedBox.shrink();
-              return ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: InkWell(
-                  onTap: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (_) => Dialog(
-                        backgroundColor: Colors.black,
-                        insetPadding: const EdgeInsets.all(8),
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: InteractiveViewer(
-                                minScale: 0.8,
-                                maxScale: 4,
-                                child: Center(
-                                  child: Image(
-                                    image: provider,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, _, _) =>
-                                        const SizedBox.shrink(),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: AppColors.snow,
-                                ),
-                              ),
-                            ),
-                          ],
+    Future<List<String>> validDisplayPaths(List<String> rawPaths) async {
+      final seen = <String>{};
+      final valid = <String>[];
+
+      for (final raw in rawPaths) {
+        final resolved = await resolveDisplayPath(raw);
+        if (resolved.isEmpty || !seen.add(resolved)) continue;
+
+        try {
+          await precacheImage(providerFor(resolved), context);
+          valid.add(resolved);
+        } catch (_) {
+          // Broken image refs should not reserve an empty tile.
+        }
+      }
+
+      return valid;
+    }
+
+    Widget buildTile(String resolved, {required double size}) {
+      final provider = providerFor(resolved);
+      return ClipRRect(
+        borderRadius: BorderRadius.zero,
+        child: InkWell(
+          onTap: () {
+            showDialog<void>(
+              context: context,
+              builder: (_) => Dialog(
+                backgroundColor: Colors.black,
+                insetPadding: const EdgeInsets.all(8),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: InteractiveViewer(
+                        minScale: 0.8,
+                        maxScale: 4,
+                        child: Center(
+                          child: Image(
+                            image: provider,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                          ),
                         ),
                       ),
-                    );
-                  },
-                  child: Container(
-                    width: size,
-                    height: size,
-                    color: AppColors.blackCat.withValues(alpha: 0.04),
-                    child: Image(
-                      image: provider,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     ),
-                  ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: AppColors.snow),
+                      ),
+                    ),
+                  ],
                 ),
-              );
-            },
-          );
-        },
+              ),
+            );
+          },
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Image(
+              image: provider,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+        ),
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tileSize = showAll
-            ? ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0)
-            : 120.0;
-        if (showAll) {
-          return GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: renderable.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              mainAxisExtent: tileSize,
+    return FutureBuilder<List<String>>(
+      future: validDisplayPaths(renderable),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return SizedBox(height: showAll ? 96 : 120);
+        }
+
+        final displayPaths = snap.data ?? const <String>[];
+        if (displayPaths.isEmpty) {
+          return Text(
+            'No photos were uploaded by Brand.',
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.62),
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
             ),
-            itemBuilder: (context, index) =>
-                buildTile(renderable[index], size: tileSize),
           );
         }
 
-        return SizedBox(
-          height: tileSize,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: renderable.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (_, i) => buildTile(renderable[i], size: tileSize),
-          ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final tileSize = showAll
+                ? ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0)
+                : 120.0;
+            if (showAll) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: displayPaths
+                    .map((path) => buildTile(path, size: tileSize))
+                    .toList(growable: false),
+              );
+            }
+
+            return SizedBox(
+              height: tileSize,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: displayPaths.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (_, i) =>
+                    buildTile(displayPaths[i], size: tileSize),
+              ),
+            );
+          },
         );
       },
     );

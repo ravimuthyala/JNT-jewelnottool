@@ -3568,54 +3568,65 @@ class _SubmittedPhotosStrip extends StatelessWidget {
 
   Widget _buildTile(BuildContext context, String path, {required double size}) {
     final provider = _providerFor(path);
-    return ClipRRect(
-      borderRadius: BorderRadius.zero,
-      child: InkWell(
-        onTap: () {
-          showDialog<void>(
-            context: context,
-            builder: (_) => Dialog(
-              backgroundColor: Colors.black,
-              insetPadding: const EdgeInsets.all(8),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: InteractiveViewer(
-                      minScale: 0.8,
-                      maxScale: 4,
-                      child: Center(
-                        child: Image(
-                          image: provider,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+    return FutureBuilder<void>(
+      future: precacheImage(provider, context),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done || snap.hasError) {
+          return const SizedBox.shrink();
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: InkWell(
+            onTap: () {
+              showDialog<void>(
+                context: context,
+                builder: (_) => Dialog(
+                  backgroundColor: Colors.black,
+                  insetPadding: const EdgeInsets.all(8),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: InteractiveViewer(
+                          minScale: 0.8,
+                          maxScale: 4,
+                          child: Center(
+                            child: Image(
+                              image: provider,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  const SizedBox.shrink(),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColors.snow,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: AppColors.snow),
-                    ),
-                  ),
-                ],
+                ),
+              );
+            },
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Image(
+                image: provider,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
-          );
-        },
-        child: Container(
-          width: size,
-          height: size,
-          color: Colors.transparent,
-          child: Image(
-            image: provider,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

@@ -785,6 +785,8 @@ class SubmittedClientRequestSummary {
     required this.acceptedByArtistEmail,
     required this.acceptedByClientEmail,
     required this.clientResponseStatus,
+    required this.selectedClientName,
+    required this.selectedClientEmail,
     required this.declinedByClientEmails,
     required this.declinedByArtistEmails,
     required this.directClientStatus,
@@ -845,6 +847,8 @@ class SubmittedClientRequestSummary {
   final String acceptedByArtistEmail;
   final String acceptedByClientEmail;
   final String clientResponseStatus;
+  final String selectedClientName;
+  final String selectedClientEmail;
   final List<String> declinedByClientEmails;
   final List<String> declinedByArtistEmails;
   final String directClientStatus;
@@ -960,6 +964,22 @@ class SubmittedClientRequestSummary {
       data['artistDisplayName'],
       orderDetails['selectedArtist'],
     ], fallback: 'Artist');
+    final selectedClientName = firstNonEmpty([
+      data['selectedClientName'],
+      data['selectedClient'],
+      requestDetails['selectedClientName'],
+      requestDetails['selectedClient'],
+      detailData['selectedClientName'],
+      detailData['selectedClient'],
+      orderDetails['selectedClientName'],
+      orderDetails['selectedClient'],
+    ]);
+    final selectedClientEmail = firstNonEmpty([
+      data['selectedClientEmail'],
+      requestDetails['selectedClientEmail'],
+      detailData['selectedClientEmail'],
+      orderDetails['selectedClientEmail'],
+    ]).toLowerCase();
     final orderType = firstNonEmpty([
       orderDetails['type'],
       detailData['orderType'],
@@ -1434,6 +1454,8 @@ class SubmittedClientRequestSummary {
         (detailData['acceptance']
             as Map<String, dynamic>?)?['clientResponseStatus'],
       ]).toLowerCase(),
+      selectedClientName: selectedClientName,
+      selectedClientEmail: selectedClientEmail,
       declinedByClientEmails: declinedByClientEmails,
       declinedByArtistEmails: declinedByArtistEmails,
       directClientStatus: firstNonEmpty([
@@ -1590,6 +1612,28 @@ class SubmittedClientRequestSummary {
       data['artistDisplayName'],
       orderDetails['selectedArtist'],
     ], fallback: 'Artist');
+    final selectedClientName = firstNonEmpty([
+      data['selected_client_name'],
+      data['selectedClientName'],
+      data['selected_client'],
+      data['selectedClient'],
+      requestDetails['selectedClientName'],
+      requestDetails['selectedClient'],
+      detailData['selectedClientName'],
+      detailData['selectedClient'],
+      payloadData['selectedClientName'],
+      payloadData['selectedClient'],
+      orderDetails['selectedClientName'],
+      orderDetails['selectedClient'],
+    ]);
+    final selectedClientEmail = firstNonEmpty([
+      data['selected_client_email'],
+      data['selectedClientEmail'],
+      requestDetails['selectedClientEmail'],
+      detailData['selectedClientEmail'],
+      payloadData['selectedClientEmail'],
+      orderDetails['selectedClientEmail'],
+    ]).toLowerCase();
     final orderType = firstNonEmpty([
       data['order_type'],
       data['orderType'],
@@ -2091,6 +2135,8 @@ class SubmittedClientRequestSummary {
         (detailData['acceptance']
             as Map<String, dynamic>?)?['clientResponseStatus'],
       ]).toLowerCase(),
+      selectedClientName: selectedClientName,
+      selectedClientEmail: selectedClientEmail,
       declinedByClientEmails: declinedByClientEmails,
       declinedByArtistEmails: declinedByArtistEmails,
       directClientStatus: firstNonEmpty([

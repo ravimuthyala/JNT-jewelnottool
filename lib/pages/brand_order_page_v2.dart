@@ -629,6 +629,8 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       artistName: req.acceptedByArtistName.isNotEmpty
           ? req.acceptedByArtistName
           : req.selectedArtist,
+      selectedClientName: req.selectedClientName,
+      selectedClientEmail: req.selectedClientEmail,
       selectedArtistName: selectedArtistName,
       artistProfileImage: req.artistProfileImage,
       createdAt: submittedAt,
@@ -1866,6 +1868,8 @@ class ClientOrder {
   final String acceptedByArtistEmail;
   final String directClientStatus;
   final String artistName;
+  final String selectedClientName;
+  final String selectedClientEmail;
   final String selectedArtistName;
   final String artistProfileImage;
   final DateTime? cancelledAt;
@@ -1929,6 +1933,8 @@ class ClientOrder {
     this.acceptedByArtistEmail = '',
     this.directClientStatus = '',
     this.artistName = '',
+    this.selectedClientName = '',
+    this.selectedClientEmail = '',
     this.selectedArtistName = '',
     this.artistProfileImage = '',
     this.cancelledAt,
