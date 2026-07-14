@@ -17,6 +17,65 @@ class ArtistRequestsRepository {
   static const int _maxInitialRequestsPerCollection = 10;
   static const int _maxActiveRequestsPerCollection = 6;
 
+  // Column projection for client_custom_requests: verified against the live
+  // Supabase schema (2026-07) and cross-referenced against every field this
+  // file actually reads via _flattenSupabaseRequestRow/_fromSupabaseRow*.
+  // Keep in sync with docs/DB_OPTIMIZATION_PLAN.md Phase A if columns change.
+  static const String _clientRequestColumns =
+      'accepted_by_artist_email, accepted_by_artist_name, accepted_by_client_email, '
+      'accepted_client_name, allow_non_licensed, artist_completed_photos, artist_final_amount, '
+      'artist_images, artist_pool_status, artist_profile_image, artist_quote, artist_status, '
+      'artist_uploaded_photos, budget_max, budget_min, campaign_name, cancel_reason, '
+      'client_avatar_url, client_budget_max, client_budget_min, client_email, client_name, '
+      'client_rating, client_response_status, client_review, client_review_submitted_at, '
+      'client_review_text, client_status, completed_art, completion_decline_description, '
+      'completion_decline_reason, completion_declined_at, completion_review_status, created_at, '
+      'data, declined_by_artist_emails, declined_by_client_emails, delivered_at, description, '
+      'description_preview, design_approval_due_at, design_approval_status, design_approved_at, '
+      'design_preview_photos, design_reminder_sent_at, design_submitted_at, details, '
+      'direct_artist_status, fallback_to_pool, group_client_count, has_inspiration_photos, id, '
+      'inspiration_photos, is_direct_request, is_group_order, nail_length, nail_preferences, '
+      'nail_shape, need_by, open_to_artist_pool, open_to_client_pool, order_number, order_type, '
+      'paid_at, payload, payment, payment_link, payment_status, photo_count, preview_image, '
+      'preview_image_asset, request_details, selected_artist, selected_artist_email, '
+      'selected_client, selected_client_email, shipped_at, shipped_by_courier, shipping, '
+      'shipping_label_carrier, shipping_label_created_at, shipping_label_pdf_url, '
+      'shipping_label_qr_data, shipping_label_ready, shipping_label_tracking_number, '
+      'shipping_qr_code, shipping_status, status, summary, title, tracking_number, updated_at';
+
+  // Column projection for company_custom_requests — same provenance as above.
+  static const String _companyRequestColumns =
+      'accepted_by_artist_email, accepted_by_artist_name, accepted_by_client_email, '
+      'accepted_client_name, accepted_group_client_emails, admin, artist_budget, '
+      'artist_budget_max, artist_budget_min, artist_completed_photos, artist_final_amount, '
+      'artist_images, artist_pool_status, artist_profile_image, artist_quote, artist_status, '
+      'artist_uploaded_photos, brand_inspiration_photos, brand_name, budget_max, budget_min, '
+      'campaign_name, cancel_reason, client_avatar_url, client_budget, client_budget_max, '
+      'client_budget_min, client_email, client_location, client_name, client_profile_image, '
+      'client_rating, client_review, client_review_submitted_at, client_review_text, '
+      'client_status, company_name, completed_art, completion_decline_description, '
+      'completion_decline_reason, completion_declined_at, completion_review_status, created_at, '
+      'declined_by_artist_emails, declined_by_client_emails, delivered_at, description, '
+      'description_preview, design_approval_due_at, design_approval_status, design_approved_at, '
+      'design_preview_photos, design_reminder_sent_at, design_submitted_at, details, '
+      'direct_artist_status, fallback_to_pool, has_inspiration_photos, id, inspiration_photos, '
+      'is_direct_request, nail_length, nail_preferences, nail_shape, need_by, '
+      'open_to_artist_pool, open_to_client_pool, order_number, order_type, order_type_label, '
+      'paid_at, payload, payment, payment_link, payment_status, photo_count, preview_image, '
+      'preview_image_asset, request_details, request_title, requester_name, selected_artist, '
+      'selected_artist_email, selected_client, selected_client_email, '
+      'selected_group_client_emails, shipped_at, shipped_by_courier, shipping, '
+      'shipping_address_different_from_profile, shipping_city, shipping_country, '
+      'shipping_label_carrier, shipping_label_created_at, shipping_label_pdf_url, '
+      'shipping_label_qr_data, shipping_label_ready, shipping_label_tracking_number, '
+      'shipping_state, shipping_status, shipping_street, shipping_zip, status, summary, title, '
+      'tracking_number, updated_at';
+
+  static String _columnsForTable(String tableName) =>
+      tableName == 'company_custom_requests'
+          ? _companyRequestColumns
+          : _clientRequestColumns;
+
   static SupabaseClient get _supabase => Supabase.instance.client;
 
   static Future<List<ClientRequestV2>> fetchActiveRequests() async {

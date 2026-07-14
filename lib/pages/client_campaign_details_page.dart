@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../constants/profile_table_columns.dart';
 import '../models/client_request_v2.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
@@ -145,6 +146,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                           body: vm.customDescription,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      _sectionContainer(child: _orderDetailsSection(vm)),
                       const SizedBox(height: 12),
                       _sectionContainer(child: _nailDimensionsSection(vm)),
                       const SizedBox(height: 12),
@@ -317,6 +320,41 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           _overviewNeedBudgetAcceptRow(vm),
         ],
       ),
+    );
+  }
+
+  Widget _orderDetailsSection(_RequestDetailsVm vm) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Order Details',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _needBudgetRow(vm),
+        const SizedBox(height: 8),
+        Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(
+                text: 'Accept By: ',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              TextSpan(text: vm.requestAcceptByLabel),
+            ],
+          ),
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.blackCat,
+          ),
+        ),
+      ],
     );
   }
 
@@ -855,6 +893,61 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       width: 1,
       height: 16,
       color: AppColors.blackCatBorderLight,
+    );
+  }
+
+  Widget _needBudgetRow(_RequestDetailsVm vm) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 16,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Need By: ${vm.needByLabel}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Row(
+            children: [
+              const Icon(
+                Icons.attach_money_rounded,
+                size: 16,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Budget: ${vm.clientBudgetLabel}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1552,12 +1645,13 @@ class _RequestDetailsVm {
       String normalizedClientId = '',
     }) async {
       List<Map<String, dynamic>> rows = const <Map<String, dynamic>>[];
+      final columns = columnsForProfileTable(tableName) ?? '*';
 
       Future<void> tryEmailLookup() async {
         if (normalizedEmail.isEmpty || rows.isNotEmpty) return;
         final response = await supabase
             .from(tableName)
-            .select()
+            .select(columns)
             .ilike('email', normalizedEmail)
             .limit(1);
         rows = response
@@ -1571,7 +1665,7 @@ class _RequestDetailsVm {
         try {
           final response = await supabase
               .from(tableName)
-              .select()
+              .select(columns)
               .eq(column, normalizedClientId)
               .limit(1);
           rows = response
@@ -2236,40 +2330,27 @@ class _RequestDetailsVm {
         if (row.isNotEmpty) return row;
       }
 
-      // Last-resort scan for legacy rows where brand name/email only exists
-      // inside the jsonb `company` object and not as a top-level column.
+      // Last-resort lookup for legacy rows where brand name/email only exists
+      // inside the jsonb `company`/`basic`/`profile` objects and not as a
+      // top-level column. Pushed into SQL via ->> operators instead of
+      // pulling up to 1000 rows into Dart for a client-side string match.
       try {
-        final rows = await supabase.from('company').select().limit(1000);
         final emailNeedle = email.trim().toLowerCase();
         final nameNeedle = companyName.trim().toLowerCase();
-        for (final raw in rows) {
-          final row = asMap(raw);
-          final company = asMap(row['company']);
-          final basic = asMap(row['basic']);
-          final profile = asMap(row['profile']);
-          final rowEmails = <String>[
-            (row['email'] ?? '').toString(),
-            (row['panel_contact_email'] ?? '').toString(),
-            (row['panel_company_email'] ?? '').toString(),
-            (company['contactEmail'] ?? '').toString(),
-            (company['email'] ?? '').toString(),
-            (basic['email'] ?? '').toString(),
-            (profile['email'] ?? '').toString(),
-          ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
-          final rowNames = <String>[
-            (row['panel_company_name'] ?? '').toString(),
-            (row['company_name'] ?? '').toString(),
-            (row['brand_name'] ?? '').toString(),
-            (company['name'] ?? '').toString(),
-            (basic['name'] ?? '').toString(),
-            (profile['name'] ?? '').toString(),
-          ].map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
-          if ((emailNeedle.isNotEmpty && rowEmails.contains(emailNeedle)) ||
-              (nameNeedle.isNotEmpty && rowNames.contains(nameNeedle))) {
-            return row;
-          }
+        final filterParts = <String>[
+          if (emailNeedle.isNotEmpty) 'company->>contactEmail.ilike."$emailNeedle"',
+          if (emailNeedle.isNotEmpty) 'company->>email.ilike."$emailNeedle"',
+          if (emailNeedle.isNotEmpty) 'basic->>email.ilike."$emailNeedle"',
+          if (emailNeedle.isNotEmpty) 'profile->>email.ilike."$emailNeedle"',
+          if (nameNeedle.isNotEmpty) 'company->>name.ilike."$nameNeedle"',
+          if (nameNeedle.isNotEmpty) 'basic->>name.ilike."$nameNeedle"',
+          if (nameNeedle.isNotEmpty) 'profile->>name.ilike."$nameNeedle"',
+        ];
+        if (filterParts.isNotEmpty) {
+          final rows = await supabase.from('company').select().or(filterParts.join(',')).limit(1);
+          if (rows.isNotEmpty) return asMap(rows.first);
         }
-            } catch (_) {}
+      } catch (_) {}
 
       return const <String, dynamic>{};
     }
@@ -2310,6 +2391,11 @@ class _RequestDetailsVm {
     }
     if (!isBrandRequest && clientBio.isNotEmpty) {
       companyBio = clientBio;
+    }
+    if (companyBio.isEmpty) {
+      companyBio = isBrandRequest
+          ? 'No company bio available.'
+          : 'No client bio available.';
     }
     final bioSectionBody = companyBio;
 

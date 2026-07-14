@@ -61,6 +61,7 @@ class _ShipmentInfo {
 class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   final SupabaseClient _supabase = Supabase.instance.client;
   bool _isMarkingDelivered = false;
+  int _selectedMeasurementTab = 0;
   String get _requestTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
       ? 'company_custom_requests'
@@ -649,10 +650,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 const SizedBox(height: 10),
                 _shippingInfoRow('Shipped by', courier.isEmpty ? '-' : courier),
                 const SizedBox(height: 8),
-                _shippingInfoRow(
-                  'Tracking #',
-                  tracking.isEmpty ? '-' : tracking,
-                ),
+_shippingInfoRow(                  'Tracking #',                  tracking.isEmpty ? '-' : tracking,                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 44,
@@ -1201,7 +1199,6 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       ),
     );
   }
-
   Widget _paymentDetailRow(
     String label,
     String value, {

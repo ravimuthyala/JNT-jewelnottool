@@ -1231,6 +1231,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   _submittedRequestsSub;
   StreamSubscription<dynamic>? _brandPartnerStatusSub;
   List<ClientOrder> _submittedOrders = const [];
+  DateTime? _lastExpirySyncAt;
   final FocusNode _notificationsFocusNode = FocusNode(
     debugLabel: 'ordersNotifications',
   );
@@ -1349,6 +1350,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     final currentUserEmail = authEmail.isNotEmpty ? authEmail : effectiveEmail;
     final controller = StreamController<List<SubmittedClientRequestSummary>>();
     var cancelled = false;
+    Timer? loadDebounce;
 
     Future<void> load() async {
       try {
@@ -1364,6 +1366,13 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       }
     }
 
+    void scheduleLoad() {
+      loadDebounce?.cancel();
+      loadDebounce = Timer(const Duration(milliseconds: 400), () {
+        if (!cancelled) unawaited(load());
+      });
+    }
+
     unawaited(load());
     final realtimeSub = Supabase.instance.client
         .channel('client-orders-${effectiveEmail.hashCode}')
@@ -1371,50 +1380,50 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'client_custom_requests',
-          callback: (_) => unawaited(load()),
+          callback: (_) => scheduleLoad(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'company_custom_requests',
-          callback: (_) => unawaited(load()),
+          callback: (_) => scheduleLoad(),
         )
         .subscribe();
 
-    _submittedRequestsSub = controller.stream.listen(
-      (items) {
-        final filteredItems = items
-            .where(
-              (req) =>
-                  _isVisibleForAudience(req, widget.audience) &&
-                  !_shouldHideFromClientArtistOrders(req, currentUserEmail),
-            )
-            .toList(growable: false);
+    _submittedRequestsSub = controller.stream.listen((items) {
+      final filteredItems = items
+          .where(
+            (req) =>
+                _isVisibleForAudience(req, widget.audience) &&
+                !_shouldHideFromClientArtistOrders(req, currentUserEmail),
+          )
+          .toList(growable: false);
+      final now = DateTime.now();
+      if (_lastExpirySyncAt == null ||
+          now.difference(_lastExpirySyncAt!) > const Duration(seconds: 60)) {
+        _lastExpirySyncAt = now;
         unawaited(_syncExpiredRequests(filteredItems));
-        final orders =
-            filteredItems
-                .map(
-                  (req) => _mapSubmittedRequestToOrder(req, currentUserEmail),
-                )
-                .toList()
-              ..sort(
-                (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
-                  a.createdAt ?? DateTime(1970),
-                ),
-              );
-        if (!mounted) return;
-        setState(() => _submittedOrders = orders);
-      },
-      onError: (_) {
-        if (!mounted) return;
-        setState(() => _submittedOrders = const []);
-      },
-    );
+      }
+      final orders = filteredItems
+          .map((req) => _mapSubmittedRequestToOrder(req, currentUserEmail))
+          .toList()
+        ..sort(
+          (a, b) => (b.createdAt ?? DateTime(1970)).compareTo(
+            a.createdAt ?? DateTime(1970),
+          ),
+        );
+      if (!mounted) return;
+      setState(() => _submittedOrders = orders);
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() => _submittedOrders = const []);
+    });
 
     _submittedRequestsSub = _CompositeStreamSubscription(
       _submittedRequestsSub!,
       onCancelExtra: () async {
         cancelled = true;
+        loadDebounce?.cancel();
         await Supabase.instance.client.removeChannel(realtimeSub);
         await controller.close();
       },

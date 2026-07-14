@@ -84,16 +84,18 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
     try {
       if (id.isNotEmpty) {
         final byId = await _supabase.from(table).select().eq('id', id).limit(1);
-        if (byId.isNotEmpty)
+        if (byId.isNotEmpty) {
           return Map<String, dynamic>.from(byId.first as Map);
+        }
 
         final byUid = await _supabase
             .from(table)
             .select()
             .eq('uid', id)
             .limit(1);
-        if (byUid.isNotEmpty)
+        if (byUid.isNotEmpty) {
           return Map<String, dynamic>.from(byUid.first as Map);
+        }
       }
 
       if (email.isNotEmpty) {

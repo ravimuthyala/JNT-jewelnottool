@@ -5110,6 +5110,8 @@ class _ClientArtistRegistrationPageState
           const SizedBox(height: 8),
           _locationServiceAreaSection(),
           const SizedBox(height: 8),
+          _locationServiceAreaSection(),
+          const SizedBox(height: 8),
           _yearCalendarSection(),
         ];
       case 4:

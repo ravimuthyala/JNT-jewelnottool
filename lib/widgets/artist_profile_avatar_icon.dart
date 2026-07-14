@@ -31,6 +31,7 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
   String _displayName = '';
   String _avatarUrl = '';
   String _secondaryAvatarUrl = '';
+  bool _loading = true;
 
   @override
   void initState() {
@@ -79,6 +80,7 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
             resolvedSeedAvatar.isNotEmpty || directPrimary.isEmpty
             ? ''
             : directSecondary;
+        _loading = false;
       });
       if (resolvedSeedAvatar.isNotEmpty || directPrimary.isNotEmpty) return;
     }
@@ -181,8 +183,12 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
         _displayName = resolvedName;
         _avatarUrl = resolvedAvatar;
         _secondaryAvatarUrl = '';
+        _loading = false;
       });
-    } catch (_) {}
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
   Future<Map<String, dynamic>?> _readArtistRow({
@@ -287,6 +293,8 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
   @override
   Widget build(BuildContext context) {
     final src = _avatarUrl.trim();
+
+    if (_loading && src.isEmpty) return _fallback();
     if (src.isEmpty) return _fallback();
 
     final size = widget.size ?? 36.0;

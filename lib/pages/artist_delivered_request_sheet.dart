@@ -134,12 +134,12 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final path = _normalizeImagePath(raw);
 
     Widget fallback() => Container(
-      color: AppColors.blackCat.withValues(alpha: 0.06),
-      child: Icon(
-        Icons.broken_image_outlined,
-        color: AppColors.blackCat.withValues(alpha: 0.35),
-      ),
-    );
+          color: AppColors.blackCat.withValues(alpha: 0.06),
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: AppColors.blackCat.withValues(alpha: 0.35),
+          ),
+        );
 
     if (path.isEmpty) return fallback();
 
@@ -158,8 +158,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final isNetwork = path.startsWith('http://') || path.startsWith('https://');
     final isAsset = path.startsWith('assets/');
     final isFileUri = path.startsWith('file://');
-    final isFilePath =
-        !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
+    final isFilePath = !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
 
     if (isNetwork) {
       return Image.network(
@@ -330,13 +329,13 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _dragHandle() => Container(
-    height: 5,
-    width: 54,
-    decoration: BoxDecoration(
-      color: AppColors.blackCat.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.zero,
-    ),
-  );
+        height: 5,
+        width: 54,
+        decoration: BoxDecoration(
+          color: AppColors.blackCat.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.zero,
+        ),
+      );
 
   Widget _topHero(BuildContext context) {
     final isBrandRequest = _isBrandRequest(request);
@@ -795,9 +794,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   Widget _acceptedClientDetailsSection(ClientRequestV2 request) {
     final name = request.acceptedClientName.trim().isNotEmpty
         ? request.acceptedClientName.trim()
-        : (request.clientName.trim().isNotEmpty
-              ? request.clientName.trim()
-              : 'Client');
+        : (request.clientName.trim().isNotEmpty ? request.clientName.trim() : 'Client');
     final avatarPath = _safeAcceptedClientAvatarPath(request);
     final avatarLetter = name[0].toUpperCase();
     return _borderBox(
@@ -857,9 +854,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   String _safeAcceptedClientAvatarPath(ClientRequestV2 request) {
-    final accepted = _normalizeImagePath(
-      request.acceptedClientProfileImage.trim(),
-    );
+    final accepted = _normalizeImagePath(request.acceptedClientProfileImage.trim());
     if (accepted.isEmpty) return '';
     final blocked = <String>{
       _normalizeImagePath(request.clientProfileImage),

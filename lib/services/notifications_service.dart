@@ -509,10 +509,7 @@ class NotificationsService {
     Iterable<String> excludeEmails = const <String>[],
   }) async {
     String norm(Object? v) => (v ?? '').toString().trim().toLowerCase();
-    final excluded = excludeEmails
-        .map((e) => e.trim().toLowerCase())
-        .where((e) => e.isNotEmpty)
-        .toSet();
+    final excluded = excludeEmails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
     final out = <String>{};
 
     void addEmail(Object? v) {
@@ -700,10 +697,7 @@ class NotificationsService {
     final targets = <String>{};
     final normalizedSelected = selectedArtistEmail.trim().toLowerCase();
     final normalizedSelectedName = selectedArtistName.trim().toLowerCase();
-    final excluded = excludeArtistEmails
-        .map((e) => e.trim().toLowerCase())
-        .where((e) => e.isNotEmpty)
-        .toSet();
+    final excluded = excludeArtistEmails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
 
     bool isLicensedArtist(Map<String, dynamic> data) {
       final profile = _map(data['profile']);
@@ -745,10 +739,7 @@ class NotificationsService {
         }
       }
       if (type.isEmpty) return true;
-      final isUnlicensed =
-          type.contains('student') ||
-          type.contains('non-licensed') ||
-          type.contains('unlicensed');
+      final isUnlicensed = type.contains('student') || type.contains('non-licensed') || type.contains('unlicensed');
       return !isUnlicensed;
     }
 
@@ -785,12 +776,7 @@ class NotificationsService {
         data['tier'],
       ];
       for (final raw in tierCandidates) {
-        final tier = (raw ?? '')
-            .toString()
-            .trim()
-            .toLowerCase()
-            .replaceAll('_', ' ')
-            .replaceAll('-', ' ');
+        final tier = (raw ?? '').toString().trim().toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
         if (tier == 'goldsmith' || tier == 'crowned') return true;
         if (tier.contains('goldsmith') || tier.contains('crowned')) return true;
       }
@@ -924,9 +910,7 @@ class NotificationsService {
               .trim()
               .toLowerCase();
       if (role.contains('admin')) return true;
-      final roles = (data['roles'] is List)
-          ? (data['roles'] as List)
-          : const <dynamic>[];
+      final roles = (data['roles'] is List) ? (data['roles'] as List) : const <dynamic>[];
       for (final raw in roles) {
         if (raw.toString().trim().toLowerCase().contains('admin')) return true;
       }

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../services/artist_directory_service.dart';
 import '../services/address_validation_service.dart';
@@ -1084,11 +1085,12 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         final allRows = <dynamic>[];
         var from = 0;
 
+        final columns = columnsForProfileTable(table) ?? '*';
         while (true) {
           try {
             final rows = await supabase
                 .from(table)
-                .select()
+                .select(columns)
                 .range(from, from + pageSize - 1);
 
             if (rows.isEmpty) break;

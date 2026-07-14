@@ -806,10 +806,6 @@ Future<void> _upsertDetailsRow(
   } catch (_) {}
 }
 
-/// If you already have this model elsewhere, you can delete this class
-/// and import the correct model file instead.
-/// But to keep this file self-contained + compile, we accept `dynamic order`.
-/// (We only read simple fields with fallback.)
 class _OrderSafe {
   final String sourceCollection;
   final String id;
@@ -6232,7 +6228,10 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           orderId: widget.order.id,
           orderNumber: widget.order.id,
           sourceCollection: _orderCollection,
-          extra: <String, dynamic>{'rating': _rating, 'tipAmount': tipAmount},
+          extra: <String, dynamic>{
+            'rating': _rating,
+            'tipAmount': tipAmount,
+          },
         );
       });
 
@@ -6274,7 +6273,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       if (mounted) setState(() => _saving = false);
     }
   }
-
   Future<void> _loadLatestReviewFromDb() async {
     try {
       final snap = await AppDatabase.instance

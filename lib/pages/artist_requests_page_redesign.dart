@@ -4036,26 +4036,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         .toList(growable: false);
     try {
       _moveToStatus(r.id, RequestStatusV2.completed);
-      final currentUser = Supabase.instance.client.auth.currentUser;
-      final artistId = (currentUser?.id ?? '').trim();
-      final artistEmail = (currentUser?.email ?? '').trim();
       final orderNumber = r.orderNumber.trim().isNotEmpty
           ? r.orderNumber
           : r.id;
-      final shipping = buildShippingPayload(
-        collectionName: r.sourceCollection,
-        orderDocId: r.id,
-        orderNumber: orderNumber,
-        artistId: artistId,
-        artistEmail: artistEmail,
-        shippingAddressDifferentFromProfile:
-            r.shippingAddressDifferentFromProfile,
-        shippingStreet: r.shippingStreet,
-        shippingCity: r.shippingCity,
-        shippingState: r.shippingState,
-        shippingZip: r.shippingZip,
-        shippingCountry: r.shippingCountry,
-      );
       // Completion is persisted in Supabase by artist_mark_request_completed()
       // before the sheet closes. Keep this parent handler for local UI movement
       // and best-effort notifications only, so a secondary write cannot make
@@ -5995,6 +5978,7 @@ class InReviewDetailsSheet extends StatelessWidget {
     final path = _heroPhotoSource().trim();
     return path.isNotEmpty;
   }
+
 
   String _heroPhotoSource() {
     final profile = request.clientProfileImage.trim();
@@ -10196,26 +10180,22 @@ class InReviewDetailsSheet extends StatelessWidget {
     final dataBytes = _decodeDataImageBytes(path);
 
     Widget broken() => Container(
-      color: AppColors.blackCat.withValues(alpha: 0.05),
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.broken_image_outlined,
-        color: AppColors.blackCat.withValues(alpha: 0.35),
-      ),
-    );
+          color: AppColors.blackCat.withValues(alpha: 0.05),
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: AppColors.blackCat.withValues(alpha: 0.35),
+          ),
+        );
 
     Widget loading() => Container(
-      color: AppColors.blackCat.withValues(alpha: 0.05),
-      alignment: Alignment.center,
-      child: const CircularProgressIndicator(strokeWidth: 2),
-    );
+          color: AppColors.blackCat.withValues(alpha: 0.05),
+          alignment: Alignment.center,
+          child: const CircularProgressIndicator(strokeWidth: 2),
+        );
 
     if (dataBytes != null) {
-      return Image.memory(
-        dataBytes,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => broken(),
-      );
+      return Image.memory(dataBytes, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
     }
     if ((path.startsWith('http://') || path.startsWith('https://')) &&
         !path.contains('/storage/v1/object/')) {
@@ -10855,6 +10835,7 @@ class _FingerNfcSelection {
       rPinky: eligible('rPinky'),
     );
   }
+
 
   final bool lThumb;
   final bool lIndex;

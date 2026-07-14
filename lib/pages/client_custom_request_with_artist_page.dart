@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
@@ -10,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import 'client_shell_page.dart';
@@ -890,7 +889,8 @@ class _ClientCustomRequestWithArtistPageState
 
       for (final table in const <String>['client', 'client_artist']) {
         try {
-          final rows = await supabase.from(table).select().limit(200);
+          final columns = columnsForProfileTable(table) ?? '*';
+          final rows = await supabase.from(table).select(columns).limit(200);
           allRows.addAll(
             rows
                 .whereType<Map>()
@@ -1892,9 +1892,9 @@ class _ClientCustomRequestWithArtistPageState
       });
       _needByFocusNode.requestFocus();
       SemanticsService.sendAnnouncement(
-        'Need By Date is required' as FlutterView,
-        Directionality.of(context) as String,
-        context as TextDirection,
+        View.of(context),
+        'Need By Date is required',
+        Directionality.of(context),
       );
       return;
     }
@@ -1907,9 +1907,9 @@ class _ClientCustomRequestWithArtistPageState
       });
       _descriptionFocusNode.requestFocus();
       SemanticsService.sendAnnouncement(
-        'Description is required' as FlutterView,
-        Directionality.of(context) as String,
-        context as TextDirection,
+        View.of(context),
+        'Description is required',
+        Directionality.of(context),
       );
       return;
     }

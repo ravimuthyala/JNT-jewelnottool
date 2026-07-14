@@ -255,6 +255,7 @@ class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
         return;
       }
 
+
       final row = await _readCompanyRow();
       final data = row ?? const <String, dynamic>{};
       final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
@@ -309,7 +310,10 @@ class _CompanyAvatarIconState extends State<_CompanyAvatarIcon> {
   @override
   Widget build(BuildContext context) {
     if (_loading && _avatarUrl.trim().isEmpty) {
-      return const SizedBox.expand();
+      return ClientProfileAvatarIcon(
+        displayName: widget.companyName,
+        size: JntHeaderMetrics.avatarSize,
+      );
     }
 
     return ClientProfileAvatarIcon(

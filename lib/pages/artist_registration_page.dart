@@ -1725,7 +1725,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         supabaseUser = await SupabaseAuthService.signup(
           email: email,
           password: password,
-        ).timeout(const Duration(seconds: 20));
+        )
+            .timeout(const Duration(seconds: 20));
       } on AuthException catch (e) {
         final message = e.message.toLowerCase();
         if (!message.contains('already')) {

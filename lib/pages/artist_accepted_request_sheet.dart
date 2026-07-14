@@ -2935,7 +2935,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       ],
     );
   }
-
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -3542,3 +3541,4 @@ class _CompactGroupClientMeasurementsTabsState
 }
 
 enum _AcceptedSheetMode { accepted, designing }
+

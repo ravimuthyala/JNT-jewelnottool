@@ -1,6 +1,7 @@
 // lib/pages/client_registration_page.dart
 
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -114,6 +115,33 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   String get _resolvedState => _isUnitedStates
       ? (_selectedState ?? '').trim()
       : _manualStateCtrl.text.trim();
+
+  void _autofillRandomData() {
+    final rand = Random();
+    final randomNum = rand.nextInt(1000000);
+    final randomState = usStates[rand.nextInt(usStates.length)];
+    setState(() {
+      _nameCtrl.text = 'Client $randomNum';
+      _emailCtrl.text = 'client_$randomNum@example.com';
+      _passCtrl.text = 'Password123!';
+      _confirmPassCtrl.text = 'Password123!';
+      
+      final p1 = 500 + rand.nextInt(400);
+      final p2 = 100 + rand.nextInt(899);
+      final p3 = 1000 + rand.nextInt(8999);
+      _phoneCtrl.text = '($p1) $p2-$p3';
+      
+      _instagramCtrl.text = 'client_$randomNum';
+      _tiktokCtrl.text = 'client_$randomNum';
+      _bioCtrl.text = 'This is a test bio for client $randomNum.';
+      _streetCtrl.text = '${100 + rand.nextInt(900)} Test St';
+      _cityCtrl.text = 'Test City';
+      _zipCtrl.text = '${10000 + rand.nextInt(89999)}';
+      _selectedState = randomState;
+      _selectedCountry = 'United States';
+      _manualStateCtrl.clear();
+    });
+  }
 
   void _authLog(String message) {
     debugPrint('[CLIENT-REG] $message');
@@ -802,8 +830,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     return values.any((v) => v != null && v.isFinite && v >= 8);
   }
 
+
+  /// Builds the sub-maps consumed by the `client` table upsert in
+  /// `_completeRegistration` (`payload['profile']`/`['basic']`/`['address']`/
+  /// `['payment']`/`['nailPreferences']`/`['registration']`). Only build keys
+  /// that call site actually reads — anything else here is silently dropped
+  /// before it reaches Supabase, so it's dead weight, not real duplication.
   Map<String, dynamic> _buildClientFirestorePayload({
-    required String uid,
     required ClientProfileDraft draft,
   }) {
     final payment = draft.payment;
@@ -812,10 +845,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     final nfcEligible = _hasAnyNfcEligibleDimension(dimensions);
 
     return {
-      'uid': uid,
-      'email': draft.basic.email,
-      'accountType': 'client',
-      'roles': {'client': true, 'artist': false, 'company': false},
       'profile': {
         'name': draft.basic.name,
         'phone': draft.basic.phone,
@@ -853,8 +882,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         'venmoHandle': payment.venmoHandle.trim(),
         'paypalEmail': payment.paypalEmail.trim(),
       },
-      'nfcEligible': nfcEligible,
-      'eligibleForNfc': nfcEligible,
       'nailPreferences': {
         'shape': nail.shape,
         'length': nail.length.name,
@@ -878,14 +905,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         'kitPurchased': _kitPurchased,
         'bypassCheckoutUsed': kAllowRegistrationWithoutCheckout,
       },
-      'panel_displayName': draft.basic.name,
-      'panel_phone': draft.basic.phone,
-      'panel_profileImageUrl': draft.basic.profileImageUrl,
-      'profileImageUrl': draft.basic.profileImageUrl,
-      'photoUrl': draft.basic.profileImageUrl,
-      'avatarUrl': draft.basic.profileImageUrl,
-      'createdAt': DateTime.now().toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
     };
   }
 
@@ -1715,7 +1734,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       draft = draft.copyWith(
         basic: draft.basic.copyWith(profileImageUrl: profilePhotoUrl),
       );
-      final payload = _buildClientFirestorePayload(uid: uid, draft: draft);
+      final payload = _buildClientFirestorePayload(draft: draft);
       final registration = Map<String, dynamic>.from(
         (payload['registration'] as Map?)?.cast<String, dynamic>() ??
             const <String, dynamic>{},
@@ -1734,6 +1753,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         'payment': payload['payment'],
         'nail_preferences': payload['nailPreferences'],
         'registration': registration,
+
+        'panel_displayName': draft.basic.name,
+        'panel_phone': draft.basic.phone,
+        'panel_profileImageUrl': draft.basic.profileImageUrl,
 
         'updated_at': DateTime.now().toIso8601String(),
       });
@@ -1831,6 +1854,22 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
           ).pushNamedAndRemoveUntil('/register', (route) => false),
           closeTooltip: 'Close client registration',
           closeIcon: const Icon(Icons.close),
+          leadingWidth: 60,
+          leading: Tooltip(
+            message: 'Fill dummy data',
+            child: IconButton(
+              icon: const Icon(Icons.auto_fix_high),
+              iconSize: 20,
+              color: AppColors.blackCat,
+              onPressed: _autofillRandomData,
+              style: IconButton.styleFrom(
+                foregroundColor: AppColors.blackCat,
+                minimumSize: const Size(40, 40),
+                padding: const EdgeInsets.all(8),
+                shape: const RoundedRectangleBorder(),
+              ),
+            ),
+          ),
         ),
         body: SafeArea(
           child: ListView(

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'dart:async';
 import 'dart:convert';
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
@@ -793,7 +794,8 @@ class _ClientCustomRequestPageV2State extends State<ClientCustomRequestPageV2> {
 
       for (final table in const <String>['client', 'client_artist']) {
         try {
-          final rows = await supabase.from(table).select().limit(200);
+          final columns = columnsForProfileTable(table) ?? '*';
+          final rows = await supabase.from(table).select(columns).limit(200);
           allRows.addAll(
             rows
                 .whereType<Map>()

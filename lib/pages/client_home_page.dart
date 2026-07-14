@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
@@ -196,10 +197,11 @@ class _ClientHomePageState extends State<ClientHomePage> {
     required String email,
   }) async {
     final supabase = Supabase.instance.client;
+    final columns = columnsForProfileTable(table) ?? '*';
 
     try {
       if (uid.isNotEmpty) {
-        final rows = await supabase.from(table).select().eq('id', uid).limit(1);
+        final rows = await supabase.from(table).select(columns).eq('id', uid).limit(1);
         if (rows.isNotEmpty) {
           return Map<String, dynamic>.from(rows.first as Map);
         }
@@ -208,7 +210,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
       if (email.isNotEmpty) {
         final rows = await supabase
             .from(table)
-            .select()
+            .select(columns)
             .eq('email', email)
             .limit(1);
         if (rows.isNotEmpty) {
@@ -258,9 +260,10 @@ class _ClientHomePageState extends State<ClientHomePage> {
 
   Future<List<Map<String, dynamic>>> _readArtistRows(String table) async {
     try {
+      final columns = columnsForProfileTable(table) ?? '*';
       final rows = await Supabase.instance.client
           .from(table)
-          .select()
+          .select(columns)
           .limit(300);
 
       return rows
