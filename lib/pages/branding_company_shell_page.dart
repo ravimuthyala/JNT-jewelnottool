@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../constants/profile_table_columns.dart';
 import '../models/client_profile_models.dart';
 import '../services/artist_directory_service.dart';
 import '../widgets/company_shell_chrome.dart';
@@ -285,7 +286,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     try {
       final rows = await Supabase.instance.client
           .from('company')
-          .select()
+          .select(kCompanyTableColumns)
           .eq('id', uid)
           .limit(1);
 
