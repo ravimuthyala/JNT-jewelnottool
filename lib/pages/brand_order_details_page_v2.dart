@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
@@ -671,7 +672,7 @@ Future<Map<String, dynamic>?> _supabaseFetchArtistRowByEmail(
     try {
       final rows = await _client
           .from(table)
-          .select()
+          .select(columnsForProfileTable(table) ?? '*')
           .eq('email', normalized)
           .limit(1);
       if (rows.isNotEmpty) {
@@ -691,7 +692,7 @@ Future<Map<String, dynamic>?> _supabaseFetchClientRowByEmail(
     try {
       final rows = await _client
           .from(table)
-          .select()
+          .select(columnsForProfileTable(table) ?? '*')
           .eq('email', normalized)
           .limit(1);
       if (rows.isNotEmpty) {
@@ -919,7 +920,7 @@ class _BaseOrderDetails extends StatelessWidget {
     for (final collection in const <String>['artist', 'client_artist']) {
       final rows = await client
           .from(collection)
-          .select()
+          .select(columnsForProfileTable(collection) ?? '*')
           .eq('email', email)
           .limit(1);
       if (rows.isEmpty) continue;
@@ -2216,7 +2217,9 @@ class _BaseOrderDetails extends StatelessWidget {
 
       for (final collection in const <String>['artist', 'client_artist']) {
         try {
-          final rows = await _client.from(collection).select();
+          final rows = await _client
+              .from(collection)
+              .select(columnsForProfileTable(collection) ?? '*');
           for (final raw in _asList(rows)) {
             final data = _asMap(raw);
             if (!isBrandEligibleArtist(data)) continue;
@@ -3759,7 +3762,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         try {
           final rows = await _client
               .from(table)
-              .select()
+              .select(columnsForProfileTable(table) ?? '*')
               .eq('id', uid)
               .limit(1);
           if (rows.isNotEmpty) {

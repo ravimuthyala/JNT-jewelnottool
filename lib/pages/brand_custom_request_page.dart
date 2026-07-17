@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart'
     show ClientProfileDraft, NailLength, nailShapes;
@@ -979,7 +980,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     int limit = 300,
   }) async {
     try {
-      final rows = await _client.from(table).select().limit(limit);
+      final rows = await _client
+          .from(table)
+          .select(columnsForProfileTable(table) ?? '*')
+          .limit(limit);
       return rows
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
@@ -1129,7 +1133,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       if (_uid.isNotEmpty) {
         final rows = await _client
             .from('company')
-            .select()
+            .select(kCompanyTableColumns)
             .eq('id', _uid)
             .limit(1);
         if (rows.isNotEmpty) {
@@ -1139,7 +1143,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       if (_authEmail.isNotEmpty) {
         final rows = await _client
             .from('company')
-            .select()
+            .select(kCompanyTableColumns)
             .eq('email', _authEmail)
             .limit(1);
         if (rows.isNotEmpty) {
