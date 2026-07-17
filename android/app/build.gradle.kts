@@ -20,20 +20,51 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.jnt_app_0120"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+
         minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        manifestPlaceholders["appName"] = "JNT"
+        manifestPlaceholders["deepLinkScheme"] = "jntapp"
+    }
+
+    flavorDimensions += "environment"
+
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+
+            manifestPlaceholders["appName"] = "JNT DEV"
+            manifestPlaceholders["deepLinkScheme"] = "jntappdev"
+        }
+
+        create("uat") {
+            dimension = "environment"
+
+            applicationIdSuffix = ".uat"
+            versionNameSuffix = "-uat"
+
+            manifestPlaceholders["appName"] = "JNT UAT"
+            manifestPlaceholders["deepLinkScheme"] = "jntappuat"
+        }
+
+        create("production") {
+            dimension = "environment"
+
+            manifestPlaceholders["appName"] = "JNT"
+            manifestPlaceholders["deepLinkScheme"] = "jntapp"
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Keep your existing signing behavior unchanged for now.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
