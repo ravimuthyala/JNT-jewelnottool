@@ -1,0 +1,68 @@
+# Apurv Branch: Firebase → Supabase Optimization Notes
+
+This document summarizes the key optimizations done in this branch so anyone can quickly understand what changed and why.
+
+## 1) Migration Focus: Firebase to Supabase
+
+- Migrated core data access flows to Supabase-backed tables and services.
+- Standardized reads through Supabase query patterns used across pages/services.
+- Added and maintained Supabase migration files under:
+  - `supabase/migrations/`
+  - `supabase/uat_export/production_public_schema.sql`
+
+## 2) Reduced Redundant Code
+
+- Consolidated repeated profile-table column selections into one shared constant file:
+  - `lib/constants/profile_table_columns.dart`
+- Added `columnsForProfileTable(...)` so the same profile projection logic is reused instead of duplicated in many pages.
+- This reduces repeated query definitions and keeps profile fetch logic consistent.
+
+## 3) Stopped Fetching Entire Tables Where Not Needed
+
+- Replaced broad/full-row fetch patterns in many profile-related reads with explicit column projections.
+- Client/artist/brand screens now use targeted `select(...)` columns instead of unnecessarily loading all fields in common paths.
+- Example usage appears across:
+  - `lib/pages/client_*`
+  - `lib/pages/brand_*`
+  - `lib/pages/client_artists_page.dart`
+  - `lib/pages/client_home_page.dart`
+  - `lib/pages/client_profile_page.dart`
+
+## 4) Indexing and Query Performance Improvements
+
+Indexes are present to support faster lookups and filtering on important workloads.
+
+### Client-related request flows
+
+- `client_custom_requests` indexes include:
+  - client email/id/uid
+  - selected/accepted artist email
+  - status, artist_status, client_status
+  - created_at, updated_at, need_by, order_number
+
+### Artist-related flows
+
+- Artist-centric lookups are optimized with indexes such as:
+  - `reviews_artist_id_idx`
+  - `tip_payout_queue_artist_email_idx`
+  - `tips_artist_id_idx`
+  - `idx_ascension_audit_logs_artist_id`
+
+### Brand/company flows
+
+- `company_custom_requests` includes indexes for:
+  - company/client/artist email filters
+  - selected/accepted artist or client email
+  - status and lifecycle fields
+  - created_at, need_by, order_number
+
+### Source of index definitions
+
+- See `supabase/uat_export/production_public_schema.sql` (`CREATE INDEX` statements).
+
+## 5) Outcome
+
+- Less redundant query code.
+- Reduced over-fetching in important UI flows.
+- Better read/query performance through indexed access patterns.
+- Clearer separation of data-access concerns while moving from Firebase-style patterns to Supabase-native structures.
