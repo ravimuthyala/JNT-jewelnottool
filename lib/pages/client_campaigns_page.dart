@@ -1792,7 +1792,8 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             final card = Semantics(
               button: true,
               label: 'Open request details for ${request.clientName}',
-              child: InkWell(
+              child: ExcludeSemantics(
+                child: InkWell(
                 borderRadius: BorderRadius.zero,
                 onTap: () => _openDetails(request),
                 child: CompanyClientRequestCard(
@@ -1818,6 +1819,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
                   previewImage: _previewWidget(request),
                   onTap: () => _openDetails(request),
                 ),
+              ),
               ),
             );
 
@@ -1964,7 +1966,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       );
     }
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Client campaigns',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications: () {
@@ -1988,6 +1994,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         ),
       ),
       body: content,
+      ),
     );
   }
 
@@ -2275,7 +2282,7 @@ class _AvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: '',
+      tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: AppColors.snow,

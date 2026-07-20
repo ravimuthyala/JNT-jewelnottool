@@ -645,7 +645,11 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist registration',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntModalAppBar(
         onClose: () => Navigator.of(
@@ -726,6 +730,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

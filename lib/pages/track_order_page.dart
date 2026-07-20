@@ -21,7 +21,11 @@ class TrackOrderPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Track order',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -49,6 +53,7 @@ class TrackOrderPage extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
+      ),
       ),
     );
   }

@@ -2152,7 +2152,11 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Client orders',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
 
       // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
@@ -2306,6 +2310,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
               onTap: (i) => widget.onNavTap?.call(i),
             )
           : null,
+      ),
     );
   }
 
@@ -2675,7 +2680,7 @@ class _AvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: '',
+      tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: AppColors.snow,

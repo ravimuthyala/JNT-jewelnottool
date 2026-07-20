@@ -137,7 +137,11 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
 
-    return Align(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Delivery history',
+      child: Align(
       alignment: Alignment.bottomCenter,
       child: Container(
         constraints: BoxConstraints(maxHeight: maxH),
@@ -259,6 +263,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

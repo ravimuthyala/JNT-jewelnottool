@@ -372,25 +372,35 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Review artist',
+        child: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
     if (_order == null) {
-      return Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          title: const Text('Rate Artist'),
-          backgroundColor: AppColors.alabaster,
-        ),
-        body: const SafeArea(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'We could not find this order for review.',
-                textAlign: TextAlign.center,
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Review artist',
+        child: Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: AppBar(
+            title: const Text('Rate Artist'),
+            backgroundColor: AppColors.alabaster,
+          ),
+          body: const SafeArea(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'We could not find this order for review.',
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           ),
@@ -398,7 +408,11 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
       );
     }
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Review artist',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -482,6 +496,7 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

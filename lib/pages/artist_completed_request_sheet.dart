@@ -407,7 +407,11 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       context,
     ).copyWith(textScaler: const TextScaler.linear(1.0));
 
-    return MediaQuery(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Completed request details',
+      child: MediaQuery(
       data: sheetMediaQuery,
       child: AnimatedPadding(
         duration: const Duration(milliseconds: 180),
@@ -447,6 +451,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -508,6 +513,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       child: Semantics(
         button: true,
         selected: selected,
+        child: ExcludeSemantics(
         child: InkWell(
         borderRadius: BorderRadius.zero,
         onTap: () => setState(() => _completedTabIndex = index),
@@ -532,6 +538,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               color: AppColors.blackCat,
             ),
           ),
+        ),
         ),
         ),
       ),

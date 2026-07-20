@@ -291,6 +291,18 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   final TextEditingController _shipCountryCtrl = TextEditingController(
     text: 'United States',
   );
+  final FocusNode _campaignNameFocusNode = FocusNode(
+    debugLabel: 'campaignNameField',
+  );
+  final FocusNode _requestedClientFocusNode = FocusNode(
+    debugLabel: 'requestedClientField',
+  );
+  final FocusNode _groupClientFocusNode = FocusNode(
+    debugLabel: 'groupClientField',
+  );
+  final FocusNode _requestedArtistFocusNode = FocusNode(
+    debugLabel: 'requestedArtistField',
+  );
   Timer? _shipStreetAutocompleteDebounce;
   List<AddressSuggestion> _shipStreetSuggestions = const [];
   bool _shipStreetSuggestionsLoading = false;
@@ -346,6 +358,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         (_requestedArtist ?? '').trim().isNotEmpty) {
       _designCreatorMode = _DesignCreatorMode.specificArtist;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_campaignNameFocusNode);
+    });
     unawaited(_loadSelectionSources());
   }
 
@@ -362,7 +378,18 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     _shipStateCtrl.dispose();
     _shipZipCtrl.dispose();
     _shipCountryCtrl.dispose();
+    _campaignNameFocusNode.dispose();
+    _requestedClientFocusNode.dispose();
+    _groupClientFocusNode.dispose();
+    _requestedArtistFocusNode.dispose();
     super.dispose();
+  }
+
+  void _focusAfterBuild(FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(node);
+    });
   }
 
   Future<void> _autofillShippingAddressFromStreet() async {
@@ -2408,7 +2435,11 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       ),
     );
 
-    return Theme(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Brand custom request',
+      child: Theme(
       data: pageTheme,
       child: Scaffold(
         backgroundColor: AppColors.snow,
@@ -2418,6 +2449,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                 imageUrl: widget.profile.basic.profileImageUrl,
                 onOpenProfile: widget.onOpenProfile,
                 onLogout: widget.onLogout,
+                autoFocusNotifications: true,
               )
             : AppBar(
                 backgroundColor: AppColors.alabaster,
@@ -2484,6 +2516,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                     hint: 'e.g. Spring 2025 Heritage Collection',
                     minHeight: 52,
                     verticalPadding: 14,
+                    focusNode: _campaignNameFocusNode,
                   ),
                   const SizedBox(height: 2),
                   _fieldLabel('Need By Date *'),
@@ -2746,6 +2779,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                         () => _clientRecipientMode =
                             _ClientRecipientMode.specificClient,
                       );
+                      _focusAfterBuild(_requestedClientFocusNode);
                       unawaited(_loadSelectionSources());
                     },
                   ),
@@ -2757,6 +2791,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                         value: _requestedClient ?? '',
                         hint: 'Select Client',
                         items: _nfcFilteredBrandPartnerClients,
+                        focusNode: _requestedClientFocusNode,
                         onChanged: (v) => setState(
                           () => _requestedClient = v.trim().isEmpty
                               ? null
@@ -2778,6 +2813,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                         () => _clientRecipientMode =
                             _ClientRecipientMode.groupClients,
                       );
+                      _focusAfterBuild(_groupClientFocusNode);
                       unawaited(_loadSelectionSources());
                     },
                   ),
@@ -2793,6 +2829,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                             ),
                             value: _groupClientToAdd,
                             hint: 'Select clients',
+                            focusNode: _groupClientFocusNode,
                             items: _nfcFilteredBrandPartnerClients
                                 .where(
                                   (name) => !_groupSelectedClients.any(
@@ -2844,7 +2881,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                     onTap: () => setState(
                                       () => _groupSelectedClients.remove(name),
                                     ),
-                                    child: InkWell(
+                                    child: ExcludeSemantics(
+                                      child: InkWell(
                                   borderRadius: BorderRadius.zero,
                                   onTap: () => setState(
                                     () => _groupSelectedClients.remove(name),
@@ -2874,6 +2912,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                       ],
                                     ),
                                   ),
+                                    ),
                                     ),
                                   ),
                                 );
@@ -2917,10 +2956,13 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                     badge: 'DIRECT',
                     subtitle:
                         'Only this artist will receive the request. If declined, it returns to the artist pool.',
-                    onTap: () => setState(
-                      () => _designCreatorMode =
-                          _DesignCreatorMode.specificArtist,
-                    ),
+                    onTap: () {
+                      setState(
+                        () => _designCreatorMode =
+                            _DesignCreatorMode.specificArtist,
+                      );
+                      _focusAfterBuild(_requestedArtistFocusNode);
+                    },
                   ),
                   if (_designCreatorMode == _DesignCreatorMode.specificArtist)
                     Padding(
@@ -2932,6 +2974,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                             value: _requestedArtist ?? '',
                             hint: 'Select Artist',
                             items: _directRequestArtists,
+                            focusNode: _requestedArtistFocusNode,
                             onChanged: (v) => setState(
                               () => _requestedArtist = v.trim().isEmpty
                                   ? null
@@ -3340,7 +3383,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               )
             : null,
       ),
-    );
+    ));
   }
 
   List<String> get _artistOptions {
@@ -3379,7 +3422,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     return Semantics(
       button: true,
       label: icon == Icons.add ? 'Increase quantity' : 'Decrease quantity',
-      child: InkWell(
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       child: Container(
         height: 34,
@@ -3389,6 +3433,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           borderRadius: BorderRadius.zero,
         ),
         child: Icon(icon, size: 16),
+      ),
       ),
       ),
     );
@@ -3439,7 +3484,8 @@ class _OptionCard extends StatelessWidget {
         button: true,
         selected: selected,
         onTap: onTap,
-        child: InkWell(
+        child: ExcludeSemantics(
+          child: InkWell(
       onTap: onTap,
       child: Container(
         width: double.infinity,
@@ -3518,6 +3564,7 @@ class _OptionCard extends StatelessWidget {
       ),
       ),
       ),
+      ),
     );
   }
 }
@@ -3529,12 +3576,14 @@ class _SearchableSelectField extends StatelessWidget {
     required this.hint,
     required this.items,
     required this.onChanged,
+    this.focusNode,
   });
 
   final String value;
   final String hint;
   final List<String> items;
   final ValueChanged<String> onChanged;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -3570,9 +3619,13 @@ class _SearchableSelectField extends StatelessWidget {
           },
           onSelected: onChanged,
           fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-            return TextField(
+            final effectiveFocusNode = this.focusNode ?? focusNode;
+            return Semantics(
+              label: hint,
+              textField: true,
+              child: TextField(
               controller: controller,
-              focusNode: focusNode,
+              focusNode: effectiveFocusNode,
               onChanged: (text) {
                 final normalizedText = text.trim();
                 final matchesExisting = normalizedItems.any(
@@ -3593,7 +3646,7 @@ class _SearchableSelectField extends StatelessWidget {
                 }
               },
               onSubmitted: (_) => onSubmit(),
-              onTapOutside: (_) => focusNode.unfocus(),
+              onTapOutside: (_) => effectiveFocusNode.unfocus(),
               style: const TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w400,
@@ -3633,6 +3686,7 @@ class _SearchableSelectField extends StatelessWidget {
                   borderSide: _requestBorder,
                 ),
               ),
+              ),
             );
           },
           optionsViewBuilder: (context, onSelected, options) {
@@ -3670,7 +3724,8 @@ class _SearchableSelectField extends StatelessWidget {
                         final item = list[index];
                         return Semantics(
                           button: true,
-                          child: InkWell(
+                          child: ExcludeSemantics(
+                            child: InkWell(
                           onTap: () => onSelected(item),
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -3686,6 +3741,7 @@ class _SearchableSelectField extends StatelessWidget {
                                 fontFamily: 'Arial',
                               ),
                             ),
+                          ),
                           ),
                           ),
                         );
@@ -3714,7 +3770,10 @@ class _DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return Semantics(
+      label: 'Date',
+      textField: true,
+      child: TextField(
       controller: controller,
       keyboardType: TextInputType.datetime,
       onChanged: onChanged,
@@ -3754,6 +3813,7 @@ class _DateField extends StatelessWidget {
           borderSide: _requestBorder,
         ),
       ),
+      ),
     );
   }
 }
@@ -3765,7 +3825,10 @@ class _TextArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return Semantics(
+      label: hint,
+      textField: true,
+      child: TextField(
       controller: controller,
       maxLines: 5,
       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
@@ -3795,6 +3858,7 @@ class _TextArea extends StatelessWidget {
           borderSide: _requestBorder,
         ),
       ),
+      ),
     );
   }
 }
@@ -3806,17 +3870,23 @@ class _InputField extends StatelessWidget {
     required this.minHeight,
     required this.verticalPadding,
     this.onChanged,
+    this.focusNode,
   });
   final TextEditingController controller;
   final String hint;
   final double minHeight;
   final double verticalPadding;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return Semantics(
+      label: hint,
+      textField: true,
+      child: TextField(
       controller: controller,
+      focusNode: focusNode,
       onChanged: onChanged,
       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
       decoration: InputDecoration(
@@ -3847,6 +3917,7 @@ class _InputField extends StatelessWidget {
           borderRadius: BorderRadius.zero,
           borderSide: _requestBorder,
         ),
+      ),
       ),
     );
   }
@@ -3919,6 +3990,8 @@ class _BudgetCard extends StatelessWidget {
               max: 5000,
               divisions: 997,
               values: values,
+              semanticFormatterCallback: (value) =>
+                  _fmtMoney(value + displayStartOffset),
               onChanged: onChanged,
               onChangeEnd: onChangeEnd,
             ),

@@ -616,7 +616,11 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist earnings',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications:
@@ -809,6 +813,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                 ],
               ),
             ),
+    ),
     );
   }
 }
@@ -940,7 +945,7 @@ class _AvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<_AvatarAction>(
-      tooltip: '',
+      tooltip: 'Account menu',
       position: PopupMenuPosition.under,
       elevation: 12,
       color: AppColors.snow,

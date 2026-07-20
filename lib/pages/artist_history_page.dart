@@ -1145,7 +1145,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
   Widget _avatarMenu() {
     return PopupMenuButton<_HeaderAvatarAction>(
-      tooltip: '',
+      tooltip: 'Account menu',
       position: PopupMenuPosition.under,
       elevation: 12,
       color: Colors.white,
@@ -1276,7 +1276,11 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         .where((r) => !_isBrandRequest(r))
         .toList(growable: false);
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist history',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications: _openNotifications,
@@ -1384,6 +1388,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
               ],
             )
           : null),
+    ),
     );
   }
 }
@@ -1432,6 +1437,7 @@ class _HistoryTabs extends StatelessWidget {
     return Semantics(
       button: true,
       selected: isSelected,
+      child: ExcludeSemantics(
       child: InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.zero,
@@ -1464,6 +1470,7 @@ class _HistoryTabs extends StatelessWidget {
         ),
       ),
       ),
+      ),
     );
   }
 }
@@ -1480,6 +1487,7 @@ class _HistoryCard extends StatelessWidget {
         child: Semantics(
           button: true,
           onTap: onTap,
+          child: ExcludeSemantics(
           child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.zero,
@@ -1543,6 +1551,7 @@ class _HistoryCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
       ),
       ),

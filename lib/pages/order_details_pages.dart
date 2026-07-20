@@ -1618,17 +1618,22 @@ class ShippedOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return _BaseOrderDetails(
-      title: 'Order Details',
-      statusPillText: 'Shipped',
-      statusPillColor: AppColors.balletSlippers,
-      statusPillIcon: Icons.local_shipping_rounded,
-      statusPillIconColor: AppColors.blackCat,
-      order: o,
-      isBrandViewer: isBrandViewer,
-      budgetViewMode: budgetViewMode,
-      showRightPanel: false,
-      rightPanel: const SizedBox.shrink(),
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Shipped order details',
+      child: _BaseOrderDetails(
+        title: 'Order Details',
+        statusPillText: 'Shipped',
+        statusPillColor: AppColors.balletSlippers,
+        statusPillIcon: Icons.local_shipping_rounded,
+        statusPillIconColor: AppColors.blackCat,
+        order: o,
+        isBrandViewer: isBrandViewer,
+        budgetViewMode: budgetViewMode,
+        showRightPanel: false,
+        rightPanel: const SizedBox.shrink(),
+      ),
     );
   }
 }
@@ -1651,22 +1656,27 @@ class InProgressOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return _BaseOrderDetails(
-      title: 'Order Details',
-      statusPillText: 'In Progress',
-      statusPillColor: AppColors.balletSlippers,
-      statusPillIcon: Icons.timelapse_rounded,
-      statusPillIconColor: const Color(0xFFD36B77),
-      order: o,
-      isBrandViewer: isBrandViewer,
-      budgetViewMode: budgetViewMode,
-      rightPanel: const _ProgressCard(
-        steps: [
-          _StepItem('Accepted', true),
-          _StepItem('Designing', true),
-          _StepItem('Packaging', false),
-          _StepItem('Shipped', false),
-        ],
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'In progress order details',
+      child: _BaseOrderDetails(
+        title: 'Order Details',
+        statusPillText: 'In Progress',
+        statusPillColor: AppColors.balletSlippers,
+        statusPillIcon: Icons.timelapse_rounded,
+        statusPillIconColor: const Color(0xFFD36B77),
+        order: o,
+        isBrandViewer: isBrandViewer,
+        budgetViewMode: budgetViewMode,
+        rightPanel: const _ProgressCard(
+          steps: [
+            _StepItem('Accepted', true),
+            _StepItem('Designing', true),
+            _StepItem('Packaging', false),
+            _StepItem('Shipped', false),
+          ],
+        ),
       ),
     );
   }
@@ -1690,21 +1700,26 @@ class InReviewOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return _BaseOrderDetails(
-      title: 'Order Details',
-      statusPillText: 'Pending',
-      statusPillColor: AppColors.balletSlippers,
-      statusPillIcon: Icons.hourglass_bottom_rounded,
-      statusPillIconColor: Colors.black.withValues(alpha: 0.65),
-      order: o,
-      isBrandViewer: isBrandViewer,
-      budgetViewMode: budgetViewMode,
-      rightPanel: const _InfoCard(
-        title: 'Waiting for artist',
-        lines: [
-          'Artist is reviewing your request.',
-          'You’ll get an update soon.',
-        ],
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'In review order details',
+      child: _BaseOrderDetails(
+        title: 'Order Details',
+        statusPillText: 'Pending',
+        statusPillColor: AppColors.balletSlippers,
+        statusPillIcon: Icons.hourglass_bottom_rounded,
+        statusPillIconColor: Colors.black.withValues(alpha: 0.65),
+        order: o,
+        isBrandViewer: isBrandViewer,
+        budgetViewMode: budgetViewMode,
+        rightPanel: const _InfoCard(
+          title: 'Waiting for artist',
+          lines: [
+            'Artist is reviewing your request.',
+            'You’ll get an update soon.',
+          ],
+        ),
       ),
     );
   }
@@ -1728,16 +1743,21 @@ class NewOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return _BaseOrderDetails(
-      title: 'Order Details',
-      statusPillText: 'New',
-      statusPillColor: AppColors.balletSlippers,
-      statusPillIcon: Icons.fiber_new_rounded,
-      statusPillIconColor: Colors.black.withValues(alpha: 0.65),
-      order: o,
-      isBrandViewer: isBrandViewer,
-      budgetViewMode: budgetViewMode,
-      rightPanel: const SizedBox.shrink(),
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'New order details',
+      child: _BaseOrderDetails(
+        title: 'Order Details',
+        statusPillText: 'New',
+        statusPillColor: AppColors.balletSlippers,
+        statusPillIcon: Icons.fiber_new_rounded,
+        statusPillIconColor: Colors.black.withValues(alpha: 0.65),
+        order: o,
+        isBrandViewer: isBrandViewer,
+        budgetViewMode: budgetViewMode,
+        rightPanel: const SizedBox.shrink(),
+      ),
     );
   }
 }
@@ -4519,34 +4539,41 @@ class _LocalGroupClientMeasurementsTabsState
             child: Row(
               children: widget.clients.asMap().entries.map((entry) {
                 final selectedTab = entry.key == _selectedIndex;
-                return InkWell(
-                  onTap: () => setState(() => _selectedIndex = entry.key),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: selectedTab
-                              ? AppColors.balletSlippers
-                              : AppColors.blackCatBorderLight,
-                          width: selectedTab ? 2 : 1,
+                return Semantics(
+                  button: true,
+                  selected: selectedTab,
+                  label: entry.value.name,
+                  child: ExcludeSemantics(
+                    child: InkWell(
+                      onTap: () => setState(() => _selectedIndex = entry.key),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
                         ),
-                      ),
-                    ),
-                    child: Text(
-                      entry.value.name,
-                      style: TextStyle(
-                        color: selectedTab
-                            ? AppColors.blackCat
-                            : AppColors.blackCat.withValues(alpha: 0.62),
-                        fontSize: 12,
-                        fontWeight: selectedTab
-                            ? FontWeight.w700
-                            : FontWeight.w600,
-                        fontFamily: selectedTab ? 'ArialBold' : 'Arial',
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: selectedTab
+                                  ? AppColors.balletSlippers
+                                  : AppColors.blackCatBorderLight,
+                              width: selectedTab ? 2 : 1,
+                            ),
+                          ),
+                        ),
+                        child: Text(
+                          entry.value.name,
+                          style: TextStyle(
+                            color: selectedTab
+                                ? AppColors.blackCat
+                                : AppColors.blackCat.withValues(alpha: 0.62),
+                            fontSize: 12,
+                            fontWeight: selectedTab
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                            fontFamily: selectedTab ? 'ArialBold' : 'Arial',
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -6344,22 +6371,29 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.blackCat : AppColors.snow,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: ExcludeSemantics(
+        child: InkWell(
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatLight),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? AppColors.snow : AppColors.blackCat,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.blackCat : AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatLight),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.snow : AppColors.blackCat,
+              ),
+            ),
           ),
         ),
       ),
@@ -6377,6 +6411,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
             Widget star(int index) {
               final selected = _rating >= index;
               return IconButton(
+                tooltip: '$index star${index == 1 ? '' : 's'}',
                 onPressed: () {
                   setState(() => _rating = index.toDouble());
                   modalSetState(() {});
@@ -6421,6 +6456,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               ),
                             ),
                             IconButton(
+                              tooltip: 'Close',
                               onPressed: () => Navigator.of(sheetContext).pop(),
                               icon: const Icon(Icons.close_rounded),
                             ),
@@ -6827,29 +6863,36 @@ class _ClientStatusTabsState extends State<_ClientStatusTabs> {
   Widget _tabButton(String label, int index) {
     final selected = _selectedTab == index;
     return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _selectedTab = index),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                  color: AppColors.blackCat,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: () => setState(() => _selectedTab = index),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
-              ),
+                Container(
+                  height: 3,
+                  width: double.infinity,
+                  color: selected ? AppColors.blackCat : Colors.transparent,
+                ),
+              ],
             ),
-            Container(
-              height: 3,
-              width: double.infinity,
-              color: selected ? AppColors.blackCat : Colors.transparent,
-            ),
-          ],
+          ),
         ),
       ),
     );

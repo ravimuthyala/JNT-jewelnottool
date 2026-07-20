@@ -190,7 +190,11 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'NFC nail profile',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -425,6 +429,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -691,7 +696,11 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
   Widget build(BuildContext context) {
     final sections = _sections;
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'NFC saved items',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -795,6 +804,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
                 ),
               ],
             ),
+      ),
     );
   }
 }
@@ -1024,7 +1034,11 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
             ? 'Keep your NFC nail near your phone.'
             : 'Hold your NFC nail near the top of your phone to activate it.');
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'NFC scan activation',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -1158,6 +1172,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -1263,7 +1278,12 @@ class _SavedItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: item.title,
+        child: ExcludeSemantics(
+          child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.zero,
         child: Container(
@@ -1320,6 +1340,8 @@ class _SavedItemTile extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),

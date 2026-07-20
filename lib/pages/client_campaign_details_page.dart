@@ -46,7 +46,11 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   Widget build(BuildContext context) {
     final safeBottom = MediaQuery.of(context).viewPadding.bottom;
     final maxH = MediaQuery.of(context).size.height * 0.96;
-    return Align(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Campaign details',
+      child: Align(
       alignment: Alignment.bottomCenter,
       child: Container(
         constraints: BoxConstraints(maxHeight: maxH),
@@ -262,6 +266,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             );
           },
         ),
+      ),
       ),
     );
   }

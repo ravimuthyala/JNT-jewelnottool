@@ -130,7 +130,11 @@ class NewArtistOrderDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _OrderDetailsShell(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'New order details',
+      child: _OrderDetailsShell(
       title: 'New Order',
       order: order,
       body: Column(
@@ -204,6 +208,7 @@ class NewArtistOrderDetailsPage extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -220,7 +225,11 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _OrderDetailsShell(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'In review order details',
+      child: _OrderDetailsShell(
       title: 'In Review',
       order: order,
       body: Column(
@@ -312,6 +321,7 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -328,7 +338,11 @@ class AcceptedArtistOrderDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _OrderDetailsShell(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Accepted order details',
+      child: _OrderDetailsShell(
       title: 'Accepted',
       order: order,
       body: Column(
@@ -364,6 +378,7 @@ class AcceptedArtistOrderDetailsPage extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -380,7 +395,12 @@ class InProgressArtistOrderDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _InProgressScaffold(order: order, onUpdate: onUpdate);
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'In progress order details',
+      child: _InProgressScaffold(order: order, onUpdate: onUpdate),
+    );
   }
 }
 

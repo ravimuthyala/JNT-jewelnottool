@@ -473,7 +473,11 @@ class _ClientArtistCalendarPageState extends State<ClientArtistCalendarPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist calendar',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       body: ArtistCalendarPage(
         requests: _requests,
@@ -569,6 +573,7 @@ class _ClientArtistCalendarPageState extends State<ClientArtistCalendarPage> {
               label: 'Earnings',
             ),
         ],
+      ),
       ),
     );
   }

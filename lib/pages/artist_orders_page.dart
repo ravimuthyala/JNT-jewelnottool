@@ -147,7 +147,11 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist orders',
+      child: Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -239,6 +243,7 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
           ],
         ],
       ),
+    ),
     );
   }
 
@@ -360,6 +365,7 @@ class _ArtistFilterTabs extends StatelessWidget {
     return Semantics(
       button: true,
       selected: isSelected,
+      child: ExcludeSemantics(
       child: InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.zero,
@@ -390,6 +396,7 @@ class _ArtistFilterTabs extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
       ),
     );
@@ -480,6 +487,7 @@ class _ArtistOrderCard extends StatelessWidget {
                     const SizedBox(width: 10),
                     Semantics(
                       button: true,
+                      child: ExcludeSemantics(
                       child: InkWell(
                       onTap: onDetails,
                       borderRadius: BorderRadius.zero,
@@ -504,6 +512,7 @@ class _ArtistOrderCard extends StatelessWidget {
                             ),
                           ],
                         ),
+                      ),
                       ),
                       ),
                     ),

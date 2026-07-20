@@ -662,6 +662,19 @@ class _ClientArtistRegistrationPageState
     return false;
   }
 
+  bool _showPaymentRequiredMessage(String message) {
+    if (!mounted) return false;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+    return false;
+  }
+
   bool get _canStartCheckout =>
       _paymentSaved &&
       (!widget.showAdaCompliance ||
@@ -2356,7 +2369,11 @@ class _ClientArtistRegistrationPageState
     final allowed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => Scaffold(
+        builder: (_) => Semantics(
+          scopesRoute: true,
+          namesRoute: true,
+          label: 'Nail measurement guide',
+          child: Scaffold(
           backgroundColor: AppColors.snow,
           appBar: AppBar(
             backgroundColor: AppColors.snow,
@@ -2457,6 +2474,7 @@ class _ClientArtistRegistrationPageState
               ),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -2990,6 +3008,12 @@ class _ClientArtistRegistrationPageState
         ),
       );
       return false;
+    }
+
+    if (_registrationStep == 4 && !_paymentSaved) {
+      return _showPaymentRequiredMessage(
+        'Please enter and save at least one payment method before continuing.',
+      );
     }
 
     return true;
@@ -4494,9 +4518,9 @@ class _ClientArtistRegistrationPageState
                   _paymentSaved = false;
                 }),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RadioListTile<String>(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RadioListTile<String>(
                       value: 'PayPal',
                       dense: true,
                       visualDensity: VisualDensity.compact,
@@ -4727,8 +4751,8 @@ class _ClientArtistRegistrationPageState
                       ),
                       const SizedBox(height: 6),
                     ],
-                  ],
-                ),
+                ],
+              ),
               ),
             ),
 
@@ -5395,7 +5419,11 @@ class _ClientArtistRegistrationPageState
           displayColor: dropdownTextColor,
         ),
       ),
-      child: Scaffold(
+      child: Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Client artist registration',
+        child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: JntModalAppBar(
           onClose: () => Navigator.of(
@@ -5429,6 +5457,7 @@ class _ClientArtistRegistrationPageState
               ),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -5679,7 +5708,11 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
       );
     }
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Select measurement coin',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.snow,
@@ -5738,6 +5771,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -5762,40 +5796,47 @@ Widget _smallCheckboxRow({
   required ValueChanged<bool?> onChanged,
   required String text,
 }) {
-  return InkWell(
-    onTap: () => onChanged(!value),
-    borderRadius: BorderRadius.zero,
-    overlayColor: WidgetStateColor.resolveWith(
-      (_) => AppColors.blackCat.withValues(alpha: 0.12),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Transform.scale(
-            scale: 0.85, // âœ… smaller checkbox
-            child: Checkbox(
-              value: value,
-              onChanged: onChanged,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              activeColor: AppColors.blackCat,
-              checkColor: AppColors.snow,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: AppColors.blackCat,
+  return Semantics(
+    button: true,
+    checked: value,
+    label: text,
+    child: ExcludeSemantics(
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.zero,
+        overlayColor: WidgetStateColor.resolveWith(
+          (_) => AppColors.blackCat.withValues(alpha: 0.12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Transform.scale(
+                scale: 0.85, // âœ… smaller checkbox
+                child: Checkbox(
+                  value: value,
+                  onChanged: onChanged,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  activeColor: AppColors.blackCat,
+                  checkColor: AppColors.snow,
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );

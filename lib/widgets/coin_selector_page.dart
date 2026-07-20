@@ -338,12 +338,17 @@ class _CoinSelectorPageState extends State<CoinSelectorPage> {
       orElse: () => countries.first,
     );
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: widget.title,
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.snow,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),
@@ -422,6 +427,7 @@ class _CoinSelectorPageState extends State<CoinSelectorPage> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -463,7 +469,12 @@ class _CountryDropdown extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        InkWell(
+        Semantics(
+          label: 'Select Country',
+          value: selectedCountry.name,
+          hint: 'Dropdown. Double tap to open.',
+          child: ExcludeSemantics(
+          child: InkWell(
           onTap: onToggle,
           borderRadius: BorderRadius.circular(18),
           child: Container(
@@ -504,6 +515,8 @@ class _CountryDropdown extends StatelessWidget {
               ],
             ),
           ),
+          ),
+          ),
         ),
         if (isOpen) ...<Widget>[
           const SizedBox(height: 8),
@@ -527,7 +540,12 @@ class _CountryDropdown extends StatelessWidget {
               itemBuilder: (BuildContext context, int index) {
                 final _CountryGroup country = countries[index];
                 final bool isSelected = country.code == value;
-                return InkWell(
+                return Semantics(
+                  button: true,
+                  selected: isSelected,
+                  label: country.name,
+                  child: ExcludeSemantics(
+                  child: InkWell(
                   onTap: () => onChanged(country.code),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -559,6 +577,8 @@ class _CountryDropdown extends StatelessWidget {
                           ),
                       ],
                     ),
+                  ),
+                  ),
                   ),
                 );
               },
@@ -631,7 +651,12 @@ class _CoinCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label:
+          '${item.name}, ${item.diameterMm.toStringAsFixed(2)} millimeter diameter',
+      child: ExcludeSemantics(
+      child: InkWell(
       onTap: () => Navigator.pop(context, item.name),
       borderRadius: BorderRadius.circular(18),
       child: Container(
@@ -676,6 +701,8 @@ class _CoinCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }

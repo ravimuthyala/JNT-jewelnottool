@@ -182,11 +182,16 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       builder: (context) {
         final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(bottom: keyboardInset),
-          child: child,
+        return Semantics(
+          scopesRoute: true,
+          namesRoute: true,
+          label: 'Edit checkout info',
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(bottom: keyboardInset),
+            child: child,
+          ),
         );
       },
     );
@@ -298,6 +303,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   Widget _editLink(VoidCallback onTap) {
     return Semantics(
       button: true,
+      child: ExcludeSemantics(
       child: InkWell(
       onTap: onTap,
       child: const Text(
@@ -308,12 +314,17 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
         ),
       ),
       ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Edit checkout info',
+      child: Scaffold(
       backgroundColor: _checkoutBg,
       appBar: JntModalAppBar(
         onClose: () => Navigator.pop(context, null),
@@ -531,6 +542,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

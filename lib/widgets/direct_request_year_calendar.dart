@@ -407,19 +407,25 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
       ),
       child: Column(
         children: [
-          InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () => _toggleMonth(year, month),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                '${_months[month - 1]} $year',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
+          Semantics(
+            button: true,
+            label: 'Toggle all days in ${_months[month - 1]} $year',
+            child: ExcludeSemantics(
+              child: InkWell(
+                borderRadius: BorderRadius.zero,
+                onTap: () => _toggleMonth(year, month),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    '${_months[month - 1]} $year',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -451,15 +457,21 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                 return Expanded(
                   child: Row(
                     children: [
-                      InkWell(
-                        onTap: () => _toggleWeek(safeWeek, month),
-                        borderRadius: BorderRadius.zero,
-                        child: Container(
-                          width: 10,
-                          margin: const EdgeInsets.only(right: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.05),
+                      Semantics(
+                        button: true,
+                        label: 'Toggle week of ${_months[month - 1]} $year',
+                        child: ExcludeSemantics(
+                          child: InkWell(
+                            onTap: () => _toggleWeek(safeWeek, month),
                             borderRadius: BorderRadius.zero,
+                            child: Container(
+                              width: 10,
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -475,32 +487,39 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
 
                             return Expanded(
                               child: Center(
-                                child: InkWell(
-                                  onTap: () => _toggleDay(d),
-                                  borderRadius: BorderRadius.zero,
-                                  child: Container(
-                                    width: 22,
-                                    height: 22,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: blocked
-                                          ? const Color(0xFFFFE6EA)
-                                          : Colors.transparent,
+                                child: Semantics(
+                                  button: true,
+                                  label: '${_months[d.month - 1]} ${d.day}, ${d.year}',
+                                  selected: blocked,
+                                  child: ExcludeSemantics(
+                                    child: InkWell(
+                                      onTap: () => _toggleDay(d),
                                       borderRadius: BorderRadius.zero,
-                                      border: blocked
-                                          ? Border.all(
-                                              color: const Color(
-                                                0xFFF06C7A,
-                                              ).withValues(alpha: 0.55),
-                                            )
-                                          : null,
-                                    ),
-                                    child: Text(
-                                      '${d.day}',
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.black.withValues(alpha: 0.75),
+                                      child: Container(
+                                        width: 22,
+                                        height: 22,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: blocked
+                                              ? const Color(0xFFFFE6EA)
+                                              : Colors.transparent,
+                                          borderRadius: BorderRadius.zero,
+                                          border: blocked
+                                              ? Border.all(
+                                                  color: const Color(
+                                                    0xFFF06C7A,
+                                                  ).withValues(alpha: 0.55),
+                                                )
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          '${d.day}',
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.black.withValues(alpha: 0.75),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),

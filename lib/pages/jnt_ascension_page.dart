@@ -636,25 +636,30 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   @override
   Widget build(BuildContext context) {
     if (!_artistLoaded || !_hasServerSnapshot || !_initialAscensionResolved) {
-      return Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: JntModalAppBar(
-          onClose: () => Navigator.of(context).pop(),
-          closeTooltip: 'Close JNT Ascension',
-          title: const Text(
-            'JNT Ascension',
-            style: TextStyle(
-              color: AppColors.blackCat,
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'JNT Ascension',
+        child: Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: JntModalAppBar(
+            onClose: () => Navigator.of(context).pop(),
+            closeTooltip: 'Close JNT Ascension',
+            title: const Text(
+              'JNT Ascension',
+              style: TextStyle(
+                color: AppColors.blackCat,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
             ),
           ),
-        ),
-        body: const Center(
-          child: SizedBox(
-            height: 28,
-            width: 28,
-            child: CircularProgressIndicator(strokeWidth: 2.2),
+          body: const Center(
+            child: SizedBox(
+              height: 28,
+              width: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.2),
+            ),
           ),
         ),
       );
@@ -663,7 +668,11 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     final level = _currentLevel;
     final nextLevel = _nextTierLevel;
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'JNT Ascension',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntModalAppBar(
         onClose: () => Navigator.of(context).pop(),
@@ -693,6 +702,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

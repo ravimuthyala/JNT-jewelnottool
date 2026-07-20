@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/company_business_options.dart';
 import '../theme/app_colors.dart';
-import '../services/edit_profile_supabase_save.dart';
 
 /// Lightweight draft model (keep here until you create a real model file).
 class CompanyBusinessInfoDraft {
@@ -177,25 +176,6 @@ class _EditCompanyBusinessInfoPopupState
       companyUrl: _companyUrlCtrl.text.trim(),
       businessType: _businessType?.trim() ?? '',
     );
-
-    try {
-      await EditProfileSupabaseSave.saveCompanyBusinessInfo(
-        companyName: updated.companyName,
-        contactName: updated.contactName,
-        contactEmail: updated.contactEmail,
-        contactPhone: updated.contactPhone,
-        companyEmail: updated.companyEmail,
-        companyPhone: updated.companyPhone,
-        companyUrl: updated.companyUrl,
-        businessType: updated.businessType,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save business info: $e')),
-      );
-      return;
-    }
 
     if (!mounted) return;
     Navigator.pop(context, updated);
@@ -453,10 +433,16 @@ class _DropdownField extends StatelessWidget {
   Widget build(BuildContext context) {
     final safeValue = (value != null && items.contains(value)) ? value : null;
 
-    return DropdownButtonFormField<String>(
+    return Semantics(
+      label: hint,
+      value: safeValue ?? 'Not selected',
+      hint: 'Dropdown. Double tap to open.',
+      child: ExcludeSemantics(
+        child: DropdownButtonFormField<String>(
       initialValue: safeValue,
       menuMaxHeight: 280,
       isExpanded: true,
+      dropdownColor: AppColors.snow,
       style: const TextStyle(
         fontSize: 11.5,
         fontWeight: FontWeight.w400,
@@ -509,6 +495,8 @@ class _DropdownField extends StatelessWidget {
           )
           .toList(),
       onChanged: onChanged,
+    ),
+      ),
     );
   }
 }

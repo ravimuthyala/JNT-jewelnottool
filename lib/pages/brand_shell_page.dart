@@ -5,13 +5,18 @@ class BrandShellPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Brand',
+      child: Scaffold(
       appBar: AppBar(title: const Text('Company Dashboard'), centerTitle: true),
       body: const Center(
         child: Text(
           'Company home (placeholder)',
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
+      ),
       ),
     );
   }

@@ -894,7 +894,11 @@ class _ClientHomeArtistPortfolioPageState
   Widget build(BuildContext context) {
     final profileKey = GlobalKey();
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist portfolio',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications: () => _openNotifications(context),
@@ -902,7 +906,8 @@ class _ClientHomeArtistPortfolioPageState
         trailing: Semantics(
           button: true,
           label: 'Open profile menu',
-          child: InkWell(
+          child: ExcludeSemantics(
+            child: InkWell(
             key: profileKey,
             borderRadius: BorderRadius.zero,
             onTap: () => _openProfileMenu(context, profileKey),
@@ -918,6 +923,7 @@ class _ClientHomeArtistPortfolioPageState
                 ),
               ),
             ),
+          ),
           ),
         ),
       ),
@@ -973,6 +979,7 @@ class _ClientHomeArtistPortfolioPageState
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1121,7 +1128,8 @@ class _PortfolioTile extends StatelessWidget {
         button: true,
         label: 'Portfolio work by ${data.artistName}',
         onTap: onTap,
-        child: InkWell(
+        child: ExcludeSemantics(
+          child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -1196,6 +1204,7 @@ class _PortfolioTile extends StatelessWidget {
           ],
         ),
       ),
+        ),
         ),
       ),
     );

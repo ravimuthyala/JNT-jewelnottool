@@ -707,10 +707,15 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.snow,
-      body: SafeArea(child: _buildClientBody()),
-      bottomNavigationBar: _buildBottomNav(),
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Client artist home',
+      child: Scaffold(
+        backgroundColor: AppColors.snow,
+        body: SafeArea(child: _buildClientBody()),
+        bottomNavigationBar: _buildBottomNav(),
+      ),
     );
   }
 }

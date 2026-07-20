@@ -318,18 +318,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   onToggle: (v) => setState(() => _bundleEnabled = v),
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _bundleKey,
-                  dropdownColor: widget.dropdownColor,
-                  style: _bodyStyle(context),
-                  decoration: _dec('Bundle', 'Select'),
-                  items: const [
-                    DropdownMenuItem(value: 'Starter', child: Text('Starter')),
-                    DropdownMenuItem(value: 'Pro', child: Text('Pro')),
-                    DropdownMenuItem(value: 'Studio', child: Text('Studio')),
-                    DropdownMenuItem(value: 'Elite', child: Text('Elite')),
-                  ],
-                  onChanged: (v) => setState(() => _bundleKey = v),
+                Semantics(
+                  label: 'Bundle',
+                  value: _bundleKey ?? 'Not selected',
+                  hint: 'Dropdown. Double tap to open.',
+                  child: ExcludeSemantics(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _bundleKey,
+                      dropdownColor: widget.dropdownColor,
+                      style: _bodyStyle(context),
+                      decoration: _dec('Bundle', 'Select'),
+                      items: const [
+                        DropdownMenuItem(value: 'Starter', child: Text('Starter')),
+                        DropdownMenuItem(value: 'Pro', child: Text('Pro')),
+                        DropdownMenuItem(value: 'Studio', child: Text('Studio')),
+                        DropdownMenuItem(value: 'Elite', child: Text('Elite')),
+                      ],
+                      onChanged: (v) => setState(() => _bundleKey = v),
+                    ),
+                  ),
                 ),
               ],
 
@@ -497,25 +504,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ],
     );
 
-    return Scaffold(
-      backgroundColor: widget.backgroundColor,
-      appBar: widget.scrollHeaderWithBody
-          ? null
-          : AppBar(
-              backgroundColor: AppColors.alabaster,
-              centerTitle: true,
-              title: Image.asset(
-                'assets/images/jnt_logo_black.png',
-                height: 50,
-                fit: BoxFit.contain,
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Checkout',
+      child: Scaffold(
+        backgroundColor: widget.backgroundColor,
+        appBar: widget.scrollHeaderWithBody
+            ? null
+            : AppBar(
+                backgroundColor: AppColors.alabaster,
+                centerTitle: true,
+                title: Image.asset(
+                  'assets/images/jnt_logo_black.png',
+                  height: 50,
+                  fit: BoxFit.contain,
+                ),
+                leading: IconButton(
+                  tooltip: 'Close',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context, null),
+                ),
               ),
-              leading: IconButton(
-                tooltip: 'Close',
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context, null),
-              ),
-            ),
-      body: SafeArea(top: !widget.scrollHeaderWithBody, child: content),
+        body: SafeArea(top: !widget.scrollHeaderWithBody, child: content),
+      ),
     );
   }
 

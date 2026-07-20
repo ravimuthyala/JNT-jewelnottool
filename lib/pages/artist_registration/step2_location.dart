@@ -198,7 +198,9 @@ class Step2LocationState extends State<Step2Location> {
                 ),
                 const SizedBox(height: kFieldGap),
                 if (_nailTechType == NailTechType.professional) ...[
-                  TextFormField(
+                  Semantics(
+                    isRequired: true,
+                    child: TextFormField(
                     controller: _licenseCtrl,
                     style: const TextStyle(fontSize: kInputFs),
                     decoration: regDec('License # *', 'Enter license number'),
@@ -207,6 +209,7 @@ class Step2LocationState extends State<Step2Location> {
                             (v == null || v.trim().isEmpty))
                         ? 'License # is required'
                         : null,
+                    ),
                   ),
                   const SizedBox(height: kFieldGap),
                   RegTypeAheadField(
@@ -236,7 +239,9 @@ class Step2LocationState extends State<Step2Location> {
                         : null,
                   ),
                 ] else ...[
-                  TextFormField(
+                  Semantics(
+                    isRequired: true,
+                    child: TextFormField(
                     controller: _schoolCtrl,
                     style: const TextStyle(fontSize: kInputFs),
                     decoration: regDec(
@@ -248,6 +253,7 @@ class Step2LocationState extends State<Step2Location> {
                             (v == null || v.trim().isEmpty))
                         ? 'School/Program is required'
                         : null,
+                    ),
                   ),
                   const SizedBox(height: kFieldGap),
                   RegPopupDropdown<String>(
@@ -406,6 +412,7 @@ class Step2LocationState extends State<Step2Location> {
       child: Semantics(
         button: true,
         selected: selected,
+        child: ExcludeSemantics(
         child: InkWell(
         onTap: () => setState(() => _nailTechType = type),
         borderRadius: BorderRadius.zero,
@@ -442,6 +449,7 @@ class Step2LocationState extends State<Step2Location> {
             ],
           ),
         ),
+      ),
       ),
       ),
     );

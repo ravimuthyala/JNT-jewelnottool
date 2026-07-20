@@ -1085,7 +1085,11 @@ class _BaseOrderDetails extends StatelessWidget {
         order.artistAcceptedAmount == null;
     final acceptedArtistMetaFuture = _loadAcceptedArtistMeta(order);
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Brand order details',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntModalAppBar(
         onClose: () => Navigator.pop(context),
@@ -1741,7 +1745,7 @@ class _BaseOrderDetails extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ));
   }
 
   Widget _paymentSection(BuildContext context) {
@@ -2931,7 +2935,10 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                       .toList(growable: false),
                 ),
               ),
-              TextField(
+              Semantics(
+                label: 'Decline reason',
+                textField: true,
+                child: TextField(
                 controller: _reasonCtrl,
                 minLines: 1,
                 maxLines: 3,
@@ -2962,6 +2969,7 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                   height: 1.3,
                   fontFamily: 'Arial',
                 ),
+              ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -3449,7 +3457,8 @@ class _SubmittedPhotosStrip extends StatelessWidget {
         child: Semantics(
           button: true,
           label: 'View photo full screen',
-          child: InkWell(
+          child: ExcludeSemantics(
+            child: InkWell(
           onTap: () {
             showDialog<void>(
               context: context,
@@ -3493,6 +3502,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
+          ),
           ),
           ),
         ),
@@ -4224,7 +4234,8 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return Semantics(
       button: true,
       selected: selected,
-      child: InkWell(
+      child: ExcludeSemantics(
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -4242,6 +4253,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
             color: selected ? AppColors.snow : AppColors.blackCat,
           ),
         ),
+      ),
       ),
       ),
     );
@@ -4337,7 +4349,10 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        TextField(
+                        Semantics(
+                          label: 'Review comment',
+                          textField: true,
+                          child: TextField(
                           controller: _commentCtrl,
                           minLines: 3,
                           maxLines: 4,
@@ -4370,6 +4385,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               ),
                             ),
                           ),
+                        ),
                         ),
                         const SizedBox(height: 12),
                         const Text(

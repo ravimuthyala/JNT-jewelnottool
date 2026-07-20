@@ -1,6 +1,7 @@
 // lib/pages/artist_registration_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:country_code_picker/country_code_picker.dart';
@@ -1285,6 +1286,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     return Semantics(
       button: true,
       selected: selected,
+      child: ExcludeSemantics(
       child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
@@ -1319,6 +1321,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         ),
       ),
       ),
+      ),
     );
   }
 
@@ -1338,6 +1341,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         child: Semantics(
           button: true,
           selected: selected,
+          child: ExcludeSemantics(
           child: InkWell(
           borderRadius: BorderRadius.zero,
           onTap: () => setState(() => _nailTechType = type),
@@ -1374,6 +1378,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
             ),
           ),
           ),
+          ),
         ),
       );
     }
@@ -1407,7 +1412,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     if (_nailTechType == NailTechType.professional) {
       return Column(
         children: [
-          TextFormField(
+          Semantics(
+            isRequired: true,
+            child: TextFormField(
             controller: _licenseCtrl,
             style: const TextStyle(fontSize: _inputFs),
             decoration: _dec('License # *', 'Enter license number'),
@@ -1416,6 +1423,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
               if (v == null || v.trim().isEmpty) return 'License # is required';
               return null;
             },
+            ),
           ),
           const SizedBox(height: 6),
 
@@ -1469,7 +1477,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     // Student / Unlicensed
     return Column(
       children: [
-        TextFormField(
+        Semantics(
+          isRequired: true,
+          child: TextFormField(
           controller: _schoolCtrl,
           style: const TextStyle(fontSize: _inputFs),
           decoration: _dec(
@@ -1483,6 +1493,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
             }
             return null;
           },
+          ),
         ),
         const SizedBox(height: 6),
 
@@ -1701,6 +1712,11 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
             content: Text('Complete required steps: ${missing.join(', ')}.'),
           ),
         );
+        SemanticsService.sendAnnouncement(
+          View.of(context),
+          'Please enter and save at least one payment method before continuing.',
+          Directionality.of(context),
+        );
         return;
       }
     } else {
@@ -1891,7 +1907,11 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           displayColor: dropdownTextColor,
         ),
       ),
-      child: Scaffold(
+      child: Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Artist registration',
+        child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: JntModalAppBar(
           onClose: () => Navigator.of(
@@ -1920,7 +1940,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                     children: [
                       _profilePicTile(),
                       const SizedBox(height: 14),
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _studioNameCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         decoration: _dec(
@@ -1929,19 +1951,25 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         ),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                       const SizedBox(height: 6),
 
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _displayNameCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         decoration: _dec('Display Name *', 'Display Name'),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                       const SizedBox(height: 6),
 
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _languageSpokenCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         decoration: _dec(
@@ -1950,6 +1978,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         ),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                       const SizedBox(height: 6),
 
@@ -1980,7 +2009,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                     const SizedBox(height: 6),*/
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _bioCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         maxLines: 5,
@@ -1990,6 +2021,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         ),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                     ],
                   ),
@@ -2004,7 +2036,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                   subtitle: 'Used to sign in to your artist account.',
                   child: Column(
                     children: [
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _emailCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         keyboardType: TextInputType.emailAddress,
@@ -2017,10 +2051,13 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           }
                           return null;
                         },
+                        ),
                       ),
                       const SizedBox(height: 6),
 
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _passCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         obscureText: _obscurePassword,
@@ -2051,6 +2088,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           }
                           return null;
                         },
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -2063,7 +2101,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                       const SizedBox(height: 6),
 
                       // ✅ Confirm password with eye icon
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _confirmCtrl,
                         obscureText: _obscureConfirmPassword,
                         style: const TextStyle(fontSize: _inputFs),
@@ -2096,6 +2136,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           }
                           return null;
                         },
+                        ),
                       ),
                       const SizedBox(height: 6),
 
@@ -2212,7 +2253,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                   ),
                   child: Column(
                     children: [
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _cityCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         decoration: _dec('City *', 'City'),
@@ -2224,6 +2267,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           }
                           return null;
                         },
+                        ),
                       ),
                       const SizedBox(height: 6),
                       const SizedBox(height: 6),
@@ -2317,7 +2361,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                     children: [
                       _requiredFieldLabel('Street Address'),
                       const SizedBox(height: 6),
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _addressLine1Ctrl,
                         style: const TextStyle(fontSize: _inputFs),
                         decoration: _dec(
@@ -2332,6 +2378,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           }
                           return null;
                         },
+                        ),
                       ),
                       if (_streetSuggestionsLoading)
                         const Padding(
@@ -2388,7 +2435,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                       const SizedBox(height: 16),
                       _requiredFieldLabel('City'),
                       const SizedBox(height: 6),
-                      TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _addressCityCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         decoration: _dec('City', 'Enter City'),
@@ -2397,6 +2446,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           if (value.isEmpty) return 'City is required';
                           return null;
                         },
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _isUnitedStates
@@ -2429,7 +2479,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           ? _requiredFieldLabel('Zip Code')
                           : _fieldLabel('Zip Code'),
                       const SizedBox(height: 6),
-                      TextFormField(
+                      Semantics(
+                        isRequired: _isUnitedStates,
+                        child: TextFormField(
                         controller: _zipCtrl,
                         style: const TextStyle(fontSize: _inputFs),
                         keyboardType: TextInputType.text,
@@ -2449,6 +2501,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           if (!ok) return 'Enter a valid ZIP code';
                           return null;
                         },
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _requiredFieldLabel('Country'),
@@ -2603,7 +2656,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextFormField(
+                            child: Semantics(
+                              isRequired: true,
+                              child: TextFormField(
                               controller: _minPriceCtrl,
                               style: const TextStyle(fontSize: _inputFs),
                               keyboardType: TextInputType.number,
@@ -2611,11 +2666,14 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               validator: (v) => (v == null || v.trim().isEmpty)
                                   ? 'Required'
                                   : null,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: TextFormField(
+                            child: Semantics(
+                              isRequired: true,
+                              child: TextFormField(
                               controller: _maxPriceCtrl,
                               style: const TextStyle(fontSize: _inputFs),
                               keyboardType: TextInputType.number,
@@ -2623,6 +2681,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               validator: (v) => (v == null || v.trim().isEmpty)
                                   ? 'Required'
                                   : null,
+                              ),
                             ),
                           ),
                         ],
@@ -2898,6 +2957,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                             child: Semantics(
                               button: true,
                               onTap: () => setState(() => _startTime = '10:00 AM'),
+                              child: ExcludeSemantics(
                               child: InkWell(
                             onTap: () => setState(() => _startTime = '10:00 AM'),
                             borderRadius: BorderRadius.zero,
@@ -2946,6 +3006,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           ),
                           ),
                           ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -2953,6 +3014,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                             child: Semantics(
                               button: true,
                               onTap: () => setState(() => _endTime = '6:00 PM'),
+                              child: ExcludeSemantics(
                               child: InkWell(
                             onTap: () => setState(() => _endTime = '6:00 PM'),
                             borderRadius: BorderRadius.zero,
@@ -2998,6 +3060,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                 ],
                               ),
                             ),
+                          ),
                           ),
                           ),
                           ),
@@ -3939,6 +4002,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -4075,7 +4139,11 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     required String text,
     required ValueChanged<bool> onChanged,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: text,
+      child: ExcludeSemantics(
+      child: InkWell(
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.zero,
       overlayColor: WidgetStateColor.resolveWith(
@@ -4103,6 +4171,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }

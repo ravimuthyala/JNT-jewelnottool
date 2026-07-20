@@ -723,18 +723,22 @@ class _FingerInput extends StatelessWidget {
 
           SizedBox(
             height: 40,
-            child: TextField(
-              controller: controller,
-              readOnly: false,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+            child: Semantics(
+              label: '$label nail dimension in millimeters',
+              textField: true,
+              child: TextField(
+                controller: controller,
+                readOnly: false,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                decoration: inputDecoration(),
+                inputFormatters: <TextInputFormatter>[
+                  NailDimensionTextInputFormatter(),
+                ],
               ),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-              decoration: inputDecoration(),
-              inputFormatters: <TextInputFormatter>[
-                NailDimensionTextInputFormatter(),
-              ],
             ),
           ),
           const SizedBox(height: 4),
@@ -813,7 +817,12 @@ class _ShapeCard extends StatelessWidget {
               ? AppColors.blackCat
               : AppColors.blackCat.withValues(alpha: 0.10));
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: 'Nail shape: $label',
+      selected: selected,
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -868,6 +877,8 @@ class _ShapeCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -972,7 +983,12 @@ class _LengthImageCard extends StatelessWidget {
               ? AppColors.blackCat
               : AppColors.blackCat.withValues(alpha: 0.10));
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: 'Nail length: $title',
+      selected: selected,
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -1036,6 +1052,8 @@ class _LengthImageCard extends StatelessWidget {
               ),
             ),*/
           ],
+        ),
+      ),
         ),
       ),
     );

@@ -673,23 +673,21 @@ class _FingerInputState extends State<_FingerInput> {
             textField: true,
             label: widget.semanticLabel,
             value: semanticValue,
-            child: ExcludeSemantics(
-              child: TextField(
-                focusNode: widget.focusNode,
-                controller: widget.controller,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
-                decoration: widget.inputDecoration(),
-                inputFormatters: <TextInputFormatter>[
-                  NailDimensionTextInputFormatter(),
-                ],
+            child: TextField(
+              focusNode: widget.focusNode,
+              controller: widget.controller,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+              decoration: widget.inputDecoration(),
+              inputFormatters: <TextInputFormatter>[
+                NailDimensionTextInputFormatter(),
+              ],
             ),
           ),
 

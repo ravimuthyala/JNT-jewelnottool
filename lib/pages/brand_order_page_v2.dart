@@ -918,7 +918,11 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Brand orders',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
 
       // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
@@ -928,6 +932,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               imageUrl: widget.profile.basic.profileImageUrl,
               onOpenProfile: widget.onOpenProfile,
               onLogout: widget.onLogout,
+              autoFocusNotifications: true,
             )
           : JntStandardAppBar(
               onNotifications: () {
@@ -1068,7 +1073,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               onTap: (i) => widget.onNavTap?.call(i),
             )
           : null,
-    );
+    ));
   }
 
   void _openOrderDetails(BuildContext context, ClientOrder order) {
@@ -1438,7 +1443,8 @@ class _FilterTabs extends StatelessWidget {
     return Semantics(
       button: true,
       selected: isSelected,
-      child: InkWell(
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.zero,
       hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
@@ -1475,6 +1481,7 @@ class _FilterTabs extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
       ),
     );
@@ -1733,7 +1740,8 @@ class _OrderDetailsLink extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      child: InkWell(
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
@@ -1759,6 +1767,7 @@ class _OrderDetailsLink extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
       ),
     );

@@ -191,7 +191,9 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
             subtitle: 'You will use these to log in to JewelNotTool.',
             child: Column(
               children: [
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
@@ -217,9 +219,12 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                     fontSize: 14,
                     fontFamily: 'Arial',
                   ),
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _passCtrl,
                   obscureText: _obscurePass,
                   textInputAction: TextInputAction.next,
@@ -251,9 +256,12 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                     fontSize: 14,
                     fontFamily: 'Arial',
                   ),
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _confirmCtrl,
                   obscureText: _obscureConfirm,
                   textInputAction: TextInputAction.done,
@@ -286,6 +294,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                     color: Color(0xFF292222),
                     fontSize: 14,
                     fontFamily: 'Arial',
+                  ),
                   ),
                 ),
               ],

@@ -819,7 +819,11 @@ class _RequestChatModalState extends State<RequestChatModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Request chat',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         backgroundColor: AppColors.snow,
@@ -950,17 +954,24 @@ class _RequestChatModalState extends State<RequestChatModal> {
                                 ),
                               ),
                             if (hasAttachment && attachmentType == 'image')
-                              GestureDetector(
-                                onTap: () => _openImagePreview(attachmentUrl),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.zero,
-                                  child: Image.network(
-                                    attachmentUrl,
-                                    fit: BoxFit.cover,
-                                    height: 170,
-                                    width: 220,
-                                    errorBuilder: (_, _, _) =>
-                                        const SizedBox.shrink(),
+                              Semantics(
+                                button: true,
+                                label: 'View attachment full screen',
+                                child: ExcludeSemantics(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        _openImagePreview(attachmentUrl),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.zero,
+                                      child: Image.network(
+                                        attachmentUrl,
+                                        fit: BoxFit.cover,
+                                        height: 170,
+                                        width: 220,
+                                        errorBuilder: (_, _, _) =>
+                                            const SizedBox.shrink(),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1098,6 +1109,7 @@ class _RequestChatModalState extends State<RequestChatModal> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -148,24 +148,30 @@ class Step3SpecializationState extends State<Step3Specialization> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextFormField(
+                      child: Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _minPriceCtrl,
                         style: const TextStyle(fontSize: kInputFs),
                         keyboardType: TextInputType.number,
                         decoration: regDec('Min Price (\$) *', '50'),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: TextFormField(
+                      child: Semantics(
+                        isRequired: true,
+                        child: TextFormField(
                         controller: _maxPriceCtrl,
                         style: const TextStyle(fontSize: kInputFs),
                         keyboardType: TextInputType.number,
                         decoration: regDec('Max Price (\$) *', '200'),
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                     ),
                   ],
@@ -222,7 +228,9 @@ class Step3SpecializationState extends State<Step3Specialization> {
             title: 'Location & Service Area',
             child: Column(
               children: [
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _cityCtrl,
                   style: const TextStyle(fontSize: kInputFs),
                   decoration: regDec('City *', 'City'),
@@ -234,6 +242,7 @@ class Step3SpecializationState extends State<Step3Specialization> {
                     }
                     return null;
                   },
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
                 RegTypeAheadField(
@@ -260,13 +269,16 @@ class Step3SpecializationState extends State<Step3Specialization> {
                         (v == null || v.isEmpty) ? 'State is required' : null,
                   ),
                 ] else ...[
-                  TextFormField(
+                  Semantics(
+                    isRequired: true,
+                    child: TextFormField(
                     controller: _manualStateCtrl,
                     style: const TextStyle(fontSize: kInputFs),
                     decoration: regDec('State / Region', 'Enter region'),
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? 'State / Region is required'
                         : null,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 6),
@@ -356,6 +368,8 @@ class Step3SpecializationState extends State<Step3Specialization> {
                 const SizedBox(height: kTightGap),
                 Semantics(
                   button: true,
+                  label: _showCalendar ? 'Hide year calendar' : 'Show year calendar',
+                  child: ExcludeSemantics(
                   child: InkWell(
                   onTap: () => setState(() {
                     _showCalendar = !_showCalendar;
@@ -380,6 +394,7 @@ class Step3SpecializationState extends State<Step3Specialization> {
                         ),
                       ),
                     ],
+                  ),
                   ),
                   ),
                 ),

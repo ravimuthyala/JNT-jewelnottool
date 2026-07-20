@@ -132,11 +132,20 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Reset password',
+        child: const Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
     }
 
     if (_error != null) {
-      return Scaffold(
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Reset password',
+        child: Scaffold(
         appBar: AppBar(title: const Text('Reset Password')),
         body: Center(
           child: Padding(
@@ -185,10 +194,15 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             ),
           ),
         ),
+        ),
       );
     }
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Reset password',
+      child: Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -276,6 +290,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

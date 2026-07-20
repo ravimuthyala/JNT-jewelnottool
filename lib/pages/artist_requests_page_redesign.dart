@@ -1880,7 +1880,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   Widget _avatarMenu() {
     return PopupMenuButton<_HeaderAvatarAction>(
-      tooltip: '',
+      tooltip: 'Account menu',
       position: PopupMenuPosition.under,
       elevation: 12,
       color: AppColors.snow,
@@ -1975,7 +1975,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist requests',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
 
       // HEADER (same style as your other pages)
@@ -2055,6 +2059,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               ],
             )
           : null,
+    ),
     );
   }
 
@@ -2519,6 +2524,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return Semantics(
       button: true,
       selected: selected,
+      child: ExcludeSemantics(
       child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
@@ -2553,6 +2559,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             ),
           ],
         ),
+      ),
       ),
       ),
     );
@@ -5267,6 +5274,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return MergeSemantics(
       child: Semantics(
         button: true,
+        child: ExcludeSemantics(
         child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: () {
@@ -5509,6 +5517,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             ),
           ],
         ),
+      ),
       ),
       ),
       ),

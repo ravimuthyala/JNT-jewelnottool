@@ -78,7 +78,11 @@ class ClientArtistArtistPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Client artist view',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       body: ClientArtistsPage(
         profile: profile,
@@ -136,6 +140,7 @@ class ClientArtistArtistPage extends StatelessWidget {
               label: 'Earnings',
             ),
         ],
+      ),
       ),
     );
   }

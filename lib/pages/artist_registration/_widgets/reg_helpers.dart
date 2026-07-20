@@ -189,32 +189,39 @@ Widget regSectionCard({
 // ── Chip ──────────────────────────────────────────────────────────────────────
 
 Widget regChip(String label, bool selected, VoidCallback onTap) {
-  return InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.zero,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.blackCat.withValues(alpha: 0.12) : Colors.white,
+  return Semantics(
+    button: true,
+    selected: selected,
+    label: label,
+    child: ExcludeSemantics(
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.zero,
-        border: Border.all(
-          color: selected
-              ? AppColors.blackCat
-              : AppColors.blackCat.withValues(alpha: 0.08),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (selected) ...[
-            const Icon(Icons.check, size: 16, color: AppColors.blackCat),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            label,
-            style: const TextStyle(fontSize: kInputFs, fontWeight: FontWeight.w700),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.blackCat.withValues(alpha: 0.12) : Colors.white,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: selected
+                  ? AppColors.blackCat
+                  : AppColors.blackCat.withValues(alpha: 0.08),
+            ),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                const Icon(Icons.check, size: 16, color: AppColors.blackCat),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: const TextStyle(fontSize: kInputFs, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -241,31 +248,37 @@ Widget regCheckRow({
   required String text,
   required ValueChanged<bool> onChanged,
 }) {
-  return InkWell(
-    onTap: () => onChanged(!value),
-    borderRadius: BorderRadius.zero,
-    overlayColor: WidgetStateColor.resolveWith((_) => AppColors.blackCat.withValues(alpha: 0.12)),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Checkbox(
-            value: value,
-            onChanged: (v) => onChanged(v ?? false),
-            activeColor: AppColors.blackCat,
-            checkColor: AppColors.snow,
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.blackCat,
+  return Semantics(
+    button: true,
+    label: text,
+    child: ExcludeSemantics(
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.zero,
+        overlayColor: WidgetStateColor.resolveWith((_) => AppColors.blackCat.withValues(alpha: 0.12)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Checkbox(
+                value: value,
+                onChanged: (v) => onChanged(v ?? false),
+                activeColor: AppColors.blackCat,
+                checkColor: AppColors.snow,
               ),
-            ),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );
@@ -309,7 +322,11 @@ class RegTypeAheadField extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Autocomplete<String>(
+            Semantics(
+              label: label,
+              value: field.value ?? '',
+              hint: 'Dropdown. Double tap to open.',
+              child: Autocomplete<String>(
               initialValue: TextEditingValue(text: field.value ?? ''),
               optionsBuilder: (textEditingValue) {
                 final query = textEditingValue.text.trim().toLowerCase();
@@ -377,6 +394,7 @@ class RegTypeAheadField extends StatelessWidget {
                 );
               },
             ),
+            ),
             if (field.hasError) ...[
               const SizedBox(height: 4),
               Text(
@@ -427,7 +445,12 @@ class RegPopupDropdown<T> extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PopupMenuButton<T>(
+            Semantics(
+              label: label,
+              value: hasValue ? itemLabel(selected as T) : 'Not selected',
+              hint: 'Dropdown. Double tap to open.',
+              child: ExcludeSemantics(
+              child: PopupMenuButton<T>(
               color: AppColors.snow,
               surfaceTintColor: AppColors.snow,
               elevation: 4,
@@ -475,6 +498,8 @@ class RegPopupDropdown<T> extends StatelessWidget {
                     const Icon(Icons.arrow_drop_down, color: AppColors.blackCat),
                   ],
                 ),
+              ),
+              ),
               ),
             ),
           ],

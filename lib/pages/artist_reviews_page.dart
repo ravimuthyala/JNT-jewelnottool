@@ -448,7 +448,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         ? 0.0
         : _reviews.fold<double>(0, (p, e) => p + e.rating) / reviewCount;
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist reviews',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications: () {},
@@ -635,6 +639,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -701,6 +706,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         child: Semantics(
           button: true,
           selected: active,
+          child: ExcludeSemantics(
           child: InkWell(
           onTap: () => setState(() => _tab = i),
           child: Container(
@@ -724,6 +730,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
               ),
             ),
           ),
+        ),
         ),
         ),
       );
@@ -775,6 +782,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       child: Builder(
         builder: (fieldContext) => Semantics(
           button: true,
+          child: ExcludeSemantics(
           child: InkWell(
           onTap: () async {
             final box = fieldContext.findRenderObject() as RenderBox?;
@@ -833,6 +841,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 const Icon(Icons.keyboard_arrow_down_rounded),
               ],
             ),
+          ),
           ),
           ),
         ),
@@ -1050,7 +1059,7 @@ class _ReviewsAvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: '',
+      tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: AppColors.snow,

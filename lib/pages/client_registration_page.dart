@@ -157,6 +157,40 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     debugPrint('[CLIENT-REG] $message');
   }
 
+  bool _hasRequiredPaymentMethod() {
+    switch (_payment.method) {
+      case PaymentMethod.venmo:
+        return _payment.venmoHandle.trim().isNotEmpty;
+      case PaymentMethod.paypal:
+        final email = _payment.paypalEmail.trim();
+        return email.isNotEmpty && email.contains('@');
+      case PaymentMethod.card:
+        final number = _payment.cardNumber.trim().replaceAll(' ', '');
+        final cvv = _payment.cvv.trim();
+        return _payment.nameOnCard.trim().isNotEmpty &&
+            number.length >= 13 &&
+            number.length <= 19 &&
+            RegExp(r'^\d{2}\/\d{2}$').hasMatch(_payment.expiryMMYY.trim()) &&
+            (cvv.length == 3 || cvv.length == 4) &&
+            _payment.zip.trim().isNotEmpty;
+      case PaymentMethod.applePay:
+        return false;
+    }
+  }
+
+  bool _showPaymentValidationMessage(String message) {
+    if (!mounted) return false;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1694,6 +1728,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       setState(() => _showValidationErrors = true);
     }
     if (_formKey.currentState?.validate() != true) return;
+    if (!_hasRequiredPaymentMethod()) {
+      _showPaymentValidationMessage(
+        'Please enter at least one payment method before continuing.',
+      );
+      return;
+    }
     _authLog('form validation passed');
 
     if (!kAllowRegistrationWithoutCheckout) {
@@ -1939,6 +1979,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         );
         return false;
       }
+    }
+
+    if (_registrationStep == 0 && !_hasRequiredPaymentMethod()) {
+      return _showPaymentValidationMessage(
+        'Please enter at least one payment method before continuing.',
+      );
     }
 
     return true;
@@ -2202,7 +2248,11 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       ),
     );
 
-    return Theme(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Client registration',
+      child: Theme(
       data: themed,
       child: Scaffold(
         backgroundColor: _clientRegBodyBg,
@@ -2779,6 +2829,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
             ],
           ),
         ),
+      ),
       ),
     );
   }

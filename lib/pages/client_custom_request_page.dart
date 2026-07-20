@@ -3308,7 +3308,11 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                     Positioned(
                                       top: 4,
                                       right: 4,
-                                      child: GestureDetector(
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Remove inspiration photo',
+                                        child: ExcludeSemantics(
+                                          child: GestureDetector(
                                         onTap: () =>
                                             _removeInspirationPhoto(photos[i]),
                                         child: Container(
@@ -3323,6 +3327,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                             size: 14,
                                             color: Colors.white,
                                           ),
+                                        ),
+                                      ),
                                         ),
                                       ),
                                     ),
@@ -3534,7 +3540,10 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                         ),
                         const SizedBox(height: 10),
 
-                        TextFormField(
+                        Semantics(
+                          label: 'Search client by name',
+                          textField: true,
+                          child: TextFormField(
                           controller: slot.searchController,
                           style: const TextStyle(
                             fontSize: 12,
@@ -3615,6 +3624,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                               ),
                             ),
                           ),
+                        ),
                         ),
 
                         if (slot.showSuggestions) ...[
@@ -4361,7 +4371,7 @@ class _AvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: '',
+      tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: _requestSnow,
@@ -4877,7 +4887,11 @@ class _SearchableSelectField extends StatelessWidget {
                   itemCount: list.length,
                   itemBuilder: (context, index) {
                     final item = list[index];
-                    return InkWell(
+                    return Semantics(
+                      button: true,
+                      label: item,
+                      child: ExcludeSemantics(
+                        child: InkWell(
                       onTap: () => onSelected(item),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
@@ -4891,6 +4905,8 @@ class _SearchableSelectField extends StatelessWidget {
                             fontWeight: FontWeight.w400,
                           ),
                         ),
+                      ),
+                    ),
                       ),
                     );
                   },
@@ -4922,7 +4938,11 @@ class _SoftButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -4952,6 +4972,8 @@ class _SoftButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    ),
       ),
     );
   }
@@ -5061,7 +5083,12 @@ class _RadioPill extends StatelessWidget {
         ? AppColors.blackCat
         : AppColors.blackCat.withValues(alpha: 0.08);
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -5093,6 +5120,8 @@ class _RadioPill extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    ),
       ),
     );
   }

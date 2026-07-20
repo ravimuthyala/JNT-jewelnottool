@@ -20,6 +20,8 @@ class BrandingCompanyHomePage extends StatelessWidget {
     required this.onLogout,
     this.onOpenProfile,
     this.onRequestTrendingArtist,
+    this.autoFocusNotifications = false,
+    this.notificationFocusRequestKey = 0,
   });
 
   final String companyName;
@@ -34,6 +36,8 @@ class BrandingCompanyHomePage extends StatelessWidget {
   /// If provided: open the Profile tab/page from Home
   final VoidCallback? onOpenProfile;
   final ValueChanged<CompanyTrendingArtist>? onRequestTrendingArtist;
+  final bool autoFocusNotifications;
+  final int notificationFocusRequestKey;
 
   /// Logout callback (shell should route to '/')
   final Future<void> Function() onLogout;
@@ -58,13 +62,19 @@ class BrandingCompanyHomePage extends StatelessWidget {
         .take(240)
         .toList(growable: false);
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Company home',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: CompanyHeader(
         companyName: companyName,
         imageUrl: companyLogoUrl,
         onOpenProfile: onOpenProfile,
         onLogout: onLogout,
+        autoFocusNotifications: autoFocusNotifications,
+        notificationFocusRequestKey: notificationFocusRequestKey,
       ),
 
       body: ListView(
@@ -111,7 +121,7 @@ class BrandingCompanyHomePage extends StatelessWidget {
             ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -128,7 +138,8 @@ class _TrendingCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'View ${artist.name} photo full screen',
-      child: InkWell(
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: () => _openPhotoPreview(context, imageUrl),
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -210,6 +221,7 @@ class _TrendingCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
       ),
     );

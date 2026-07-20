@@ -7,7 +7,7 @@ import '../pages/notifications_page.dart';
 import 'client_profile_avatar_icon.dart';
 import 'jnt_standard_app_bar.dart';
 
-class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
+class CompanyHeader extends StatefulWidget implements PreferredSizeWidget {
   const CompanyHeader({
     super.key,
     required this.companyName,
@@ -15,6 +15,9 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
     this.onOpenProfile,
     this.onLogout,
     this.trailing,
+    this.notificationFocusNode,
+    this.autoFocusNotifications = false,
+    this.notificationFocusRequestKey = 0,
   });
 
   final String companyName;
@@ -22,6 +25,23 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onOpenProfile;
   final Future<void> Function()? onLogout;
   final Widget? trailing;
+  final FocusNode? notificationFocusNode;
+  final bool autoFocusNotifications;
+  final int notificationFocusRequestKey;
+
+  @override
+  State<CompanyHeader> createState() => _CompanyHeaderState();
+
+  @override
+  Size get preferredSize =>
+      const Size.fromHeight(JntHeaderMetrics.toolbarHeight);
+}
+
+class _CompanyHeaderState extends State<CompanyHeader> {
+  late final FocusNode _internalNotificationFocusNode;
+
+  FocusNode get _effectiveNotificationFocusNode =>
+      widget.notificationFocusNode ?? _internalNotificationFocusNode;
 
   void _openNotifications(BuildContext context) {
     Navigator.push(
@@ -81,13 +101,43 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
     );
 
     if (choice == 'logout') {
-      await onLogout?.call();
+      await widget.onLogout?.call();
     }
   }
 
   @override
-  Size get preferredSize =>
-      const Size.fromHeight(JntHeaderMetrics.toolbarHeight);
+  void initState() {
+    super.initState();
+    _internalNotificationFocusNode = FocusNode(
+      debugLabel: 'companyHeaderNotifications',
+    );
+    _requestNotificationFocus();
+  }
+
+  @override
+  void didUpdateWidget(covariant CompanyHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.notificationFocusRequestKey !=
+        oldWidget.notificationFocusRequestKey) {
+      _requestNotificationFocus();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.notificationFocusNode == null) {
+      _internalNotificationFocusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  void _requestNotificationFocus() {
+    if (!widget.autoFocusNotifications) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_effectiveNotificationFocusNode);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,11 +145,12 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
 
     return JntStandardAppBar(
       onNotifications: () => _openNotifications(context),
+      notificationFocusNode: _effectiveNotificationFocusNode,
       trailing:
-          trailing ??
+          widget.trailing ??
           Semantics(
             button: true,
-            label: 'Account menu for $companyName',
+            label: 'Account menu for ${widget.companyName}',
             onTap: () => _openProfileMenu(context, profileKey),
             child: ExcludeSemantics(
               child: InkWell(
@@ -112,8 +163,8 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.zero,
                     child: _CompanyAvatarIcon(
-                      companyName: companyName,
-                      imageUrl: imageUrl,
+                      companyName: widget.companyName,
+                      imageUrl: widget.imageUrl,
                     ),
                   ),
                 ),

@@ -58,7 +58,11 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
       context,
     ).copyWith(textScaler: const TextScaler.linear(1.0));
 
-    return MediaQuery(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Request status',
+      child: MediaQuery(
       data: sheetMediaQuery,
       child: Align(
         alignment: Alignment.bottomCenter,
@@ -282,6 +286,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

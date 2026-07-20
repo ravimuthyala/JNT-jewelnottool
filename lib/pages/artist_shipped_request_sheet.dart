@@ -476,7 +476,11 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
     final modalClientPhotos = _modalClientPhotos();
 
-    return MediaQuery(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Shipped request details',
+      child: MediaQuery(
       data: sheetMediaQuery,
       child: Align(
         alignment: Alignment.bottomCenter,
@@ -616,6 +620,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

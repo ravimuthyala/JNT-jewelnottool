@@ -239,7 +239,11 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       context,
     ).copyWith(textScaler: const TextScaler.linear(1.0));
 
-    return MediaQuery(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Delivered request details',
+      child: MediaQuery(
       data: sheetMediaQuery,
       child: Align(
         alignment: Alignment.bottomCenter,
@@ -325,6 +329,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -617,6 +622,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       child: Semantics(
         button: true,
         selected: selected,
+        child: ExcludeSemantics(
         child: InkWell(
         onTap: () => setState(() => _selectedTab = index),
         child: Column(
@@ -639,6 +645,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               color: selected ? AppColors.blackCat : Colors.transparent,
             ),
           ],
+        ),
         ),
         ),
       ),

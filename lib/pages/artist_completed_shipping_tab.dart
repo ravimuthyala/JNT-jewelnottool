@@ -60,7 +60,10 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
     final hasValue = displayText.isNotEmpty;
 
     return Semantics(
-      button: true,
+      label: 'Courier',
+      value: hasValue ? displayText : 'Not selected',
+      hint: 'Dropdown. Double tap to open.',
+      child: ExcludeSemantics(
       child: InkWell(
       key: fieldKey,
       borderRadius: BorderRadius.zero,
@@ -96,6 +99,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
             ),
           ],
         ),
+      ),
       ),
       ),
     );
@@ -147,7 +151,10 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                 ),
               ),
               const SizedBox(height: 8),
-              TextField(
+              Semantics(
+                label: 'Tracking number',
+                textField: true,
+                child: TextField(
                 controller: _trackingCtrl,
                 onChanged: (_) => setState(() {}),
                 style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
@@ -180,6 +187,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                     vertical: 6,
                   ),
                 ),
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -193,6 +201,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
               const SizedBox(height: 8),
               Semantics(
                 button: true,
+                child: ExcludeSemantics(
                 child: InkWell(
                 borderRadius: BorderRadius.zero,
                 onTap: _pickShippedDate,
@@ -229,6 +238,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                       ),
                     ],
                   ),
+                ),
                 ),
                 ),
               ),

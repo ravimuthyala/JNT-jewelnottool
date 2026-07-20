@@ -90,7 +90,11 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Edit payment info',
+      child: Material(
       color: AppColors.snow,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -139,6 +143,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                         value: PaymentMethod.applePay,
                         label: 'Apple Pay',
                       ),
+
                       _paymentMethodTile(
                         value: PaymentMethod.venmo,
                         label: 'Venmo',
@@ -147,11 +152,14 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                       if (_method == PaymentMethod.venmo)
                         _MethodFieldsCard(
                           title: 'Venmo Details',
-                          child: TextFormField(
-                            controller: _venmoHandle,
-                            style: const TextStyle(fontSize: _inputFs),
-                            decoration: _dec('Venmo Username', '@username'),
-                            validator: (v) => _req(v, 'Venmo Username'),
+                          child: Semantics(
+                            isRequired: true,
+                            child: TextFormField(
+                              controller: _venmoHandle,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Venmo Username', '@username'),
+                              validator: (v) => _req(v, 'Venmo Username'),
+                            ),
                           ),
                         ),
 
@@ -163,12 +171,15 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                       if (_method == PaymentMethod.paypal)
                         _MethodFieldsCard(
                           title: 'PayPal Details',
-                          child: TextFormField(
-                            controller: _paypalEmail,
-                            style: const TextStyle(fontSize: _inputFs),
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: _dec('PayPal Email', 'name@email.com'),
-                            validator: (v) => _req(v, 'PayPal Email'),
+                          child: Semantics(
+                            isRequired: true,
+                            child: TextFormField(
+                              controller: _paypalEmail,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: _dec('PayPal Email', 'name@email.com'),
+                              validator: (v) => _req(v, 'PayPal Email'),
+                            ),
                           ),
                         ),
 
@@ -176,66 +187,81 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
                         value: PaymentMethod.card,
                         label: 'Credit / Debit Card',
                       ),
+
+                      if (_method == PaymentMethod.card)
+                        _MethodFieldsCard(
+                          title: 'Card Details',
+                          child: Column(
+                            children: [
+                              Semantics(
+                                isRequired: true,
+                                child: TextFormField(
+                                  controller: _cardName,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec('Name on Card', 'Full name'),
+                                  validator: (v) => _req(v, 'Name on Card'),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Semantics(
+                                isRequired: true,
+                                child: TextFormField(
+                                  controller: _cardNumber,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  decoration: _dec(
+                                    'Card Number',
+                                    '1234 5678 9012 3456',
+                                  ),
+                                  validator: (v) => _req(v, 'Card Number'),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Semantics(
+                                      isRequired: true,
+                                      child: TextFormField(
+                                        controller: _cardExp,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        decoration: _dec('Expiry', 'MM/YY'),
+                                        validator: (v) => _req(v, 'Expiry'),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Semantics(
+                                      isRequired: true,
+                                      child: TextFormField(
+                                        controller: _cardCvv,
+                                        style: const TextStyle(fontSize: _inputFs),
+                                        keyboardType: TextInputType.number,
+                                        decoration: _dec('CVV', '123'),
+                                        validator: (v) => _req(v, 'CVV'),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Semantics(
+                                isRequired: true,
+                                child: TextFormField(
+                                  controller: _cardZip,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  decoration: _dec('Billing Zip', 'Billing zip'),
+                                  validator: (v) => _req(v, 'Billing Zip'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
-
-                if (_method == PaymentMethod.card)
-                  _MethodFieldsCard(
-                    title: 'Card Details',
-                    child: Column(
-                      children: [
-                        TextFormField(
-                          controller: _cardName,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Name on Card', 'Full name'),
-                          validator: (v) => _req(v, 'Name on Card'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _cardNumber,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec(
-                            'Card Number',
-                            '1234 5678 9012 3456',
-                          ),
-                          validator: (v) => _req(v, 'Card Number'),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _cardExp,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec('Expiry', 'MM/YY'),
-                                validator: (v) => _req(v, 'Expiry'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _cardCvv,
-                                style: const TextStyle(fontSize: _inputFs),
-                                keyboardType: TextInputType.number,
-                                decoration: _dec('CVV', '123'),
-                                validator: (v) => _req(v, 'CVV'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _cardZip,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec('Billing Zip', 'Billing zip'),
-                          validator: (v) => _req(v, 'Billing Zip'),
-                        ),
-                      ],
-                    ),
-                  ),
 
                 const SizedBox(height: 6),
 
@@ -327,6 +353,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

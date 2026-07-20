@@ -515,7 +515,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final maxH = MediaQuery.of(context).size.height * 0.92;
 
     final clientModalPhotos = _clientModalPhotos();
-    return Align(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Accepted request details',
+      child: Align(
       alignment: Alignment.bottomCenter,
       child: Container(
         constraints: BoxConstraints(maxHeight: maxH),
@@ -872,6 +876,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1625,19 +1630,25 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                 Positioned(
                   right: 6,
                   top: 6,
-                  child: InkWell(
-                    onTap: () => onRemoveAt(i),
-                    child: Container(
-                      height: 26,
-                      width: 26,
-                      decoration: BoxDecoration(
-                        color: AppColors.blackCat.withValues(alpha: 0.70),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        size: 16,
-                        color: Colors.white,
+                  child: Semantics(
+                    button: true,
+                    label: 'Remove photo',
+                    child: ExcludeSemantics(
+                      child: InkWell(
+                        onTap: () => onRemoveAt(i),
+                        child: Container(
+                          height: 26,
+                          width: 26,
+                          decoration: BoxDecoration(
+                            color: AppColors.blackCat.withValues(alpha: 0.70),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -2812,21 +2823,27 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         Positioned(
           right: 6,
           top: 6,
-          child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () => Navigator.pop(
-              context,
-              const _AcceptedSheetResult(
-                completed: false,
-                artistPhotos: <String>[],
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Icon(
-                Icons.close_rounded,
-                size: 22,
-                color: AppColors.blackCat.withValues(alpha: 0.70),
+          child: Semantics(
+            button: true,
+            label: 'Close',
+            child: ExcludeSemantics(
+              child: InkWell(
+                borderRadius: BorderRadius.zero,
+                onTap: () => Navigator.pop(
+                  context,
+                  const _AcceptedSheetResult(
+                    completed: false,
+                    artistPhotos: <String>[],
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 22,
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
+                  ),
+                ),
               ),
             ),
           ),
@@ -3012,12 +3029,18 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           final path = renderable[i];
           return SizedBox(
             width: 112,
-            child: InkWell(
-              borderRadius: BorderRadius.zero,
-              onTap: () => _openImagePreview(path),
-              child: ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: _clientImage(path),
+            child: Semantics(
+              button: true,
+              label: 'View photo full screen',
+              child: ExcludeSemantics(
+                child: InkWell(
+                  borderRadius: BorderRadius.zero,
+                  onTap: () => _openImagePreview(path),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: _clientImage(path),
+                  ),
+                ),
               ),
             ),
           );
@@ -3236,6 +3259,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               right: 8,
               child: IconButton(
                 onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Close image preview',
                 icon: const Icon(Icons.close, color: AppColors.blackCat),
               ),
             ),
@@ -3426,7 +3450,11 @@ class _CompactGroupClientMeasurementsTabsState
               padding: EdgeInsets.only(
                 right: index == widget.clients.length - 1 ? 0 : 18,
               ),
-              child: InkWell(
+              child: Semantics(
+                button: true,
+                label: name,
+                child: ExcludeSemantics(
+                  child: InkWell(
                 borderRadius: BorderRadius.zero,
                 onTap: () => setState(() => _selectedIndex = index),
                 child: Container(
@@ -3462,6 +3490,8 @@ class _CompactGroupClientMeasurementsTabsState
                         ),
                       ),
                     ),
+                  ),
+                ),
                   ),
                 ),
               ),

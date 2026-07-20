@@ -5,6 +5,11 @@ class LandingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: Text('Landing / Login Page')));
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Landing',
+      child: const Scaffold(body: Center(child: Text('Landing / Login Page'))),
+    );
   }
 }

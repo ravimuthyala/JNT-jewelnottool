@@ -280,6 +280,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   Widget _editLink(VoidCallback onTap) {
     return Semantics(
       button: true,
+      child: ExcludeSemantics(
       child: InkWell(
       onTap: onTap,
       child: const Text(
@@ -290,12 +291,17 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
         ),
       ),
       ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist checkout',
+      child: Scaffold(
       backgroundColor: _checkoutBg,
       appBar: AppBar(
         backgroundColor: AppColors.alabaster,
@@ -524,6 +530,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

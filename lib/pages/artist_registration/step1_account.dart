@@ -216,7 +216,9 @@ class Step1AccountState extends State<Step1Account> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _studioNameCtrl,
                   textInputAction: TextInputAction.next,
                   validator: (value) => (value == null || value.trim().isEmpty)
@@ -227,9 +229,12 @@ class Step1AccountState extends State<Step1Account> {
                     'Full Name / Studio Name',
                   ),
                   style: fieldStyle,
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _displayNameCtrl,
                   textInputAction: TextInputAction.next,
                   validator: (value) => (value == null || value.trim().isEmpty)
@@ -237,9 +242,12 @@ class Step1AccountState extends State<Step1Account> {
                       : null,
                   decoration: regDec('Display Name', 'Display Name'),
                   style: fieldStyle,
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _languageCtrl,
                   textInputAction: TextInputAction.next,
                   validator: (value) => (value == null || value.trim().isEmpty)
@@ -250,6 +258,7 @@ class Step1AccountState extends State<Step1Account> {
                     'e.g. English, Spanish',
                   ),
                   style: fieldStyle,
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
                 RegTypeAheadField(
@@ -303,7 +312,9 @@ class Step1AccountState extends State<Step1Account> {
                               ),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: TextFormField(
+                                child: Semantics(
+                                  isRequired: true,
+                                  child: TextFormField(
                                   controller: _phoneCtrl,
                                   style: const TextStyle(fontSize: kInputFs),
                                   keyboardType: TextInputType.phone,
@@ -331,6 +342,7 @@ class Step1AccountState extends State<Step1Account> {
                                     isDense: false,
                                   ),
                                 ),
+                                ),
                               ),
                               const SizedBox(width: 10),
                             ],
@@ -354,7 +366,9 @@ class Step1AccountState extends State<Step1Account> {
                   },
                 ),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
@@ -368,9 +382,12 @@ class Step1AccountState extends State<Step1Account> {
                   },
                   decoration: regDec('Email', 'you@example.com'),
                   style: fieldStyle,
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _bioCtrl,
                   textInputAction: TextInputAction.done,
                   maxLines: 4,
@@ -379,6 +396,7 @@ class Step1AccountState extends State<Step1Account> {
                       : null,
                   decoration: regDec('Bio / About', 'Tell clients about you'),
                   style: fieldStyle,
+                  ),
                 ),
               ],
             ),
@@ -391,23 +409,29 @@ class Step1AccountState extends State<Step1Account> {
               children: [
                 regRequiredLabel('Street Address'),
                 const SizedBox(height: kFieldGap),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _addressLine1Ctrl,
                   style: const TextStyle(fontSize: kInputFs),
                   decoration: regDec('Street Address', 'Enter Street Address'),
                   validator: (v) => (v ?? '').trim().isEmpty
                       ? 'Street Address is required'
                       : null,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 regRequiredLabel('City'),
                 const SizedBox(height: 6),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _addressCityCtrl,
                   style: const TextStyle(fontSize: kInputFs),
                   decoration: regDec('City', 'Enter City'),
                   validator: (v) =>
                       (v ?? '').trim().isEmpty ? 'City is required' : null,
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
                 if (_isUS)
@@ -434,7 +458,9 @@ class Step1AccountState extends State<Step1Account> {
                         : null,
                   )
                 else
-                  TextFormField(
+                  Semantics(
+                    isRequired: true,
+                    child: TextFormField(
                     controller: _manualStateCtrl,
                     style: const TextStyle(fontSize: kInputFs),
                     decoration: regDec(
@@ -444,6 +470,7 @@ class Step1AccountState extends State<Step1Account> {
                     validator: (v) => (v ?? '').trim().isEmpty
                         ? 'State / Region is required'
                         : null,
+                    ),
                   ),
                 const SizedBox(height: kFieldGap),
                 if (_isUS)
@@ -458,7 +485,9 @@ class Step1AccountState extends State<Step1Account> {
                     ),
                   ),
                 const SizedBox(height: 6),
-                TextFormField(
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
                   controller: _zipCtrl,
                   style: const TextStyle(fontSize: kInputFs),
                   keyboardType: TextInputType.text,
@@ -472,6 +501,7 @@ class Step1AccountState extends State<Step1Account> {
                     }
                     return null;
                   },
+                  ),
                 ),
                 const SizedBox(height: kFieldGap),
                 regRequiredLabel('Country'),

@@ -69,7 +69,11 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Edit address',
+      child: Material(
       color: AppColors.snow,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -105,19 +109,25 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
                 ),
                 const SizedBox(height: 6),
 
-                TextFormField(
-                  controller: _street,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: _dec('Street'),
-                  validator: (v) => _req(v, 'Street'),
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
+                    controller: _street,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _dec('Street'),
+                    validator: (v) => _req(v, 'Street'),
+                  ),
                 ),
                 const SizedBox(height: 8),
 
-                TextFormField(
-                  controller: _city,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: _dec('City'),
-                  validator: (v) => _req(v, 'City'),
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
+                    controller: _city,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _dec('City'),
+                    validator: (v) => _req(v, 'City'),
+                  ),
                 ),
                 const SizedBox(height: 8),
 
@@ -132,11 +142,14 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
                 ),
                 const SizedBox(height: 8),
 
-                TextFormField(
-                  controller: _zip,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: _dec('Zip'),
-                  validator: (v) => _isUnitedStates ? _req(v, 'Zip') : null,
+                Semantics(
+                  isRequired: _isUnitedStates,
+                  child: TextFormField(
+                    controller: _zip,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _dec('Zip'),
+                    validator: (v) => _isUnitedStates ? _req(v, 'Zip') : null,
+                  ),
                 ),
                 const SizedBox(height: 8),
 
@@ -209,6 +222,7 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

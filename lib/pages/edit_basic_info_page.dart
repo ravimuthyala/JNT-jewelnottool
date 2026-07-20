@@ -57,7 +57,11 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Edit basic info',
+      child: Material(
       color: AppColors.snow,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -93,27 +97,36 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
                 ),
                 const SizedBox(height: 6),
 
-                TextFormField(
-                  controller: _name,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: _dec('Name'),
-                  validator: (v) => _req(v, 'Name'),
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
+                    controller: _name,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _dec('Name'),
+                    validator: (v) => _req(v, 'Name'),
+                  ),
                 ),
                 const SizedBox(height: 8),
 
-                TextFormField(
-                  controller: _email,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: _dec('Email'),
-                  validator: (v) => _req(v, 'Email'),
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
+                    controller: _email,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _dec('Email'),
+                    validator: (v) => _req(v, 'Email'),
+                  ),
                 ),
                 const SizedBox(height: 8),
 
-                TextFormField(
-                  controller: _phone,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: _dec('Phone'),
-                  validator: (v) => _req(v, 'Phone'),
+                Semantics(
+                  isRequired: true,
+                  child: TextFormField(
+                    controller: _phone,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _dec('Phone'),
+                    validator: (v) => _req(v, 'Phone'),
+                  ),
                 ),
 
                 const SizedBox(height: 18),
@@ -165,6 +178,7 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

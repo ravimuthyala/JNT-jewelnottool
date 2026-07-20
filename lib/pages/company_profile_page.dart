@@ -10,6 +10,7 @@ import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/searchable_dropdown_field.dart';
 import 'edit_shipping_address_page.dart' show usStates, countries;
+import 'artist_profile_page.dart' show ArtistPayoutSettingsPage;
 
 class CompanyProfilePage extends StatefulWidget {
   const CompanyProfilePage({
@@ -28,6 +29,8 @@ class CompanyProfilePage extends StatefulWidget {
     this.initialBusinessInfo,
     this.initialBillingInfo,
     this.initialAddressesInfo,
+    this.autoFocusNotifications = false,
+    this.notificationFocusRequestKey = 0,
   });
 
   final String companyName;
@@ -44,6 +47,8 @@ class CompanyProfilePage extends StatefulWidget {
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onOpenShippingAddresses;
   final VoidCallback? onClose;
+  final bool autoFocusNotifications;
+  final int notificationFocusRequestKey;
 
   /// Optional seed data
   final CompanyBusinessInfoDraft? initialBusinessInfo;
@@ -60,6 +65,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   late CompanyBusinessInfoDraft _businessInfo;
   late CompanyBillingDraft _billingInfo;
   late CompanyAddressesDraft _addressInfo;
+  Map<String, dynamic> _companyRowData = const <String, dynamic>{};
   String _profileImageUrl = '';
   bool _uploadingPhoto = false;
 
@@ -72,20 +78,25 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     _addressInfo = widget.initialAddressesInfo ?? CompanyAddressesDraft.empty();
     _profileImageUrl = widget.profileImageUrl.trim();
     unawaited(_hydrateProfileImageUrl());
+    unawaited(_hydrateDraftsFromCompanyRow());
   }
 
   @override
   void didUpdateWidget(covariant CompanyProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialBusinessInfo != oldWidget.initialBusinessInfo &&
+    final shouldAcceptSeedUpdates = _companyRowData.isEmpty;
+    if (shouldAcceptSeedUpdates &&
+        widget.initialBusinessInfo != oldWidget.initialBusinessInfo &&
         widget.initialBusinessInfo != null) {
       _businessInfo = widget.initialBusinessInfo!;
     }
-    if (widget.initialBillingInfo != oldWidget.initialBillingInfo &&
+    if (shouldAcceptSeedUpdates &&
+        widget.initialBillingInfo != oldWidget.initialBillingInfo &&
         widget.initialBillingInfo != null) {
       _billingInfo = widget.initialBillingInfo!;
     }
-    if (widget.initialAddressesInfo != oldWidget.initialAddressesInfo &&
+    if (shouldAcceptSeedUpdates &&
+        widget.initialAddressesInfo != oldWidget.initialAddressesInfo &&
         widget.initialAddressesInfo != null) {
       _addressInfo = widget.initialAddressesInfo!;
     }
@@ -166,15 +177,38 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     return null;
   }
 
+  String? _missingColumnFromPostgrest(String message) {
+    for (final pattern in <RegExp>[
+      RegExp(r"Could not find the '([^']+)' column"),
+      RegExp(r'column [^ ]+\.([a-zA-Z0-9_]+) does not exist'),
+    ]) {
+      final match = pattern.firstMatch(message);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
+
   Future<void> _upsertCompanyRow(Map<String, dynamic> values) async {
+    final existing = await _readCompanyRow();
+    final resolvedId = _firstNonEmpty([
+      existing?['id'],
+      existing?['uid'],
+      _companyRowData['id'],
+      _companyRowData['uid'],
+      _uid,
+    ]);
+    final resolvedEmail = _firstNonEmpty([
+      existing?['email'],
+      _companyRowData['email'],
+      _email,
+    ]);
     final row = <String, dynamic>{
-      'id': _uid,
-      'email': _email,
+      'id': resolvedId,
+      'email': resolvedEmail,
       'account_type': 'company',
       'updated_at': DateTime.now().toIso8601String(),
       ...values,
     };
-    final existing = await _readCompanyRow();
     if (existing != null) {
       for (final section in const <String>[
         'profile',
@@ -182,6 +216,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         'company',
         'addresses',
         'billing',
+        'payout',
       ]) {
         final nextSection = row[section];
         if (nextSection is Map) {
@@ -196,13 +231,461 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         row.putIfAbsent(entry.key, () => entry.value);
       }
       row.addAll(values);
-      row['id'] = _uid;
-      row['email'] = _email;
+      row['id'] = resolvedId;
+      row['email'] = resolvedEmail;
       row['account_type'] = 'company';
       row['updated_at'] = DateTime.now().toIso8601String();
     }
 
-    await _client.from('company').upsert(row).timeout(_profileSaveTimeout);
+    for (var attempt = 0; attempt < 50; attempt++) {
+      try {
+        await _client.from('company').upsert(row).timeout(_profileSaveTimeout);
+        return;
+      } on PostgrestException catch (error) {
+        final missingColumn = _missingColumnFromPostgrest(error.message);
+        final canRetry = missingColumn != null && row.containsKey(missingColumn);
+        if (!canRetry) rethrow;
+        row.remove(missingColumn);
+      }
+    }
+
+    throw const PostgrestException(
+      message: 'Could not save company profile after schema fallback retries.',
+      code: 'PGRST204',
+    );
+  }
+
+  String _first(Object? a, [
+    Object? b,
+    Object? c,
+    Object? d,
+    Object? e,
+    Object? f,
+    Object? g,
+    Object? h,
+    Object? i,
+    Object? j,
+    Object? k,
+    Object? l,
+    Object? m,
+    Object? n,
+    Object? o,
+  ]) {
+    for (final candidate in <Object?>[
+      a,
+      b,
+      c,
+      d,
+      e,
+      f,
+      g,
+      h,
+      i,
+      j,
+      k,
+      l,
+      m,
+      n,
+      o,
+    ]) {
+      final value = (candidate ?? '').toString().trim();
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  CompanyBusinessInfoDraft _businessInfoFromRow(Map<String, dynamic> row) {
+    final company = _asMap(row['company']);
+    final profile = _asMap(row['profile']);
+    final basic = _asMap(row['basic']);
+    return CompanyBusinessInfoDraft(
+      companyName: _first(
+        row['panel_companyName'],
+        row['panel_company_name'],
+        company['name'],
+        company['companyName'],
+        company['company_name'],
+        profile['companyName'],
+        profile['company_name'],
+        basic['companyName'],
+        basic['company_name'],
+        widget.initialBusinessInfo?.companyName,
+        widget.companyName,
+      ),
+      contactName: _first(
+        row['panel_contactName'],
+        row['panel_contact_name'],
+        company['contactName'],
+        company['contact_name'],
+        profile['contactName'],
+        profile['contact_name'],
+        basic['contactName'],
+        basic['contact_name'],
+        widget.initialBusinessInfo?.contactName,
+      ),
+      contactEmail: _first(
+        row['panel_contactEmail'],
+        row['panel_contact_email'],
+        row['contact_email'],
+        company['contactEmail'],
+        company['contact_email'],
+        profile['contactEmail'],
+        profile['contact_email'],
+        basic['contactEmail'],
+        basic['contact_email'],
+        widget.initialBusinessInfo?.contactEmail,
+      ),
+      contactPhone: _first(
+        row['panel_contactPhone'],
+        row['panel_contact_phone'],
+        row['panel_contactPhoneAreaCode'] != null &&
+                row['panel_contactPhoneLocal'] != null
+            ? '${row['panel_contactPhoneAreaCode']}${row['panel_contactPhoneLocal']}'
+            : null,
+        company['contactPhone'],
+        company['contact_phone'],
+        profile['contactPhone'],
+        profile['contact_phone'],
+        basic['contactPhone'],
+        basic['contact_phone'],
+        widget.initialBusinessInfo?.contactPhone,
+      ),
+      companyEmail: _first(
+        row['panel_companyEmail'],
+        row['panel_company_email'],
+        row['email'],
+        row['company_email'],
+        company['companyEmail'],
+        company['company_email'],
+        profile['companyEmail'],
+        profile['company_email'],
+        basic['companyEmail'],
+        basic['company_email'],
+        widget.initialBusinessInfo?.companyEmail,
+        widget.email,
+      ),
+      companyPhone: _first(
+        row['panel_companyPhone'],
+        row['panel_company_phone'],
+        row['panel_companyPhoneAreaCode'] != null &&
+                row['panel_companyPhoneLocal'] != null
+            ? '${row['panel_companyPhoneAreaCode']}${row['panel_companyPhoneLocal']}'
+            : null,
+        company['companyPhone'],
+        company['company_phone'],
+        company['phone'],
+        profile['companyPhone'],
+        profile['company_phone'],
+        basic['companyPhone'],
+        basic['company_phone'],
+        widget.initialBusinessInfo?.companyPhone,
+      ),
+      companyUrl: _first(
+        row['panel_companyWebsite'],
+        row['panel_company_website'],
+        row['panel_website'],
+        company['companyWebsite'],
+        company['company_website'],
+        company['website'],
+        profile['companyUrl'],
+        profile['companyWebsite'],
+        profile['company_website'],
+        basic['companyUrl'],
+        basic['companyWebsite'],
+        basic['company_website'],
+        widget.initialBusinessInfo?.companyUrl,
+      ),
+      businessType: _first(
+        row['panel_businessType'],
+        row['panel_business_type'],
+        company['businessType'],
+        company['business_type'],
+        profile['businessType'],
+        profile['business_type'],
+        basic['businessType'],
+        basic['business_type'],
+        widget.initialBusinessInfo?.businessType,
+      ),
+    );
+  }
+
+  CompanyBillingDraft _billingInfoFromRow(Map<String, dynamic> row) {
+    final billing = _asMap(row['billing']);
+    return CompanyBillingDraft(
+      method: _first(
+        billing['method'],
+        row['panel_billingMethod'],
+        row['panel_billing_method'],
+        widget.initialBillingInfo?.method,
+        'Credit/Debit Card',
+      ),
+      saveForFutureUse:
+          billing['saveForFutureUse'] == true ||
+          billing['save_for_future_use'] == true ||
+          row['panel_billingSaveForFutureUse'] == true ||
+          row['panel_billing_save_for_future_use'] == true ||
+          (widget.initialBillingInfo?.saveForFutureUse ?? false),
+      nameOnCard: _first(
+        billing['nameOnCard'],
+        row['panel_billingNameOnCard'],
+        row['panel_billing_name_on_card'],
+        widget.initialBillingInfo?.nameOnCard,
+      ),
+      cardNumber: _first(
+        billing['cardNumber'],
+        billing['card_number'],
+        row['panel_billingCardNumber'],
+        row['panel_billing_card_number'],
+        widget.initialBillingInfo?.cardNumber,
+      ),
+      expiry: _first(
+        billing['expiry'],
+        row['panel_billingExpiry'],
+        row['panel_billing_expiry'],
+        widget.initialBillingInfo?.expiry,
+      ),
+      cvv: _first(
+        billing['cvv'],
+        row['panel_billingCvv'],
+        row['panel_billing_cvv'],
+        widget.initialBillingInfo?.cvv,
+      ),
+      achAccountName: _first(
+        billing['achAccountName'],
+        billing['ach_account_name'],
+        row['panel_billingAchAccountName'],
+        row['panel_billing_ach_account_name'],
+        widget.initialBillingInfo?.achAccountName,
+      ),
+      achRoutingNumber: _first(
+        billing['achRoutingNumber'],
+        billing['ach_routing_number'],
+        row['panel_billingAchRoutingNumber'],
+        row['panel_billing_ach_routing_number'],
+        widget.initialBillingInfo?.achRoutingNumber,
+      ),
+      achAccountNumber: _first(
+        billing['achAccountNumber'],
+        billing['ach_account_number'],
+        row['panel_billingAchAccountNumber'],
+        row['panel_billing_ach_account_number'],
+        widget.initialBillingInfo?.achAccountNumber,
+      ),
+      applePayEmail: _first(
+        billing['applePayEmail'],
+        row['panel_billingApplePayEmail'],
+        row['panel_billing_apple_pay_email'],
+        widget.initialBillingInfo?.applePayEmail,
+      ),
+      googlePayEmail: _first(
+        billing['googlePayEmail'],
+        row['panel_billingGooglePayEmail'],
+        row['panel_billing_google_pay_email'],
+        widget.initialBillingInfo?.googlePayEmail,
+      ),
+    );
+  }
+
+  CompanyAddressesDraft _addressesInfoFromRow(Map<String, dynamic> row) {
+    final addresses = _asMap(row['addresses']);
+    return CompanyAddressesDraft(
+      billingStreet: _first(
+        addresses['billingStreet'],
+        row['panel_billingStreet'],
+        row['panel_billing_street'],
+        widget.initialAddressesInfo?.billingStreet,
+      ),
+      billingCity: _first(
+        addresses['billingCity'],
+        row['panel_billingCity'],
+        row['panel_billing_city'],
+        widget.initialAddressesInfo?.billingCity,
+      ),
+      billingState: _first(
+        addresses['billingState'],
+        row['panel_billingState'],
+        row['panel_billing_state'],
+        widget.initialAddressesInfo?.billingState,
+      ),
+      billingZip: _first(
+        addresses['billingZip'],
+        row['panel_billingZip'],
+        row['panel_billing_zip'],
+        widget.initialAddressesInfo?.billingZip,
+      ),
+      billingCountry: _first(
+        addresses['billingCountry'],
+        row['panel_billingCountry'],
+        row['panel_billing_country'],
+        widget.initialAddressesInfo?.billingCountry,
+      ),
+      shippingSameAsBilling:
+          addresses['shippingSameAsBilling'] == true ||
+          row['panel_shippingSameAsBilling'] == true ||
+          row['panel_shipping_same_as_billing'] == true ||
+          (widget.initialAddressesInfo?.shippingSameAsBilling ?? false),
+      shippingStreet: _first(
+        addresses['shippingStreet'],
+        row['panel_shippingStreet'],
+        row['panel_shipping_street'],
+        widget.initialAddressesInfo?.shippingStreet,
+      ),
+      shippingCity: _first(
+        addresses['shippingCity'],
+        row['panel_shippingCity'],
+        row['panel_shipping_city'],
+        widget.initialAddressesInfo?.shippingCity,
+      ),
+      shippingState: _first(
+        addresses['shippingState'],
+        row['panel_shippingState'],
+        row['panel_shipping_state'],
+        widget.initialAddressesInfo?.shippingState,
+      ),
+      shippingZip: _first(
+        addresses['shippingZip'],
+        row['panel_shippingZip'],
+        row['panel_shipping_zip'],
+        widget.initialAddressesInfo?.shippingZip,
+      ),
+      shippingCountry: _first(
+        addresses['shippingCountry'],
+        row['panel_shippingCountry'],
+        row['panel_shipping_country'],
+        widget.initialAddressesInfo?.shippingCountry,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _companyPayoutModalData(Map<String, dynamic> row) {
+    final panel = _asMap(row['panel_payout']);
+    final payout = _asMap(row['payout']);
+
+    final method = _first(
+      panel['method'],
+      payout['method'],
+      row['panel_payoutMethod'],
+      row['panel_payout_method'],
+    );
+
+    final paypal = <String, dynamic>{
+      ..._asMap(panel['paypal']),
+      ..._asMap(payout['paypal']),
+    };
+    final venmo = <String, dynamic>{
+      ..._asMap(panel['venmo']),
+      ..._asMap(payout['venmo']),
+    };
+    final ach = <String, dynamic>{
+      ..._asMap(panel['ach']),
+      ..._asMap(payout['ach']),
+    };
+    final applePay = <String, dynamic>{
+      ..._asMap(panel['applePay']),
+      ..._asMap(payout['applePay']),
+    };
+
+    final payoutEmail = _first(
+      row['panel_payoutEmail'],
+      row['panel_payout_email'],
+      paypal['email'],
+      venmo['username'],
+      payout['email'],
+      panel['email'],
+    );
+
+    final payoutLegalName = _first(
+      row['panel_payoutLegalName'],
+      row['panel_payout_legal_name'],
+      ach['accountHolder'],
+      ach['accountHolderName'],
+      payout['accountHolder'],
+      payout['accountHolderName'],
+      panel['accountHolder'],
+      panel['accountHolderName'],
+    );
+
+    final normalizedPanel = <String, dynamic>{
+      ...panel,
+      'method': method,
+      'paypal': paypal,
+      'venmo': venmo,
+      'ach': ach,
+      'applePay': applePay,
+    };
+
+    final normalizedPayout = <String, dynamic>{
+      ...payout,
+      'method': method,
+      'paypal': paypal,
+      'venmo': venmo,
+      'ach': ach,
+      'applePay': applePay,
+      'email': _first(payout['email'], panel['email'], payoutEmail),
+      'accountHolder': _first(
+        payout['accountHolder'],
+        payout['accountHolderName'],
+        ach['accountHolder'],
+        ach['accountHolderName'],
+        payoutLegalName,
+      ),
+      'bankName': _first(
+        payout['bankName'],
+        ach['bankName'],
+        panel['bankName'],
+      ),
+      'routingNumber': _first(
+        payout['routingNumber'],
+        payout['routing'],
+        ach['routingNumber'],
+        ach['routing'],
+        panel['routingNumber'],
+        panel['routing'],
+      ),
+      'accountNumber': _first(
+        payout['accountNumber'],
+        ach['accountNumber'],
+        panel['accountNumber'],
+      ),
+      'applePayName': _first(
+        payout['applePayName'],
+        applePay['fullName'],
+        panel['applePayName'],
+      ),
+      'applePayEmail': _first(
+        payout['applePayEmail'],
+        applePay['email'],
+        panel['applePayEmail'],
+      ),
+      'applePayPhone': _first(
+        payout['applePayPhone'],
+        applePay['phone'],
+        panel['applePayPhone'],
+      ),
+    };
+
+    return <String, dynamic>{
+      ...row,
+      'panel_payout': normalizedPanel,
+      'payout': normalizedPayout,
+      'panel_payoutMethod': method,
+      'panel_artist_payoutMethod': method,
+      'panel_payoutEmail': payoutEmail,
+      'panel_artist_payoutEmail': payoutEmail,
+      'panel_payoutLegalName': payoutLegalName,
+      'panel_artist_payoutLegalName': payoutLegalName,
+    };
+  }
+
+  Future<void> _hydrateDraftsFromCompanyRow() async {
+    final row = await _readCompanyRow();
+    if (!mounted || row == null) return;
+    setState(() {
+      _companyRowData = row;
+      _businessInfo = _businessInfoFromRow(row);
+      _billingInfo = _billingInfoFromRow(row);
+      _addressInfo = _addressesInfoFromRow(row);
+    });
   }
 
   Future<void> _editBusinessInfo() async {
@@ -225,6 +708,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       }
       if (!mounted) return;
       setState(() => _businessInfo = updated);
+      await _hydrateDraftsFromCompanyRow();
     }
   }
 
@@ -248,7 +732,44 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       }
       if (!mounted) return;
       setState(() => _billingInfo = updated);
+      await _hydrateDraftsFromCompanyRow();
     }
+  }
+
+  Future<void> _openPayoutSettings() async {
+    final row = await _readCompanyRow();
+    if (!mounted) return;
+    final data = _companyPayoutModalData(row ?? _companyRowData);
+    final supabaseId = _first(
+      data['id'],
+      data['uid'],
+      _companyRowData['id'],
+      _companyRowData['uid'],
+      _uid,
+    );
+    if (data.isEmpty || supabaseId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payout settings not found.')),
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.82,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistPayoutSettingsPage(
+            supabaseTable: 'company',
+            supabaseId: supabaseId,
+            initialData: data,
+          ),
+        ),
+      ),
+    );
+    await _hydrateDraftsFromCompanyRow();
   }
 
   Future<void> _persistBillingInfo(CompanyBillingDraft billing) async {
@@ -283,6 +804,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         'googlePayEmail': billing.googlePayEmail,
       },
     });
+    await _hydrateDraftsFromCompanyRow();
   }
 
   Future<void> _persistBusinessInfo(CompanyBusinessInfoDraft business) async {
@@ -296,6 +818,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       'panel_contact_name': business.contactName,
       'panel_contactEmail': business.contactEmail,
       'panel_contact_email': business.contactEmail,
+      'panel_companyEmail': business.companyEmail,
+      'panel_company_email': business.companyEmail,
       'panel_companyPhone': business.companyPhone,
       'panel_company_phone': business.companyPhone,
       'panel_contactPhone': business.contactPhone,
@@ -346,21 +870,27 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       },
       'company': {
         'name': business.companyName,
+        'companyName': business.companyName,
         'contactName': business.contactName,
         'contactEmail': business.contactEmail,
+        'companyEmail': business.companyEmail,
         'phone': business.companyPhone,
+        'companyPhone': business.companyPhone,
         'contactPhone': business.contactPhone,
         'website': business.companyUrl,
+        'companyWebsite': business.companyUrl,
         'businessType': business.businessType,
         'company_name': business.companyName,
         'contact_name': business.contactName,
         'contact_email': business.contactEmail,
+        'company_email': business.companyEmail,
         'contact_phone': business.contactPhone,
         'company_phone': business.companyPhone,
         'company_website': business.companyUrl,
         'business_type': business.businessType,
       },
     });
+    await _hydrateDraftsFromCompanyRow();
   }
 
   Future<void> _editAddresses() async {
@@ -383,6 +913,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       }
       if (!mounted) return;
       setState(() => _addressInfo = updated);
+      await _hydrateDraftsFromCompanyRow();
     }
   }
 
@@ -427,6 +958,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       'panel_shippingCountry': addresses.shippingCountry,
       'panel_shipping_country': addresses.shippingCountry,
     });
+    await _hydrateDraftsFromCompanyRow();
   }
 
   Future<void> _pickAndUploadProfilePhoto() async {
@@ -592,11 +1124,17 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         ? widget.locationText
         : (city.isEmpty ? state : (state.isEmpty ? city : '$city, $state'));
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Company profile',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: CompanyHeader(
         companyName: companyName.isEmpty ? 'Company' : companyName,
         imageUrl: _profileImageUrl,
+        autoFocusNotifications: widget.autoFocusNotifications,
+        notificationFocusRequestKey: widget.notificationFocusRequestKey,
         trailing: IconButton(
           onPressed: () => widget.onClose?.call(),
           icon: const Icon(
@@ -713,6 +1251,11 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
             onTap: widget.onOpenBilling ?? _editBilling,
           ),
           _RowChevronTile(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Payout Settings',
+            onTap: _openPayoutSettings,
+          ),
+          _RowChevronTile(
             icon: Icons.location_on_outlined,
             title: 'Addresses',
             onTap: widget.onOpenShippingAddresses ?? _editAddresses,
@@ -723,7 +1266,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
           _TextDangerButton(text: 'Log out', onTap: widget.onLogout),
         ],
       ),
-    );
+    ));
   }
 
   Widget _safeProfileAvatar({
@@ -1142,7 +1685,11 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      InkWell(
+                      Semantics(
+                        button: true,
+                        label: m,
+                        child: ExcludeSemantics(
+                          child: InkWell(
                         onTap: () => setState(() => _method = m),
                         borderRadius: BorderRadius.zero,
                         child: Row(
@@ -1162,6 +1709,8 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                             ),
                           ],
                         ),
+                          ),
+                        ),
                       ),
                       Divider(
                         height: 1,
@@ -1170,70 +1719,106 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                       if (selected) ...[
                         const SizedBox(height: 8),
                         if (m == 'Credit/Debit Card') ...[
-                          TextField(
+                          Semantics(
+                            label: 'Name on Card',
+                            textField: true,
+                            child: TextField(
                             controller: _nameOnCardCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Name on Card'),
                           ),
+                          ),
                           const SizedBox(height: 8),
-                          TextField(
+                          Semantics(
+                            label: 'Card Number',
+                            textField: true,
+                            child: TextField(
                             controller: _cardNumberCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Card Number'),
+                          ),
                           ),
                           const SizedBox(height: 8),
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
+                                child: Semantics(
+                                  label: 'Expiration Date',
+                                  textField: true,
+                                  child: TextField(
                                   controller: _expiryCtrl,
                                   style: const TextStyle(fontSize: 11),
                                   decoration: _dec('Expiry MM/YY'),
                                 ),
+                                ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: TextField(
+                                child: Semantics(
+                                  label: 'CVV',
+                                  textField: true,
+                                  child: TextField(
                                   controller: _cvvCtrl,
                                   style: const TextStyle(fontSize: 11),
                                   decoration: _dec('CVV'),
+                                ),
                                 ),
                               ),
                             ],
                           ),
                         ],
                         if (m == 'ACH Transfer') ...[
-                          TextField(
+                          Semantics(
+                            label: 'Account Holder Name',
+                            textField: true,
+                            child: TextField(
                             controller: _achAccountNameCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Account Holder Name'),
                           ),
+                          ),
                           const SizedBox(height: 8),
-                          TextField(
+                          Semantics(
+                            label: 'Routing Number',
+                            textField: true,
+                            child: TextField(
                             controller: _achRoutingCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Routing Number'),
                           ),
+                          ),
                           const SizedBox(height: 8),
-                          TextField(
+                          Semantics(
+                            label: 'Account Number',
+                            textField: true,
+                            child: TextField(
                             controller: _achAccountCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Account Number'),
                           ),
+                          ),
                         ],
                         if (m == 'Apple Pay')
-                          TextField(
+                          Semantics(
+                            label: 'Apple Pay Email',
+                            textField: true,
+                            child: TextField(
                             controller: _applePayEmailCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Apple Pay Email'),
                             keyboardType: TextInputType.emailAddress,
                           ),
+                          ),
                         if (m == 'Google Pay')
-                          TextField(
+                          Semantics(
+                            label: 'Google Pay Email',
+                            textField: true,
+                            child: TextField(
                             controller: _googlePayEmailCtrl,
                             style: const TextStyle(fontSize: 11),
                             decoration: _dec('Google Pay Email'),
                             keyboardType: TextInputType.emailAddress,
+                          ),
                           ),
                         const SizedBox(height: 8),
                       ],
@@ -1567,6 +2152,7 @@ class _CompanyPopupScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Container(
@@ -1574,47 +2160,55 @@ class _CompanyPopupScaffold extends StatelessWidget {
         child: SafeArea(
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              decoration: const BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.blackCat,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: keyboardInset),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                decoration: const BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                ),
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.only(bottom: keyboardInset > 0 ? 12 : 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.blackCat,
+                              ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Close',
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.blackCat,
+                          IconButton(
+                            tooltip: 'Close',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    child,
-                  ],
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      child,
+                    ],
+                  ),
                 ),
               ),
             ),

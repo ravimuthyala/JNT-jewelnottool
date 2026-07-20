@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
@@ -210,6 +211,11 @@ class Step4CredentialsState extends State<Step4Credentials> {
     if (!_paymentSaved) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please save your payment method.')),
+      );
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        'Please enter and save at least one payment method before continuing.',
+        Directionality.of(context),
       );
       return false;
     }

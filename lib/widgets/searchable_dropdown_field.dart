@@ -56,7 +56,11 @@ class SearchableDropdownField extends StatelessWidget {
       children: [
         Text(label, style: labelStyle ?? defaultLabelStyle),
         SizedBox(height: labelBottomSpacing),
-        Autocomplete<String>(
+        Semantics(
+          label: label,
+          value: current.isEmpty ? 'Not selected' : current,
+          hint: 'Dropdown. Double tap to open.',
+          child: Autocomplete<String>(
           initialValue: TextEditingValue(text: current),
           optionsBuilder: (textEditingValue) {
             final query = textEditingValue.text.trim().toLowerCase();
@@ -67,7 +71,10 @@ class SearchableDropdownField extends StatelessWidget {
           },
           onSelected: onChanged,
           fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-            return TextField(
+            return Semantics(
+              label: label,
+              textField: true,
+              child: TextField(
               controller: controller,
               focusNode: focusNode,
               textAlignVertical: TextAlignVertical.center,
@@ -121,6 +128,7 @@ class SearchableDropdownField extends StatelessWidget {
                   borderSide: BorderSide(color: borderColor, width: 1.2),
                 ),
               ),
+              ),
             );
           },
           optionsViewBuilder: (context, onSelected, options) {
@@ -161,18 +169,24 @@ class SearchableDropdownField extends StatelessWidget {
                             ),
                             itemBuilder: (context, index) {
                               final item = list[index];
-                              return InkWell(
-                                onTap: () => onSelected(item),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  child: Text(
-                                    item,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w400,
+                              return Semantics(
+                                button: true,
+                                label: item,
+                                child: ExcludeSemantics(
+                                  child: InkWell(
+                                    onTap: () => onSelected(item),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      child: Text(
+                                        item,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -184,6 +198,7 @@ class SearchableDropdownField extends StatelessWidget {
               ),
             );
           },
+          ),
         ),
       ],
     );

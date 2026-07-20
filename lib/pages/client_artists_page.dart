@@ -1090,6 +1090,7 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                 imageUrl: widget.profile.basic.profileImageUrl,
                 onOpenProfile: widget.onOpenProfile,
                 onLogout: widget.onLogout,
+                autoFocusNotifications: true,
               )
             : JntStandardAppBar(
                 onNotifications: () {
@@ -1280,7 +1281,11 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                                   itemCount: list.length,
                                   itemBuilder: (context, index) {
                                     final item = list[index];
-                                    return InkWell(
+                                    return Semantics(
+                                      button: true,
+                                      label: item,
+                                      child: ExcludeSemantics(
+                                        child: InkWell(
                                       onTap: () => onSelected(item),
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
@@ -1296,6 +1301,8 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                                             color: AppColors.blackCat,
                                           ),
                                         ),
+                                      ),
+                                    ),
                                       ),
                                     );
                                   },
@@ -1482,7 +1489,7 @@ class _AvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: '',
+      tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: AppColors.snow,
@@ -2770,7 +2777,11 @@ class _PreviousArtStrip extends StatelessWidget {
                     height: tileSize,
                     child: src.isEmpty
                         ? const SizedBox.shrink()
-                        : InkWell(
+                        : Semantics(
+                            button: true,
+                            label: 'View portfolio photo full screen',
+                            child: ExcludeSemantics(
+                              child: InkWell(
                             onTap: () => onImageTap(src),
                             child: ClipRRect(
                               borderRadius: BorderRadius.zero,
@@ -2789,6 +2800,8 @@ class _PreviousArtStrip extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                            ),
+                          ),
                             ),
                           ),
                   ),

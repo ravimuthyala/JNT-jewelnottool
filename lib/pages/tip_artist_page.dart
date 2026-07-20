@@ -331,25 +331,35 @@ class _TipArtistPageState extends State<TipArtistPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Tip artist',
+        child: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
     if (_order == null) {
-      return Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          title: const Text('Tip Artist'),
-          backgroundColor: AppColors.alabaster,
-        ),
-        body: const SafeArea(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'We could not find this order for tipping.',
-                textAlign: TextAlign.center,
+      return Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        label: 'Tip artist',
+        child: Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: AppBar(
+            title: const Text('Tip Artist'),
+            backgroundColor: AppColors.alabaster,
+          ),
+          body: const SafeArea(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'We could not find this order for tipping.',
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           ),
@@ -357,7 +367,11 @@ class _TipArtistPageState extends State<TipArtistPage> {
       );
     }
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Tip artist',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: AppBar(
         title: const Text('Tip Artist'),
@@ -436,6 +450,7 @@ class _TipArtistPageState extends State<TipArtistPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

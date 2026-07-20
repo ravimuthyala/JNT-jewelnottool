@@ -55,7 +55,11 @@ class _ArtistInboxPageState extends State<ArtistInboxPage>
     final pinned = _samplePinned();
     final fresh = _sampleNew();
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist inbox',
+      child: Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
 
       // ✅ Header matches your other pages: logo + notifications + avatar dropdown
@@ -176,6 +180,7 @@ class _ArtistInboxPageState extends State<ArtistInboxPage>
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -446,6 +451,7 @@ class _ThreadRow extends StatelessWidget {
       child: Semantics(
         button: true,
         onTap: onTap,
+        child: ExcludeSemantics(
         child: InkWell(
       onTap: onTap,
       child: Padding(
@@ -530,6 +536,7 @@ class _ThreadRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
       ),
       ),

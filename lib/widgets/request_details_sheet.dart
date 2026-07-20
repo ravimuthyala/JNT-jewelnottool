@@ -314,6 +314,7 @@ class _ImageViewerDialog extends StatelessWidget {
             child: IconButton(
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.close_rounded, color: AppColors.blackCat),
+              tooltip: 'Close',
             ),
           ),
         ],
@@ -619,12 +620,18 @@ class _DeliveredHistorySheet extends StatelessWidget {
           Positioned(
             right: 10,
             top: 10,
-            child: InkWell(
-              borderRadius: BorderRadius.zero,
-              onTap: () => Navigator.pop(context),
-              child: const Padding(
-                padding: EdgeInsets.all(10),
-                child: Icon(Icons.close_rounded, size: 24),
+            child: Semantics(
+              button: true,
+              label: 'Close',
+              child: ExcludeSemantics(
+                child: InkWell(
+                  borderRadius: BorderRadius.zero,
+                  onTap: () => Navigator.pop(context),
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Icon(Icons.close_rounded, size: 24),
+                  ),
+                ),
               ),
             ),
           ),
@@ -901,12 +908,18 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
           Positioned(
             right: 10,
             top: 10,
-            child: InkWell(
-              borderRadius: BorderRadius.zero,
-              onTap: () => Navigator.pop(context),
-              child: const Padding(
-                padding: EdgeInsets.all(10),
-                child: Icon(Icons.close_rounded, size: 24),
+            child: Semantics(
+              button: true,
+              label: 'Close',
+              child: ExcludeSemantics(
+                child: InkWell(
+                  borderRadius: BorderRadius.zero,
+                  onTap: () => Navigator.pop(context),
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Icon(Icons.close_rounded, size: 24),
+                  ),
+                ),
               ),
             ),
           ),
@@ -956,24 +969,30 @@ Widget _photoGrid({
             final provider = _sheetProviderForResolved(resolved);
             return SizedBox(
               width: 148,
-              child: InkWell(
-                borderRadius: BorderRadius.zero,
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => _ImageViewerDialog(image: provider),
-                  );
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: Image(
-                    image: provider,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.black.withValues(alpha: 0.35),
+              child: Semantics(
+                button: true,
+                label: 'View photo full screen',
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    borderRadius: BorderRadius.zero,
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => _ImageViewerDialog(image: provider),
+                      );
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.zero,
+                      child: Image(
+                        image: provider,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Container(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            color: Colors.black.withValues(alpha: 0.35),
+                          ),
+                        ),
                       ),
                     ),
                   ),

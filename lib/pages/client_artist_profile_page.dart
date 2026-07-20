@@ -2215,7 +2215,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Client artist profile',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
 
       // ✅ Your custom header
@@ -2556,6 +2560,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             ),
         ],
       ),
+      ),
     );
   }
 
@@ -2603,29 +2608,38 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? AppColors.balletSlippers : Colors.transparent,
-              width: 3,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: text,
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.zero,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              border: Border(
+                bottom: BorderSide(
+                  color: selected
+                      ? AppColors.balletSlippers
+                      : Colors.transparent,
+                  width: 3,
+                ),
+              ),
             ),
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          text,
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: selected
-                ? AppColors.blackCat
-                : AppColors.blackCat.withValues(alpha: 0.60),
-            fontSize: 12.5,
+            alignment: Alignment.center,
+            child: Text(
+              text,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? AppColors.blackCat
+                    : AppColors.blackCat.withValues(alpha: 0.60),
+                fontSize: 12.5,
+              ),
+            ),
           ),
         ),
       ),
@@ -2637,7 +2651,11 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     required String title,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: title,
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -2666,6 +2684,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -2940,17 +2960,26 @@ class _CommunicationPreferencePopupState
   }
 
   Widget _checkboxTile(String title, bool value, ValueChanged<bool> onChanged) {
-    return InkWell(
-      onTap: () => onChanged(!value),
-      child: Row(
-        children: [
-          Checkbox(
-            value: value,
-            activeColor: AppColors.blackCat,
-            onChanged: (v) => onChanged(v ?? false),
+    return Semantics(
+      button: true,
+      checked: value,
+      label: title,
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: () => onChanged(!value),
+          child: Row(
+            children: [
+              Checkbox(
+                value: value,
+                activeColor: AppColors.blackCat,
+                onChanged: (v) => onChanged(v ?? false),
+              ),
+              Expanded(
+                child: Text(title, style: const TextStyle(fontSize: 12)),
+              ),
+            ],
           ),
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 12))),
-        ],
+        ),
       ),
     );
   }

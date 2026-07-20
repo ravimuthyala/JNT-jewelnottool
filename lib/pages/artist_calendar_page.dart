@@ -472,7 +472,11 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   Widget build(BuildContext context) {
     final monthLabel = _monthLabel(_focusedMonth);
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist calendar',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(
         onNotifications: _openNotifications,
@@ -625,6 +629,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
               ],
             )
           : null,
+    ),
     );
   }
 
@@ -681,7 +686,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
 
   Widget _avatarMenu() {
     return PopupMenuButton<_HeaderAvatarAction>(
-      tooltip: '',
+      tooltip: 'Account menu',
       position: PopupMenuPosition.under,
       elevation: 12,
       color: AppColors.snow,
@@ -822,6 +827,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return Semantics(
       button: true,
       label: semanticLabel,
+      child: ExcludeSemantics(
       child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
@@ -834,6 +840,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           border: Border.all(color: AppColors.blackCatLight),
         ),
         child: Icon(icon, color: AppColors.blackCat),
+      ),
       ),
       ),
     );

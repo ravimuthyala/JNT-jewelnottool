@@ -41,6 +41,7 @@ class BrandingCompanyShellPage extends StatefulWidget {
 
 class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
   late int _index;
+  int _notificationFocusRequestKey = 0;
   bool _loadingEnrolledArtists = true;
   List<CompanyTrendingArtist> _enrolledArtists =
       const <CompanyTrendingArtist>[];
@@ -244,7 +245,10 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       await _openOrders(profile: navProfile, companyName: navCompanyName);
       return;
     }
-    setState(() => _index = i);
+    setState(() {
+      _index = i;
+      _notificationFocusRequestKey++;
+    });
   }
 
   @override
@@ -387,6 +391,8 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
             artistName: artist.name,
           );
         },
+        autoFocusNotifications: _index == 0,
+        notificationFocusRequestKey: _notificationFocusRequestKey,
       ),
       const SizedBox.shrink(),
       _ComingSoonPage(
@@ -399,6 +405,8 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           companyName: data.companyName,
         ),
         onLogout: _logoutToHomePage,
+        autoFocusNotifications: _index == 2,
+        notificationFocusRequestKey: _notificationFocusRequestKey,
       ),
       _ComingSoonPage(
         title: 'Company Calendar',
@@ -410,6 +418,8 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           companyName: data.companyName,
         ),
         onLogout: _logoutToHomePage,
+        autoFocusNotifications: _index == 3,
+        notificationFocusRequestKey: _notificationFocusRequestKey,
       ),
       CompanyProfilePage(
         companyName: data.companyName,
@@ -426,6 +436,8 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
         initialBusinessInfo: data.businessInfo,
         initialBillingInfo: data.billingInfo,
         initialAddressesInfo: data.addressesInfo,
+        autoFocusNotifications: _index == 4,
+        notificationFocusRequestKey: _notificationFocusRequestKey,
         onOpenNewDesignRequest: () => _onNavTap(
           1,
           profile: profileForDesign,
@@ -437,7 +449,11 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       ),
     ];
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Company',
+      child: Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: CompanyBottomNav(
@@ -450,7 +466,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           );
         },
       ),
-    );
+    ));
   }
 
   bool _matchesCompanyRequest(
@@ -586,6 +602,8 @@ class _CompanyUiData {
     final company = asMap(source['company']);
     final addresses = asMap(source['addresses']);
     final billing = asMap(source['billing']);
+    final profile = asMap(source['profile']);
+    final basic = asMap(source['basic']);
 
     String first(
       Object? a, [
@@ -654,15 +672,18 @@ class _CompanyUiData {
     );
     final email = first(
       source['panel_contactEmail'],
+      source['panel_contact_email'],
       source['contact_email'],
       company['contactEmail'],
+      profile['contactEmail'],
+      profile['contact_email'],
+      basic['contactEmail'],
+      basic['contact_email'],
       source['email'],
       source['company_email'],
     );
 
     final companyAddress = asMap(company['address']);
-    final profile = asMap(source['profile']);
-    final basic = asMap(source['basic']);
 
     final city = first(
       source['panel_billingCity'],
@@ -706,47 +727,111 @@ class _CompanyUiData {
         : 'company/$uid/profile/avatar.jpg';
 
     final businessInfo = CompanyBusinessInfoDraft(
-      companyName: first(companyName, fallbackBusiness?.companyName),
-      contactName: first(contactName, fallbackBusiness?.contactName),
-      contactEmail: first(email, fallbackBusiness?.contactEmail),
+      companyName: first(
+        companyName,
+        source['panel_company_name'],
+        profile['companyName'],
+        profile['company_name'],
+        basic['companyName'],
+        basic['company_name'],
+        fallbackBusiness?.companyName,
+      ),
+      contactName: first(
+        contactName,
+        source['panel_contact_name'],
+        company['contact_name'],
+        profile['contactName'],
+        profile['contact_name'],
+        basic['contactName'],
+        basic['contact_name'],
+        fallbackBusiness?.contactName,
+      ),
+      contactEmail: first(
+        email,
+        source['panel_contact_email'],
+        company['contact_email'],
+        profile['contactEmail'],
+        profile['contact_email'],
+        basic['contactEmail'],
+        basic['contact_email'],
+        fallbackBusiness?.contactEmail,
+      ),
       contactPhone: first(
         source['panel_contactPhone'],
+        source['panel_contact_phone'],
         source['panel_contactPhoneAreaCode'] != null &&
                 source['panel_contactPhoneLocal'] != null
             ? '${source['panel_contactPhoneAreaCode']}${source['panel_contactPhoneLocal']}'
             : null,
         company['contactPhone'],
+        company['contact_phone'],
+        profile['contactPhone'],
+        profile['contact_phone'],
+        basic['contactPhone'],
+        basic['contact_phone'],
         source['panel_phone'],
         company['phone'],
         fallbackBusiness?.contactPhone,
       ),
       companyEmail: first(
         source['email'],
-      source['company_email'],
+        source['company_email'],
+        source['panel_companyEmail'],
+        source['panel_company_email'],
         source['panel_contactEmail'],
-      source['contact_email'],
+        source['panel_contact_email'],
+        source['contact_email'],
         company['contactEmail'],
+        company['companyEmail'],
+        company['company_email'],
+        profile['companyEmail'],
+        profile['company_email'],
+        basic['companyEmail'],
+        basic['company_email'],
         fallbackBusiness?.companyEmail,
       ),
       companyPhone: first(
         source['panel_companyPhone'],
+        source['panel_company_phone'],
         source['panel_companyPhoneAreaCode'] != null &&
                 source['panel_companyPhoneLocal'] != null
             ? '${source['panel_companyPhoneAreaCode']}${source['panel_companyPhoneLocal']}'
             : null,
         company['phone'],
+        company['companyPhone'],
+        company['company_phone'],
+        profile['companyPhone'],
+        profile['company_phone'],
+        basic['companyPhone'],
+        basic['company_phone'],
         source['panel_phone'],
         fallbackBusiness?.companyPhone,
       ),
       companyUrl: first(
         source['panel_companyWebsite'],
+        source['panel_company_website'],
         source['panel_website'],
         company['website'],
+        company['companyWebsite'],
+        company['company_website'],
+        profile['companyUrl'],
+        profile['companyUrl'],
+        profile['companyWebsite'],
+        profile['company_website'],
+        basic['companyUrl'],
+        basic['companyWebsite'],
+        basic['company_website'],
         fallbackBusiness?.companyUrl,
       ),
       businessType: first(
         source['panel_businessType'],
+        source['panel_business_type'],
         company['businessType'],
+        company['business_type'],
+        profile['businessType'],
+        profile['business_type'],
+        basic['businessType'],
+        basic['business_type'],
         source['panel_industry'],
         company['industry'],
         fallbackBusiness?.businessType,
@@ -757,45 +842,72 @@ class _CompanyUiData {
       method: first(
         billing['method'],
         source['panel_billingMethod'],
+        source['panel_billing_method'],
         fallbackBilling?.method,
         'Credit/Debit Card',
       ),
       saveForFutureUse:
           billing['saveForFutureUse'] == true ||
+          billing['save_for_future_use'] == true ||
           source['panel_billingSaveForFutureUse'] == true ||
+          source['panel_billing_save_for_future_use'] == true ||
           (fallbackBilling?.saveForFutureUse ?? false),
       nameOnCard: first(
         billing['nameOnCard'],
         source['panel_billingNameOnCard'],
+        source['panel_billing_name_on_card'],
         fallbackBilling?.nameOnCard,
       ),
-      cardNumber: first(billing['cardNumber'], fallbackBilling?.cardNumber),
+      cardNumber: first(
+        billing['cardNumber'],
+        billing['card_number'],
+        source['panel_billingCardNumber'],
+        source['panel_billing_card_number'],
+        fallbackBilling?.cardNumber,
+      ),
       expiry: first(
         billing['expiry'],
         source['panel_billingExpiry'],
+        source['panel_billing_expiry'],
         fallbackBilling?.expiry,
       ),
-      cvv: first(billing['cvv'], fallbackBilling?.cvv),
+      cvv: first(
+        billing['cvv'],
+        source['panel_billingCvv'],
+        source['panel_billing_cvv'],
+        fallbackBilling?.cvv,
+      ),
       achAccountName: first(
         billing['achAccountName'],
+        billing['ach_account_name'],
+        source['panel_billingAchAccountName'],
+        source['panel_billing_ach_account_name'],
         fallbackBilling?.achAccountName,
       ),
       achRoutingNumber: first(
         billing['achRoutingNumber'],
+        billing['ach_routing_number'],
+        source['panel_billingAchRoutingNumber'],
+        source['panel_billing_ach_routing_number'],
         fallbackBilling?.achRoutingNumber,
       ),
       achAccountNumber: first(
         billing['achAccountNumber'],
+        billing['ach_account_number'],
+        source['panel_billingAchAccountNumber'],
+        source['panel_billing_ach_account_number'],
         fallbackBilling?.achAccountNumber,
       ),
       applePayEmail: first(
         billing['applePayEmail'],
         source['panel_billingApplePayEmail'],
+        source['panel_billing_apple_pay_email'],
         fallbackBilling?.applePayEmail,
       ),
       googlePayEmail: first(
         billing['googlePayEmail'],
         source['panel_billingGooglePayEmail'],
+        source['panel_billing_google_pay_email'],
         fallbackBilling?.googlePayEmail,
       ),
     );
@@ -907,6 +1019,8 @@ class _ComingSoonPage extends StatelessWidget {
     this.companyLogoUrl = '',
     this.onOpenProfile,
     required this.onLogout,
+    this.autoFocusNotifications = false,
+    this.notificationFocusRequestKey = 0,
   });
 
   final String title;
@@ -914,6 +1028,8 @@ class _ComingSoonPage extends StatelessWidget {
   final String companyLogoUrl;
   final VoidCallback? onOpenProfile;
   final Future<void> Function() onLogout;
+  final bool autoFocusNotifications;
+  final int notificationFocusRequestKey;
 
   @override
   Widget build(BuildContext context) {
@@ -924,6 +1040,8 @@ class _ComingSoonPage extends StatelessWidget {
         imageUrl: companyLogoUrl,
         onOpenProfile: onOpenProfile,
         onLogout: onLogout,
+        autoFocusNotifications: autoFocusNotifications,
+        notificationFocusRequestKey: notificationFocusRequestKey,
       ),
       body: Center(
         child: Text(

@@ -1203,7 +1203,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist profile',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       body: SafeArea(
         child: ListView(
@@ -1339,6 +1343,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               ],
             )
           : null,
+    ),
     );
   }
 
@@ -1447,6 +1452,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               const SizedBox(height: 8),
               Semantics(
                 button: true,
+                label: 'View all reviews',
+                child: ExcludeSemantics(
                 child: InkWell(
                 onTap: () {
                   Navigator.push(
@@ -1466,6 +1473,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       color: AppColors.blackCat,
                     ),
                   ),
+                ),
                 ),
                 ),
               ),
@@ -1555,6 +1563,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       child: Semantics(
         button: true,
         onTap: onTap,
+        child: ExcludeSemantics(
         child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
@@ -1600,6 +1609,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             Icon(Icons.chevron_right_rounded, color: AppColors.blackCat),
           ],
         ),
+      ),
       ),
       ),
       ),
@@ -1821,6 +1831,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       child: Semantics(
         button: true,
         onTap: _openAscension,
+        child: ExcludeSemantics(
         child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: _openAscension,
@@ -1851,6 +1862,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             ),
           ],
         ),
+      ),
       ),
       ),
       ),
@@ -2378,6 +2390,73 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
     });
   }
 
+  String _selectedPayoutMethod() {
+    final paypalEnabled = _paypalEmailCtrl.text.trim().isNotEmpty;
+    final venmoEnabled =
+        _venmoUserCtrl.text.trim().isNotEmpty ||
+        _venmoPhoneCtrl.text.trim().isNotEmpty;
+    final appleEnabled =
+        _appleNameCtrl.text.trim().isNotEmpty ||
+        _appleEmailCtrl.text.trim().isNotEmpty ||
+        _applePhoneCtrl.text.trim().isNotEmpty;
+    final achEnabled =
+        _achHolderCtrl.text.trim().isNotEmpty ||
+        _achBankCtrl.text.trim().isNotEmpty ||
+        _achRoutingCtrl.text.trim().isNotEmpty ||
+        _achAccountCtrl.text.trim().isNotEmpty;
+
+    if (_openPaypal || paypalEnabled) return 'paypal';
+    if (_openVenmo || venmoEnabled) return 'venmo';
+    if (_openApple || appleEnabled) return 'applePay';
+    if (_openAch || achEnabled) return 'ach';
+    return 'paypal';
+  }
+
+  String? _missingColumnFromPostgrest(String message) {
+    for (final pattern in <RegExp>[
+      RegExp(r"Could not find the '([^']+)' column"),
+      RegExp(r'column [^ ]+\.([a-zA-Z0-9_]+) does not exist'),
+    ]) {
+      final match = pattern.firstMatch(message);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
+
+  Future<void> _updatePayoutWithSchemaFallback(
+    Map<String, dynamic> requestedPayload,
+  ) async {
+    final payload = Map<String, dynamic>.from(requestedPayload);
+
+    for (var attempt = 0; attempt < 50; attempt++) {
+      try {
+        final updated = await SupabaseBootstrap.client
+            .from(widget.supabaseTable)
+            .update(payload)
+            .eq('id', widget.supabaseId)
+            .select('id')
+            .maybeSingle();
+
+        if (updated == null) {
+          throw StateError(
+            'No ${widget.supabaseTable} row updated for id ${widget.supabaseId}.',
+          );
+        }
+        return;
+      } on PostgrestException catch (error) {
+        final missingColumn = _missingColumnFromPostgrest(error.message);
+        final canRetry = missingColumn != null && payload.containsKey(missingColumn);
+        if (!canRetry) rethrow;
+        payload.remove(missingColumn);
+      }
+    }
+
+    throw const PostgrestException(
+      message: 'Could not save payout settings after schema fallback retries.',
+      code: 'PGRST204',
+    );
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
@@ -2395,8 +2474,17 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       final venmoEnabled =
           _venmoUserCtrl.text.trim().isNotEmpty ||
           _venmoPhoneCtrl.text.trim().isNotEmpty;
+      final method = _selectedPayoutMethod();
+      final payoutEmail = _firstNonEmpty([
+        method == 'paypal' ? _paypalEmailCtrl.text : '',
+        method == 'venmo' ? _venmoUserCtrl.text : '',
+        _paypalEmailCtrl.text,
+        _venmoUserCtrl.text,
+      ]);
+      final payoutLegalName = _achHolderCtrl.text.trim();
 
       final payout = <String, dynamic>{
+        'method': method,
         'applePay': {
           'enabled': appleEnabled,
           'fullName': _appleNameCtrl.text.trim(),
@@ -2420,22 +2508,38 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
           'username': _venmoUserCtrl.text.trim(),
           'phone': _venmoPhoneCtrl.text.trim(),
         },
+        'email': payoutEmail,
+        'accountHolder': payoutLegalName,
       };
 
-      await SupabaseBootstrap.client
-          .from(widget.supabaseTable)
-          .update({
-            'payout': payout,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', widget.supabaseId);
+      final requestedPayload = <String, dynamic>{
+        'payout': payout,
+        'panel_payout': payout,
+        'panel_payoutMethod': method,
+        'panel_payout_method': method,
+        'panel_artist_payoutMethod': method,
+        'panel_payoutEmail': payoutEmail,
+        'panel_payout_email': payoutEmail,
+        'panel_artist_payoutEmail': payoutEmail,
+        'panel_payoutLegalName': payoutLegalName,
+        'panel_payout_legal_name': payoutLegalName,
+        'panel_artist_payoutLegalName': payoutLegalName,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      await _updatePayoutWithSchemaFallback(requestedPayload);
 
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Payout settings updated.')));
       Navigator.pop(context);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Payout settings save failed for ${widget.supabaseTable}'
+        ' (${widget.supabaseId}): $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to save payout settings.')),
@@ -2597,6 +2701,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
               button: true,
               selected: open,
               onTap: onTap,
+              child: ExcludeSemantics(
               child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.zero,
@@ -2623,6 +2728,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
               ],
             ),
           ),
+            ),
             ),
           ),
           if (open) ...[const SizedBox(height: 6), ...children],
@@ -3683,6 +3789,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     return Semantics(
       button: true,
       selected: selected,
+      child: ExcludeSemantics(
       child: InkWell(
       onTap: () => setState(() => _nailTechType = value),
       borderRadius: BorderRadius.zero,
@@ -3718,6 +3825,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             ),
           ],
         ),
+      ),
       ),
       ),
     );
@@ -4590,6 +4698,7 @@ class _ArtistSpecializationServiceAreaModalState
                       return Semantics(
                         button: true,
                         selected: selected,
+                        child: ExcludeSemantics(
                         child: InkWell(
                         onTap: () {
                           setState(() {
@@ -4641,6 +4750,7 @@ class _ArtistSpecializationServiceAreaModalState
                               ),
                             ],
                           ),
+                        ),
                         ),
                         ),
                       );
@@ -5237,7 +5347,9 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                           constraints.maxWidth,
                           constraints.maxHeight,
                         );
-                        return GestureDetector(
+                        return Semantics(
+                          label: 'Availability calendar. Drag to select multiple days.',
+                          child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onPanStart: (details) =>
                               _startDrag(details.localPosition, days, gridSize),
@@ -5263,6 +5375,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                               );
                             }),
                           ),
+                        ),
                         );
                       },
                     ),

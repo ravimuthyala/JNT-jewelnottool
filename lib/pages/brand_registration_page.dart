@@ -42,6 +42,8 @@ class BrandRegistrationPage extends StatefulWidget {
 @Deprecated('Use BrandRegistrationPage instead.')
 typedef CompanyRegistrationPageV2 = BrandRegistrationPage;
 
+enum CompanyPayoutMethod { paypal, venmo, bankTransfer, applePay }
+
 class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   static const Duration _registrationStepTimeout = Duration(seconds: 20);
   static const Duration _logoUploadTimeout = Duration(seconds: 20);
@@ -76,7 +78,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   final _bioCtrl = TextEditingController();
   // âœ… NEW: for the updated Company Profile + Account Creation section
   final _confirmPassCtrl = TextEditingController();
-  final _twitterCtrl = TextEditingController();
   String? _businessType;
 
   final _contactEmailCtrl = TextEditingController();
@@ -151,6 +152,16 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
   final _applePayEmailCtrl = TextEditingController();
   final _googlePayEmailCtrl = TextEditingController();
+
+  CompanyPayoutMethod _payoutMethod = CompanyPayoutMethod.paypal;
+  final _payoutLegalNameCtrl = TextEditingController();
+  final _payoutEmailCtrl = TextEditingController();
+  final _payoutBankNameCtrl = TextEditingController();
+  final _payoutRoutingCtrl = TextEditingController();
+  final _payoutAccountNumberCtrl = TextEditingController();
+  final _payoutApplePayNameCtrl = TextEditingController();
+  final _payoutApplePayPhoneCtrl = TextEditingController();
+  final _payoutApplePayEmailCtrl = TextEditingController();
 
   static const List<String> _billingMethods = [
     'Credit/Debit Card',
@@ -358,7 +369,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     _tiktokCtrl.dispose();
     _bioCtrl.dispose();
     _confirmPassCtrl.dispose();
-    _twitterCtrl.dispose();
     _contactEmailCtrl.dispose();
     _contactPhoneCtrl.dispose();
     _streetCtrl.dispose();
@@ -386,6 +396,14 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     _achAccountCtrl.dispose();
     _applePayEmailCtrl.dispose();
     _googlePayEmailCtrl.dispose();
+    _payoutLegalNameCtrl.dispose();
+    _payoutEmailCtrl.dispose();
+    _payoutBankNameCtrl.dispose();
+    _payoutRoutingCtrl.dispose();
+    _payoutAccountNumberCtrl.dispose();
+    _payoutApplePayNameCtrl.dispose();
+    _payoutApplePayPhoneCtrl.dispose();
+    _payoutApplePayEmailCtrl.dispose();
 
     super.dispose();
   }
@@ -792,6 +810,78 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     return null;
   }
 
+  bool _hasRequiredBillingMethod() {
+    switch (_billingMethod) {
+      case 'Credit/Debit Card':
+        final cardNumber = _cardNumberCtrl.text.trim().replaceAll(' ', '');
+        final cvv = _cardCvvCtrl.text.trim();
+        return _cardNameCtrl.text.trim().isNotEmpty &&
+            cardNumber.length >= 13 &&
+            cardNumber.length <= 19 &&
+            RegExp(r'^\d{2}\/\d{2}$').hasMatch(_cardExpiryCtrl.text.trim()) &&
+            (cvv.length == 3 || cvv.length == 4);
+      case 'ACH Transfer':
+        return _achAccountNameCtrl.text.trim().isNotEmpty &&
+            _achRoutingCtrl.text.trim().isNotEmpty &&
+            _achAccountCtrl.text.trim().isNotEmpty;
+      case 'Apple Pay':
+        return _applePayEmailCtrl.text.trim().isNotEmpty;
+      case 'Google Pay':
+        return _googlePayEmailCtrl.text.trim().isNotEmpty;
+    }
+    return false;
+  }
+
+  bool _showBillingValidationMessage(String message) {
+    if (!mounted) return false;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+    return false;
+  }
+
+  String? _payoutRequiredValidator(String? value, String fieldName) {
+    if (value == null || value.trim().isEmpty) return '$fieldName is required';
+    return null;
+  }
+
+  Map<String, dynamic> _normalizedCompanyPayoutPayload() {
+    final isPaypal = _payoutMethod == CompanyPayoutMethod.paypal;
+    final isVenmo = _payoutMethod == CompanyPayoutMethod.venmo;
+    final isBank = _payoutMethod == CompanyPayoutMethod.bankTransfer;
+    final isApplePay = _payoutMethod == CompanyPayoutMethod.applePay;
+    return <String, dynamic>{
+      'method': _payoutMethod.name,
+      'paypal': {
+        'enabled': isPaypal,
+        'email': isPaypal ? _payoutEmailCtrl.text.trim() : '',
+      },
+      'venmo': {
+        'enabled': isVenmo,
+        'username': isVenmo ? _payoutEmailCtrl.text.trim() : '',
+      },
+      'ach': {
+        'enabled': isBank,
+        'accountHolder': isBank ? _payoutLegalNameCtrl.text.trim() : '',
+        'bankName': isBank ? _payoutBankNameCtrl.text.trim() : '',
+        'routingNumber': isBank ? _payoutRoutingCtrl.text.trim() : '',
+        'accountNumber': isBank ? _payoutAccountNumberCtrl.text.trim() : '',
+      },
+      'applePay': {
+        'enabled': isApplePay,
+        'fullName': isApplePay ? _payoutApplePayNameCtrl.text.trim() : '',
+        'email': isApplePay ? _payoutApplePayEmailCtrl.text.trim() : '',
+        'phone': isApplePay ? _payoutApplePayPhoneCtrl.text.trim() : '',
+      },
+      'email': _payoutEmailCtrl.text.trim(),
+    };
+  }
+
   Widget promosAndNailTipsCard() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -876,9 +966,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     final businessType = (_businessType ?? '').trim();
     final companyPhone = '$_normalizedCompanyAreaCode$companyPhoneLocal';
     final contactPhone = '$_normalizedContactAreaCode$contactPhoneLocal';
+    final payout = _normalizedCompanyPayoutPayload();
     return {
       'uid': uid,
       'email': _emailCtrl.text.trim().toLowerCase(),
+      'panel_companyEmail': _emailCtrl.text.trim().toLowerCase(),
+      'panel_company_email': _emailCtrl.text.trim().toLowerCase(),
       'accountType': 'company',
       'roles': {'client': false, 'artist': false, 'company': true},
       // Panel-friendly top-level columns
@@ -903,7 +996,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_contactPhoneLocal': contactPhoneLocal,
       'panel_instagram': _instagramCtrl.text.trim(),
       'panel_tiktok': _tiktokCtrl.text.trim(),
-      'panel_twitter': _twitterCtrl.text.trim(),
       'panel_billingStreet': addressesDraft.billingStreet,
       'panel_billing_street': addressesDraft.billingStreet,
       'panel_billingCity': addressesDraft.billingCity,
@@ -936,6 +1028,13 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_billing_expiry': billingDraft.expiry,
       'panel_billing_apple_pay_email': billingDraft.applePayEmail,
       'panel_billing_google_pay_email': billingDraft.googlePayEmail,
+      'panel_payout': payout,
+      'panel_payoutMethod': _payoutMethod.name,
+      'panel_payout_method': _payoutMethod.name,
+      'panel_payoutLegalName': _payoutLegalNameCtrl.text.trim(),
+      'panel_payout_legal_name': _payoutLegalNameCtrl.text.trim(),
+      'panel_payoutEmail': _payoutEmailCtrl.text.trim(),
+      'panel_payout_email': _payoutEmailCtrl.text.trim(),
       'panel_profileImageUrl': safeProfilePhotoUrl,
       'panel_profile_image_url': safeProfilePhotoUrl,
       'panel_logoUrl': safeProfilePhotoUrl,
@@ -961,18 +1060,26 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         'name': companyName,
         'contactName': contactName,
         'businessType': businessType,
+        'business_type': businessType,
         'website': companyWebsite,
+        'companyWebsite': companyWebsite,
+        'company_website': companyWebsite,
         'bio': _bioCtrl.text.trim(),
         'contactEmail': contactEmail,
+        'contact_email': contactEmail,
+        'companyEmail': _emailCtrl.text.trim().toLowerCase(),
+        'company_email': _emailCtrl.text.trim().toLowerCase(),
         'phone': companyPhone,
+        'companyPhone': companyPhone,
+        'company_phone': companyPhone,
         'phoneAreaCode': _normalizedCompanyAreaCode,
         'phoneLocal': companyPhoneLocal,
         'contactPhone': contactPhone,
+        'contact_phone': contactPhone,
         'contactPhoneAreaCode': _normalizedContactAreaCode,
         'contactPhoneLocal': contactPhoneLocal,
         'instagram': _instagramCtrl.text.trim(),
         'tiktok': _tiktokCtrl.text.trim(),
-        'twitter': _twitterCtrl.text.trim(),
         'logoUrl': safeProfilePhotoUrl,
         'profileImageUrl': safeProfilePhotoUrl,
         'photoUrl': safeProfilePhotoUrl,
@@ -1004,6 +1111,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         'applePayEmail': billingDraft.applePayEmail,
         'googlePayEmail': billingDraft.googlePayEmail,
       },
+      'payout': payout,
       'createdAt': DateTime.now().toIso8601String(),
       'updatedAt': DateTime.now().toIso8601String(),
     };
@@ -1102,10 +1210,16 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_company_website': payload['panel_company_website'],
       'panel_contactEmail': payload['panel_contactEmail'],
       'panel_contact_email': payload['panel_contact_email'],
+      'panel_companyEmail': payload['panel_companyEmail'],
+      'panel_company_email': payload['panel_company_email'],
       'panel_companyPhone': payload['panel_companyPhone'],
       'panel_company_phone': payload['panel_company_phone'],
+      'panel_companyPhoneAreaCode': payload['panel_companyPhoneAreaCode'],
+      'panel_companyPhoneLocal': payload['panel_companyPhoneLocal'],
       'panel_contactPhone': payload['panel_contactPhone'],
       'panel_contact_phone': payload['panel_contact_phone'],
+      'panel_contactPhoneAreaCode': payload['panel_contactPhoneAreaCode'],
+      'panel_contactPhoneLocal': payload['panel_contactPhoneLocal'],
       'panel_profileImageUrl': payload['panel_profileImageUrl'],
       'panel_profile_image_url': payload['panel_profile_image_url'],
       'panel_logoUrl': payload['panel_logoUrl'],
@@ -1122,11 +1236,19 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_billing_apple_pay_email': payload['panel_billing_apple_pay_email'],
       'panel_billing_google_pay_email':
           payload['panel_billing_google_pay_email'],
+      'panel_payout': payload['panel_payout'],
+      'panel_payoutMethod': payload['panel_payoutMethod'],
+      'panel_payout_method': payload['panel_payout_method'],
+      'panel_payoutLegalName': payload['panel_payoutLegalName'],
+      'panel_payout_legal_name': payload['panel_payout_legal_name'],
+      'panel_payoutEmail': payload['panel_payoutEmail'],
+      'panel_payout_email': payload['panel_payout_email'],
       'profile': payload['profile'],
       'basic': payload['basic'],
       'company': payload['company'],
       'addresses': payload['addresses'],
       'billing': payload['billing'],
+      'payout': payload['payout'],
       'panel_billingStreet': payload['panel_billingStreet'],
       'panel_billing_street': payload['panel_billing_street'],
       'panel_billingCity': payload['panel_billingCity'],
@@ -1253,6 +1375,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       setState(() => _showValidationErrors = true);
     }
     if (_formKey.currentState?.validate() != true) return;
+    if (!_hasRequiredBillingMethod()) {
+      _showBillingValidationMessage(
+        'Please enter at least one payment method before continuing.',
+      );
+      return;
+    }
 
     if (_isBillingUnitedStates) {
       final billingValidation =
@@ -1513,6 +1641,19 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         'Please correct the highlighted fields before continuing.',
         Directionality.of(context),
       );
+      if (_registrationStep == 1) {
+        SemanticsService.sendAnnouncement(
+          View.of(context),
+          'Please enter at least one payment method before continuing.',
+          Directionality.of(context),
+        );
+      }
+      return false;
+    }
+    if (_registrationStep == 1 && !_hasRequiredBillingMethod()) {
+      return _showBillingValidationMessage(
+        'Please enter at least one payment method before continuing.',
+      );
     }
     return valid;
   }
@@ -1745,7 +1886,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     const dropdownTextColor = AppColors.blackCat;
     const dropdownBackground = AppColors.snow;
 
-    return Theme(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Brand registration',
+      child: Theme(
       data: Theme.of(context).copyWith(
         canvasColor: dropdownBackground,
         textTheme: Theme.of(context).textTheme.apply(
@@ -2087,17 +2232,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                           ),
                           const SizedBox(height: 16),
 
-                          _FieldLabel.normal('Twitter'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _twitterCtrl,
-                            style: const TextStyle(fontSize: _inputFs),
-                            decoration: _dec(
-                              'Twitter',
-                              'Enter Twitter/X handle/link',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
 
                           _FieldLabel.normal('Company Bio'),
                           const SizedBox(height: 6),
@@ -2936,16 +3070,10 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                         children: [
                           //_FieldLabel.required('Billing Method'),
                           const SizedBox(height: 6),
-                          RadioGroup<String>(
-                            groupValue: _billingMethod,
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _billingMethod = value);
-                            },
-                            child: Column(
-                              children: _billingMethods.map((method) {
-                                final selected = _billingMethod == method;
-                                return Container(
+                          Column(
+                            children: _billingMethods.map((method) {
+                              final selected = _billingMethod == method;
+                              return Container(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   padding: const EdgeInsets.fromLTRB(
                                     10,
@@ -2976,6 +3104,13 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           children: [
                                             Radio<String>(
                                               value: method,
+                                              groupValue: _billingMethod,
+                                              onChanged: (value) {
+                                                if (value == null) return;
+                                                setState(
+                                                  () => _billingMethod = value,
+                                                );
+                                              },
                                               activeColor: AppColors.deepPlum,
                                             ),
                                             Expanded(
@@ -3216,9 +3351,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                       ],
                                     ],
                                   ),
-                                );
-                              }).toList(),
-                            ),
+                              );
+                            }).toList(),
                           ),
                           const SizedBox(height: 6),
                           CheckboxListTile(
@@ -3242,6 +3376,162 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                       ),
                     ),
 
+                    const SizedBox(height: 16),
+
+                    _SectionCard(
+                      title: 'Payout',
+                      subtitle:
+                          'How your brand receives payouts or reimbursements.',
+                      child: Column(
+                        children: [
+                          _dropdownSemantics(
+                            label: 'Payout Method',
+                            value: _payoutMethod.name,
+                            required: true,
+                            child: DropdownButtonFormField<CompanyPayoutMethod>(
+                              initialValue: _payoutMethod,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                color: AppColors.blackCat,
+                              ),
+                              decoration: _dec(
+                                'Payout Method',
+                                'Select payout method',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: CompanyPayoutMethod.paypal,
+                                  child: Text('PayPal'),
+                                ),
+                                DropdownMenuItem(
+                                  value: CompanyPayoutMethod.venmo,
+                                  child: Text('Venmo'),
+                                ),
+                                DropdownMenuItem(
+                                  value: CompanyPayoutMethod.bankTransfer,
+                                  child: Text('Bank Transfer'),
+                                ),
+                                DropdownMenuItem(
+                                  value: CompanyPayoutMethod.applePay,
+                                  child: Text('Apple Pay'),
+                                ),
+                              ],
+                              onChanged: (value) => setState(
+                                () => _payoutMethod =
+                                    value ?? CompanyPayoutMethod.paypal,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          if (_payoutMethod == CompanyPayoutMethod.paypal ||
+                              _payoutMethod == CompanyPayoutMethod.venmo) ...[
+                            TextFormField(
+                              controller: _payoutLegalNameCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Legal Name', 'Legal Name'),
+                              validator: (v) =>
+                                  _payoutRequiredValidator(v, 'Legal Name'),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _payoutEmailCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: _dec(
+                                _payoutMethod == CompanyPayoutMethod.venmo
+                                    ? 'Venmo Email'
+                                    : 'PayPal Email',
+                                'Email',
+                              ),
+                              validator: _emailValidator,
+                            ),
+                          ],
+                          if (_payoutMethod ==
+                              CompanyPayoutMethod.bankTransfer) ...[
+                            TextFormField(
+                              controller: _payoutLegalNameCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Legal Name', 'Legal Name'),
+                              validator: (v) =>
+                                  _payoutRequiredValidator(v, 'Legal Name'),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _payoutBankNameCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Bank Name', 'Bank name'),
+                              validator: (v) =>
+                                  _payoutRequiredValidator(v, 'Bank Name'),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _payoutRoutingCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.number,
+                              decoration: _dec(
+                                'Routing Number',
+                                'Routing number',
+                              ),
+                              validator: (v) => _payoutRequiredValidator(
+                                v,
+                                'Routing Number',
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _payoutAccountNumberCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.number,
+                              decoration: _dec(
+                                'Account Number',
+                                'Account number',
+                              ),
+                              validator: (v) => _payoutRequiredValidator(
+                                v,
+                                'Account Number',
+                              ),
+                            ),
+                          ],
+                          if (_payoutMethod == CompanyPayoutMethod.applePay) ...[
+                            TextFormField(
+                              controller: _payoutApplePayNameCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              decoration: _dec('Full Name', 'Name on Apple Pay'),
+                              validator: (v) =>
+                                  _payoutRequiredValidator(v, 'Full Name'),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _payoutApplePayPhoneCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.phone,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(10),
+                                UsPhoneTextInputFormatter(),
+                              ],
+                              decoration: _dec(
+                                'Phone Number',
+                                'Apple Pay phone',
+                              ),
+                              validator: _phoneValidator,
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: _payoutApplePayEmailCtrl,
+                              style: const TextStyle(fontSize: _inputFs),
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: _dec(
+                                'Apple ID Email',
+                                'Email linked to Apple Pay',
+                              ),
+                              validator: _emailValidator,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
                     ],
                     const SizedBox(height: 18),
                     _wizardNavButtons(),
@@ -3252,7 +3542,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
