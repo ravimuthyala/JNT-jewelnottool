@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -91,6 +92,7 @@ class _ClientArtistRegistrationPageState
   // Profile image (tap avatar to upload)
   // -----------------------
   final ImagePicker _picker = ImagePicker();
+  final FocusNode _profilePhotoFocusNode = FocusNode(debugLabel: 'clientArtistProfilePhotoUpload');
   Uint8List? _profileBytes;
   final Map<String, Uint8List> _guidedMeasurementPhotos = {};
   String _measurementCoinReference = 'US Penny (1¢)';
@@ -1157,6 +1159,28 @@ class _ClientArtistRegistrationPageState
     );
   }
 
+  /// Marks a form field as required (or not) for screen readers.
+  Widget _req(bool required, Widget child) {
+    return Semantics(isRequired: required, child: child);
+  }
+
+  /// Wraps a DropdownButtonFormField-style widget so screen readers announce
+  /// it as a dropdown (with its current value) instead of a generic button.
+  Widget _dropdownSemantics({
+    required String label,
+    required String? value,
+    required Widget child,
+    bool required = false,
+  }) {
+    return Semantics(
+      label: label,
+      value: (value == null || value.trim().isEmpty) ? 'Not selected' : value,
+      hint: 'Dropdown. Double tap to open.',
+      isRequired: required,
+      child: ExcludeSemantics(child: child),
+    );
+  }
+
   Widget _countryCodeDropdown({
     required String value,
     required ValueChanged<CountryCode> onChanged,
@@ -1244,7 +1268,11 @@ class _ClientArtistRegistrationPageState
       itemCount: items.length,
       itemExtent: 40,
     );
-    return PopupMenuButton<T>(
+    return _dropdownSemantics(
+      label: label,
+      value: itemLabel(value),
+      required: true,
+      child: PopupMenuButton<T>(
       color: _snow,
       surfaceTintColor: _snow,
       elevation: 4,
@@ -1286,6 +1314,7 @@ class _ClientArtistRegistrationPageState
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -1311,7 +1340,11 @@ class _ClientArtistRegistrationPageState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Semantics(
-              button: true,
+              label: label,
+              value: hasValue ? itemLabel(selected as T) : 'Not selected',
+              hint: 'Dropdown. Double tap to open.',
+              isRequired: validator != null,
+              child: ExcludeSemantics(
               child: InkWell(
               borderRadius: BorderRadius.zero,
               onTap: onToggle,
@@ -1338,6 +1371,7 @@ class _ClientArtistRegistrationPageState
                     ),
                   ],
                 ),
+              ),
               ),
               ),
             ),
@@ -1438,6 +1472,25 @@ class _ClientArtistRegistrationPageState
     required String? selectedValue,
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
+    bool required = false,
+  }) {
+    return _req(required, _typeAheadPickerField(
+      label: label,
+      hint: hint,
+      options: options,
+      selectedValue: selectedValue,
+      onChanged: onChanged,
+      validator: validator,
+    ));
+  }
+
+  Widget _typeAheadPickerField({
+    required String label,
+    required String hint,
+    required List<String> options,
+    required String? selectedValue,
+    required ValueChanged<String?> onChanged,
+    String? Function(String?)? validator,
   }) {
     return FormField<String>(
       initialValue: selectedValue,
@@ -1471,10 +1524,15 @@ class _ClientArtistRegistrationPageState
                       ),
                       decoration: _dec(label, hint),
                       onTapOutside: (_) => focusNode.unfocus(),
-                      onChanged: (value) {
-                        final match = _firstExactMatch(options, value);
-                        field.didChange(match);
-                        onChanged(match);
+                      onEditingComplete: () {
+                        final match = _firstExactMatch(
+                          options,
+                          textController.text,
+                        );
+                        if (match != null) {
+                          field.didChange(match);
+                          onChanged(match);
+                        }
                       },
                     );
                   },
@@ -1997,6 +2055,7 @@ class _ClientArtistRegistrationPageState
       helperText: _profileBytes == null
           ? 'Tap to upload your profile photo'
           : 'Profile photo selected',
+      focusNode: _profilePhotoFocusNode,
     );
   }
 
@@ -2008,10 +2067,18 @@ class _ClientArtistRegistrationPageState
       source: ImageSource.gallery,
       imageQuality: 80,
     );
-    if (img == null) return;
-    final bytes = await img.readAsBytes();
-    if (!mounted) return;
-    setState(() => _profileBytes = bytes);
+    if (img != null) {
+      final bytes = await img.readAsBytes();
+      if (!mounted) return;
+      setState(() => _profileBytes = bytes);
+    }
+    // The OS image picker steals accessibility focus; put it back on the
+    // avatar (not wherever the platform happens to land it) so screen
+    // reader users stay in place.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_profilePhotoFocusNode);
+    });
   }
 
   Future<void> _pickPortfolioImages() async {
@@ -2855,12 +2922,31 @@ class _ClientArtistRegistrationPageState
     }
   }
 
+  void _announceStep(int index) {
+    if (!mounted) return;
+    final title = _registrationStepTitles[index].replaceAll('\n', ' ');
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Step ${index + 1} of ${_registrationStepTitles.length}: $title',
+      Directionality.of(context),
+    );
+  }
+
   Future<bool> _validateCurrentRegistrationStep() async {
     if (_validationTriggeredStep != _registrationStep) {
       setState(() => _validationTriggeredStep = _registrationStep);
     }
     final ok = _formKey.currentState?.validate() ?? true;
-    if (!ok) return false;
+    if (!ok) {
+      if (mounted) {
+        SemanticsService.sendAnnouncement(
+          View.of(context),
+          'Please correct the highlighted fields before continuing.',
+          Directionality.of(context),
+        );
+      }
+      return false;
+    }
 
     if (_registrationStep == 0 && _isUnitedStates) {
       try {
@@ -3190,6 +3276,7 @@ class _ClientArtistRegistrationPageState
   @override
   void dispose() {
     _streetAutocompleteDebounce?.cancel();
+    _profilePhotoFocusNode.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
@@ -3253,31 +3340,40 @@ class _ClientArtistRegistrationPageState
 
             _FieldLabel.required('Full Name / Studio Name'),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _fullNameOrStudioCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Name', 'Enter Name'),
-              validator: (v) => _requiredValidator(v, 'Name'),
+            _req(
+              true,
+              TextFormField(
+                controller: _fullNameOrStudioCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                decoration: _dec('Name', 'Enter Name'),
+                validator: (v) => _requiredValidator(v, 'Name'),
+              ),
             ),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Display Name'),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _displayNameCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Display Name', 'Enter Display Name'),
-              validator: (v) => _requiredValidator(v, 'Display Name'),
+            _req(
+              true,
+              TextFormField(
+                controller: _displayNameCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                decoration: _dec('Display Name', 'Enter Display Name'),
+                validator: (v) => _requiredValidator(v, 'Display Name'),
+              ),
             ),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Language Spoken'),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _languageSpokenCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Language Spoken', 'Enter language(s) spoken'),
-              validator: (v) => _requiredValidator(v, 'Language Spoken'),
+            _req(
+              true,
+              TextFormField(
+                controller: _languageSpokenCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                decoration: _dec('Language Spoken', 'Enter language(s) spoken'),
+                validator: (v) => _requiredValidator(v, 'Language Spoken'),
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -3288,6 +3384,7 @@ class _ClientArtistRegistrationPageState
               hint: 'Select Currency',
               options: currencyOptions,
               selectedValue: _currency,
+              required: true,
               onChanged: (v) => setState(() => _currency = v),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? 'Currency is required'
@@ -3340,7 +3437,11 @@ class _ClientArtistRegistrationPageState
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: TextFormField(
+                            child: Semantics(
+                              label: 'Phone number',
+                              isRequired: true,
+                              textField: true,
+                              child: TextFormField(
                               controller: _phoneCtrl,
                               style: const TextStyle(fontSize: _inputFs),
                               keyboardType: TextInputType.phone,
@@ -3364,6 +3465,7 @@ class _ClientArtistRegistrationPageState
                                   vertical: _fieldVerticalPadding,
                                 ),
                                 isDense: false,
+                              ),
                               ),
                             ),
                           ),
@@ -3392,12 +3494,15 @@ class _ClientArtistRegistrationPageState
 
             _FieldLabel.required('Email ID'),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _emailCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              keyboardType: TextInputType.emailAddress,
-              decoration: _dec('Email', 'Enter Email'),
-              validator: _emailValidator,
+            _req(
+              true,
+              TextFormField(
+                controller: _emailCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                keyboardType: TextInputType.emailAddress,
+                decoration: _dec('Email', 'Enter Email'),
+                validator: _emailValidator,
+              ),
             ),
           ],
         ),
@@ -3415,35 +3520,41 @@ class _ClientArtistRegistrationPageState
           children: [
             _FieldLabel.required('Email'),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _emailCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              keyboardType: TextInputType.emailAddress,
-              decoration: _dec('Email', 'Enter Email'),
-              validator: _emailValidator,
+            _req(
+              true,
+              TextFormField(
+                controller: _emailCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                keyboardType: TextInputType.emailAddress,
+                decoration: _dec('Email', 'Enter Email'),
+                validator: _emailValidator,
+              ),
             ),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Password'),
             const SizedBox(height: 6),
-            TextFormField(
-              controller: _passCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              obscureText: _obscurePassword,
-              decoration: _dec(
-                'Password',
-                'Enter Password',
-                suffixIcon: IconButton(
-                  iconSize: 18,
-                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+            _req(
+              true,
+              TextFormField(
+                controller: _passCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                obscureText: _obscurePassword,
+                decoration: _dec(
+                  'Password',
+                  'Enter Password',
+                  suffixIcon: IconButton(
+                    iconSize: 18,
+                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    ),
                   ),
                 ),
+                validator: _passwordValidator,
               ),
-              validator: _passwordValidator,
             ),
             const SizedBox(height: 16),
             Text(
@@ -3457,7 +3568,9 @@ class _ClientArtistRegistrationPageState
 
             _FieldLabel.required('Confirm Password'),
             const SizedBox(height: 6),
-            TextFormField(
+            _req(
+              true,
+              TextFormField(
               controller: _confirmCtrl,
               style: const TextStyle(fontSize: _inputFs),
               obscureText: _obscureConfirmPassword,
@@ -3480,6 +3593,7 @@ class _ClientArtistRegistrationPageState
                 ),
               ),
               validator: _confirmPasswordValidator,
+              ),
             ),
           ],
         ),
@@ -3497,12 +3611,15 @@ class _ClientArtistRegistrationPageState
           children: [
             _FieldLabel.required('Street Address'),
             const SizedBox(height: 6),
-            TextFormField(
-              controller: _streetCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Street Address', 'Enter Street Address'),
-              onChanged: (_) => _autofillAddressFromStreet(),
-              validator: (v) => _requiredValidator(v, 'Street Address'),
+            _req(
+              true,
+              TextFormField(
+                controller: _streetCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                decoration: _dec('Street Address', 'Enter Street Address'),
+                onChanged: (_) => _autofillAddressFromStreet(),
+                validator: (v) => _requiredValidator(v, 'Street Address'),
+              ),
             ),
             if (_streetSuggestionsLoading)
               const Padding(
@@ -3553,11 +3670,14 @@ class _ClientArtistRegistrationPageState
 
             _FieldLabel.required('City'),
             const SizedBox(height: 6),
-            TextFormField(
-              controller: _cityCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('City', 'City'),
-              validator: (v) => _requiredValidator(v, 'City'),
+            _req(
+              true,
+              TextFormField(
+                controller: _cityCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                decoration: _dec('City', 'City'),
+                validator: (v) => _requiredValidator(v, 'City'),
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -3577,6 +3697,7 @@ class _ClientArtistRegistrationPageState
                           hint: 'Select State',
                           options: usStates,
                           selectedValue: _state,
+                          required: true,
                           onChanged: (v) => setState(() => _state = v),
                           validator: (v) => (v == null || v.trim().isEmpty)
                               ? 'State is required'
@@ -3604,25 +3725,28 @@ class _ClientArtistRegistrationPageState
                           ? _FieldLabel.required('Zip Code')
                           : _FieldLabel.normal('Zip Code'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _zipCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.number,
-                        decoration: _dec('Zip Code', 'Enter Zip Code'),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) {
-                            return _isUnitedStates
-                                ? 'Zip Code is required'
-                                : null;
-                          }
-                          if (!_isUnitedStates) return null;
-                          final ok = RegExp(
-                            r'^\d{5}(-\d{4})?$',
-                          ).hasMatch(value);
-                          if (!ok) return 'Enter a valid ZIP code';
-                          return null;
-                        },
+                      _req(
+                        _isUnitedStates,
+                        TextFormField(
+                          controller: _zipCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.number,
+                          decoration: _dec('Zip Code', 'Enter Zip Code'),
+                          validator: (v) {
+                            final value = (v ?? '').trim();
+                            if (value.isEmpty) {
+                              return _isUnitedStates
+                                  ? 'Zip Code is required'
+                                  : null;
+                            }
+                            if (!_isUnitedStates) return null;
+                            final ok = RegExp(
+                              r'^\d{5}(-\d{4})?$',
+                            ).hasMatch(value);
+                            if (!ok) return 'Enter a valid ZIP code';
+                            return null;
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -3638,6 +3762,7 @@ class _ClientArtistRegistrationPageState
               hint: 'Select Country',
               options: countries,
               selectedValue: _selectedCountry,
+              required: true,
               onChanged: (v) => setState(() {
                 if (v == null) return;
                 _selectedCountry = v;
@@ -4066,6 +4191,7 @@ class _ClientArtistRegistrationPageState
               hint: 'Select Country',
               options: countries,
               selectedValue: _selectedCountry,
+              required: true,
               onChanged: (v) => setState(() {
                 if (v == null) return;
                 _selectedCountry = v;
@@ -4091,6 +4217,7 @@ class _ClientArtistRegistrationPageState
                 hint: 'Select State',
                 options: usStates,
                 selectedValue: _state,
+                required: true,
                 onChanged: (v) => setState(() => _state = v),
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'State is required'
@@ -4264,13 +4391,16 @@ class _ClientArtistRegistrationPageState
                     children: [
                       _FieldLabel.required('Min Price'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _minPriceCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.number,
-                        decoration: _dec('Min Price (\$) *', '15'),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _minPriceCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.number,
+                          decoration: _dec('Min Price (\$) *', '15'),
+                          validator: (v) =>
+                              (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                     ],
                   ),
@@ -4282,13 +4412,16 @@ class _ClientArtistRegistrationPageState
                     children: [
                       _FieldLabel.required('Max Price'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _maxPriceCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.number,
-                        decoration: _dec('Max Price (\$) *', '5000'),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _maxPriceCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.number,
+                          decoration: _dec('Max Price (\$) *', '5000'),
+                          validator: (v) =>
+                              (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
                       ),
                     ],
                   ),
@@ -4381,11 +4514,14 @@ class _ClientArtistRegistrationPageState
                     if (_paymentMethod == 'PayPal') ...[
                       _FieldLabel.required('PayPal Email'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _paypalEmailCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('PayPal Email', 'name@email.com'),
-                        validator: _emailValidator,
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _paypalEmailCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          decoration: _dec('PayPal Email', 'name@email.com'),
+                          validator: _emailValidator,
+                        ),
                       ),
                       const SizedBox(height: 6),
                     ],
@@ -4407,11 +4543,14 @@ class _ClientArtistRegistrationPageState
                     if (_paymentMethod == 'Venmo') ...[
                       _FieldLabel.required('Venmo Handle'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _venmoHandleCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Venmo', '@handle or phone/email'),
-                        validator: (v) => _requiredValidator(v, 'Venmo Handle'),
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _venmoHandleCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          decoration: _dec('Venmo', '@handle or phone/email'),
+                          validator: (v) => _requiredValidator(v, 'Venmo Handle'),
+                        ),
                       ),
                       const SizedBox(height: 6),
                     ],
@@ -4433,36 +4572,45 @@ class _ClientArtistRegistrationPageState
                     if (_paymentMethod == 'Apple Pay') ...[
                       _FieldLabel.required('Apple Pay Name'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _applePayPaymentNameCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Name', 'Name on Apple Pay'),
-                        validator: (v) =>
-                            _requiredValidator(v, 'Apple Pay Name'),
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _applePayPaymentNameCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          decoration: _dec('Name', 'Name on Apple Pay'),
+                          validator: (v) =>
+                              _requiredValidator(v, 'Apple Pay Name'),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       _FieldLabel.required('Apple Pay Phone'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _applePayPaymentPhoneCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10),
-                          UsPhoneTextInputFormatter(),
-                        ],
-                        decoration: _dec('Phone', 'Phone'),
-                        validator: _phoneValidator,
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _applePayPaymentPhoneCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                            UsPhoneTextInputFormatter(),
+                          ],
+                          decoration: _dec('Phone', 'Phone'),
+                          validator: _phoneValidator,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       _FieldLabel.required('Apple Pay Email'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _applePayPaymentEmailCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Email', 'Email'),
-                        validator: _emailValidator,
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _applePayPaymentEmailCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          decoration: _dec('Email', 'Email'),
+                          validator: _emailValidator,
+                        ),
                       ),
                       const SizedBox(height: 6),
                     ],
@@ -4484,26 +4632,32 @@ class _ClientArtistRegistrationPageState
                     if (_paymentMethod == 'Credit Card') ...[
                       _FieldLabel.required('Card Name'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _cardNameCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Name', 'Name on card'),
-                        validator: (v) => _requiredValidator(v, 'Card Name'),
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _cardNameCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          decoration: _dec('Name', 'Name on card'),
+                          validator: (v) => _requiredValidator(v, 'Card Name'),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       _FieldLabel.required('Card Number'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _cardNumberCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(19),
-                          CardNumberTextInputFormatter(),
-                        ],
-                        decoration: _dec('Number', '1234 5678 9012 3456'),
-                        validator: _cardNumberValidator,
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _cardNumberCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(19),
+                            CardNumberTextInputFormatter(),
+                          ],
+                          decoration: _dec('Number', '1234 5678 9012 3456'),
+                          validator: _cardNumberValidator,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -4514,17 +4668,20 @@ class _ClientArtistRegistrationPageState
                               children: [
                                 _FieldLabel.required('Expiration Date'),
                                 const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _cardExpiryCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(4),
-                                    ExpiryDateTextInputFormatter(),
-                                  ],
-                                  decoration: _dec('Expiration Date', 'MM/YY'),
-                                  validator: _expiryValidator,
+                                _req(
+                                  true,
+                                  TextFormField(
+                                    controller: _cardExpiryCtrl,
+                                    style: const TextStyle(fontSize: _inputFs),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(4),
+                                      ExpiryDateTextInputFormatter(),
+                                    ],
+                                    decoration: _dec('Expiration Date', 'MM/YY'),
+                                    validator: _expiryValidator,
+                                  ),
                                 ),
                               ],
                             ),
@@ -4536,16 +4693,19 @@ class _ClientArtistRegistrationPageState
                               children: [
                                 _FieldLabel.required('CVV'),
                                 const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _cardCvvCtrl,
-                                  style: const TextStyle(fontSize: _inputFs),
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(4),
-                                  ],
-                                  decoration: _dec('CVV', '123'),
-                                  validator: _cvvValidator,
+                                _req(
+                                  true,
+                                  TextFormField(
+                                    controller: _cardCvvCtrl,
+                                    style: const TextStyle(fontSize: _inputFs),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(4),
+                                    ],
+                                    decoration: _dec('CVV', '123'),
+                                    validator: _cvvValidator,
+                                  ),
                                 ),
                               ],
                             ),
@@ -4555,12 +4715,15 @@ class _ClientArtistRegistrationPageState
                       const SizedBox(height: 6),
                       _FieldLabel.required('Billing Zip'),
                       const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _cardZipCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.number,
-                        decoration: _dec('Zip', 'Zip'),
-                        validator: (v) => _requiredValidator(v, 'Billing Zip'),
+                      _req(
+                        true,
+                        TextFormField(
+                          controller: _cardZipCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.number,
+                          decoration: _dec('Zip', 'Zip'),
+                          validator: (v) => _requiredValidator(v, 'Billing Zip'),
+                        ),
                       ),
                       const SizedBox(height: 6),
                     ],
@@ -4731,7 +4894,11 @@ class _ClientArtistRegistrationPageState
         gradient: const LinearGradient(colors: [_snow, _snow]),
         child: Column(
           children: [
-            DropdownButtonFormField<PayoutMethod>(
+            _dropdownSemantics(
+              label: 'Payout Method',
+              value: _payoutMethod.name,
+              required: true,
+              child: DropdownButtonFormField<PayoutMethod>(
               initialValue: _payoutMethod,
               dropdownColor: _snow,
               style: const TextStyle(
@@ -4792,6 +4959,7 @@ class _ClientArtistRegistrationPageState
               ],
               onChanged: (v) =>
                   setState(() => _payoutMethod = v ?? PayoutMethod.paypal),
+              ),
             ),
             const SizedBox(height: 6),
 
@@ -4952,16 +5120,22 @@ class _ClientArtistRegistrationPageState
               selected: selected,
               label:
                   'Step ${index + 1}: ${_registrationStepTitles[index]}${completed ? ', completed' : ''}',
-              onTap: () => setState(() {
-                _registrationStep = index;
-                _validationTriggeredStep = null;
-              }),
+              onTap: () {
+                setState(() {
+                  _registrationStep = index;
+                  _validationTriggeredStep = null;
+                });
+                _announceStep(index);
+              },
               child: ExcludeSemantics(
               child: InkWell(
-              onTap: () => setState(() {
-                _registrationStep = index;
-                _validationTriggeredStep = null;
-              }),
+              onTap: () {
+                setState(() {
+                  _registrationStep = index;
+                  _validationTriggeredStep = null;
+                });
+                _announceStep(index);
+              },
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -5068,6 +5242,7 @@ class _ClientArtistRegistrationPageState
       _registrationStep += 1;
       _validationTriggeredStep = null;
     });
+    _announceStep(_registrationStep);
   }
 
   Widget _wizardNavButtons() {
@@ -5090,10 +5265,13 @@ class _ClientArtistRegistrationPageState
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
-                onPressed: () => setState(() {
-                  _registrationStep -= 1;
-                  _validationTriggeredStep = null;
-                }),
+                onPressed: () {
+                  setState(() {
+                    _registrationStep -= 1;
+                    _validationTriggeredStep = null;
+                  });
+                  _announceStep(_registrationStep);
+                },
                 child: const Text(
                   'Back',
                   style: TextStyle(

@@ -13,6 +13,7 @@ class RegistrationProfileUpload extends StatelessWidget {
     this.label,
     this.helperText,
     this.size = 88,
+    this.focusNode,
   });
 
   final VoidCallback onTap;
@@ -21,17 +22,19 @@ class RegistrationProfileUpload extends StatelessWidget {
   final String? label;
   final String? helperText;
   final double size;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     final resolvedImage = imageBytes != null
         ? MemoryImage(imageBytes!) as ImageProvider
         : imageProvider;
+    final hasImage = resolvedImage != null;
 
     final accessibleLabel =
         (label != null && label!.trim().isNotEmpty)
-        ? '${resolvedImage == null ? 'Add' : 'Change'} ${label!.trim()}'
-        : (resolvedImage == null ? 'Add photo' : 'Change photo');
+        ? '${hasImage ? 'Change' : 'Add'} ${label!.trim()}'
+        : (hasImage ? 'Change photo' : 'Add photo');
 
     return Column(
       children: [
@@ -39,8 +42,10 @@ class RegistrationProfileUpload extends StatelessWidget {
           child: Semantics(
             button: true,
             label: accessibleLabel,
-            hint: 'Opens photo options',
-            child: GestureDetector(
+            hint: hasImage ? 'Uploaded. Opens photo options' : 'Opens photo options',
+            child: Focus(
+              focusNode: focusNode,
+              child: GestureDetector(
               onTap: onTap,
               child: ExcludeSemantics(
                 child: Stack(
@@ -93,30 +98,35 @@ class RegistrationProfileUpload extends StatelessWidget {
                   ],
                 ),
               ),
+              ),
             ),
           ),
         ),
         if (label != null && label!.trim().isNotEmpty) ...[
           const SizedBox(height: 8),
-          Text(
-            label!,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-              fontFamily: 'Arial',
+          ExcludeSemantics(
+            child: Text(
+              label!,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+                fontFamily: 'Arial',
+              ),
             ),
           ),
         ],
         if (helperText != null && helperText!.trim().isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(
-            helperText!,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11.5,
-              color: AppColors.blackCat.withValues(alpha: 0.62),
-              fontFamily: 'Arial',
+          ExcludeSemantics(
+            child: Text(
+              helperText!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: AppColors.blackCat.withValues(alpha: 0.62),
+                fontFamily: 'Arial',
+              ),
             ),
           ),
         ],

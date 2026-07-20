@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show AuthException, UserAttributes, FileOptions;
@@ -55,6 +56,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   int? _validationTriggeredStep;
   bool _pickingImage = false;
   final ImagePicker _picker = ImagePicker();
+  final FocusNode _profilePhotoFocusNode = FocusNode(debugLabel: 'clientProfilePhotoUpload');
   Uint8List? _profilePhotoBytes;
   final Map<String, Uint8List> _guidedMeasurementPhotos = {};
 
@@ -826,6 +828,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       }
     } finally {
       _pickingImage = false;
+      // The OS image picker steals accessibility focus; put it back on the
+      // avatar (not wherever the platform happens to land it) so screen
+      // reader users stay in place.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        FocusScope.of(context).requestFocus(_profilePhotoFocusNode);
+      });
     }
   }
 
@@ -1173,6 +1182,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _streetAutocompleteDebounce?.cancel();
+    _profilePhotoFocusNode.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
@@ -1284,6 +1294,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     );
   }
 
+  /// Marks a form field as required (or not) for screen readers, matching
+  /// the visible required/optional state already tracked by `_FieldLabel`.
+  Widget _req(bool required, Widget child) {
+    return Semantics(isRequired: required, child: child);
+  }
+
   Widget _countryCodeDropdown({
     required String value,
     required ValueChanged<CountryCode> onChanged,
@@ -1361,6 +1377,25 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     required String? selectedValue,
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
+    bool required = false,
+  }) {
+    return _req(required, _typeAheadPickerField(
+      label: label,
+      hint: hint,
+      options: options,
+      selectedValue: selectedValue,
+      onChanged: onChanged,
+      validator: validator,
+    ));
+  }
+
+  Widget _typeAheadPickerField({
+    required String label,
+    required String hint,
+    required List<String> options,
+    required String? selectedValue,
+    required ValueChanged<String?> onChanged,
+    String? Function(String?)? validator,
   }) {
     return FormField<String>(
       initialValue: selectedValue,
@@ -1394,10 +1429,15 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                       ),
                       decoration: _dec(label, hint),
                       onTapOutside: (_) => focusNode.unfocus(),
-                      onChanged: (value) {
-                        final match = _firstExactMatch(options, value);
-                        field.didChange(match);
-                        onChanged(match);
+                      onEditingComplete: () {
+                        final match = _firstExactMatch(
+                          options,
+                          textController.text,
+                        );
+                        if (match != null) {
+                          field.didChange(match);
+                          onChanged(match);
+                        }
                       },
                     );
                   },
@@ -1844,12 +1884,31 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     }
   }
 
+  void _announceStep(int index) {
+    if (!mounted) return;
+    final title = _registrationStepTitles[index].replaceAll('\n', ' ');
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Step ${index + 1} of ${_registrationStepTitles.length}: $title',
+      Directionality.of(context),
+    );
+  }
+
   Future<bool> _validateCurrentRegistrationStep() async {
     if (_validationTriggeredStep != _registrationStep) {
       setState(() => _validationTriggeredStep = _registrationStep);
     }
     final ok = _formKey.currentState?.validate() ?? true;
-    if (!ok) return false;
+    if (!ok) {
+      if (mounted) {
+        SemanticsService.sendAnnouncement(
+          View.of(context),
+          'Please correct the highlighted fields before continuing.',
+          Directionality.of(context),
+        );
+      }
+      return false;
+    }
 
     if (_registrationStep == 0 && _isUnitedStates) {
       try {
@@ -1892,6 +1951,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       _registrationStep += 1;
       _validationTriggeredStep = null;
     });
+    _announceStep(_registrationStep);
   }
 
   Widget _registrationProgressTabs() {
@@ -1908,16 +1968,22 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
               selected: selected,
               label:
                   'Step ${index + 1}: ${_registrationStepTitles[index]}${completed ? ', completed' : ''}',
-              onTap: () => setState(() {
-                _registrationStep = index;
-                _validationTriggeredStep = null;
-              }),
+              onTap: () {
+                setState(() {
+                  _registrationStep = index;
+                  _validationTriggeredStep = null;
+                });
+                _announceStep(index);
+              },
               child: ExcludeSemantics(
                 child: InkWell(
-                  onTap: () => setState(() {
-                    _registrationStep = index;
-                    _validationTriggeredStep = null;
-                  }),
+                  onTap: () {
+                    setState(() {
+                      _registrationStep = index;
+                      _validationTriggeredStep = null;
+                    });
+                    _announceStep(index);
+                  },
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -2048,10 +2114,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
-                onPressed: () => setState(() {
-                  _registrationStep -= 1;
-                  _validationTriggeredStep = null;
-                }),
+                onPressed: () {
+                  setState(() {
+                    _registrationStep -= 1;
+                    _validationTriggeredStep = null;
+                  });
+                  _announceStep(_registrationStep);
+                },
                 child: const Text(
                   'Back',
                   style: TextStyle(
@@ -2184,69 +2253,81 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                           _ProfileUpload(
                             imageBytes: _profilePhotoBytes,
                             onTap: _pickProfilePhoto,
+                            focusNode: _profilePhotoFocusNode,
                           ),
                           const SizedBox(height: 6),
 
                           _FieldLabel.required('Name'),
                           const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _nameCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
+                          _req(
+                            true,
+                            TextFormField(
+                              controller: _nameCtrl,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                fontFamily: 'Arial',
+                              ),
+                              decoration: _dec('Name', 'Enter Name'),
+                              validator: (v) => _requiredValidator(v, 'Name'),
                             ),
-                            decoration: _dec('Name', 'Enter Name'),
-                            validator: (v) => _requiredValidator(v, 'Name'),
                           ),
                           const SizedBox(height: 6),
 
                           _FieldLabel.required('Email'),
                           const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _emailCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
+                          _req(
+                            true,
+                            TextFormField(
+                              controller: _emailCtrl,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                fontFamily: 'Arial',
+                              ),
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: _dec('Email', 'Enter Email'),
+                              validator: _emailValidator,
                             ),
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: _dec('Email', 'Enter Email'),
-                            validator: _emailValidator,
                           ),
                           const SizedBox(height: 6),
 
                           _FieldLabel.required('Password'),
                           const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _passCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
-                            ),
-                            obscureText: _obscure,
-                            decoration: _dec(
-                              'Password',
-                              'Enter Password',
-                              suffixIcon: IconButton(
-                                iconSize: 18,
-                                tooltip: _obscure
-                                    ? 'Show password'
-                                    : 'Hide password',
-                                onPressed: () =>
-                                    setState(() => _obscure = !_obscure),
-                                icon: Icon(
-                                  _obscure
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
+                          _req(
+                            true,
+                            TextFormField(
+                              controller: _passCtrl,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                fontFamily: 'Arial',
+                              ),
+                              obscureText: _obscure,
+                              decoration: _dec(
+                                'Password',
+                                'Enter Password',
+                                suffixIcon: IconButton(
+                                  iconSize: 18,
+                                  tooltip: _obscure
+                                      ? 'Show password'
+                                      : 'Hide password',
+                                  onPressed: () =>
+                                      setState(() => _obscure = !_obscure),
+                                  icon: Icon(
+                                    _obscure
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
                                 ),
                               ),
+                              validator: _passwordValidator,
                             ),
-                            validator: _passwordValidator,
                           ),
                           const SizedBox(height: 6),
                           // ✅ Confirm Password (NEW)
                           _FieldLabel.required('Confirm Password'),
                           const SizedBox(height: 6),
-                          TextFormField(
+                          _req(
+                            true,
+                            TextFormField(
                             controller: _confirmPassCtrl,
                             style: const TextStyle(
                               fontSize: _inputFs,
@@ -2271,6 +2352,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               ),
                             ),
                             validator: _confirmPasswordValidator,
+                            ),
                           ),
                           const SizedBox(height: 6),
                           _FieldLabel.required('Phone'),
@@ -2310,7 +2392,11 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
-                                          child: TextFormField(
+                                          child: Semantics(
+                                            label: 'Phone number',
+                                            isRequired: true,
+                                            textField: true,
+                                            child: TextFormField(
                                             controller: _phoneCtrl,
                                             style: const TextStyle(
                                               fontSize: _inputFs,
@@ -2343,6 +2429,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                                         _fieldVerticalPadding,
                                                   ),
                                               isDense: false,
+                                            ),
                                             ),
                                           ),
                                         ),
@@ -2424,19 +2511,22 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                         children: [
                           _FieldLabel.required('Street Address'),
                           const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _streetCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
+                          _req(
+                            true,
+                            TextFormField(
+                              controller: _streetCtrl,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                fontFamily: 'Arial',
+                              ),
+                              decoration: _dec(
+                                'Street Address',
+                                'Enter Street Address',
+                              ),
+                              onChanged: (_) => _autofillAddressFromStreet(),
+                              validator: (v) =>
+                                  _requiredValidator(v, 'Street Address'),
                             ),
-                            decoration: _dec(
-                              'Street Address',
-                              'Enter Street Address',
-                            ),
-                            onChanged: (_) => _autofillAddressFromStreet(),
-                            validator: (v) =>
-                                _requiredValidator(v, 'Street Address'),
                           ),
                           if (_streetSuggestionsLoading)
                             const Padding(
@@ -2497,14 +2587,17 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
 
                           _FieldLabel.required('City'),
                           const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _cityCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
+                          _req(
+                            true,
+                            TextFormField(
+                              controller: _cityCtrl,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                fontFamily: 'Arial',
+                              ),
+                              decoration: _dec('City', 'Enter City'),
+                              validator: (v) => _requiredValidator(v, 'City'),
                             ),
-                            decoration: _dec('City', 'Enter City'),
-                            validator: (v) => _requiredValidator(v, 'City'),
                           ),
                           const SizedBox(height: 6),
 
@@ -2518,6 +2611,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               hint: 'Type state',
                               options: usStates,
                               selectedValue: _selectedState,
+                              required: true,
                               onChanged: (v) =>
                                   setState(() => _selectedState = v),
                               validator: (v) => (v == null || v.trim().isEmpty)
@@ -2542,21 +2636,24 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               ? _FieldLabel.required('Zip Code')
                               : _FieldLabel.normal('Zip Code'),
                           const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _zipCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
+                          _req(
+                            _isUnitedStates,
+                            TextFormField(
+                              controller: _zipCtrl,
+                              style: const TextStyle(
+                                fontSize: _inputFs,
+                                fontFamily: 'Arial',
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: _isUnitedStates
+                                  ? <TextInputFormatter>[
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(5),
+                                    ]
+                                  : <TextInputFormatter>[],
+                              decoration: _dec('Zip Code', 'Enter Zip Code'),
+                              validator: _zipValidator,
                             ),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: _isUnitedStates
-                                ? <TextInputFormatter>[
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(5),
-                                  ]
-                                : <TextInputFormatter>[],
-                            decoration: _dec('Zip Code', 'Enter Zip Code'),
-                            validator: _zipValidator,
                           ),
                           const SizedBox(height: 6),
 
@@ -2567,6 +2664,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                             hint: 'Type country',
                             options: countries,
                             selectedValue: _selectedCountry,
+                            required: true,
                             onChanged: (v) {
                               if (v == null) return;
                               setState(() {
@@ -3068,13 +3166,18 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _ProfileUpload extends StatelessWidget {
-  const _ProfileUpload({required this.onTap, this.imageBytes});
+  const _ProfileUpload({required this.onTap, this.imageBytes, this.focusNode});
   final VoidCallback onTap;
   final Uint8List? imageBytes;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
-    return RegistrationProfileUpload(onTap: onTap, imageBytes: imageBytes);
+    return RegistrationProfileUpload(
+      onTap: onTap,
+      imageBytes: imageBytes,
+      focusNode: focusNode,
+    );
   }
 }
 

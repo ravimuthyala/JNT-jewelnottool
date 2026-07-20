@@ -37,48 +37,9 @@ class _RegisterPageState extends State<RegisterPage> {
   static const Color _blackCat = AppColors.blackCat;
   static const Color _linkShade = AppColors.blackCat;
   static const Color _focusRing = Color(0xFFFFBF47);
-  final FocusNode _clientFocusNode = FocusNode(debugLabel: 'clientRoleTile');
-  bool _didRedirectInitialA11yFocus = false;
-  bool _closeSemanticsEnabled = false;
-
-  bool get _isAdaMode =>
-      WidgetsBinding
-          .instance
-          .platformDispatcher
-          .accessibilityFeatures
-          .accessibleNavigation ||
-      (MediaQuery.maybeOf(context)?.accessibleNavigation ?? false);
-
-  void _focusClientTile() {
-    FocusScope.of(context).requestFocus(_clientFocusNode);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-      if (_isAdaMode) {
-        _focusClientTile();
-        await Future<void>.delayed(const Duration(milliseconds: 40));
-        if (!mounted) return;
-        _focusClientTile();
-        SemanticsService.sendAnnouncement(
-          View.of(context),
-          'Client. Collaborate with top artists on personalized designs.',
-          Directionality.of(context),
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 350));
-        if (!mounted) return;
-        setState(() => _closeSemanticsEnabled = true);
-      }
-    });
-  }
 
   @override
   void dispose() {
-    _clientFocusNode.dispose();
     super.dispose();
   }
 
@@ -195,32 +156,7 @@ class _RegisterPageState extends State<RegisterPage> {
               rootNavigator: true,
             ).pushNamedAndRemoveUntil('/', (route) => false);
           },
-          closeTooltip: 'Close create account',
-          autofocusClose: _closeSemanticsEnabled,
-          closeIcon: Semantics(
-            sortKey: const OrdinalSortKey(99),
-            onDidGainAccessibilityFocus: () {
-              if (_didRedirectInitialA11yFocus || !mounted) return;
-              _didRedirectInitialA11yFocus = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                _focusClientTile();
-                SemanticsService.sendAnnouncement(
-                  View.of(context),
-                  'Client. Collaborate with top artists on personalized designs.',
-                  Directionality.of(context),
-                );
-              });
-            },
-            child: Focus(
-              canRequestFocus: false,
-              skipTraversal: true,
-              child: ExcludeSemantics(
-                excluding: !_closeSemanticsEnabled,
-                child: const Icon(Icons.close),
-              ),
-            ),
-          ),
+          closeTooltip: 'Close registration dialog',
         ),
         body: SafeArea(
           child: ListView(
@@ -235,8 +171,6 @@ class _RegisterPageState extends State<RegisterPage> {
                     'Collaborate with top artists on personalized designs.',
                 selected: client,
                 onTap: toggleClient,
-                focusNode: _clientFocusNode,
-                autofocus: _isAdaMode,
                 focusRingColor: _focusRing,
                 semanticSortOrder: 1,
               ),
@@ -343,10 +277,13 @@ class _RegisterPageState extends State<RegisterPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const ExcludeSemantics(
-                    child: Text(
-                      'Already have an account? ',
-                      style: TextStyle(fontSize: 14, fontFamily: 'Arial'),
+                  Semantics(
+                    label: 'Already have an account?',
+                    child: const ExcludeSemantics(
+                      child: Text(
+                        'Already have an account? ',
+                        style: TextStyle(fontSize: 14, fontFamily: 'Arial'),
+                      ),
                     ),
                   ),
                   TextButton(
@@ -416,8 +353,6 @@ class _RoleTileNoIcon extends StatefulWidget {
     required this.subtitle,
     required this.selected,
     required this.onTap,
-    this.focusNode,
-    this.autofocus = false,
     required this.focusRingColor,
     this.semanticSortOrder,
   });
@@ -426,8 +361,6 @@ class _RoleTileNoIcon extends StatefulWidget {
   final String subtitle;
   final bool selected;
   final VoidCallback onTap;
-  final FocusNode? focusNode;
-  final bool autofocus;
   final Color focusRingColor;
   final double? semanticSortOrder;
 
@@ -455,11 +388,9 @@ class _RoleTileNoIconState extends State<_RoleTileNoIcon> {
           : OrdinalSortKey(widget.semanticSortOrder!),
       child: ExcludeSemantics(
         child: Focus(
-          focusNode: widget.focusNode,
           onFocusChange: (focused) => setState(() => _isFocused = focused),
           child: InkWell(
             onTap: widget.onTap,
-            autofocus: widget.autofocus,
             borderRadius: BorderRadius.zero,
             child: Container(
               padding: const EdgeInsets.all(16),
