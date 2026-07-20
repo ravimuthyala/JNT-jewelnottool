@@ -28,6 +28,7 @@ class TrackOrderPage extends StatelessWidget {
         surfaceTintColor: AppColors.alabaster,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () {
             onBackHome?.call();

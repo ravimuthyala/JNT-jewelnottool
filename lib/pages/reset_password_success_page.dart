@@ -7,7 +7,11 @@ class ResetPasswordSuccessPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Password updated successfully',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       body: SafeArea(
         child: Padding(
@@ -72,6 +76,7 @@ class ResetPasswordSuccessPage extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

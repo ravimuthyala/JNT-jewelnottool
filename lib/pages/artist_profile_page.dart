@@ -1067,28 +1067,39 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     );
                   }
 
-                  for (var index = 0; index < picked.length; index++) {
-                    final file = picked[index];
-                    final rawBytes = await file.readAsBytes();
-                    final bytes = await prepareBytes(rawBytes);
-                    final path =
-                        'artists/$supabaseId/portfolio/${now}_${index + 1}.jpg';
-                    await storage.uploadBinary(
-                      path,
-                      bytes,
-                      fileOptions: const FileOptions(
-                        contentType: 'image/jpeg',
-                        upsert: true,
-                      ),
-                    );
-                    uploaded.add(
-                      ArtistPortfolioItem(
-                        image: storage.getPublicUrl(path),
-                        style: 'All',
-                        storagePath: path,
-                      ),
-                    );
-                    onProgress?.call(index + 1, picked.length);
+                  try {
+                    for (var index = 0; index < picked.length; index++) {
+                      final file = picked[index];
+                      final rawBytes = await file.readAsBytes();
+                      final bytes = await prepareBytes(rawBytes);
+                      final path =
+                          'artists/$supabaseId/portfolio/${now}_${index + 1}.jpg';
+                      await storage.uploadBinary(
+                        path,
+                        bytes,
+                        fileOptions: const FileOptions(
+                          contentType: 'image/jpeg',
+                          upsert: true,
+                        ),
+                      );
+                      uploaded.add(
+                        ArtistPortfolioItem(
+                          image: storage.getPublicUrl(path),
+                          style: 'All',
+                          storagePath: path,
+                        ),
+                      );
+                      onProgress?.call(index + 1, picked.length);
+                    }
+                  } catch (e) {
+                    debugPrint('Portfolio upload failed: $e');
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Unable to upload image(s). Please try again.'),
+                        ),
+                      );
+                    }
                   }
 
                   if (uploaded.isNotEmpty) {
@@ -1434,7 +1445,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 ],
               ),
               const SizedBox(height: 8),
-              InkWell(
+              Semantics(
+                button: true,
+                child: InkWell(
                 onTap: () {
                   Navigator.push(
                     context,
@@ -1453,6 +1466,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       color: AppColors.blackCat,
                     ),
                   ),
+                ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -1537,7 +1551,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        onTap: onTap,
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -1582,6 +1600,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             Icon(Icons.chevron_right_rounded, color: AppColors.blackCat),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -1797,7 +1817,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }
 
   Widget _jntAscensionTile(BuildContext context) {
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        onTap: _openAscension,
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: _openAscension,
       child: Container(
@@ -1827,6 +1851,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -2444,6 +2470,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Close',
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -2565,7 +2592,12 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       ),
       child: Column(
         children: [
-          InkWell(
+          MergeSemantics(
+            child: Semantics(
+              button: true,
+              selected: open,
+              onTap: onTap,
+              child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.zero,
             child: Row(
@@ -2589,6 +2621,8 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                   color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
               ],
+            ),
+          ),
             ),
           ),
           if (open) ...[const SizedBox(height: 6), ...children],
@@ -3357,6 +3391,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),
@@ -3645,7 +3680,10 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
 
   Widget _techTypeOption({required String label, required String value}) {
     final selected = _nailTechType == value;
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       onTap: () => setState(() => _nailTechType = value),
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -3680,6 +3718,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -3813,7 +3852,12 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
               Positioned(
                 top: 6,
                 right: 6,
-                child: InkWell(
+                child: Semantics(
+                  button: true,
+                  label: 'Delete portfolio image',
+                  onTap: deleting ? null : () => _deletePortfolioItem(item),
+                  child: ExcludeSemantics(
+                    child: InkWell(
                   onTap: deleting ? null : () => _deletePortfolioItem(item),
                   borderRadius: BorderRadius.zero,
                   child: Container(
@@ -3840,6 +3884,8 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                           ),
                   ),
                 ),
+                    ),
+                  ),
               ),
             ],
           ),
@@ -4496,7 +4542,12 @@ class _ArtistSpecializationServiceAreaModalState
                       ),
                     ),
                   ),
-                  InkWell(
+                  Semantics(
+                    button: true,
+                    label: 'Close',
+                    onTap: () => Navigator.pop(context),
+                    child: ExcludeSemantics(
+                      child: InkWell(
                     borderRadius: BorderRadius.zero,
                     onTap: () => Navigator.pop(context),
                     child: const Padding(
@@ -4507,6 +4558,8 @@ class _ArtistSpecializationServiceAreaModalState
                         color: AppColors.blackCat,
                       ),
                     ),
+                    ),
+                  ),
                   ),
                 ],
               ),
@@ -4534,7 +4587,10 @@ class _ArtistSpecializationServiceAreaModalState
                 children: _artistServiceOptions
                     .map((service) {
                       final selected = _services.contains(service);
-                      return InkWell(
+                      return Semantics(
+                        button: true,
+                        selected: selected,
+                        child: InkWell(
                         onTap: () {
                           setState(() {
                             if (selected) {
@@ -4585,6 +4641,7 @@ class _ArtistSpecializationServiceAreaModalState
                               ),
                             ],
                           ),
+                        ),
                         ),
                       );
                     })
@@ -5031,6 +5088,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Close',
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -5086,6 +5144,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                     child: Row(
                       children: [
                         IconButton(
+                          tooltip: 'Previous month',
                           onPressed: () => setState(() {
                             _visibleMonth = DateTime(
                               _visibleMonth.year,
@@ -5129,6 +5188,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                           ),
                         ),
                         IconButton(
+                          tooltip: 'Next month',
                           onPressed: () => setState(() {
                             _visibleMonth = DateTime(
                               _visibleMonth.year,
@@ -5285,7 +5345,22 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
       text = AppColors.blackCat.withValues(alpha: 0.55);
     }
 
-    return InkWell(
+    final statusLabel = !isCurrentMonth
+        ? 'outside current month'
+        : state == 'direct'
+        ? 'direct requests enabled'
+        : state == 'blocked'
+        ? 'blocked'
+        : isUnavailable
+        ? 'unavailable'
+        : 'available';
+
+    return Semantics(
+      button: true,
+      label: '${_monthLabel(day)} ${day.day}, $statusLabel',
+      onTap: () => _onDayTap(day),
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: () => _onDayTap(day),
       child: Container(
         margin: const EdgeInsets.all(1),
@@ -5318,6 +5393,8 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -5853,7 +5930,12 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                       ),
                     ),
                   ),
-                  InkWell(
+                  Semantics(
+                    button: true,
+                    label: 'Close',
+                    onTap: () => Navigator.pop(context),
+                    child: ExcludeSemantics(
+                      child: InkWell(
                     borderRadius: BorderRadius.zero,
                     onTap: () => Navigator.pop(context),
                     child: const Padding(
@@ -5864,6 +5946,8 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                         color: AppColors.blackCat,
                       ),
                     ),
+                    ),
+                  ),
                   ),
                 ],
               ),
@@ -5975,7 +6059,12 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
     final imageProvider = _imageProviderFromUrl(_profilePhotoUrl.trim());
     final hasImage = _profilePhotoBytes != null || imageProvider != null;
     return Center(
-      child: Stack(
+      child: Semantics(
+        button: true,
+        label: hasImage ? 'Change profile photo' : 'Add profile photo',
+        onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
+        child: ExcludeSemantics(
+          child: Stack(
         clipBehavior: Clip.none,
         children: [
           GestureDetector(
@@ -6053,6 +6142,8 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
               ),
             ),
         ],
+      ),
+        ),
       ),
     );
   }

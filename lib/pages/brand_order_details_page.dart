@@ -1004,36 +1004,6 @@ class _BaseOrderDetails extends StatelessWidget {
     return fallback;
   }
 
-  void _openRequestChat(BuildContext context) {
-    final clientEmail = order.clientEmail.trim().toLowerCase();
-    final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
-    if (clientEmail.isEmpty || artistEmail.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Chat unavailable until both client and artist are assigned.',
-          ),
-        ),
-      );
-      return;
-    }
-    final currentName = _currentName.trim();
-    final fallbackCurrentName = _currentEmail.trim();
-    final clientName = currentName.isNotEmpty
-        ? currentName
-        : (fallbackCurrentName.contains('@')
-              ? fallbackCurrentName.split('@').first
-              : 'Client');
-    showRequestChatModal(
-      context: context,
-      requestId: order.id,
-      clientEmail: clientEmail,
-      artistEmail: artistEmail,
-      clientName: clientName,
-      artistName: order.artistName.trim(),
-    );
-  }
-
   void _openAiSupportChat(BuildContext context) {
     final clientEmail = order.clientEmail.trim().toLowerCase();
     if (clientEmail.isEmpty) {
@@ -1051,7 +1021,8 @@ class _BaseOrderDetails extends StatelessWidget {
               : 'Client');
     showRequestChatModal(
       context: context,
-      requestId: '${order.id}-ai-support',
+      requestId: order.id,
+      conversationSuffix: 'ai_support',
       clientEmail: clientEmail,
       artistEmail: 'ai.chatbot@jnt.com',
       clientName: clientName,
@@ -1490,7 +1461,9 @@ class _BaseOrderDetails extends StatelessWidget {
                     elevation: 0,
                   ),
                   onPressed: () {
-                    _openRequestChat(context);
+                    // Brand-submitted requests always talk to the JNT AI
+                    // Assistant, never directly with the accepted artist.
+                    _openAiSupportChat(context);
                   },
                   child: const Text(
                     'Chat',

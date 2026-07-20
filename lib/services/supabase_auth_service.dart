@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_bootstrap.dart';
 
@@ -12,12 +13,17 @@ class SupabaseAuthService {
     required String email,
     required String password,
   }) async {
-    final response = await _client.auth.signInWithPassword(
-      email: email.trim(),
-      password: password.trim(),
-    );
+    try {
+      final response = await _client.auth.signInWithPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
 
-    return response.user;
+      return response.user;
+    } catch (e) {
+      debugPrint('SupabaseAuthService.login failed: $e');
+      rethrow;
+    }
   }
 
   static Future<User?> signup({
@@ -45,18 +51,33 @@ class SupabaseAuthService {
     required String email,
     String? redirectTo,
   }) async {
-    await _client.auth.resetPasswordForEmail(
-      email.trim(),
-      redirectTo: redirectTo,
-    );
+    try {
+      await _client.auth.resetPasswordForEmail(
+        email.trim(),
+        redirectTo: redirectTo,
+      );
+    } catch (e) {
+      debugPrint('SupabaseAuthService.sendPasswordResetEmail failed: $e');
+      rethrow;
+    }
   }
 
   static Future<void> updatePassword(String password) async {
-    await _client.auth.updateUser(
-      UserAttributes(password: password.trim()),
-    );
+    try {
+      await _client.auth.updateUser(
+        UserAttributes(password: password.trim()),
+      );
+    } catch (e) {
+      debugPrint('SupabaseAuthService.updatePassword failed: $e');
+      rethrow;
+    }
   }
   static Future<void> logout() async {
-    await _client.auth.signOut();
+    try {
+      await _client.auth.signOut();
+    } catch (e) {
+      debugPrint('SupabaseAuthService.logout failed: $e');
+      rethrow;
+    }
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RequestChatService {
@@ -28,6 +29,7 @@ class RequestChatService {
     final normalizedArtist = normalizeEmail(artistEmail);
 
     final roomPayload = <String, dynamic>{
+      'id': conversationId,
       'conversation_id': conversationId,
       'request_id': requestId.trim(),
       'client_email': normalizedClient,
@@ -44,17 +46,22 @@ class RequestChatService {
       'created_at_ms': nowMs,
     };
 
-    await _supabase
-        .from('request_chats')
-        .upsert(roomPayload, onConflict: 'conversation_id');
+    try {
+      await _supabase
+          .from('request_chats')
+          .upsert(roomPayload, onConflict: 'id');
 
-    if (normalizedArtist == _aiAssistantEmail) {
-      await _ensureAiAssistantWelcomeMessage(
-        conversationId: conversationId,
-        requestId: requestId,
-        clientEmail: normalizedClient,
-        clientName: clientName,
-      );
+      if (normalizedArtist == _aiAssistantEmail) {
+        await _ensureAiAssistantWelcomeMessage(
+          conversationId: conversationId,
+          requestId: requestId,
+          clientEmail: normalizedClient,
+          clientName: clientName,
+        );
+      }
+    } catch (e, st) {
+      debugPrint('RequestChatService.ensureConversation failed: $e');
+      debugPrint(st.toString());
     }
   }
 
@@ -187,41 +194,47 @@ class RequestChatService {
       artistName: artistName,
     );
 
-    await _supabase.from('request_chat_messages').insert({
-      'conversation_id': conversationId,
-      'request_id': requestId.trim(),
-      'client_email': normalizeEmail(clientEmail),
-      'artist_email': normalizeEmail(artistEmail),
-      'client_name': clientName.trim(),
-      'artist_name': artistName.trim(),
-      'text': trimmed,
-      'sender_email': normalizeEmail(senderEmail),
-      'sender_name': senderName.trim(),
-      'attachment_url': attachmentUrl.trim(),
-      'attachment_type': attachmentType.trim(),
-      'attachment_name': attachmentName.trim(),
-      'created_at': nowIso,
-      'created_at_ms': nowMs,
-      'updated_at': nowIso,
-    });
+    try {
+      await _supabase.from('request_chat_messages').insert({
+        'conversation_id': conversationId,
+        'request_id': requestId.trim(),
+        'client_email': normalizeEmail(clientEmail),
+        'artist_email': normalizeEmail(artistEmail),
+        'client_name': clientName.trim(),
+        'artist_name': artistName.trim(),
+        'text': trimmed,
+        'sender_email': normalizeEmail(senderEmail),
+        'sender_name': senderName.trim(),
+        'attachment_url': attachmentUrl.trim(),
+        'attachment_type': attachmentType.trim(),
+        'attachment_name': attachmentName.trim(),
+        'created_at': nowIso,
+        'created_at_ms': nowMs,
+        'updated_at': nowIso,
+      });
 
-    await _supabase.from('request_chats').upsert({
-      'conversation_id': conversationId,
-      'request_id': requestId.trim(),
-      'client_email': normalizeEmail(clientEmail),
-      'artist_email': normalizeEmail(artistEmail),
-      'client_name': clientName.trim(),
-      'artist_name': artistName.trim(),
-      'participants': <String>[
-        if (normalizeEmail(clientEmail).isNotEmpty) normalizeEmail(clientEmail),
-        if (normalizeEmail(artistEmail).isNotEmpty) normalizeEmail(artistEmail),
-      ],
-      'last_message': trimmed.isNotEmpty ? trimmed : attachmentType.trim(),
-      'last_sender_email': normalizeEmail(senderEmail),
-      'last_sender_name': senderName.trim(),
-      'updated_at': nowIso,
-      'updated_at_ms': nowMs,
-    }, onConflict: 'conversation_id');
+      await _supabase.from('request_chats').upsert({
+        'id': conversationId,
+        'conversation_id': conversationId,
+        'request_id': requestId.trim(),
+        'client_email': normalizeEmail(clientEmail),
+        'artist_email': normalizeEmail(artistEmail),
+        'client_name': clientName.trim(),
+        'artist_name': artistName.trim(),
+        'participants': <String>[
+          if (normalizeEmail(clientEmail).isNotEmpty) normalizeEmail(clientEmail),
+          if (normalizeEmail(artistEmail).isNotEmpty) normalizeEmail(artistEmail),
+        ],
+        'last_message': trimmed.isNotEmpty ? trimmed : attachmentType.trim(),
+        'last_sender_email': normalizeEmail(senderEmail),
+        'last_sender_name': senderName.trim(),
+        'updated_at': nowIso,
+        'updated_at_ms': nowMs,
+      }, onConflict: 'id');
+    } catch (e, st) {
+      debugPrint('RequestChatService._sendMessageCore failed: $e');
+      debugPrint(st.toString());
+    }
   }
 
   static Future<void> _ensureAiAssistantWelcomeMessage({
@@ -274,6 +287,7 @@ class RequestChatService {
     });
 
     await _supabase.from('request_chats').upsert({
+      'id': conversationId,
       'conversation_id': conversationId,
       'request_id': requestId.trim(),
       'client_email': normalizeEmail(clientEmail),
@@ -289,7 +303,7 @@ class RequestChatService {
       'last_sender_name': 'JNT Assistant',
       'updated_at': nowIso,
       'updated_at_ms': nowMs,
-    }, onConflict: 'conversation_id');
+    }, onConflict: 'id');
   }
 
   static Map<String, dynamic> _messageRowToCompat(Map<String, dynamic> row) {

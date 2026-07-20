@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AscensionSnapshot {
@@ -98,51 +99,32 @@ class AscensionService {
   }) async {
     final email = artistEmail.trim().toLowerCase();
     if (email.isEmpty) {
-      return const AscensionSnapshot(
-        points: 0,
-        level: 'Maker',
-        sponsorshipEligible: false,
-        completedOrders: 0,
-        onTimeDeliveries: 0,
-        fiveStarReviews: 0,
-        repeatClientOrders: 0,
-        portfolioUploads: 0,
-        jntRevenue: 0,
-        artistGmv: 0,
-        artistEarnings: 0,
-        crownedPointsQualified: false,
-        crownedRevenueQualified: false,
-        jntRevenueToCrowned: crownedRevenueMin,
-        ordersToRevenueCrowned: 200,
-        insuranceReimbursementEligible: false,
-        blendedAveragePointsPerOrder: blendedAveragePointsPerOrder,
-        ordersToGoldsmith: 21,
-        ordersToCrowned: 200,
-        annualOrders: 0,
-        annualArtistGmv: 0,
-        annualArtistEarnings: 0,
-        annualJntRevenue: 0,
-        annualPerkCost: makerAnnualPerkCost,
-        netMarginAfterPerks: -makerAnnualPerkCost,
-        marginPercent: 0,
-      );
+      return _emptySnapshot();
     }
 
     final supabase = Supabase.instance.client;
 
-    // client_custom_requests: client_rating and need_by are in summary JSONB
-    final clientRows = await supabase
-        .from('client_custom_requests')
-        .select('status, delivered_at, shipped_at, updated_at, created_at, summary, details, client_email')
-        .eq('accepted_by_artist_email', email)
-        .inFilter('status', ['completed', 'shipped', 'delivered']);
+    List<Map<String, dynamic>> clientRows;
+    List<Map<String, dynamic>> companyRows;
+    try {
+      // client_custom_requests: client_rating and need_by are in summary JSONB
+      clientRows = List<Map<String, dynamic>>.from(await supabase
+          .from('client_custom_requests')
+          .select('status, delivered_at, shipped_at, updated_at, created_at, summary, details, client_email')
+          .eq('accepted_by_artist_email', email)
+          .inFilter('status', ['completed', 'shipped', 'delivered']));
 
-    // company_custom_requests: all fields are real columns
-    final companyRows = await supabase
-        .from('company_custom_requests')
-        .select('status, client_rating, need_by, delivered_at, shipped_at, updated_at, created_at, client_email, payload')
-        .eq('accepted_by_artist_email', email)
-        .inFilter('status', ['completed', 'shipped', 'delivered']);
+      // company_custom_requests: all fields are real columns
+      companyRows = List<Map<String, dynamic>>.from(await supabase
+          .from('company_custom_requests')
+          .select('status, client_rating, need_by, delivered_at, shipped_at, updated_at, created_at, client_email, payload')
+          .eq('accepted_by_artist_email', email)
+          .inFilter('status', ['completed', 'shipped', 'delivered']));
+    } catch (e, st) {
+      debugPrint('AscensionService.calculateForArtist fetch failed: $e');
+      debugPrint(st.toString());
+      return _emptySnapshot();
+    }
 
     final allRows = <Map<String, dynamic>>[
       for (final r in clientRows) _normalizeClientRequestRow(r),
@@ -257,6 +239,37 @@ class AscensionService {
     );
   }
 
+  static AscensionSnapshot _emptySnapshot() {
+    return const AscensionSnapshot(
+      points: 0,
+      level: 'Maker',
+      sponsorshipEligible: false,
+      completedOrders: 0,
+      onTimeDeliveries: 0,
+      fiveStarReviews: 0,
+      repeatClientOrders: 0,
+      portfolioUploads: 0,
+      jntRevenue: 0,
+      artistGmv: 0,
+      artistEarnings: 0,
+      crownedPointsQualified: false,
+      crownedRevenueQualified: false,
+      jntRevenueToCrowned: crownedRevenueMin,
+      ordersToRevenueCrowned: 200,
+      insuranceReimbursementEligible: false,
+      blendedAveragePointsPerOrder: blendedAveragePointsPerOrder,
+      ordersToGoldsmith: 21,
+      ordersToCrowned: 200,
+      annualOrders: 0,
+      annualArtistGmv: 0,
+      annualArtistEarnings: 0,
+      annualJntRevenue: 0,
+      annualPerkCost: makerAnnualPerkCost,
+      netMarginAfterPerks: -makerAnnualPerkCost,
+      marginPercent: 0,
+    );
+  }
+
   static Map<String, dynamic> buildAscensionPayload(
     AscensionSnapshot snapshot,
   ) {
@@ -351,15 +364,20 @@ class AscensionService {
 
     if (filterParts.isEmpty) return null;
 
-    final rows = await supabase
-        .from('ascension_overrides')
-        .select('id, artist_email, artist_doc_path, artist_doc_path_lower, override_level, active')
-        .or(filterParts.join(','))
-        .limit(20);
+    try {
+      final rows = await supabase
+          .from('ascension_overrides')
+          .select('id, artist_email, artist_doc_path, artist_doc_path_lower, override_level, active')
+          .or(filterParts.join(','))
+          .limit(20);
 
-    for (final row in rows) {
-      final data = normRow(row);
-      if (looksLikeUsableOverride(data)) return data;
+      for (final row in rows) {
+        final data = normRow(row);
+        if (looksLikeUsableOverride(data)) return data;
+      }
+    } catch (e) {
+      debugPrint('AscensionService.readActiveOverride failed: $e');
+      return null;
     }
 
     return null;
@@ -530,52 +548,57 @@ class AscensionService {
     final docId = _overrideDocIdFromPath('$artistCollection/$email');
     final now = DateTime.now().toIso8601String();
 
-    await supabase.from('ascension_current').upsert(<String, dynamic>{
-      'id': docId,
-      'artist_doc_path': '$artistCollection/$email',
-      'artist_id': email,
-      'artist_email': email,
-      'artist_name': artistName.trim(),
-      'ascension': ascensionPayload,
-      'updated_at': now,
-    });
-
-    final nextPoints = (ascensionPayload['points'] as num?)?.toDouble() ?? 0.0;
-    if (nextPoints != previousPoints) {
-      await supabase.from('ascension_audit_logs').insert(<String, dynamic>{
+    try {
+      await supabase.from('ascension_current').upsert(<String, dynamic>{
+        'id': docId,
         'artist_doc_path': '$artistCollection/$email',
         'artist_id': email,
         'artist_email': email,
         'artist_name': artistName.trim(),
-        'previous_points': previousPoints,
-        'new_points': nextPoints,
-        'new_tier': (ascensionPayload['tier'] ?? '').toString(),
-        'sponsorship_eligible': ascensionPayload['sponsorshipEligible'] == true,
-        'source': 'auto_sync',
-        'created_at': now,
-      });
-    }
-
-    final tier = (ascensionPayload['tier'] ?? '').toString().trim();
-    final eligible = ascensionPayload['sponsorshipEligible'] == true;
-    final row = await supabase
-        .from(artistCollection)
-        .select('profile')
-        .eq('email', email)
-        .maybeSingle();
-    final currentProfile = Map<String, dynamic>.from(
-      (row?['profile'] as Map?) ?? const <String, dynamic>{},
-    );
-    await supabase.from(artistCollection).update(<String, dynamic>{
-      'profile': <String, dynamic>{
-        ...currentProfile,
         'ascension': ascensionPayload,
-        'ascensionTier': tier,
-        'ascensionPoints': nextPoints,
-        'sponsorshipEligible': eligible,
-      },
-      'updated_at': now,
-    }).eq('email', email);
+        'updated_at': now,
+      });
+
+      final nextPoints = (ascensionPayload['points'] as num?)?.toDouble() ?? 0.0;
+      if (nextPoints != previousPoints) {
+        await supabase.from('ascension_audit_logs').insert(<String, dynamic>{
+          'artist_doc_path': '$artistCollection/$email',
+          'artist_id': email,
+          'artist_email': email,
+          'artist_name': artistName.trim(),
+          'previous_points': previousPoints,
+          'new_points': nextPoints,
+          'new_tier': (ascensionPayload['tier'] ?? '').toString(),
+          'sponsorship_eligible': ascensionPayload['sponsorshipEligible'] == true,
+          'source': 'auto_sync',
+          'created_at': now,
+        });
+      }
+
+      final tier = (ascensionPayload['tier'] ?? '').toString().trim();
+      final eligible = ascensionPayload['sponsorshipEligible'] == true;
+      final row = await supabase
+          .from(artistCollection)
+          .select('profile')
+          .eq('email', email)
+          .maybeSingle();
+      final currentProfile = Map<String, dynamic>.from(
+        (row?['profile'] as Map?) ?? const <String, dynamic>{},
+      );
+      await supabase.from(artistCollection).update(<String, dynamic>{
+        'profile': <String, dynamic>{
+          ...currentProfile,
+          'ascension': ascensionPayload,
+          'ascensionTier': tier,
+          'ascensionPoints': nextPoints,
+          'sponsorshipEligible': eligible,
+        },
+        'updated_at': now,
+      }).eq('email', email);
+    } catch (e, st) {
+      debugPrint('AscensionService.persistAdminCollections failed: $e');
+      debugPrint(st.toString());
+    }
   }
 
   static String _overrideDocIdFromPath(String path) {

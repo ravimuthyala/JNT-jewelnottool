@@ -491,6 +491,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                     children: [
                       _iconChip(
                         icon: Icons.chevron_left_rounded,
+                        semanticLabel: 'Previous month',
                         onTap: () => setState(() {
                           _focusedMonth = _startOfMonth(
                             DateTime(
@@ -533,7 +534,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                                   ),
                                 ),
                               ),
-                              GestureDetector(
+                              Semantics(
+                                button: true,
+                                child: GestureDetector(
                                 onTap: () => setState(() {
                                   final now = _dateOnly(DateTime.now());
                                   _selectedDay = now;
@@ -547,6 +550,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                                     color: AppColors.blackCat,
                                   ),
                                 ),
+                                ),
                               ),
                             ],
                           ),
@@ -555,6 +559,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                       const SizedBox(width: 10),
                       _iconChip(
                         icon: Icons.chevron_right_rounded,
+                        semanticLabel: 'Next month',
                         onTap: () => setState(() {
                           _focusedMonth = _startOfMonth(
                             DateTime(
@@ -809,8 +814,15 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     );
   }
 
-  Widget _iconChip({required IconData icon, required VoidCallback onTap}) {
-    return InkWell(
+  Widget _iconChip({
+    required IconData icon,
+    required VoidCallback onTap,
+    String? semanticLabel,
+  }) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -822,6 +834,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           border: Border.all(color: AppColors.blackCatLight),
         ),
         child: Icon(icon, color: AppColors.blackCat),
+      ),
       ),
     );
   }
@@ -958,7 +971,18 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           )
         : Border.all(color: Colors.transparent, width: 2);
 
-    return GestureDetector(
+    final label =
+        '${day.month}/${day.day}/${day.year}'
+        '${isToday ? ', today' : ''}'
+        '${dotCount > 0 ? ', $dotCount ${dotCount == 1 ? 'appointment' : 'appointments'}' : ''}';
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: GestureDetector(
       onTap: onTap,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1030,6 +1054,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             ),
           );
         },
+      ),
+        ),
       ),
     );
   }
@@ -1146,7 +1172,17 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         ? const Color(0xFF8A5A00)
         : AppColors.deepPlum;
 
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        onTap: () {
+          setState(() {
+            _selectedDay = due;
+            _focusedMonth = _startOfMonth(due);
+            _tabCtrl.index = 0;
+          });
+        },
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: () {
         setState(() {
@@ -1235,6 +1271,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }

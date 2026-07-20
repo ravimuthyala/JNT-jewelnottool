@@ -445,7 +445,12 @@ class StorageUrlResolver {
     if (parts.length >= 2) {
       final bucket = parts.first;
       final path = parts.sublist(1).join('/');
-      return Supabase.instance.client.storage.from(bucket).getPublicUrl(path);
+      try {
+        return Supabase.instance.client.storage.from(bucket).getPublicUrl(path);
+      } catch (e) {
+        debugPrint('StorageUrlResolver.resolve: getPublicUrl failed: $e');
+        return raw;
+      }
     }
     for (final bucket in const <String>[
       'request-inspiration-photos',
@@ -1843,11 +1848,17 @@ class _BaseOrderDetails extends StatelessWidget {
     final supabase = Supabase.instance.client;
 
     for (final table in const <String>['artist', 'client_artist']) {
-      final rows = await supabase
-          .from(table)
-          .select()
-          .ilike('email', email)
-          .limit(1);
+      List<dynamic> rows;
+      try {
+        rows = await supabase
+            .from(table)
+            .select()
+            .ilike('email', email)
+            .limit(1);
+      } catch (e) {
+        debugPrint('_loadAcceptedArtistMeta: failed to query $table: $e');
+        continue;
+      }
 
       if (rows.isEmpty) continue;
 
@@ -1932,6 +1943,12 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   void _openRequestChat(BuildContext context) {
+    // Brand-submitted requests always talk to the JNT AI Assistant, never
+    // directly with the accepted artist.
+    if (_isBrandRequest) {
+      _openAiSupportChat(context);
+      return;
+    }
     final clientEmail = order.clientEmail.trim().toLowerCase();
     final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
     if (clientEmail.isEmpty || artistEmail.isEmpty) {
@@ -1982,7 +1999,8 @@ class _BaseOrderDetails extends StatelessWidget {
               : 'Client');
     showRequestChatModal(
       context: context,
-      requestId: '${order.id}-ai-support',
+      requestId: order.id,
+      conversationSuffix: 'ai_support',
       clientEmail: clientEmail,
       artistEmail: 'ai.chatbot@jnt.com',
       clientName: clientName,

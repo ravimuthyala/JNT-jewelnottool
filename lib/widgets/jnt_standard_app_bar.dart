@@ -60,6 +60,7 @@ class JntStandardAppBar extends StatelessWidget implements PreferredSizeWidget {
             'assets/images/jnt_logo_black.png',
             height: JntHeaderMetrics.logoHeight,
             fit: BoxFit.contain,
+            semanticLabel: 'JNT',
             errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
       actions: trailing == null

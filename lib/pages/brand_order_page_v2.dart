@@ -200,42 +200,48 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   }
 
   Future<void> _subscribeSubmittedOrders() async {
-    if (_submittedRequestsChannel != null) {
-      unawaited(_client.removeChannel(_submittedRequestsChannel!));
-      _submittedRequestsChannel = null;
+    try {
+      if (_submittedRequestsChannel != null) {
+        unawaited(_client.removeChannel(_submittedRequestsChannel!));
+        _submittedRequestsChannel = null;
+      }
+      final authEmail = _currentEmail;
+      final profileEmail = widget.profile.basic.email.trim().toLowerCase();
+      final effectiveEmail = profileEmail.isNotEmpty
+          ? profileEmail
+          : authEmail;
+      final profileName = widget.profile.basic.name.trim();
+      final effectiveName = profileName.isNotEmpty
+          ? profileName
+          : widget.companyName.trim();
+      final uid = _currentUid;
+      _submittedRequestsChannel =
+          _client.channel('brand-order-company-custom-requests')
+            ..onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'company_custom_requests',
+              callback: (_) {
+                unawaited(
+                  _loadSubmittedOrders(
+                    authEmail: authEmail,
+                    effectiveEmail: effectiveEmail,
+                    effectiveName: effectiveName,
+                    uid: uid,
+                  ),
+                );
+              },
+            );
+      await _submittedRequestsChannel!.subscribe();
+      await _loadSubmittedOrders(
+        authEmail: authEmail,
+        effectiveEmail: effectiveEmail,
+        effectiveName: effectiveName,
+        uid: uid,
+      );
+    } catch (e) {
+      debugPrint('[BrandOrderPage] failed to subscribe submitted orders: $e');
     }
-    final authEmail = _currentEmail;
-    final profileEmail = widget.profile.basic.email.trim().toLowerCase();
-    final effectiveEmail = profileEmail.isNotEmpty ? profileEmail : authEmail;
-    final profileName = widget.profile.basic.name.trim();
-    final effectiveName = profileName.isNotEmpty
-        ? profileName
-        : widget.companyName.trim();
-    final uid = _currentUid;
-    _submittedRequestsChannel =
-        _client.channel('brand-order-company-custom-requests')
-          ..onPostgresChanges(
-            event: PostgresChangeEvent.all,
-            schema: 'public',
-            table: 'company_custom_requests',
-            callback: (_) {
-              unawaited(
-                _loadSubmittedOrders(
-                  authEmail: authEmail,
-                  effectiveEmail: effectiveEmail,
-                  effectiveName: effectiveName,
-                  uid: uid,
-                ),
-              );
-            },
-          );
-    await _submittedRequestsChannel!.subscribe();
-    await _loadSubmittedOrders(
-      authEmail: authEmail,
-      effectiveEmail: effectiveEmail,
-      effectiveName: effectiveName,
-      uid: uid,
-    );
   }
 
   Future<void> _loadSubmittedOrders({
@@ -901,7 +907,11 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       await widget.onLogout!.call();
       return;
     }
-    await _client.auth.signOut();
+    try {
+      await _client.auth.signOut();
+    } catch (e) {
+      debugPrint('[BrandOrderPage] sign out failed: $e');
+    }
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -1425,7 +1435,10 @@ class _FilterTabs extends StatelessWidget {
     final bool isSelected = selected == value;
     final count = counts[value] ?? 0;
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.zero,
       hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
@@ -1462,6 +1475,7 @@ class _FilterTabs extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1717,7 +1731,9 @@ class _OrderDetailsLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
@@ -1743,6 +1759,7 @@ class _OrderDetailsLink extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -97,18 +97,25 @@ class CompanyHeader extends StatelessWidget implements PreferredSizeWidget {
       onNotifications: () => _openNotifications(context),
       trailing:
           trailing ??
-          InkWell(
-            key: profileKey,
-            borderRadius: BorderRadius.zero,
+          Semantics(
+            button: true,
+            label: 'Account menu for $companyName',
             onTap: () => _openProfileMenu(context, profileKey),
-            child: SizedBox(
-              height: JntHeaderMetrics.avatarSize,
-              width: JntHeaderMetrics.avatarSize,
-              child: ClipRRect(
+            child: ExcludeSemantics(
+              child: InkWell(
+                key: profileKey,
                 borderRadius: BorderRadius.zero,
-                child: _CompanyAvatarIcon(
-                  companyName: companyName,
-                  imageUrl: imageUrl,
+                onTap: () => _openProfileMenu(context, profileKey),
+                child: SizedBox(
+                  height: JntHeaderMetrics.avatarSize,
+                  width: JntHeaderMetrics.avatarSize,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: _CompanyAvatarIcon(
+                      companyName: companyName,
+                      imageUrl: imageUrl,
+                    ),
+                  ),
                 ),
               ),
             ),

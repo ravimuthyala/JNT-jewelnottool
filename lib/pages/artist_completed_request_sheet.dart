@@ -505,7 +505,10 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   Widget _completedTabButton(String label, int index) {
     final selected = _completedTabIndex == index;
     return Expanded(
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: InkWell(
         borderRadius: BorderRadius.zero,
         onTap: () => setState(() => _completedTabIndex = index),
         child: Container(
@@ -529,6 +532,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               color: AppColors.blackCat,
             ),
           ),
+        ),
         ),
       ),
     );
@@ -668,7 +672,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         Positioned(
           right: 6,
           top: 6,
-          child: InkWell(
+          child: Semantics(
+            button: true,
+            label: 'Close',
+            onTap: onClose,
+            child: ExcludeSemantics(
+              child: InkWell(
             borderRadius: BorderRadius.zero,
             onTap: onClose,
             child: Padding(
@@ -677,6 +686,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 Icons.close_rounded,
                 size: 24,
                 color: AppColors.blackCat.withValues(alpha: 0.70),
+              ),
+            ),
               ),
             ),
           ),
@@ -1835,11 +1846,18 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           final path = renderable[i];
           return SizedBox(
             width: 112,
-            child: InkWell(
+            child: Semantics(
+              button: true,
+              label: 'View photo ${i + 1} full screen',
+              onTap: () => _openImagePreview(path),
+              child: ExcludeSemantics(
+                child: InkWell(
               onTap: () => _openImagePreview(path),
               child: ClipRRect(
                 borderRadius: BorderRadius.zero,
                 child: _imageForPath(path),
+              ),
+                ),
               ),
             ),
           );
@@ -1862,6 +1880,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               right: 6,
               top: 6,
               child: IconButton(
+                tooltip: 'Close image preview',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded),
               ),

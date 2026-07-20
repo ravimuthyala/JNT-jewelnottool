@@ -18,6 +18,13 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
   String? _error;
   bool _loading = false;
 
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _login() async {
     if (_loading) return;
     setState(() {
@@ -69,7 +76,11 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Artist login',
+      child: Scaffold(
       backgroundColor: const Color(0xFFF7F7FB),
       body: SafeArea(
         child: Padding(
@@ -77,9 +88,12 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Artist Login',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              Semantics(
+                header: true,
+                child: const Text(
+                  'Artist Login',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -89,7 +103,13 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
 
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
               ],
 
               const SizedBox(height: 24),
@@ -119,6 +139,7 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

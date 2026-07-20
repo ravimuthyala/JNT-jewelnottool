@@ -42,7 +42,11 @@ class CompanyClientRequestCard extends StatelessWidget {
         : (request.clientName.trim().isEmpty
               ? 'Brand Company'
               : request.clientName.trim());
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        onTap: onTap,
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -156,6 +160,8 @@ class CompanyClientRequestCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
         ),
       ),
     );

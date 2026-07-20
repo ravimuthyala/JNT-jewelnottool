@@ -1063,7 +1063,12 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       await widget.onLogout!.call();
       return;
     }
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e, st) {
+      debugPrint('ClientArtistsPage Supabase _logout error: $e');
+      debugPrint(st.toString());
+    }
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -2360,6 +2365,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded),
                   ),

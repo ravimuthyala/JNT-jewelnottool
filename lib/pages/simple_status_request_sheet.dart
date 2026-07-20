@@ -260,15 +260,22 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
             Positioned(
               right: 6,
               top: 6,
-              child: InkWell(
-                borderRadius: BorderRadius.zero,
+              child: Semantics(
+                button: true,
+                label: 'Close',
                 onTap: () => Navigator.pop(context),
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 24,
-                    color: Colors.black.withValues(alpha: 0.70),
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    borderRadius: BorderRadius.zero,
+                    onTap: () => Navigator.pop(context),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 24,
+                        color: Colors.black.withValues(alpha: 0.70),
+                      ),
+                    ),
                   ),
                 ),
               ),

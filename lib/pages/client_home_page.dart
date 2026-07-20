@@ -625,9 +625,11 @@ class _ClientHomePageState extends State<ClientHomePage> {
   ) async {
     if (anchorKey.currentContext == null) return;
 
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RenderBox box =
-        anchorKey.currentContext!.findRenderObject() as RenderBox;
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final RenderBox? box =
+        anchorKey.currentContext!.findRenderObject() as RenderBox?;
+    if (overlay == null || box == null) return;
     final Offset bottomRight = box.localToGlobal(
       box.size.bottomRight(Offset.zero),
       ancestor: overlay,

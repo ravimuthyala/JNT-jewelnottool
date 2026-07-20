@@ -317,6 +317,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               right: 6,
               top: 6,
               child: IconButton(
+                tooltip: 'Close',
                 icon: const Icon(Icons.close_rounded, size: 30),
                 color: AppColors.blackCat.withValues(alpha: 0.72),
                 onPressed: () => Navigator.pop(context),
@@ -613,7 +614,10 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   Widget _tabButton(String label, int index) {
     final selected = _selectedTab == index;
     return Expanded(
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: InkWell(
         onTap: () => setState(() => _selectedTab = index),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -635,6 +639,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               color: selected ? AppColors.blackCat : Colors.transparent,
             ),
           ],
+        ),
         ),
       ),
     );

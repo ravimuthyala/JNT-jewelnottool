@@ -20,7 +20,14 @@ class RoleTileModern extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$title. $subtitle',
+      value: selected ? 'Selected' : 'Not selected',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -92,6 +99,8 @@ class RoleTileModern extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
         ),
       ),
     );

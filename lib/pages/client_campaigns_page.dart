@@ -514,40 +514,44 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       return _readRow(collection, id: uid, email: email);
     }
 
-    for (final c in const <String>['client', 'client_artist']) {
-      final data = await readFrom(c);
-      if (data == null) continue;
-      final profile = _asMap(data['profile']);
-      final basic = _asMap(data['basic']);
-      final avatar =
-          pick(data, const ['profileImageUrl', 'avatarUrl']).isNotEmpty
-          ? pick(data, const ['profileImageUrl', 'avatarUrl'])
-          : (pick(profile, const [
-                  'profileImageUrl',
-                  'avatarUrl',
-                  'photoUrl',
-                ]).isNotEmpty
-                ? pick(profile, const [
+    try {
+      for (final c in const <String>['client', 'client_artist']) {
+        final data = await readFrom(c);
+        if (data == null) continue;
+        final profile = _asMap(data['profile']);
+        final basic = _asMap(data['basic']);
+        final avatar =
+            pick(data, const ['profileImageUrl', 'avatarUrl']).isNotEmpty
+            ? pick(data, const ['profileImageUrl', 'avatarUrl'])
+            : (pick(profile, const [
                     'profileImageUrl',
                     'avatarUrl',
                     'photoUrl',
-                  ])
-                : pick(basic, const [
-                    'profileImageUrl',
-                    'avatarUrl',
-                    'photoUrl',
-                  ]));
-      final name = pick(data, const ['displayName', 'name']).isNotEmpty
-          ? pick(data, const ['displayName', 'name'])
-          : (pick(profile, const ['name', 'displayName']).isNotEmpty
-                ? pick(profile, const ['name', 'displayName'])
-                : pick(basic, const ['name', 'displayName']));
-      if (!mounted) return;
-      setState(() {
-        _headerAvatarUrl = avatar;
-        _headerDisplayName = name;
-      });
-      break;
+                  ]).isNotEmpty
+                  ? pick(profile, const [
+                      'profileImageUrl',
+                      'avatarUrl',
+                      'photoUrl',
+                    ])
+                  : pick(basic, const [
+                      'profileImageUrl',
+                      'avatarUrl',
+                      'photoUrl',
+                    ]));
+        final name = pick(data, const ['displayName', 'name']).isNotEmpty
+            ? pick(data, const ['displayName', 'name'])
+            : (pick(profile, const ['name', 'displayName']).isNotEmpty
+                  ? pick(profile, const ['name', 'displayName'])
+                  : pick(basic, const ['name', 'displayName']));
+        if (!mounted) return;
+        setState(() {
+          _headerAvatarUrl = avatar;
+          _headerDisplayName = name;
+        });
+        break;
+      }
+    } catch (e) {
+      debugPrint('[ClientCampaignsPage] _loadHeaderIdentity failed: $e');
     }
   }
 
@@ -2001,7 +2005,16 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         widget.onLogout!.call();
         return;
       }
-      await _supabase.auth.signOut();
+      try {
+        await _supabase.auth.signOut();
+      } catch (e) {
+        debugPrint('[ClientCampaignsPage] signOut failed: $e');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to log out: $e')),
+        );
+        return;
+      }
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }

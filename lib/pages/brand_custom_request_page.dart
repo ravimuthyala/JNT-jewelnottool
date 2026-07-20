@@ -698,6 +698,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       }),
     );
 
+    if (!mounted) return;
     setState(() {
       _uploadedFiles.addAll(uploaded);
     });
@@ -709,8 +710,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         ),
       );
     }
-
-    if (!mounted) return;
   }
 
   Future<void> _captureReferenceImage() async {
@@ -729,13 +728,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
 
+    if (!mounted) return;
     setState(() {
       _uploadedFiles.add(
         _UploadedReferenceImage(name: picked.name, bytes: bytes),
       );
     });
-
-    if (!mounted) return;
   }
 
   String _pickFirstString(Map<String, dynamic> data, List<String> keys) {
@@ -2431,6 +2429,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
                 leading: IconButton(
+                  tooltip: 'Back',
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                   onPressed: widget.onBackHome ?? () => Navigator.pop(context),
                 ),
@@ -2650,7 +2649,14 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                   Positioned(
                                     right: 2,
                                     top: 2,
-                                    child: InkWell(
+                                    child: Semantics(
+                                      button: true,
+                                      label: 'Remove photo',
+                                      onTap: () => setState(
+                                        () => _uploadedFiles.remove(file),
+                                      ),
+                                      child: ExcludeSemantics(
+                                        child: InkWell(
                                       onTap: () => setState(
                                         () => _uploadedFiles.remove(file),
                                       ),
@@ -2660,6 +2666,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                         child: const Icon(
                                           Icons.close,
                                           size: 14,
+                                        ),
+                                      ),
                                         ),
                                       ),
                                     ),
@@ -2829,7 +2837,14 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                           runSpacing: 8,
                           children: _groupSelectedClients
                               .map((name) {
-                                return InkWell(
+                                return MergeSemantics(
+                                  child: Semantics(
+                                    button: true,
+                                    label: 'Remove $name',
+                                    onTap: () => setState(
+                                      () => _groupSelectedClients.remove(name),
+                                    ),
+                                    child: InkWell(
                                   borderRadius: BorderRadius.zero,
                                   onTap: () => setState(
                                     () => _groupSelectedClients.remove(name),
@@ -2857,6 +2872,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                           color: AppColors.blackCat,
                                         ),
                                       ],
+                                    ),
+                                  ),
                                     ),
                                   ),
                                 );
@@ -3359,7 +3376,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   }
 
   Widget _stepperBtn({required IconData icon, required VoidCallback onTap}) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: icon == Icons.add ? 'Increase quantity' : 'Decrease quantity',
+      child: InkWell(
       onTap: onTap,
       child: Container(
         height: 34,
@@ -3369,6 +3389,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           borderRadius: BorderRadius.zero,
         ),
         child: Icon(icon, size: 16),
+      ),
       ),
     );
   }
@@ -3413,7 +3434,12 @@ class _OptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        onTap: onTap,
+        child: InkWell(
       onTap: onTap,
       child: Container(
         width: double.infinity,
@@ -3489,6 +3515,8 @@ class _OptionCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -3640,7 +3668,9 @@ class _SearchableSelectField extends StatelessWidget {
                       itemCount: list.length,
                       itemBuilder: (context, index) {
                         final item = list[index];
-                        return InkWell(
+                        return Semantics(
+                          button: true,
+                          child: InkWell(
                           onTap: () => onSelected(item),
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -3656,6 +3686,7 @@ class _SearchableSelectField extends StatelessWidget {
                                 fontFamily: 'Arial',
                               ),
                             ),
+                          ),
                           ),
                         );
                       },
@@ -3702,6 +3733,7 @@ class _DateField extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         constraints: const BoxConstraints(minHeight: 52),
         suffixIcon: IconButton(
+          tooltip: 'Pick date',
           onPressed: onCalendarTap,
           icon: Icon(
             Icons.calendar_month_rounded,

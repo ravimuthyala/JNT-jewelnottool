@@ -106,32 +106,36 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   void _subscribeArtistRealtime(String email, String uid, String collection) {
     _artistChannel?.unsubscribe();
     _requestsChannel?.unsubscribe();
-    _artistChannel = Supabase.instance.client
-        .channel('jnt_ascension_artist_$collection')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: collection,
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: uid.isNotEmpty ? 'id' : 'email',
-            value: uid.isNotEmpty ? uid : email,
-          ),
-          callback: (payload) {
-            if (!mounted) return;
-            setState(() {
-              _artistData = _flattenArtistRow(
-                Map<String, dynamic>.from(payload.newRecord),
-              );
-              _portfolioUploads = _portfolioUploadCount(
-                Map<String, dynamic>.from(payload.newRecord),
-                _artistData,
-              );
-              _hasServerSnapshot = true;
-            });
-          },
-        )
-        .subscribe();
+    try {
+      _artistChannel = Supabase.instance.client
+          .channel('jnt_ascension_artist_$collection')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: collection,
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: uid.isNotEmpty ? 'id' : 'email',
+              value: uid.isNotEmpty ? uid : email,
+            ),
+            callback: (payload) {
+              if (!mounted) return;
+              setState(() {
+                _artistData = _flattenArtistRow(
+                  Map<String, dynamic>.from(payload.newRecord),
+                );
+                _portfolioUploads = _portfolioUploadCount(
+                  Map<String, dynamic>.from(payload.newRecord),
+                  _artistData,
+                );
+                _hasServerSnapshot = true;
+              });
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('JntAscensionPage: failed to subscribe artist realtime: $e');
+    }
   }
 
   static Map<String, dynamic> _flattenArtistRow(Map<String, dynamic> row) {
@@ -186,20 +190,24 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
   void _subscribeRequestRealtime() {
     _requestsChannel?.unsubscribe();
-    _requestsChannel = Supabase.instance.client
-        .channel('jnt_ascension_requests')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'client_custom_requests',
-          callback: (_) {
-            final email = _currentArtistEmail;
-            if (email.isNotEmpty && _artistCollection.isNotEmpty) {
-              unawaited(_syncAscension(email, _artistCollection));
-            }
-          },
-        )
-        .subscribe();
+    try {
+      _requestsChannel = Supabase.instance.client
+          .channel('jnt_ascension_requests')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'client_custom_requests',
+            callback: (_) {
+              final email = _currentArtistEmail;
+              if (email.isNotEmpty && _artistCollection.isNotEmpty) {
+                unawaited(_syncAscension(email, _artistCollection));
+              }
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('JntAscensionPage: failed to subscribe request realtime: $e');
+    }
   }
 
   int _portfolioUploadCount(
@@ -375,6 +383,8 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         if (!_orderDate(r).isBefore(monthStart))
           JntAscensionEngine.pointsCompleteOrder.toDouble(),
       for (final r in onTime)
+        // Invariant: `onTime` is filtered via _isOnTimeDelivery, which
+        // returns false for null shippedAt, so shippedAt is non-null here.
         if (!r.shippedAt!.isBefore(monthStart))
           JntAscensionEngine.pointsOnTimeDelivery.toDouble(),
       for (final r in fiveStar)
@@ -921,23 +931,34 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   Widget _tabButton(_AscTab tab, String label) {
     final selected = _activeTab == tab;
     return Expanded(
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        value: selected ? 'Selected' : 'Not selected',
         onTap: () => setState(() => _activeTab = tab),
-        borderRadius: BorderRadius.circular(11),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? Colors.white : Colors.transparent,
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: () => setState(() => _activeTab = tab),
             borderRadius: BorderRadius.circular(11),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-              color: selected ? AppColors.blackCat : AppColors.blackCatLight,
-              fontSize: 14,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: selected ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected
+                      ? AppColors.blackCat
+                      : AppColors.blackCatLight,
+                  fontSize: 14,
+                ),
+              ),
             ),
           ),
         ),

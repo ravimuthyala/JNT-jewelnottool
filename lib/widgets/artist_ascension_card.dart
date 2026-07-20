@@ -49,9 +49,12 @@ class ArtistAscensionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text(
-                'Artist Ascension',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              Semantics(
+                header: true,
+                child: const Text(
+                  'Artist Ascension',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
               ),
               const Spacer(),
               TierBadge(tier: ascension.tier),
@@ -108,9 +111,12 @@ class ArtistAscensionCard extends StatelessWidget {
           const SizedBox(height: 12),
           _metricRow('Lifetime orders', '${ascension.lifetimeOrders}'),
           const SizedBox(height: 12),
-          const Text(
-            'Unlocked perks',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          Semantics(
+            header: true,
+            child: const Text(
+              'Unlocked perks',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
           ),
           const SizedBox(height: 8),
           for (final perk in perks) _perkRow(perk),

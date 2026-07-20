@@ -418,7 +418,11 @@ class _ClientShellPageState extends State<ClientShellPage> {
   }
 
   Future<void> _logoutToHomePage() async {
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('CLIENT SHELL SIGN OUT FAILED: $e');
+    }
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }

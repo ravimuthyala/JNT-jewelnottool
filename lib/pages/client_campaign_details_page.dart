@@ -285,6 +285,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           Align(
             alignment: Alignment.centerRight,
             child: IconButton(
+              tooltip: 'Close',
               icon: const Icon(Icons.close_rounded, size: 28),
               onPressed: () => Navigator.of(context).pop(),
             ),
@@ -1059,7 +1060,10 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
               if (imageSnap.hasError) return const SizedBox.shrink();
               return ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: InkWell(
+                child: Semantics(
+                  button: true,
+                  label: 'View campaign image full screen',
+                  child: InkWell(
                   onTap: () {
                     showDialog<void>(
                       context: context,
@@ -1086,6 +1090,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                               top: 8,
                               right: 8,
                               child: IconButton(
+                                tooltip: 'Close image preview',
                                 onPressed: () =>
                                     Navigator.of(dialogContext).pop(),
                                 icon: const Icon(
@@ -1114,6 +1119,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     ),
                   ),
+                ),
                 ),
               );
             },

@@ -1282,7 +1282,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   }
 
   Widget _chip(String label, bool selected, VoidCallback onTap) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -1315,6 +1318,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -1331,7 +1335,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       final selected = _nailTechType == type;
 
       return Expanded(
-        child: InkWell(
+        child: Semantics(
+          button: true,
+          selected: selected,
+          child: InkWell(
           borderRadius: BorderRadius.zero,
           onTap: () => setState(() => _nailTechType = type),
           child: Container(
@@ -1365,6 +1372,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                   ),
               ],
             ),
+          ),
           ),
         ),
       );
@@ -1591,6 +1599,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         )) ??
         false;
 
+    if (!mounted) return;
     if (purchased) {
       setState(() {
         _bundlePurchased = true;
@@ -2020,6 +2029,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           'Enter password',
                           suffixIcon: IconButton(
                             iconSize: 18,
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
                             onPressed: () => setState(
                               () => _obscurePassword = !_obscurePassword,
                             ),
@@ -2060,6 +2072,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           'Confirm password',
                           suffixIcon: IconButton(
                             iconSize: 18,
+                            tooltip: _obscureConfirmPassword
+                                ? 'Show password'
+                                : 'Hide password',
                             onPressed: () => setState(
                               () => _obscureConfirmPassword =
                                   !_obscureConfirmPassword,
@@ -2765,6 +2780,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: IconButton(
+                          tooltip: _showYearCalendar
+                              ? 'Hide year calendar'
+                              : 'Show year calendar',
                           icon: Icon(
                             _showYearCalendar
                                 ? Icons.expand_less
@@ -2876,7 +2894,11 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                     Row(
                       children: [
                         Expanded(
-                          child: InkWell(
+                          child: MergeSemantics(
+                            child: Semantics(
+                              button: true,
+                              onTap: () => setState(() => _startTime = '10:00 AM'),
+                              child: InkWell(
                             onTap: () => setState(() => _startTime = '10:00 AM'),
                             borderRadius: BorderRadius.zero,
                             child: Container(
@@ -2922,10 +2944,16 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               ),
                             ),
                           ),
+                          ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: InkWell(
+                          child: MergeSemantics(
+                            child: Semantics(
+                              button: true,
+                              onTap: () => setState(() => _endTime = '6:00 PM'),
+                              child: InkWell(
                             onTap: () => setState(() => _endTime = '6:00 PM'),
                             borderRadius: BorderRadius.zero,
                             child: Container(
@@ -2970,6 +2998,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                 ],
                               ),
                             ),
+                          ),
+                          ),
                           ),
                         ),
                       ],
@@ -3115,7 +3145,12 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               ),
                             );
                           }),
-                          InkWell(
+                          Semantics(
+                            button: true,
+                            label: 'Add portfolio image',
+                            onTap: _pickPortfolioImages,
+                            child: ExcludeSemantics(
+                              child: InkWell(
                             onTap: _pickPortfolioImages,
                             borderRadius: BorderRadius.zero,
                             child: Container(
@@ -3148,6 +3183,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
                               ),
                             ),
                           ),
@@ -3919,7 +3956,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     required VoidCallback onTap,
     required VoidCallback onAdd,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -4025,6 +4065,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

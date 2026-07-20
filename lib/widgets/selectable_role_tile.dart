@@ -20,42 +20,54 @@ class SelectableRoleTile extends StatelessWidget {
     final borderColor = selected ? AppColors.deepPlum : Colors.grey.shade300;
     final bgColor = selected ? AppColors.deepPlum.withValues(alpha: 0.08) : Colors.white;
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$title. $subtitle',
+      value: selected ? 'Selected' : 'Not selected',
       onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: bgColor,
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: borderColor, width: selected ? 2 : 1),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: AppColors.deepPlum.withValues(alpha: 0.10),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: borderColor, width: selected ? 2 : 1),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.deepPlum.withValues(alpha: 0.10),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                   ),
-                ]
-              : [],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    height: 1.25,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.65),
-                height: 1.25,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

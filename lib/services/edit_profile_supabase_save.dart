@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_profile_models.dart';
@@ -190,12 +190,13 @@ class EditProfileSupabaseSave {
       'updatedAt': DateTime.now().toIso8601String(),
     };
 
-    await _client.from('company').upsert(<String, dynamic>{
-      'id': _uid,
-      'email': companyEmailValue,
-      'account_type': 'company',
-      'profile': row,
-      'basic': <String, dynamic>{
+    try {
+      await _client.from('company').upsert(<String, dynamic>{
+        'id': _uid,
+        'email': companyEmailValue,
+        'account_type': 'company',
+        'profile': row,
+        'basic': <String, dynamic>{
         'companyName': companyNameValue,
         'company_name': companyNameValue,
         'displayName': companyNameValue,
@@ -235,7 +236,12 @@ class EditProfileSupabaseSave {
       'addresses': <String, dynamic>{},
       'billing': <String, dynamic>{},
       ...row,
-    });
+      });
+    } catch (e, st) {
+      debugPrint('EditProfileSupabaseSave.saveCompanyBusinessInfo failed: $e');
+      debugPrint(st.toString());
+      rethrow;
+    }
   }
 
   static Future<String> uploadProfilePhoto(Uint8List bytes) async {

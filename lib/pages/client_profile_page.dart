@@ -689,7 +689,17 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         );
 
     if (updatedPreference != null) {
-      await _saveCommunicationPreferences(updatedPreference);
+      try {
+        await _saveCommunicationPreferences(updatedPreference);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save communication preferences: $e'),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       setState(() => _communicationPreferences = updatedPreference);
       SemanticsService.sendAnnouncement(

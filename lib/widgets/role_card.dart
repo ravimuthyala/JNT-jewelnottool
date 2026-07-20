@@ -20,43 +20,55 @@ class RoleCard extends StatelessWidget {
     final border = selected ? AppColors.deepPlum : Colors.grey.shade300;
     final fill = selected ? AppColors.deepPlum.withValues(alpha: 0.10) : Colors.white;
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$title. $subtitle',
+      value: selected ? 'Selected' : 'Not selected',
       onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: fill,
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: border, width: selected ? 2 : 1),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: AppColors.deepPlum.withValues(alpha: 0.10),
-                    blurRadius: 18,
-                    offset: const Offset(0, 7),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: border, width: selected ? 2 : 1),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.deepPlum.withValues(alpha: 0.10),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
                   ),
-                ]
-              : [],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.25,
+                    color: Colors.black.withValues(alpha: 0.65),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.25,
-                color: Colors.black.withValues(alpha: 0.65),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

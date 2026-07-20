@@ -292,6 +292,21 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
 
   @override
   Widget build(BuildContext context) {
+    return Semantics(
+      image: true,
+      label: _avatarSemanticLabel(),
+      child: ExcludeSemantics(child: _buildVisual(context)),
+    );
+  }
+
+  String _avatarSemanticLabel() {
+    final name = (_displayName.isNotEmpty ? _displayName : widget.displayName)
+        ?.trim();
+    if (name == null || name.isEmpty) return 'Profile photo';
+    return 'Profile photo of $name';
+  }
+
+  Widget _buildVisual(BuildContext context) {
     final src = _avatarUrl.trim();
 
     if (_loading && src.isEmpty) return _fallback();

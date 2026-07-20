@@ -125,7 +125,10 @@ class _TrendingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: 'View ${artist.name} photo full screen',
+      child: InkWell(
       onTap: () => _openPhotoPreview(context, imageUrl),
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -208,6 +211,7 @@ class _TrendingCard extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -252,6 +256,7 @@ class _TrendingCard extends StatelessWidget {
                 child: Material(
                   color: Colors.transparent,
                   child: IconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close, color: AppColors.snow),
                     style: IconButton.styleFrom(

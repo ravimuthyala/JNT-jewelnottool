@@ -94,6 +94,7 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
                       icon: Icon(
                         Icons.close_rounded,

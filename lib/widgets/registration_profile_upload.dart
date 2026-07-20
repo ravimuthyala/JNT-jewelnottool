@@ -28,61 +28,72 @@ class RegistrationProfileUpload extends StatelessWidget {
         ? MemoryImage(imageBytes!) as ImageProvider
         : imageProvider;
 
+    final accessibleLabel =
+        (label != null && label!.trim().isNotEmpty)
+        ? '${resolvedImage == null ? 'Add' : 'Change'} ${label!.trim()}'
+        : (resolvedImage == null ? 'Add photo' : 'Change photo');
+
     return Column(
       children: [
         Center(
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              GestureDetector(
-                onTap: onTap,
-                child: Container(
-                  height: size,
-                  width: size,
-                  decoration: BoxDecoration(
-                    color: AppColors.snow,
-                    borderRadius: BorderRadius.zero,
-                    border: Border.all(
-                      color: AppColors.blackCatBorderLight,
-                      width: 1.4,
-                    ),
-                  ),
-                  child: resolvedImage == null
-                      ? const Icon(
-                          Icons.camera_alt_outlined,
-                          size: 26,
-                          color: AppColors.blackCat,
-                        )
-                      : Image(
-                          image: resolvedImage,
-                          fit: BoxFit.cover,
-                          width: size,
-                          height: size,
+          child: Semantics(
+            button: true,
+            label: accessibleLabel,
+            hint: 'Opens photo options',
+            child: GestureDetector(
+              onTap: onTap,
+              child: ExcludeSemantics(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      height: size,
+                      width: size,
+                      decoration: BoxDecoration(
+                        color: AppColors.snow,
+                        borderRadius: BorderRadius.zero,
+                        border: Border.all(
+                          color: AppColors.blackCatBorderLight,
+                          width: 1.4,
                         ),
+                      ),
+                      child: resolvedImage == null
+                          ? const Icon(
+                              Icons.camera_alt_outlined,
+                              size: 26,
+                              color: AppColors.blackCat,
+                            )
+                          : Image(
+                              image: resolvedImage,
+                              fit: BoxFit.cover,
+                              width: size,
+                              height: size,
+                            ),
+                    ),
+                    Positioned(
+                      right: -4,
+                      bottom: -4,
+                      child: Container(
+                        height: 24,
+                        width: 24,
+                        decoration: BoxDecoration(
+                          color: AppColors.snow,
+                          borderRadius: BorderRadius.zero,
+                          border: Border.all(
+                            color: AppColors.blackCatBorderLight,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.file_upload_outlined,
+                          size: 16,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Positioned(
-                right: -4,
-                bottom: -4,
-                child: GestureDetector(
-                  onTap: onTap,
-                  child: Container(
-                    height: 24,
-                    width: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.snow,
-                      borderRadius: BorderRadius.zero,
-                      border: Border.all(color: AppColors.blackCatBorderLight),
-                    ),
-                    child: const Icon(
-                      Icons.file_upload_outlined,
-                      size: 16,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         if (label != null && label!.trim().isNotEmpty) ...[

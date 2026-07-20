@@ -1485,7 +1485,12 @@ class _PhotoGrid extends StatelessWidget {
                   Positioned(
                     right: 6,
                     top: 6,
-                    child: InkWell(
+                    child: Semantics(
+                      button: true,
+                      label: 'Remove photo ${i + 1}',
+                      onTap: () => onDelete!(i),
+                      child: ExcludeSemantics(
+                        child: InkWell(
                       onTap: () => onDelete!(i),
                       borderRadius: BorderRadius.zero,
                       child: Container(
@@ -1498,6 +1503,8 @@ class _PhotoGrid extends StatelessWidget {
                           Icons.delete_outline,
                           size: 16,
                           color: AppColors.snow,
+                        ),
+                      ),
                         ),
                       ),
                     ),

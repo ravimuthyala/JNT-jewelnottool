@@ -289,10 +289,16 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         ArtistReviewType.brand,
       ),
     ]) {
-      final rows = await _supabase
-          .from(entry.key)
-          .select()
-          .ilike('accepted_by_artist_email', email);
+      List<dynamic> rows;
+      try {
+        rows = await _supabase
+            .from(entry.key)
+            .select()
+            .ilike('accepted_by_artist_email', email);
+      } catch (e) {
+        debugPrint('ARTIST REVIEWS LOAD FAILED for ${entry.key}: $e');
+        continue;
+      }
       for (final raw in rows) {
         final data = Map<String, dynamic>.from(raw);
         final details = _asMap(data['details']);
@@ -692,7 +698,10 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
     Widget tab(int i, String label) {
       final active = _tab == i;
       return Expanded(
-        child: InkWell(
+        child: Semantics(
+          button: true,
+          selected: active,
+          child: InkWell(
           onTap: () => setState(() => _tab = i),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -715,6 +724,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
               ),
             ),
           ),
+        ),
         ),
       );
     }
@@ -763,7 +773,9 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         borderRadius: BorderRadius.zero,
       ),
       child: Builder(
-        builder: (fieldContext) => InkWell(
+        builder: (fieldContext) => Semantics(
+          button: true,
+          child: InkWell(
           onTap: () async {
             final box = fieldContext.findRenderObject() as RenderBox?;
             final overlay =
@@ -821,6 +833,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 const Icon(Icons.keyboard_arrow_down_rounded),
               ],
             ),
+          ),
           ),
         ),
       ),

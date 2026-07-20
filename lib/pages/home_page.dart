@@ -3,6 +3,50 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'login_page.dart';
 import '../services/startup_frame_gate.dart';
+
+// -----------------------------------------------------------------------
+// ADA / Section 508 (WCAG 2.1 AA) convention — reference implementation.
+//
+// This page models the pattern used across the app for accessibility work.
+// It must always be invisible to non-screen-reader users: no new visible
+// Text, no layout/spacing/color changes — only semantics-tree metadata.
+//
+// Most stock Material widgets already produce correct semantics for free
+// (TextFormField with decoration.labelText, ElevatedButton with a Text
+// child, a labeled Radio/Checkbox, a labeled BottomNavigationBarItem).
+// Do NOT wrap those in extra Semantics — that's redundant, not required.
+//
+// Explicit Semantics is only needed for:
+//  1. Icon-only IconButtons -> just add `tooltip:` (Flutter derives the
+//     semantic label from it automatically; no ExcludeSemantics needed).
+//  2. Custom tap targets: GestureDetector/InkWell wrapping a bare
+//     Container/Text/Icon with no built-in semantics (cards, tiles, upload
+//     controls) -> `Semantics(button: true, label: ..., onTap: ...)` around
+//     `ExcludeSemantics(child: <the decorative visual subtree>)`. See
+//     lib/widgets/registration_profile_upload.dart for a worked example.
+//  3. Composite/custom form controls with no automatic label (e.g. a
+//     hint-only TextField/TextFormField with no labelText) ->
+//     `Semantics(label: '...', child: TextFormField(...))` WITHOUT
+//     ExcludeSemantics. Wrapping a live editable TextField/TextFormField in
+//     ExcludeSemantics is a documented Flutter bug risk (breaks real text
+//     input for screen readers — see flutter/flutter#172206) and must
+//     never be done, even though it's the right call for #2's decorative
+//     content.
+//  4. Color-only status indicators -> pair with text/icon; if truly
+//     graphical-only, add `Semantics(label: ...)`.
+//  5. Meaningful images/avatars -> a real label, or ExcludeSemantics if
+//     purely decorative.
+//  6. Dynamic content (errors, success/failure messages, loading states)
+//     -> `Semantics(liveRegion: true, ...)` so changes are announced
+//     without the user needing to re-explore the screen.
+//  7. Screen/route roots -> `Semantics(scopesRoute: true, namesRoute: true,
+//     label: '<page purpose>')` at the top of the page, as done below.
+//  8. Section headings -> `Semantics(header: true)` merged onto the title
+//     Text directly (no ExcludeSemantics needed for a simple merge).
+//  9. Icon-only tap targets should meet a 44x44 (iOS) / 48x48 (Android)
+//     minimum hit area; pad the hit area, not the visible icon.
+// -----------------------------------------------------------------------
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 

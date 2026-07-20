@@ -196,6 +196,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
     final updated = await _showCheckoutEditModal<ArtistCheckoutInfo>(
       _EditArtistInfoPage(initial: _info),
     );
+    if (!mounted) return;
     if (updated != null) setState(() => _info = updated);
   }
 
@@ -203,6 +204,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
     final updated = await _showCheckoutEditModal<ArtistCheckoutInfo>(
       _EditAddressInfoPage(initial: _info),
     );
+    if (!mounted) return;
     if (updated != null) setState(() => _info = updated);
   }
 
@@ -210,6 +212,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
     final updated = await _showCheckoutEditModal<ArtistCheckoutInfo>(
       _EditPaymentInfoPage(initial: _info),
     );
+    if (!mounted) return;
     if (updated != null) setState(() => _info = updated);
   }
 
@@ -293,7 +296,9 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   }
 
   Widget _editLink(VoidCallback onTap) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      child: InkWell(
       onTap: onTap,
       child: const Text(
         'Edit',
@@ -301,6 +306,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
           color: AppColors.blackCat,
           fontWeight: FontWeight.w700,
         ),
+      ),
       ),
     );
   }
@@ -570,7 +576,12 @@ class _EditModalShell extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    InkWell(
+                    Semantics(
+                      button: true,
+                      label: 'Close',
+                      onTap: () => Navigator.pop(context),
+                      child: ExcludeSemantics(
+                        child: InkWell(
                       onTap: () => Navigator.pop(context),
                       child: const Padding(
                         padding: EdgeInsets.all(4),
@@ -578,6 +589,8 @@ class _EditModalShell extends StatelessWidget {
                           Icons.close,
                           color: AppColors.blackCat,
                           size: 22,
+                        ),
+                      ),
                         ),
                       ),
                     ),

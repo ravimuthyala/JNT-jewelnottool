@@ -2876,6 +2876,7 @@ class _ClientCustomRequestWithArtistPageState
                             ),
                             const Spacer(),
                             IconButton(
+                              tooltip: 'Remove client ${i + 1}',
                               onPressed: () => _removeClientSlot(i),
                               icon: const Icon(Icons.delete_outline, size: 22),
                             ),

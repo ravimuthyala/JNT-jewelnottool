@@ -10,7 +10,7 @@ class Environment {
   const Environment._();
 
   static const String _env =
-      String.fromEnvironment('ENV', defaultValue: 'uat');
+      String.fromEnvironment('ENV', defaultValue: 'production');
 
   static AppEnvironment get current {
     switch (_env.toLowerCase()) {

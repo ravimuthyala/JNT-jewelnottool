@@ -176,6 +176,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
       context,
       MaterialPageRoute(builder: (_) => _EditArtistInfoPage(initial: _info)),
     );
+    if (!mounted) return;
     if (updated != null) setState(() => _info = updated);
   }
 
@@ -184,6 +185,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
       context,
       MaterialPageRoute(builder: (_) => _EditAddressInfoPage(initial: _info)),
     );
+    if (!mounted) return;
     if (updated != null) setState(() => _info = updated);
   }
 
@@ -192,6 +194,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
       context,
       MaterialPageRoute(builder: (_) => _EditPaymentInfoPage(initial: _info)),
     );
+    if (!mounted) return;
     if (updated != null) setState(() => _info = updated);
   }
 
@@ -275,7 +278,9 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   }
 
   Widget _editLink(VoidCallback onTap) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      child: InkWell(
       onTap: onTap,
       child: const Text(
         'Edit',
@@ -283,6 +288,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
           color: AppColors.blackCat,
           fontWeight: FontWeight.w700,
         ),
+      ),
       ),
     );
   }
@@ -296,6 +302,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
         surfaceTintColor: AppColors.alabaster,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Close',
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context, null),
         ),

@@ -110,23 +110,34 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     unawaited(emit());
 
-    final channel = Supabase.instance.client
-        .channel('user_notifications_$email')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'user_notifications',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'receiver_email',
-            value: email,
-          ),
-          callback: (_) => unawaited(emit()),
-        )
-        .subscribe();
+    RealtimeChannel? channel;
+    try {
+      channel = Supabase.instance.client
+          .channel('user_notifications_$email')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'user_notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'receiver_email',
+              value: email,
+            ),
+            callback: (_) => unawaited(emit()),
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('NotificationsPage: failed to subscribe realtime channel: $e');
+    }
 
     controller.onCancel = () async {
-      await Supabase.instance.client.removeChannel(channel);
+      final ch = channel;
+      if (ch == null) return;
+      try {
+        await Supabase.instance.client.removeChannel(ch);
+      } catch (e) {
+        debugPrint('NotificationsPage: failed to remove realtime channel: $e');
+      }
     };
 
     return controller.stream;

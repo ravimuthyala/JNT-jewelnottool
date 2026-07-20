@@ -237,27 +237,33 @@ class ClientCustomRequestRepository {
 
     row.removeWhere((_, value) => value == null);
 
-    final inserted = await supabase
-        .from('client_custom_requests')
-        .insert(row)
-        .select('id')
-        .single();
+    try {
+      final inserted = await supabase
+          .from('client_custom_requests')
+          .insert(row)
+          .select('id')
+          .single();
 
-    final requestId = inserted['id'].toString();
+      final requestId = inserted['id'].toString();
 
-    await supabase.from('client_custom_requests_details').insert({
-      'request_id': requestId,
-      'detail_key': 'payload',
-      'data': {
-        ...enrichedDetails,
-        'payload': row['payload'],
-        'requestDetails': requestDetails,
-      },
-      'created_at': nowIso,
-      'updated_at': nowIso,
-    });
+      await supabase.from('client_custom_requests_details').insert({
+        'request_id': requestId,
+        'detail_key': 'payload',
+        'data': {
+          ...enrichedDetails,
+          'payload': row['payload'],
+          'requestDetails': requestDetails,
+        },
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      });
 
-    return requestId;
+      return requestId;
+    } catch (e, st) {
+      debugPrint('ClientCustomRequestRepository.createRequest failed: $e');
+      debugPrint(st.toString());
+      rethrow;
+    }
   }
 
   static Stream<List<SubmittedClientRequestSummary>> watchRequestsForClient({

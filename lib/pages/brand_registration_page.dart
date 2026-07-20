@@ -54,6 +54,13 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   bool _shippingStreetSuggestionsLoading = false;
   bool _submitting = false;
   bool _showValidationErrors = false;
+  int _registrationStep = 0;
+  int? _validationTriggeredStep;
+
+  static const List<String> _registrationStepTitles = <String>[
+    'Company Profile\n& Primary Contact',
+    'Address\n& Payment',
+  ];
 
   // -----------------------
   // EXISTING (kept)
@@ -387,9 +394,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       maxWidth: 1200,
     );
     if (img == null) return;
+    if (!mounted) return;
 
     if (kIsWeb) {
       final bytes = await img.readAsBytes();
+      if (!mounted) return;
       setState(() {
         _logoBytes = bytes;
         _logoPath = null;
@@ -1425,6 +1434,202 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     });
   }
 
+  Future<bool> _validateCurrentRegistrationStep() async {
+    if (_validationTriggeredStep != _registrationStep) {
+      setState(() => _validationTriggeredStep = _registrationStep);
+    }
+    return _formKey.currentState?.validate() ?? true;
+  }
+
+  Future<void> _goToNextRegistrationStep() async {
+    if (!await _validateCurrentRegistrationStep()) return;
+    if (!mounted) return;
+    setState(() {
+      _registrationStep += 1;
+      _validationTriggeredStep = null;
+    });
+  }
+
+  Widget _registrationProgressTabs() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 2),
+      child: Row(
+        children: List.generate(_registrationStepTitles.length, (index) {
+          final selected = index == _registrationStep;
+          final completed = index < _registrationStep;
+          final showConnector = index < _registrationStepTitles.length - 1;
+          return Expanded(
+            child: InkWell(
+              onTap: () => setState(() {
+                _registrationStep = index;
+                _validationTriggeredStep = null;
+              }),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 28,
+                    child: Row(
+                      children: [
+                        if (index > 0)
+                          Expanded(
+                            child: Container(
+                              height: 1.5,
+                              color: completed
+                                  ? AppColors.blackCat.withValues(alpha: 0.55)
+                                  : AppColors.blackCat.withValues(alpha: 0.18),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: (selected || completed)
+                                ? AppColors.blackCat
+                                : AppColors.blackCat.withValues(alpha: 0.10),
+                          ),
+                          child: completed
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 15,
+                                  color: AppColors.snow,
+                                )
+                              : Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    fontFamily: 'Arial',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: selected
+                                        ? AppColors.snow
+                                        : AppColors.blackCat,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 6),
+                        if (showConnector)
+                          Expanded(
+                            child: Container(
+                              height: 1.5,
+                              color: (completed || selected)
+                                  ? AppColors.blackCat.withValues(alpha: 0.55)
+                                  : AppColors.blackCat.withValues(alpha: 0.18),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 30,
+                    child: Text(
+                      _registrationStepTitles[index],
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Arial',
+                        fontSize: 9,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                        color: AppColors.blackCat.withValues(
+                          alpha: selected ? 1 : 0.65,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _wizardNavButtons() {
+    final isLast = _registrationStep == _registrationStepTitles.length - 1;
+    return Container(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      color: AppColors.snow,
+      child: Row(
+        children: [
+          if (_registrationStep > 0)
+            SizedBox(
+              height: 44,
+              width: 96,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: AppColors.deepPlum,
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: AppColors.blackCatBorderLight),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: () => setState(() {
+                  _registrationStep -= 1;
+                  _validationTriggeredStep = null;
+                }),
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 96),
+          const Spacer(),
+          SizedBox(
+            height: 44,
+            width: isLast ? 170 : 96,
+            child: ElevatedButton(
+              onPressed: _submitting
+                  ? null
+                  : isLast
+                  ? _onCreateAccount
+                  : _goToNextRegistrationStep,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.deepPlum,
+                foregroundColor: Colors.white,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      isLast ? 'Create account' : 'Next',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const dropdownTextColor = AppColors.blackCat;
@@ -1454,11 +1659,13 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
             children: [
               Form(
                 key: _formKey,
-                autovalidateMode: _showValidationErrors
+                autovalidateMode: _validationTriggeredStep == _registrationStep
                     ? AutovalidateMode.always
                     : AutovalidateMode.disabled,
                 child: Column(
                   children: [
+                    _registrationProgressTabs(),
+                    if (_registrationStep == 0) ...[
                     // -----------------------
                     // âœ… COMPANY PROFILE & ACCOUNT CREATION (UPDATED)
                     // -----------------------
@@ -1580,37 +1787,45 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
-                                          child: TextFormField(
-                                            controller: _phoneCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.phone,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                              LengthLimitingTextInputFormatter(
-                                                10,
+                                          child: Semantics(
+                                            label:
+                                                'Company phone number, required',
+                                            textField: true,
+                                            child: TextFormField(
+                                              controller: _phoneCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
                                               ),
-                                              UsPhoneTextInputFormatter(),
-                                            ],
-                                            onChanged: field.didChange,
-                                            decoration: InputDecoration(
-                                              hintText: 'Enter 10-digit phone',
-                                              hintStyle: TextStyle(
-                                                fontSize: _hintFs,
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.35,
+                                              keyboardType:
+                                                  TextInputType.phone,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                                LengthLimitingTextInputFormatter(
+                                                  10,
                                                 ),
+                                                UsPhoneTextInputFormatter(),
+                                              ],
+                                              onChanged: field.didChange,
+                                              decoration: InputDecoration(
+                                                hintText:
+                                                    'Enter 10-digit phone',
+                                                hintStyle: TextStyle(
+                                                  fontSize: _hintFs,
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.35),
+                                                ),
+                                                border: InputBorder.none,
+                                                enabledBorder:
+                                                    InputBorder.none,
+                                                focusedBorder:
+                                                    InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical:
+                                                          _fieldVerticalPadding,
+                                                    ),
                                               ),
-                                              border: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical:
-                                                        _fieldVerticalPadding,
-                                                  ),
                                             ),
                                           ),
                                         ),
@@ -1651,6 +1866,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               'Enter Password',
                               suffixIcon: IconButton(
                                 iconSize: 18,
+                                tooltip: _obscure
+                                    ? 'Show password'
+                                    : 'Hide password',
                                 onPressed: () =>
                                     setState(() => _obscure = !_obscure),
                                 icon: Icon(
@@ -1683,6 +1901,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               'Re-enter Password',
                               suffixIcon: IconButton(
                                 iconSize: 18,
+                                tooltip: _obscureConfirm
+                                    ? 'Show password'
+                                    : 'Hide password',
                                 onPressed: () => setState(
                                   () => _obscureConfirm = !_obscureConfirm,
                                 ),
@@ -1841,37 +2062,45 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
-                                          child: TextFormField(
-                                            controller: _contactPhoneCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.phone,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                              LengthLimitingTextInputFormatter(
-                                                10,
+                                          child: Semantics(
+                                            label:
+                                                'Contact phone number, required',
+                                            textField: true,
+                                            child: TextFormField(
+                                              controller: _contactPhoneCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
                                               ),
-                                              UsPhoneTextInputFormatter(),
-                                            ],
-                                            onChanged: field.didChange,
-                                            decoration: InputDecoration(
-                                              hintText: 'Enter 10-digit phone',
-                                              hintStyle: TextStyle(
-                                                fontSize: _hintFs,
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.35,
+                                              keyboardType:
+                                                  TextInputType.phone,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                                LengthLimitingTextInputFormatter(
+                                                  10,
                                                 ),
+                                                UsPhoneTextInputFormatter(),
+                                              ],
+                                              onChanged: field.didChange,
+                                              decoration: InputDecoration(
+                                                hintText:
+                                                    'Enter 10-digit phone',
+                                                hintStyle: TextStyle(
+                                                  fontSize: _hintFs,
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.35),
+                                                ),
+                                                border: InputBorder.none,
+                                                enabledBorder:
+                                                    InputBorder.none,
+                                                focusedBorder:
+                                                    InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical:
+                                                          _fieldVerticalPadding,
+                                                    ),
                                               ),
-                                              border: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical:
-                                                        _fieldVerticalPadding,
-                                                  ),
                                             ),
                                           ),
                                         ),
@@ -1903,6 +2132,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                       ),
                     ),
 
+                    ] else ...[
                     const SizedBox(height: 16),
 
                     /*
@@ -2837,39 +3067,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                       ),
                     ),
 
+                    ],
                     const SizedBox(height: 18),
-
-                    SizedBox(
-                      height: 54,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.deepPlum,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        onPressed: _submitting ? null : _onCreateAccount,
-                        child: _submitting
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : const Text(
-                                'Create Account',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
-                    ),
+                    _wizardNavButtons(),
                   ],
                 ),
               ),

@@ -415,7 +415,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final currentCredentials = _asMap(_profileData['credentials']);
     final resolvedId = id.isNotEmpty ? id : email;
 
-    await _upsertArtistRow('client_artist', resolvedId, {
+    try {
+      await _upsertArtistRow('client_artist', resolvedId, {
       'account_type': 'client_artist',
       'displayName': _profile.basic.name.trim(),
       'name': _profile.basic.name.trim(),
@@ -444,6 +445,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       'pricing': currentPricing,
       'credentials': currentCredentials,
     }, email: email);
+    } catch (e) {
+      debugPrint('ClientArtistProfilePage: failed to create artist row: $e');
+    }
 
     return _resolveArtistRow();
   }
@@ -1099,38 +1103,48 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final previousEmail = previous.email.trim().toLowerCase();
     if (previousEmail.isEmpty) return;
 
-    final requests = await _supabase
-        .from('client_custom_requests')
-        .select()
-        .eq('client_email', previousEmail);
-
-    for (final raw in requests) {
-      final doc = Map<String, dynamic>.from(raw as Map);
-      final requestId = (doc['id'] ?? '').toString().trim();
-      if (requestId.isEmpty) continue;
-      await _supabase
+    try {
+      final requests = await _supabase
           .from('client_custom_requests')
-          .update({
-            'clientName': next.name.trim(),
-            'clientEmail': next.email.trim(),
-            'clientProfileImage': profileImage,
-            'clientProfilePic': profileImage,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', requestId);
+          .select()
+          .eq('client_email', previousEmail);
 
-      await _updateRequestDetails('client_custom_requests_details', requestId, {
-        'clientProfileSnapshot': {
-          'basic': {
-            'name': next.name.trim(),
-            'email': next.email.trim(),
-            'phone': next.phone.trim(),
-            'profileImageUrl': profileImage,
-            'photoUrl': profileImage,
-            'avatarUrl': profileImage,
+      for (final raw in requests) {
+        final doc = Map<String, dynamic>.from(raw as Map);
+        final requestId = (doc['id'] ?? '').toString().trim();
+        if (requestId.isEmpty) continue;
+        await _supabase
+            .from('client_custom_requests')
+            .update({
+              'clientName': next.name.trim(),
+              'clientEmail': next.email.trim(),
+              'clientProfileImage': profileImage,
+              'clientProfilePic': profileImage,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', requestId);
+
+        await _updateRequestDetails(
+          'client_custom_requests_details',
+          requestId,
+          {
+            'clientProfileSnapshot': {
+              'basic': {
+                'name': next.name.trim(),
+                'email': next.email.trim(),
+                'phone': next.phone.trim(),
+                'profileImageUrl': profileImage,
+                'photoUrl': profileImage,
+                'avatarUrl': profileImage,
+              },
+            },
           },
-        },
-      });
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'ClientArtistProfilePage: failed to sync basic info to requests: $e',
+      );
     }
   }
 
@@ -1298,7 +1312,20 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         );
 
     if (updatedPreference != null) {
-      await _saveCommunicationPreferences(updatedPreference);
+      try {
+        await _saveCommunicationPreferences(updatedPreference);
+      } catch (e) {
+        debugPrint(
+          'ClientArtistProfilePage: failed to save communication preferences: $e',
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save communication preferences.'),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       setState(() => _communicationPreferences = updatedPreference);
     }
@@ -2127,10 +2154,26 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
             initialDirectRequestsEnabled: initialDirect,
             initialDayStates: states,
             onDirectRequestChanged: (value) async {
-              await _upsertArtistRow(ref.table, ref.id, {
-                'panel_directRequestsEnabled': value,
-                'availability': {'directRequestsEnabled': value},
-              });
+              try {
+                await _upsertArtistRow(ref.table, ref.id, {
+                  'panel_directRequestsEnabled': value,
+                  'availability': {'directRequestsEnabled': value},
+                });
+              } catch (e) {
+                debugPrint(
+                  'ClientArtistProfilePage: failed to update direct requests: $e',
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Unable to update direct request preference.',
+                      ),
+                    ),
+                  );
+                }
+                return;
+              }
               if (mounted) {
                 setState(() => _directRequestsOn = value);
               }
@@ -2749,6 +2792,7 @@ class _CommunicationPreferencePopupState
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
                       icon: Icon(
                         Icons.close_rounded,

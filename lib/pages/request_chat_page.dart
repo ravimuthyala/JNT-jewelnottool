@@ -13,6 +13,11 @@ Future<void> showRequestChatModal({
   required String artistEmail,
   required String clientName,
   required String artistName,
+  // Distinguishes a separate thread (e.g. AI support) for the same request
+  // without corrupting requestId, which must stay a valid uuid — it's
+  // written as-is into request_chat_messages.request_id / request_chats
+  // .request_id, both uuid columns.
+  String conversationSuffix = '',
 }) async {
   await showGeneralDialog<void>(
     context: context,
@@ -45,6 +50,7 @@ Future<void> showRequestChatModal({
                         artistEmail: artistEmail,
                         clientName: clientName,
                         artistName: artistName,
+                        conversationSuffix: conversationSuffix,
                       ),
                     ),
                   ),
@@ -76,6 +82,7 @@ class RequestChatModal extends StatefulWidget {
     required this.artistEmail,
     required this.clientName,
     required this.artistName,
+    this.conversationSuffix = '',
   });
 
   final String requestId;
@@ -83,6 +90,7 @@ class RequestChatModal extends StatefulWidget {
   final String artistEmail;
   final String clientName;
   final String artistName;
+  final String conversationSuffix;
 
   @override
   State<RequestChatModal> createState() => _RequestChatModalState();
@@ -98,10 +106,15 @@ class _RequestChatModalState extends State<RequestChatModal> {
 
   bool _sending = false;
   _PeerPresence _peerPresence = _PeerPresence.offline;
+  RealtimeChannel? _presenceChannel;
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
-  String get _conversationId => _conversationIdForRequest(widget.requestId);
+  String get _conversationId {
+    final base = _conversationIdForRequest(widget.requestId);
+    final suffix = widget.conversationSuffix.trim();
+    return suffix.isEmpty ? base : '${base}_$suffix';
+  }
 
   String get _currentEmail => _normalizeEmail(
         _supabase.auth.currentUser?.email ?? '',
@@ -142,12 +155,19 @@ class _RequestChatModalState extends State<RequestChatModal> {
   @override
   void initState() {
     super.initState();
-    _ensureRoom();
-    _refreshPeerPresence();
+    unawaited(_ensureRoom().catchError((Object e, StackTrace st) {
+      debugPrint('RequestChatModal: failed to ensure room: $e');
+    }));
+    _initPresenceChannel();
   }
 
   @override
   void dispose() {
+    final channel = _presenceChannel;
+    if (channel != null) {
+      unawaited(channel.untrack());
+      unawaited(_supabase.removeChannel(channel));
+    }
     _messageCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -155,8 +175,13 @@ class _RequestChatModalState extends State<RequestChatModal> {
 
   Future<void> _ensureRoom() async {
     final nowIso = DateTime.now().toIso8601String();
+    // "id" is the actual primary key (and the FK target from
+    // request_chat_messages.conversation_id) — it must be set explicitly.
+    // "conversation_id" alone has no unique constraint, so upserting on it
+    // fails outright, which previously blocked every message send.
     await _supabase.from('request_chats').upsert(
       {
+        'id': _conversationId,
         'conversation_id': _conversationId,
         'request_id': widget.requestId,
         'client_email': _normalizeEmail(widget.clientEmail),
@@ -165,64 +190,113 @@ class _RequestChatModalState extends State<RequestChatModal> {
         'artist_name': widget.artistName.trim(),
         'updated_at': nowIso,
       },
-      onConflict: 'conversation_id',
+      onConflict: 'id',
     );
+
+    if (_normalizeEmail(widget.artistEmail) == _aiAssistantEmail) {
+      await _ensureAiWelcomeMessage();
+    }
   }
 
-  Future<void> _refreshPeerPresence() async {
-    final status = await _resolvePresenceForEmail(_peerEmail);
-    if (!mounted) return;
-    setState(() => _peerPresence = status);
+  static const String _aiWelcomeText =
+      'Hi! I\'m your JNT Assistant.\n'
+      'I can help you with order status, payment updates, delivery updates, '
+      'reviews, tips, and support questions.\n'
+      'Please choose one:\n\n'
+      '1. Check my order status\n'
+      '2. Payment help\n'
+      '3. Shipping or delivery update\n'
+      '4. Leave a review\n'
+      '5. Add a tip\n'
+      '6. Contact support';
+
+  Future<void> _ensureAiWelcomeMessage() async {
+    final existing = await _supabase
+        .from('request_chat_messages')
+        .select('id')
+        .eq('conversation_id', _conversationId)
+        .limit(1);
+    if (existing.isNotEmpty) return;
+
+    final nowIso = DateTime.now().toIso8601String();
+    await _supabase.from('request_chat_messages').insert({
+      'conversation_id': _conversationId,
+      'request_id': widget.requestId,
+      'client_email': _normalizeEmail(widget.clientEmail),
+      'artist_email': _aiAssistantEmail,
+      'client_name': widget.clientName.trim(),
+      'artist_name': 'JNT Assistant',
+      'sender_email': _aiAssistantEmail,
+      'sender_name': 'JNT Assistant',
+      'text': _aiWelcomeText,
+      'attachment_url': '',
+      'attachment_type': '',
+      'attachment_name': '',
+      'is_system': true,
+      'created_at': nowIso,
+      'updated_at': nowIso,
+    });
+
+    await _supabase
+        .from('request_chats')
+        .update({
+          'last_message': _aiWelcomeText,
+          'last_message_at': nowIso,
+          'last_sender_email': _aiAssistantEmail,
+          'last_sender_name': 'JNT Assistant',
+          'updated_at': nowIso,
+        })
+        .eq('id', _conversationId);
   }
 
-  Future<_PeerPresence> _resolvePresenceForEmail(String email) async {
-    final normalized = _normalizeEmail(email);
-    if (normalized.isEmpty) return _PeerPresence.offline;
-
-    Map<String, dynamic>? data;
-    for (final table in const <String>['client', 'artist', 'client_artist']) {
-      try {
-        final row = await _supabase
-            .from(table)
-            .select()
-            .ilike('email', normalized)
-            .limit(1)
-            .maybeSingle();
-        if (row != null) {
-          data = Map<String, dynamic>.from(row);
-          break;
-        }
-      } catch (_) {}
+  // Real online/offline status via Supabase Realtime Presence, scoped to
+  // this conversation. The previous implementation read is_online/
+  // last_seen_at/presence columns that don't exist anywhere in the schema,
+  // so it always reported "Offline" regardless of the peer's actual state.
+  void _initPresenceChannel() {
+    // The AI assistant isn't a real logged-in session, so it can never
+    // "track" itself on a presence channel — always show it as available
+    // rather than a misleading (and permanently stuck) "Offline".
+    if (_peerEmail == _aiAssistantEmail) {
+      setState(() => _peerPresence = _PeerPresence.available);
+      return;
     }
 
-    if (data == null) return _PeerPresence.offline;
+    final channel = _supabase.channel('presence:$_conversationId');
+    _presenceChannel = channel;
 
-    final presence = _asMap(data['presence']);
-    final isOnlineRaw = data['is_online'] ??
-        data['isOnline'] ??
-        data['online'] ??
-        presence['is_online'] ??
-        presence['isOnline'];
-    if (_isTruthy(isOnlineRaw)) return _PeerPresence.available;
+    channel.onPresenceSync((_) => _updatePresenceFromChannel());
+    channel.onPresenceJoin((_) => _updatePresenceFromChannel());
+    channel.onPresenceLeave((_) => _updatePresenceFromChannel());
 
-    final lastSeen = _dateValue(data['last_seen_at']) ??
-        _dateValue(data['lastSeenAt']) ??
-        _dateValue(data['last_active_at']) ??
-        _dateValue(data['lastActiveAt']) ??
-        _dateValue(data['updated_at']) ??
-        _dateValue(data['updatedAt']) ??
-        _dateValue(presence['last_seen_at']) ??
-        _dateValue(presence['lastSeenAt']) ??
-        _dateValue(presence['last_active_at']) ??
-        _dateValue(presence['lastActiveAt']);
-
-    if (lastSeen == null) return _PeerPresence.offline;
-
-    final diff = DateTime.now().difference(lastSeen);
-    if (diff <= const Duration(minutes: 5)) return _PeerPresence.available;
-    if (diff <= const Duration(hours: 12)) return _PeerPresence.away;
-    return _PeerPresence.offline;
+    channel.subscribe((status, error) async {
+      if (status == RealtimeSubscribeStatus.subscribed && _currentEmail.isNotEmpty) {
+        try {
+          await channel.track({'email': _currentEmail});
+        } catch (e) {
+          debugPrint('RequestChatModal: failed to track presence: $e');
+        }
+      }
+    });
   }
+
+  void _updatePresenceFromChannel() {
+    final channel = _presenceChannel;
+    if (channel == null || !mounted) return;
+
+    final peer = _peerEmail;
+    final isPeerPresent = channel.presenceState().any(
+          (state) => state.presences.any(
+            (p) => _normalizeEmail((p.payload['email'] ?? '').toString()) == peer,
+          ),
+        );
+
+    setState(() {
+      _peerPresence = isPeerPresent ? _PeerPresence.available : _PeerPresence.offline;
+    });
+  }
+
+  void _refreshPeerPresence() => _updatePresenceFromChannel();
 
   Future<void> _sendText() async {
     final text = _messageCtrl.text.trim();
@@ -232,6 +306,8 @@ class _RequestChatModalState extends State<RequestChatModal> {
       await _sendMessage(text: text);
       _messageCtrl.clear();
       _scrollToBottom();
+    } catch (e) {
+      _showSendError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -244,9 +320,18 @@ class _RequestChatModalState extends State<RequestChatModal> {
     try {
       await _sendMessage(text: text);
       _scrollToBottom();
+    } catch (e) {
+      _showSendError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  void _showSendError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not send message: $error')),
+    );
   }
 
   Future<void> _sendMessage({
@@ -287,7 +372,297 @@ class _RequestChatModalState extends State<RequestChatModal> {
           'last_sender_email': _currentEmail,
           'updated_at': nowIso,
         })
-        .eq('conversation_id', _conversationId);
+        .eq('id', _conversationId);
+
+    // Client-side auto-reply. Mirrors the server-side "ai-chat-assistant"
+    // Edge Function (supabase/functions/ai-chat-assistant) so the assistant
+    // still replies immediately in this app even before/without that
+    // function's Postgres-webhook trigger being deployed to a given project.
+    if (_normalizeEmail(widget.artistEmail) == _aiAssistantEmail &&
+        _currentEmail != _aiAssistantEmail) {
+      try {
+        await _sendAiAssistantReply(userText: text.trim());
+      } catch (_) {
+        // The user's own message already sent successfully; a failed
+        // auto-reply shouldn't surface as a send error.
+      }
+    }
+  }
+
+  Future<void> _sendAiAssistantReply({required String userText}) async {
+    final replyText = await _buildAiReply(userText);
+    final nowIso = DateTime.now().toIso8601String();
+
+    await _supabase.from('request_chat_messages').insert({
+      'conversation_id': _conversationId,
+      'request_id': widget.requestId,
+      'client_email': _normalizeEmail(widget.clientEmail),
+      'artist_email': _aiAssistantEmail,
+      'client_name': widget.clientName.trim(),
+      'artist_name': 'JNT Assistant',
+      'sender_email': _aiAssistantEmail,
+      'sender_name': 'JNT Assistant',
+      'text': replyText,
+      'attachment_url': '',
+      'attachment_type': '',
+      'attachment_name': '',
+      'created_at': nowIso,
+      'updated_at': nowIso,
+    });
+
+    await _supabase
+        .from('request_chats')
+        .update({
+          'last_message': replyText,
+          'last_message_at': nowIso,
+          'last_sender_email': _aiAssistantEmail,
+          'last_sender_name': 'JNT Assistant',
+          'updated_at': nowIso,
+        })
+        .eq('id', _conversationId);
+  }
+
+  Future<String> _buildAiReply(String userText) async {
+    final intent = _detectAiIntent(userText);
+    switch (intent) {
+      case _AiIntent.orderStatus:
+        return _replyOrderStatus();
+      case _AiIntent.payment:
+        return _replyPayment();
+      case _AiIntent.shipping:
+        return _replyShipping();
+      case _AiIntent.review:
+        return _replyReview();
+      case _AiIntent.tip:
+        return _replyTip();
+      case _AiIntent.support:
+        return _replySupport(userText);
+      case _AiIntent.unknown:
+        return _aiWelcomeText;
+    }
+  }
+
+  _AiIntent _detectAiIntent(String raw) {
+    final text = raw.trim().toLowerCase();
+
+    switch (text) {
+      case '1':
+        return _AiIntent.orderStatus;
+      case '2':
+        return _AiIntent.payment;
+      case '3':
+        return _AiIntent.shipping;
+      case '4':
+        return _AiIntent.review;
+      case '5':
+        return _AiIntent.tip;
+      case '6':
+        return _AiIntent.support;
+    }
+
+    if (text == 'check my order status') return _AiIntent.orderStatus;
+    if (text == 'payment help') return _AiIntent.payment;
+    if (text == 'shipping or delivery update') return _AiIntent.shipping;
+    if (text == 'leave a review') return _AiIntent.review;
+    if (text == 'add a tip') return _AiIntent.tip;
+    if (text == 'contact support') return _AiIntent.support;
+
+    if (RegExp(r'\bstatus\b|\btrack(ing)?\b.*order|order.*where').hasMatch(text)) {
+      return _AiIntent.orderStatus;
+    }
+    if (RegExp(r'\bpay(ment)?\b|\bcharge\b|\brefund\b|\binvoice\b').hasMatch(text)) {
+      return _AiIntent.payment;
+    }
+    if (RegExp(r'\bship(ping|ped)?\b|\bdeliver(y|ed)?\b|\btrack(ing)?\b').hasMatch(text)) {
+      return _AiIntent.shipping;
+    }
+    if (RegExp(r'\breview\b|\brate\b|\brating\b').hasMatch(text)) {
+      return _AiIntent.review;
+    }
+    if (RegExp(r'\btip\b|\bgratuity\b').hasMatch(text)) {
+      return _AiIntent.tip;
+    }
+    if (RegExp(r'\bsupport\b|\bhelp\b|\bhuman\b|\bagent\b|\bcontact\b').hasMatch(text)) {
+      return _AiIntent.support;
+    }
+    return _AiIntent.unknown;
+  }
+
+  static const String _requestColumns =
+      'status, client_status, artist_status, order_number, '
+      'accepted_by_artist_name, payment_status, payment_amount, currency, '
+      'paid_at, shipping_status, tracking_number, shipped_at, delivered_at, '
+      'cancelled_at, cancel_reason';
+
+  Future<Map<String, dynamic>?> _fetchRequestRow() async {
+    final requestId = widget.requestId.trim();
+    if (requestId.isEmpty) return null;
+
+    try {
+      final clientRow = await _supabase
+          .from('client_custom_requests')
+          .select(_requestColumns)
+          .eq('id', requestId)
+          .maybeSingle();
+      if (clientRow != null) return clientRow;
+    } catch (_) {}
+
+    try {
+      final companyRow = await _supabase
+          .from('company_custom_requests')
+          .select(_requestColumns)
+          .eq('id', requestId)
+          .maybeSingle();
+      return companyRow;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _humanize(String value) {
+    final withSpaces = value.trim().replaceAll(RegExp(r'[_-]+'), ' ');
+    if (withSpaces.isEmpty) return withSpaces;
+    return withSpaces
+        .split(' ')
+        .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+        .join(' ');
+  }
+
+  String _formatDate(Object? value) {
+    final parsed = DateTime.tryParse((value ?? '').toString());
+    if (parsed == null) return '';
+    return '${parsed.month}/${parsed.day}/${parsed.year}';
+  }
+
+  Future<String> _replyOrderStatus() async {
+    final row = await _fetchRequestRow();
+    if (row == null) {
+      return "I couldn't find that order. Could you confirm the order number?";
+    }
+
+    final cancelledAt = row['cancelled_at'];
+    if (cancelledAt != null) {
+      final reason = (row['cancel_reason'] ?? '').toString().trim();
+      return 'Order ${row['order_number'] ?? ''} was cancelled'
+          '${reason.isNotEmpty ? ' (reason: $reason)' : ''}. '
+          'You can resubmit a new request any time from your orders page.';
+    }
+
+    final status = (row['status'] ?? 'pending').toString();
+    final artist = (row['accepted_by_artist_name'] ?? '').toString().trim();
+    final artistLine = artist.isNotEmpty
+        ? 'Your artist, $artist, is assigned.'
+        : 'An artist has not been assigned yet.';
+    return 'Order ${row['order_number'] ?? ''} status: ${_humanize(status)}. $artistLine';
+  }
+
+  Future<String> _replyPayment() async {
+    final row = await _fetchRequestRow();
+    if (row == null) {
+      return "I couldn't find payment details for that order. Could you confirm the order number?";
+    }
+
+    final status = (row['payment_status'] ?? '').toString().trim();
+    if (status.isEmpty || status.toLowerCase() == 'pending') {
+      return 'No payment has been made yet for this order. You can complete payment from the order details page.';
+    }
+
+    final amount = row['payment_amount'];
+    final currency = (row['currency'] ?? 'USD').toString();
+    final paidAt = _formatDate(row['paid_at']);
+    final amountLine = amount != null ? ' of $currency $amount' : '';
+    final dateLine = paidAt.isNotEmpty ? ' on $paidAt' : '';
+    return 'Payment status: ${_humanize(status)}$amountLine$dateLine.';
+  }
+
+  Future<String> _replyShipping() async {
+    final row = await _fetchRequestRow();
+    if (row == null) {
+      return "I couldn't find shipping details for that order. Could you confirm the order number?";
+    }
+
+    final deliveredAt = row['delivered_at'];
+    if (deliveredAt != null) {
+      return 'Your order was delivered on ${_formatDate(deliveredAt)}.';
+    }
+
+    final shippedAt = row['shipped_at'];
+    final tracking = (row['tracking_number'] ?? '').toString().trim();
+    if (shippedAt != null || tracking.isNotEmpty) {
+      final trackingLine = tracking.isNotEmpty ? ' Tracking number: $tracking.' : '';
+      final shippedLine = shippedAt != null ? ' Shipped on ${_formatDate(shippedAt)}.' : '';
+      return 'Your order is on its way.$shippedLine$trackingLine';
+    }
+
+    return 'Your order has not shipped yet. We will update tracking as soon as it ships.';
+  }
+
+  Future<String> _replyReview() async {
+    final requestId = widget.requestId.trim();
+    if (requestId.isEmpty) {
+      return "I couldn't find that order to check for a review.";
+    }
+
+    try {
+      final data = await _supabase
+          .from('reviews')
+          .select('rating')
+          .eq('order_id', requestId)
+          .maybeSingle();
+      if (data != null) {
+        return 'You already left a ${data['rating']}-star review for this order. Thank you!';
+      }
+    } catch (_) {}
+
+    final artist = widget.artistName.trim();
+    return "You haven't left a review yet${artist.isNotEmpty && artist != 'JNT AI Assistant' ? ' for $artist' : ''}. "
+        'Once your order is delivered, you can leave a review from the order details page.';
+  }
+
+  Future<String> _replyTip() async {
+    final requestId = widget.requestId.trim();
+    if (requestId.isEmpty) {
+      return "I couldn't find that order to check tip status.";
+    }
+
+    try {
+      final data = await _supabase
+          .from('tips')
+          .select('status, tip_amount')
+          .eq('order_id', requestId)
+          .maybeSingle();
+      if (data != null) {
+        return 'You already added a tip of \$${data['tip_amount']} (${_humanize((data['status'] ?? '').toString())}).';
+      }
+    } catch (_) {}
+
+    return "You haven't added a tip for this order yet. You can add one from the order details page after delivery.";
+  }
+
+  Future<String> _replySupport(String userText) async {
+    try {
+      final nowIso = DateTime.now().toIso8601String();
+      await _supabase.from('admin_notifications').insert({
+        'type': 'ai_chat_support_request',
+        'source': 'request_chat_messages',
+        'request_id': widget.requestId.trim(),
+        'title': 'Support requested via AI Assistant',
+        'message':
+            '${widget.clientName.trim().isNotEmpty ? widget.clientName.trim() : widget.clientEmail} '
+            'asked for support: "${userText.length > 300 ? userText.substring(0, 300) : userText}"',
+        'date_label': nowIso,
+        'event_at': nowIso,
+        'payload': {
+          'conversationId': _conversationId,
+          'clientEmail': _normalizeEmail(widget.clientEmail),
+        },
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      });
+    } catch (_) {}
+
+    return "I've let our support team know you need help — someone will follow up here shortly. "
+        'In the meantime, tell me more about the issue and I can try to help right away.';
   }
 
   Stream<List<Map<String, dynamic>>> _watchMessages() {
@@ -406,6 +781,8 @@ class _RequestChatModalState extends State<RequestChatModal> {
       );
       _messageCtrl.clear();
       _scrollToBottom();
+    } catch (e) {
+      _showSendError(e);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -449,6 +826,7 @@ class _RequestChatModalState extends State<RequestChatModal> {
         surfaceTintColor: AppColors.alabaster,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Close chat',
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.close_rounded),
         ),
@@ -752,6 +1130,7 @@ class _RequestChatModalState extends State<RequestChatModal> {
               top: 8,
               right: 8,
               child: IconButton(
+                tooltip: 'Close image preview',
                 onPressed: () => Navigator.pop(context),
                 icon:
                     const Icon(Icons.close_rounded, color: AppColors.blackCat),
@@ -762,6 +1141,16 @@ class _RequestChatModalState extends State<RequestChatModal> {
       ),
     );
   }
+}
+
+enum _AiIntent {
+  orderStatus,
+  payment,
+  shipping,
+  review,
+  tip,
+  support,
+  unknown,
 }
 
 String _conversationIdForRequest(String requestId) {
@@ -790,37 +1179,8 @@ String _value(
   return (raw ?? '').toString().trim();
 }
 
-Map<String, dynamic> _asMap(Object? value) {
-  if (value is Map<String, dynamic>) return value;
-  if (value is Map) return Map<String, dynamic>.from(value);
-  return <String, dynamic>{};
-}
-
-bool _isTruthy(Object? value) {
-  if (value == true) return true;
-  if (value is num) return value != 0;
-  final text = (value ?? '').toString().trim().toLowerCase();
-  return text == 'true' || text == 'yes' || text == '1' || text == 'online';
-}
-
-DateTime? _dateValue(Object? value) {
-  if (value == null) return null;
-  if (value is DateTime) return value;
-  if (value is String) return DateTime.tryParse(value);
-  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-  if (value is double) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
-  if (value is Map) {
-    final seconds = value['seconds'];
-    if (seconds is int) {
-      return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
-    }
-  }
-  return null;
-}
-
 enum _PeerPresence {
   available('Available', Color(0xFF2E8B57)),
-  away('Away', Color(0xFFFFA726)),
   offline('Offline', Color(0xFF9E9E9E));
 
   const _PeerPresence(this.label, this.color);

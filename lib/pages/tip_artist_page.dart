@@ -297,21 +297,30 @@ class _TipArtistPageState extends State<TipArtistPage> {
     final selected = _selectedPercent == percent;
 
     return Expanded(
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '$percent% tip',
+        value: selected ? 'Selected' : 'Not selected',
         onTap: () => setState(() => _selectedPercent = percent),
-        child: Container(
-          height: 52,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? AppColors.blackCat : AppColors.snow,
-            border: Border.all(color: AppColors.blackCat),
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Text(
-            '$percent%',
-            style: TextStyle(
-              color: selected ? AppColors.snow : AppColors.blackCat,
-              fontWeight: FontWeight.w700,
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: () => setState(() => _selectedPercent = percent),
+            child: Container(
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.blackCat : AppColors.snow,
+                border: Border.all(color: AppColors.blackCat),
+                borderRadius: BorderRadius.zero,
+              ),
+              child: Text(
+                '$percent%',
+                style: TextStyle(
+                  color: selected ? AppColors.snow : AppColors.blackCat,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ),

@@ -5,21 +5,36 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "JewelNotTool",
-            "request": "launch",
-            "type": "dart"
-        },
-        {
-            "name": "JewelNotTool (profile mode)",
+            "name": "JewelNotTool (dev)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "profile"
+            "args": ["--flavor", "dev", "--dart-define=ENV=dev"]
         },
         {
-            "name": "JewelNotTool (release mode)",
+            "name": "JewelNotTool (uat)",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "release"
+            "args": ["--flavor", "uat", "--dart-define=ENV=uat"]
+        },
+        {
+            "name": "JewelNotTool (production)",
+            "request": "launch",
+            "type": "dart",
+            "args": ["--flavor", "production", "--dart-define=ENV=production"]
+        },
+        {
+            "name": "JewelNotTool (production, profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "args": ["--flavor", "production", "--dart-define=ENV=production"]
+        },
+        {
+            "name": "JewelNotTool (production, release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "args": ["--flavor", "production", "--dart-define=ENV=production"]
         }
     ]
 }

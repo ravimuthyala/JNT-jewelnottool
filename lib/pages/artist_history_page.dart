@@ -1429,7 +1429,10 @@ class _HistoryTabs extends StatelessWidget {
 
   Widget _tab(String label, int count, ArtistHistoryFilter value) {
     final isSelected = selected == value;
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.zero,
       child: Padding(
@@ -1460,6 +1463,7 @@ class _HistoryTabs extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -1472,7 +1476,11 @@ class _HistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Card(
-      child: InkWell(
+      child: MergeSemantics(
+        child: Semantics(
+          button: true,
+          onTap: onTap,
+          child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.zero,
         child: Row(
@@ -1535,6 +1543,8 @@ class _HistoryCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }

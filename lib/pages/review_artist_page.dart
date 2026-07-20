@@ -350,12 +350,21 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
   Widget _star(int value) {
     final selected = value <= _rating;
 
-    return IconButton(
-      onPressed: () => setState(() => _rating = value),
-      icon: Icon(
-        selected ? Icons.star : Icons.star_border,
-        size: 34,
-        color: AppColors.blackCat,
+    return Semantics(
+      button: true,
+      selected: value == _rating,
+      label: '$value ${value == 1 ? 'star' : 'stars'}',
+      value: value == _rating ? 'Selected' : null,
+      onTap: () => setState(() => _rating = value),
+      child: ExcludeSemantics(
+        child: IconButton(
+          onPressed: () => setState(() => _rating = value),
+          icon: Icon(
+            selected ? Icons.star : Icons.star_border,
+            size: 34,
+            color: AppColors.blackCat,
+          ),
+        ),
       ),
     );
   }

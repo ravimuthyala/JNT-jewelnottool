@@ -166,6 +166,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
                 children: [
                   const Spacer(),
                   IconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),

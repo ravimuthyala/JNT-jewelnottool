@@ -122,6 +122,14 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   final List<String> _inspirationPhotos = [];
   final Map<String, XFile> _pickedPhotoFiles = <String, XFile>{};
   final Map<String, Uint8List> _pickedPhotoBytes = <String, Uint8List>{};
+  int _photoKeySeq = 0;
+
+  // image_picker can return the same cache file path for different shots
+  // (especially camera captures on Android), so a real path can't be used
+  // as a stable per-photo key. A synthetic key avoids later picks silently
+  // overwriting earlier ones' cached bytes/preview under a reused path.
+  String _newPhotoKey() =>
+      'picked_${DateTime.now().microsecondsSinceEpoch}_${_photoKeySeq++}';
 
   // Budget
   RangeValues _budget = const RangeValues(15, 500);
@@ -1415,7 +1423,16 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
   Future<void> _logout() async {
     if (widget.showBottomNav) {
-      await Supabase.instance.client.auth.signOut();
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (e) {
+        debugPrint('[ClientCustomRequestPage] logout failed: $e');
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to log out: $e')));
+        return;
+      }
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
       return;
@@ -1424,7 +1441,16 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       await widget.onLogout!.call();
       return;
     }
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('[ClientCustomRequestPage] logout failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to log out: $e')));
+      return;
+    }
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -1761,27 +1787,34 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         );
         return;
       }
-      final picked = await _picker.pickMultiImage(
-        imageQuality: 35,
-        maxWidth: 800,
-        maxHeight: 800,
-      );
+      // Note: intentionally NOT passing imageQuality/maxWidth/maxHeight here.
+      // image_picker's native multi-image compression step has a known race
+      // on some Android versions where picking many images at once produces
+      // duplicate (identical) compressed bytes for different files. Manual
+      // resizing below (_normalizeImageBytes) handles downsizing instead.
+      final picked = await _picker.pickMultiImage();
       if (!mounted) return;
       if (picked.isEmpty) return;
 
       final accepted = <XFile>[];
-      final acceptedBytes = <String, Uint8List>{};
+      final acceptedBytes = <Uint8List>[];
       var rejectedCount = 0;
       for (final file in picked) {
-        final size = await file.length();
-        if (size > _maxImageSizeBytes) {
+        Uint8List normalized;
+        try {
+          final bytes = await file.readAsBytes();
+          normalized = _normalizeImageBytes(bytes);
+        } catch (_) {
           rejectedCount++;
           continue;
         }
-        try {
-          final bytes = await file.readAsBytes();
-          acceptedBytes[file.path] = _normalizeImageBytes(bytes);
-        } catch (_) {}
+        // Check size after our own resize/compression, since the file is no
+        // longer pre-compressed by the native picker (see note above).
+        if (normalized.length > _maxImageSizeBytes) {
+          rejectedCount++;
+          continue;
+        }
+        acceptedBytes.add(normalized);
         accepted.add(file);
       }
       if (!mounted) return;
@@ -1795,12 +1828,13 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           .take(remainingSlots)
           .toList(growable: false);
       setState(() {
-        for (final file in acceptedToAdd) {
-          _inspirationPhotos.add(file.path);
-          _pickedPhotoFiles[file.path] = file;
-          final bytes = acceptedBytes[file.path];
-          if (bytes != null && bytes.isNotEmpty) {
-            _pickedPhotoBytes[file.path] = bytes;
+        for (var i = 0; i < acceptedToAdd.length; i++) {
+          final key = _newPhotoKey();
+          _inspirationPhotos.add(key);
+          _pickedPhotoFiles[key] = acceptedToAdd[i];
+          final bytes = acceptedBytes[i];
+          if (bytes.isNotEmpty) {
+            _pickedPhotoBytes[key] = bytes;
           }
         }
         _fieldErrors.remove('inspirationPhotos');
@@ -1855,12 +1889,10 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         return;
       }
 
+      final key = _newPhotoKey();
       setState(() {
-        _inspirationPhotos.add(picked.path);
-        _pickedPhotoFiles[picked.path] = picked;
-        // Capture immediate preview bytes so the submitted request can carry
-        // a temporary renderable fallback while uploads complete.
-        _pickedPhotoBytes.remove(picked.path);
+        _inspirationPhotos.add(key);
+        _pickedPhotoFiles[key] = picked;
         _fieldErrors.remove('inspirationPhotos');
       });
       final bytes = await picked.readAsBytes().timeout(
@@ -1870,7 +1902,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       final normalized = _normalizeImageBytes(bytes);
       if (normalized.isNotEmpty && mounted) {
         setState(() {
-          _pickedPhotoBytes[picked.path] = normalized;
+          _pickedPhotoBytes[key] = normalized;
         });
       }
     } catch (_) {
@@ -1963,10 +1995,12 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     if (_isUrl(p)) return NetworkImage(p);
     if (p.startsWith('data:')) return NetworkImage(p);
     if (p.startsWith('assets/')) return AssetImage(p);
-    if (kIsWeb) return NetworkImage(p);
+
+    final realPath = _pickedPhotoFiles[p]?.path ?? p;
+    if (kIsWeb) return NetworkImage(realPath);
 
     // Mobile-safe thumbnail preview.
-    return ResizeImage(FileImage(File(p)), width: 300, height: 300);
+    return ResizeImage(FileImage(File(realPath)), width: 300, height: 300);
   }
 
   Widget _previewImage(String path) {
@@ -3030,6 +3064,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                 SizedBox(
                   width: 50,
                   child: IconButton(
+                    tooltip: 'Back',
                     onPressed: widget.onBackHome,
                     icon: Icon(
                       Icons.arrow_back_rounded,
@@ -3491,6 +3526,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                             ),
                             const Spacer(),
                             IconButton(
+                              tooltip: 'Remove client ${i + 1}',
                               onPressed: () => _removeClientSlot(i),
                               icon: const Icon(Icons.delete_outline, size: 22),
                             ),
@@ -4244,7 +4280,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           const Icon(Icons.image_outlined, size: 28),
           const SizedBox(height: 6),
           Text(
-            _fileNameFromPath(p),
+            _pickedPhotoFiles[p]?.name ?? _fileNameFromPath(p),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,

@@ -72,7 +72,11 @@ class _EmailVerificationPendingPageState
 
   Future<void> _navigateToLogin() async {
     if (!mounted) return;
-    await _supabase.auth.signOut();
+    try {
+      await _supabase.auth.signOut();
+    } catch (e) {
+      debugPrint('EmailVerificationPendingPage: sign out failed: $e');
+    }
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: widget.loginPageBuilder),
@@ -142,7 +146,11 @@ class _EmailVerificationPendingPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      label: 'Verify your email',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       body: SafeArea(
         child: Center(
@@ -162,6 +170,7 @@ class _EmailVerificationPendingPageState
                   Align(
                     alignment: Alignment.topRight,
                     child: IconButton(
+                      tooltip: 'Close and return to login',
                       onPressed: _navigateToLogin,
                       icon: const Icon(Icons.close_rounded),
                     ),
@@ -260,6 +269,7 @@ class _EmailVerificationPendingPageState
             ),
           ),
         ),
+      ),
       ),
     );
   }

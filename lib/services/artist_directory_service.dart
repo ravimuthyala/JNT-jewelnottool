@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ArtistDirectoryEntry {
@@ -208,22 +209,27 @@ class ArtistDirectoryService {
     const pageSize = _defaultPageSize;
     var offset = 0;
 
-    while (rows.length < maxRows) {
-      final pageLimit = (maxRows - rows.length).clamp(1, pageSize);
-      final page = await _client
-          .from(table)
-          .select()
-          .order('id')
-          .range(offset, offset + pageLimit - 1);
-      if (page.isEmpty) break;
+    try {
+      while (rows.length < maxRows) {
+        final pageLimit = (maxRows - rows.length).clamp(1, pageSize);
+        final page = await _client
+            .from(table)
+            .select()
+            .order('id')
+            .range(offset, offset + pageLimit - 1);
+        if (page.isEmpty) break;
 
-      final mapped = page
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList(growable: false);
-      rows.addAll(mapped);
-      if (mapped.length < pageLimit) break;
-      offset += mapped.length;
+        final mapped = page
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+        rows.addAll(mapped);
+        if (mapped.length < pageLimit) break;
+        offset += mapped.length;
+      }
+    } catch (e) {
+      debugPrint('ArtistDirectoryService._fetchRows($table) failed: $e');
+      return rows;
     }
 
     return rows;

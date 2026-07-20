@@ -1310,7 +1310,9 @@ class _ClientArtistRegistrationPageState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            InkWell(
+            Semantics(
+              button: true,
+              child: InkWell(
               borderRadius: BorderRadius.zero,
               onTap: onToggle,
               child: InputDecorator(
@@ -1336,6 +1338,7 @@ class _ClientArtistRegistrationPageState
                     ),
                   ],
                 ),
+              ),
               ),
             ),
             if (isOpen)
@@ -1377,7 +1380,10 @@ class _ClientArtistRegistrationPageState
                       itemBuilder: (context, index) {
                         final item = items[index];
                         final selectedItem = selected == item;
-                        return InkWell(
+                        return Semantics(
+                          button: true,
+                          selected: selectedItem,
+                          child: InkWell(
                           onTap: () {
                             field.didChange(item);
                             onChanged(item);
@@ -1400,6 +1406,7 @@ class _ClientArtistRegistrationPageState
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
+                          ),
                           ),
                         );
                       },
@@ -1677,7 +1684,10 @@ class _ClientArtistRegistrationPageState
     required VoidCallback onTap,
     required VoidCallback onAdd,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -1789,6 +1799,7 @@ class _ClientArtistRegistrationPageState
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -1797,7 +1808,10 @@ class _ClientArtistRegistrationPageState
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -1821,6 +1835,7 @@ class _ClientArtistRegistrationPageState
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -1828,7 +1843,10 @@ class _ClientArtistRegistrationPageState
     Widget option({required NailTechType type, required String label}) {
       final selected = _nailTechType == type;
       return Expanded(
-        child: InkWell(
+        child: Semantics(
+          button: true,
+          selected: selected,
+          child: InkWell(
           borderRadius: BorderRadius.zero,
           onTap: () => setState(() => _nailTechType = type),
           child: Container(
@@ -1864,6 +1882,7 @@ class _ClientArtistRegistrationPageState
               ],
             ),
           ),
+        ),
         ),
       );
     }
@@ -2276,6 +2295,7 @@ class _ClientArtistRegistrationPageState
             backgroundColor: AppColors.snow,
             elevation: 0,
             leading: IconButton(
+              tooltip: 'Back',
               icon: const Icon(Icons.arrow_back_rounded),
               onPressed: () => Navigator.pop(context, false),
             ),
@@ -2541,36 +2561,47 @@ class _ClientArtistRegistrationPageState
                           final s = _nailCaptureSteps[i];
                           final done = measured[s.key] != null;
                           final current = i == stepIndex;
-                          return InkWell(
-                            onTap: () => setModalState(() => stepIndex = i),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: current
-                                    ? AppColors.blackCat
-                                    : (done
-                                          ? AppColors.balletSlippers
-                                          : AppColors.snow),
-                                border: Border.all(
-                                  color: current
-                                      ? AppColors.blackCat
-                                      : AppColors.blackCat.withValues(
-                                          alpha: 0.12,
-                                        ),
-                                ),
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              child: Text(
-                                s.finger,
-                                style: TextStyle(
-                                  color: current
-                                      ? AppColors.snow
-                                      : AppColors.blackCat,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                          return Semantics(
+                            button: true,
+                            selected: current,
+                            label:
+                                '${s.title}${done ? ', measured' : ', not measured'}',
+                            onTap: () =>
+                                setModalState(() => stepIndex = i),
+                            child: ExcludeSemantics(
+                              child: InkWell(
+                                onTap: () =>
+                                    setModalState(() => stepIndex = i),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: current
+                                        ? AppColors.blackCat
+                                        : (done
+                                              ? AppColors.balletSlippers
+                                              : AppColors.snow),
+                                    border: Border.all(
+                                      color: current
+                                          ? AppColors.blackCat
+                                          : AppColors.blackCat.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                    ),
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  child: Text(
+                                    s.finger,
+                                    style: TextStyle(
+                                      color: current
+                                          ? AppColors.snow
+                                          : AppColors.blackCat,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -3404,6 +3435,7 @@ class _ClientArtistRegistrationPageState
                 'Enter Password',
                 suffixIcon: IconButton(
                   iconSize: 18,
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                   onPressed: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
                   icon: Icon(
@@ -3434,6 +3466,9 @@ class _ClientArtistRegistrationPageState
                 'Re-enter Password',
                 suffixIcon: IconButton(
                   iconSize: 18,
+                  tooltip: _obscureConfirmPassword
+                      ? 'Show password'
+                      : 'Hide password',
                   onPressed: () => setState(
                     () => _obscureConfirmPassword = !_obscureConfirmPassword,
                   ),
@@ -3768,23 +3803,32 @@ class _ClientArtistRegistrationPageState
                         Positioned(
                           top: 4,
                           right: 4,
-                          child: InkWell(
+                          child: Semantics(
+                            button: true,
+                            label: 'Remove portfolio image ${index + 1}',
                             onTap: () => setState(
                               () => _portfolioImages.removeAt(index),
                             ),
-                            child: Container(
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.82,
+                            child: ExcludeSemantics(
+                              child: InkWell(
+                                onTap: () => setState(
+                                  () => _portfolioImages.removeAt(index),
                                 ),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                size: 14,
-                                color: AppColors.snow,
+                                child: Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.82,
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: AppColors.snow,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -3794,7 +3838,12 @@ class _ClientArtistRegistrationPageState
                   );
                 }),
                 if (_portfolioImages.length < _maxPortfolioImages)
-                  InkWell(
+                  Semantics(
+                    button: true,
+                    label: 'Add portfolio image',
+                    onTap: _pickPortfolioImages,
+                    child: ExcludeSemantics(
+                    child: InkWell(
                     onTap: _pickPortfolioImages,
                     borderRadius: BorderRadius.zero,
                     child: Container(
@@ -3825,6 +3874,8 @@ class _ClientArtistRegistrationPageState
                         ],
                       ),
                     ),
+                  ),
+                  ),
                   ),
               ],
             ),
@@ -3937,7 +3988,9 @@ class _ClientArtistRegistrationPageState
             ),
             const SizedBox(height: 6),
 
-            InkWell(
+            Semantics(
+              button: true,
+              child: InkWell(
               onTap: () => setState(() {
                 _showYearCalendar = !_showYearCalendar;
                 if (_showYearCalendar) {
@@ -3961,6 +4014,7 @@ class _ClientArtistRegistrationPageState
                     ),
                   ),
                 ],
+              ),
               ),
             ),
 
@@ -4893,7 +4947,17 @@ class _ClientArtistRegistrationPageState
           final completed = index < _registrationStep;
           final showConnector = index < _registrationStepTitles.length - 1;
           return Expanded(
-            child: InkWell(
+            child: Semantics(
+              button: true,
+              selected: selected,
+              label:
+                  'Step ${index + 1}: ${_registrationStepTitles[index]}${completed ? ', completed' : ''}',
+              onTap: () => setState(() {
+                _registrationStep = index;
+                _validationTriggeredStep = null;
+              }),
+              child: ExcludeSemantics(
+              child: InkWell(
               onTap: () => setState(() {
                 _registrationStep = index;
                 _validationTriggeredStep = null;
@@ -4986,6 +5050,8 @@ class _ClientArtistRegistrationPageState
                     color: selected ? AppColors.blackCat : Colors.transparent,
                   ),
                 ],
+              ),
+            ),
               ),
             ),
           );
@@ -5384,7 +5450,11 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
         );
       }
       groupedWidgets.add(
-        InkWell(
+        MergeSemantics(
+          child: Semantics(
+            button: true,
+            onTap: () => Navigator.pop(context, item.name),
+            child: InkWell(
           onTap: () => Navigator.pop(context, item.name),
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -5426,6 +5496,8 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
             ),
           ),
         ),
+          ),
+        ),
       );
     }
 
@@ -5435,6 +5507,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
         backgroundColor: AppColors.snow,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),

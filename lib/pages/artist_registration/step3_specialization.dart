@@ -354,7 +354,9 @@ class Step3SpecializationState extends State<Step3Specialization> {
                   ),
                 ),
                 const SizedBox(height: kTightGap),
-                InkWell(
+                Semantics(
+                  button: true,
+                  child: InkWell(
                   onTap: () => setState(() {
                     _showCalendar = !_showCalendar;
                     if (_showCalendar) {
@@ -378,6 +380,7 @@ class Step3SpecializationState extends State<Step3Specialization> {
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ),
                 if (_showCalendar) ...[

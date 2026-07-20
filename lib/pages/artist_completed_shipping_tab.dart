@@ -59,7 +59,9 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
     final displayText = (_courier ?? '').trim();
     final hasValue = displayText.isNotEmpty;
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      child: InkWell(
       key: fieldKey,
       borderRadius: BorderRadius.zero,
       onTap: () => _openCourierMenu(context, fieldKey),
@@ -94,6 +96,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -188,7 +191,9 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                 ),
               ),
               const SizedBox(height: 8),
-              InkWell(
+              Semantics(
+                button: true,
+                child: InkWell(
                 borderRadius: BorderRadius.zero,
                 onTap: _pickShippedDate,
                 child: Container(
@@ -224,6 +229,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                       ),
                     ],
                   ),
+                ),
                 ),
               ),
             const SizedBox(height: 20),

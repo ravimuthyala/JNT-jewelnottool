@@ -198,7 +198,14 @@ class AddressValidationService {
       }
 
       final raw = await utf8.decoder.bind(response).join();
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final decodedJson = jsonDecode(raw);
+      if (decodedJson is! Map<String, dynamic>) {
+        return const AddressValidationResult(
+          isValid: false,
+          message: 'Unexpected response during address validation.',
+        );
+      }
+      final decoded = decodedJson;
       final places = (decoded['places'] as List<dynamic>? ?? const []);
       if (places.isEmpty) {
         return const AddressValidationResult(
@@ -210,7 +217,8 @@ class AddressValidationService {
       final cityMatches = <String>{};
       final stateMatches = <String>{};
       for (final place in places) {
-        final row = place as Map<String, dynamic>;
+        if (place is! Map<String, dynamic>) continue;
+        final row = place;
         final placeName = (row['place name'] ?? '').toString();
         final stateAbbr = (row['state abbreviation'] ?? '').toString();
         if (_normalizeCity(placeName) == expectedCity) {
@@ -299,7 +307,14 @@ class AddressValidationService {
       }
 
       final raw = await utf8.decoder.bind(response).join();
-      final decoded = jsonDecode(raw) as List<dynamic>;
+      final decodedJson = jsonDecode(raw);
+      if (decodedJson is! List<dynamic>) {
+        return const AddressValidationResult(
+          isValid: false,
+          message: 'Unexpected response during city/state validation.',
+        );
+      }
+      final decoded = decodedJson;
       if (decoded.isEmpty) {
         return const AddressValidationResult(
           isValid: false,
@@ -309,7 +324,8 @@ class AddressValidationService {
 
       final expectedCityNormalized = _normalizeCity(cityValue);
       for (final row in decoded) {
-        final map = row as Map<String, dynamic>;
+        if (row is! Map<String, dynamic>) continue;
+        final map = row;
         final address = (map['address'] as Map<String, dynamic>? ?? const {});
         final countryCode = (address['country_code'] ?? '')
             .toString()

@@ -442,7 +442,11 @@ class _ThreadRow extends StatelessWidget {
       color: AppColors.blackCat.withValues(alpha: 0.55),
     );
 
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        onTap: onTap,
+        child: InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -526,6 +530,8 @@ class _ThreadRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }

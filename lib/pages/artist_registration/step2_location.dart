@@ -298,7 +298,12 @@ class Step2LocationState extends State<Step2Location> {
                         ),
                       );
                     }),
-                    InkWell(
+                    Semantics(
+                      button: true,
+                      label: 'Add portfolio image',
+                      onTap: _pickPortfolioImages,
+                      child: ExcludeSemantics(
+                        child: InkWell(
                       onTap: _pickPortfolioImages,
                       borderRadius: BorderRadius.zero,
                       child: Container(
@@ -327,6 +332,8 @@ class Step2LocationState extends State<Step2Location> {
                               ),
                             ),
                           ],
+                        ),
+                      ),
                         ),
                       ),
                     ),
@@ -396,7 +403,10 @@ class Step2LocationState extends State<Step2Location> {
   Widget _typeToggleOption(NailTechType type, String label) {
     final selected = _nailTechType == type;
     return Expanded(
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: InkWell(
         onTap: () => setState(() => _nailTechType = type),
         borderRadius: BorderRadius.zero,
         child: Container(
@@ -432,6 +442,7 @@ class Step2LocationState extends State<Step2Location> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

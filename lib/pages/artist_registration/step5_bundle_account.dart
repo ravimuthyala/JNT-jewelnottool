@@ -150,6 +150,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
           MaterialPageRoute(builder: (_) => ArtistCheckoutPage(initial: info)),
         )) ??
         false;
+    if (!mounted) return;
     if (purchased) {
       setState(() {
         _bundlePurchased = true;
@@ -235,6 +236,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                     'Password',
                     'At least 8 characters',
                     suffixIcon: IconButton(
+                      tooltip: _obscurePass ? 'Show password' : 'Hide password',
                       icon: Icon(
                         _obscurePass ? Icons.visibility_off : Icons.visibility,
                         color: AppColors.blackCatLight,
@@ -268,6 +270,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                     'Confirm password',
                     '',
                     suffixIcon: IconButton(
+                      tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
                       icon: Icon(
                         _obscureConfirm
                             ? Icons.visibility_off
@@ -421,7 +424,10 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
     final selected = _selectedBundle == bundleKey;
     final purchased = _bundlePurchased && _selectedBundle == bundleKey;
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       onTap: () => setState(() => _selectedBundle = bundleKey),
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -530,6 +536,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

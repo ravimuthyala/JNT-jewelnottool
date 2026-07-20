@@ -50,6 +50,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   static const bool kAllowRegistrationWithoutCheckout = true;
 
   bool _submitting = false;
+  bool _showValidationErrors = false;
+  int _registrationStep = 0;
+  int? _validationTriggeredStep;
   bool _pickingImage = false;
   final ImagePicker _picker = ImagePicker();
   Uint8List? _profilePhotoBytes;
@@ -107,6 +110,11 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     method: PaymentMethod.applePay,
     saveForFuture: true,
   );
+
+  static const List<String> _registrationStepTitles = <String>[
+    'Basic Info,\nAddress & Payment',
+    'Nail\nDimensions',
+  ];
 
   // State/Country dropdown values
   String? _selectedState;
@@ -331,6 +339,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
             backgroundColor: AppColors.snow,
             elevation: 0,
             leading: IconButton(
+              tooltip: 'Back',
               icon: const Icon(Icons.arrow_back_rounded),
               onPressed: () => Navigator.pop(context, false),
             ),
@@ -594,36 +603,47 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                           final s = _nailCaptureSteps[i];
                           final done = measured[s.key] != null;
                           final current = i == stepIndex;
-                          return InkWell(
-                            onTap: () => setModalState(() => stepIndex = i),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: current
-                                    ? AppColors.blackCat
-                                    : (done
-                                          ? AppColors.balletSlippers
-                                          : AppColors.snow),
-                                border: Border.all(
-                                  color: current
-                                      ? AppColors.blackCat
-                                      : AppColors.blackCat.withValues(
-                                          alpha: 0.12,
-                                        ),
-                                ),
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              child: Text(
-                                s.finger,
-                                style: TextStyle(
-                                  color: current
-                                      ? AppColors.snow
-                                      : AppColors.blackCat,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                          return Semantics(
+                            button: true,
+                            selected: current,
+                            label:
+                                '${s.title}${done ? ', measured' : ', not measured'}',
+                            onTap: () =>
+                                setModalState(() => stepIndex = i),
+                            child: ExcludeSemantics(
+                              child: InkWell(
+                                onTap: () =>
+                                    setModalState(() => stepIndex = i),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: current
+                                        ? AppColors.blackCat
+                                        : (done
+                                              ? AppColors.balletSlippers
+                                              : AppColors.snow),
+                                    border: Border.all(
+                                      color: current
+                                          ? AppColors.blackCat
+                                          : AppColors.blackCat.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                    ),
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  child: Text(
+                                    s.finger,
+                                    style: TextStyle(
+                                      color: current
+                                          ? AppColors.snow
+                                          : AppColors.blackCat,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1630,6 +1650,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     final sw = Stopwatch()..start();
     _authLog('submit tapped');
 
+    if (!_showValidationErrors) {
+      setState(() => _showValidationErrors = true);
+    }
     if (_formKey.currentState?.validate() != true) return;
     _authLog('form validation passed');
 
@@ -1754,9 +1777,8 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         'nail_preferences': payload['nailPreferences'],
         'registration': registration,
 
-        'panel_displayName': draft.basic.name,
+        'panel_display_name': draft.basic.name,
         'panel_phone': draft.basic.phone,
-        'panel_profileImageUrl': draft.basic.profileImageUrl,
 
         'updated_at': DateTime.now().toIso8601String(),
       });
@@ -1822,6 +1844,274 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     }
   }
 
+  Future<bool> _validateCurrentRegistrationStep() async {
+    if (_validationTriggeredStep != _registrationStep) {
+      setState(() => _validationTriggeredStep = _registrationStep);
+    }
+    final ok = _formKey.currentState?.validate() ?? true;
+    if (!ok) return false;
+
+    if (_registrationStep == 0 && _isUnitedStates) {
+      try {
+        final addressValidation =
+            await AddressValidationService.validateUsAddress(
+              street: _streetCtrl.text.trim(),
+              city: _cityCtrl.text.trim(),
+              state: _resolvedState,
+              zip: _zipCtrl.text.trim(),
+            ).timeout(const Duration(seconds: 8));
+        if (!addressValidation.isValid) {
+          if (!mounted) return false;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                addressValidation.message ?? 'Invalid U.S. mailing address.',
+              ),
+            ),
+          );
+          return false;
+        }
+      } on TimeoutException {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Address validation timed out. Please try again.'),
+          ),
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  Future<void> _goToNextRegistrationStep() async {
+    if (!await _validateCurrentRegistrationStep()) return;
+    if (!mounted) return;
+    setState(() {
+      _registrationStep += 1;
+      _validationTriggeredStep = null;
+    });
+  }
+
+  Widget _registrationProgressTabs() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 2),
+      child: Row(
+        children: List.generate(_registrationStepTitles.length, (index) {
+          final selected = index == _registrationStep;
+          final completed = index < _registrationStep;
+          final showConnector = index < _registrationStepTitles.length - 1;
+          return Expanded(
+            child: Semantics(
+              button: true,
+              selected: selected,
+              label:
+                  'Step ${index + 1}: ${_registrationStepTitles[index]}${completed ? ', completed' : ''}',
+              onTap: () => setState(() {
+                _registrationStep = index;
+                _validationTriggeredStep = null;
+              }),
+              child: ExcludeSemantics(
+                child: InkWell(
+                  onTap: () => setState(() {
+                    _registrationStep = index;
+                    _validationTriggeredStep = null;
+                  }),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 28,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (index > 0)
+                              Expanded(
+                                child: Container(
+                                  height: 1.5,
+                                  color: completed
+                                      ? _clientRegBrandInk.withValues(
+                                          alpha: 0.55,
+                                        )
+                                      : _clientRegBrandInk.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                ),
+                              )
+                            else
+                              const Spacer(),
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: (selected || completed)
+                                    ? _clientRegBrandInk
+                                    : _clientRegBrandInk.withValues(
+                                        alpha: 0.10,
+                                      ),
+                              ),
+                              child: completed
+                                  ? const Icon(
+                                      Icons.check,
+                                      size: 15,
+                                      color: AppColors.snow,
+                                    )
+                                  : Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        fontFamily: 'Arial',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: selected
+                                            ? AppColors.snow
+                                            : _clientRegBrandInk,
+                                      ),
+                                    ),
+                            ),
+                            const SizedBox(width: 6),
+                            if (showConnector)
+                              Expanded(
+                                child: Container(
+                                  height: 1.5,
+                                  color: (completed || selected)
+                                      ? _clientRegBrandInk.withValues(
+                                          alpha: 0.55,
+                                        )
+                                      : _clientRegBrandInk.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                ),
+                              )
+                            else
+                              const Spacer(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 30,
+                        child: Text(
+                          _registrationStepTitles[index],
+                          textAlign: TextAlign.center,
+                          softWrap: true,
+                          style: TextStyle(
+                            fontFamily: 'Arial',
+                            fontSize: 9,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: _clientRegBrandInk.withValues(
+                              alpha: selected ? 1 : 0.65,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 3,
+                        color: selected
+                            ? _clientRegBrandInk
+                            : Colors.transparent,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _wizardNavButtons({required bool canCreate}) {
+    final isLast = _registrationStep == _registrationStepTitles.length - 1;
+    return Container(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      color: _clientRegBodyBg,
+      child: Row(
+        children: [
+          if (_registrationStep > 0)
+            SizedBox(
+              height: 44,
+              width: 96,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: _clientRegBrandInk,
+                  foregroundColor: AppColors.snow,
+                  side: const BorderSide(color: AppColors.blackCatBorderLight),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: () => setState(() {
+                  _registrationStep -= 1;
+                  _validationTriggeredStep = null;
+                }),
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 96),
+          const Spacer(),
+          SizedBox(
+            height: 44,
+            width: isLast ? 170 : 96,
+            child: ElevatedButton(
+              onPressed: _submitting
+                  ? null
+                  : isLast
+                  ? (canCreate ? _onCreateAccount : null)
+                  : _goToNextRegistrationStep,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _clientRegBrandInk,
+                disabledBackgroundColor: _clientRegBrandInk.withValues(
+                  alpha: 0.16,
+                ),
+                foregroundColor: AppColors.snow,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                elevation: 0,
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.snow,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      isLast ? 'Create account' : 'Next',
+                      style: const TextStyle(
+                        fontFamily: 'Arial',
+                        color: AppColors.snow,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canCreate = kAllowRegistrationWithoutCheckout
@@ -1877,9 +2167,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
             children: [
               Form(
                 key: _formKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
+                autovalidateMode: _validationTriggeredStep == _registrationStep
+                    ? AutovalidateMode.always
+                    : AutovalidateMode.disabled,
                 child: Column(
                   children: [
+                    _registrationProgressTabs(),
+                    if (_registrationStep == 0) ...[
                     _SectionCard(
                       title: 'Basic Information',
                       subtitle:
@@ -1934,6 +2228,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               'Enter Password',
                               suffixIcon: IconButton(
                                 iconSize: 18,
+                                tooltip: _obscure
+                                    ? 'Show password'
+                                    : 'Hide password',
                                 onPressed: () =>
                                     setState(() => _obscure = !_obscure),
                                 icon: Icon(
@@ -1961,6 +2258,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               'Re-enter Password',
                               suffixIcon: IconButton(
                                 iconSize: 18,
+                                tooltip: _obscure
+                                    ? 'Show password'
+                                    : 'Hide password',
                                 onPressed: () =>
                                     setState(() => _obscure = !_obscure),
                                 icon: Icon(
@@ -2290,6 +2590,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                     const SizedBox(height: 16),
                     promosAndNailTipsCard(),
                     const SizedBox(height: 6),
+                    PaymentMethodSection(
+                      initial: _payment,
+                      onChanged: (updated) =>
+                          setState(() => _payment = updated),
+                    ),
+                  ] else ...[
 
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -2344,12 +2650,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                       onChanged: (updated) =>
                           setState(() => _nailPrefs = updated),
                     ),
-                    const SizedBox(height: 6),
-                    PaymentMethodSection(
-                      initial: _payment,
-                      onChanged: (updated) =>
-                          setState(() => _payment = updated),
-                    ),
+                  ],
                     const SizedBox(height: 6),
 
                     /*if (!_nailPrefs.isComplete) ...[
@@ -2373,41 +2674,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                     ],*/
                     const SizedBox(height: 18),
 
-                    SizedBox(
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _clientRegBrandInk,
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        onPressed: (canCreate && !_submitting)
-                            ? _onCreateAccount
-                            : null,
-                        child: _submitting
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.snow,
-                                  ),
-                                ),
-                              )
-                            : const Text(
-                                'Create Account',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                  fontFamily: 'Arial',
-                                  color: AppColors.snow,
-                                ),
-                              ),
-                      ),
-                    ),
+                    _wizardNavButtons(canCreate: canCreate),
                   ],
                 ),
               ),
@@ -2611,7 +2878,11 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
         );
       }
       groupedWidgets.add(
-        InkWell(
+        MergeSemantics(
+          child: Semantics(
+            button: true,
+            onTap: () => Navigator.pop(context, item.name),
+            child: InkWell(
           onTap: () => Navigator.pop(context, item.name),
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -2653,6 +2924,8 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
             ),
           ),
         ),
+          ),
+        ),
       );
     }
 
@@ -2662,6 +2935,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
         backgroundColor: AppColors.snow,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),

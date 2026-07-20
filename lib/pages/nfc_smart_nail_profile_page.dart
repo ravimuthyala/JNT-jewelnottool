@@ -129,12 +129,16 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
     final uid = _supabase.auth.currentUser?.id;
     if (uid == null) return;
 
-    final target = await _findNfcProfileTarget(uid);
-    final data = target?.profile;
-    if (!mounted || data == null) return;
+    try {
+      final target = await _findNfcProfileTarget(uid);
+      final data = target?.profile;
+      if (!mounted || data == null) return;
 
-    for (final entry in _controllers.entries) {
-      entry.value.text = (data[entry.key] ?? '').toString();
+      for (final entry in _controllers.entries) {
+        entry.value.text = (data[entry.key] ?? '').toString();
+      }
+    } catch (e) {
+      debugPrint('NfcSmartNailProfilePage: failed to load existing profile: $e');
     }
   }
 
@@ -204,6 +208,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
           ),
         ),
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           color: AppColors.blackCat,
           onPressed: () => Navigator.pop(context),
@@ -703,6 +708,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
           ),
         ),
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           color: AppColors.blackCat,
           onPressed: () => Navigator.pop(context),
@@ -1035,6 +1041,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           ),
         ),
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           color: AppColors.blackCat,
           onPressed: () async {
@@ -1582,6 +1589,8 @@ class _BrandIconView extends StatelessWidget {
       return Icon(materialIcon, color: AppColors.blackCat, size: 22);
     }
 
+    // Invariant: every _IconTextField call site supplies either icon or
+    // materialIcon; materialIcon == null here guarantees icon is set.
     final spec = _spec(icon!);
     return Container(
       width: 28,

@@ -917,98 +917,72 @@ class _BaseOrderDetails extends StatelessWidget {
     if (email.isEmpty) return fallback;
     final client = Supabase.instance.client;
 
-    for (final collection in const <String>['artist', 'client_artist']) {
-      final rows = await client
-          .from(collection)
-          .select(columnsForProfileTable(collection) ?? '*')
-          .eq('email', email)
-          .limit(1);
-      if (rows.isEmpty) continue;
+    try {
+      for (final collection in const <String>['artist', 'client_artist']) {
+        final rows = await client
+            .from(collection)
+            .select(columnsForProfileTable(collection) ?? '*')
+            .eq('email', email)
+            .limit(1);
+        if (rows.isEmpty) continue;
 
-      final data = Map<String, dynamic>.from(rows.first as Map);
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-      final address = (data['address'] as Map<String, dynamic>?) ?? const {};
-      final stats = (data['stats'] as Map<String, dynamic>?) ?? const {};
+        final data = Map<String, dynamic>.from(rows.first as Map);
+        final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
+        final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
+        final address = (data['address'] as Map<String, dynamic>?) ?? const {};
+        final stats = (data['stats'] as Map<String, dynamic>?) ?? const {};
 
-      final name = _firstNonEmpty([
-        order.artistName,
-        profile['displayName'],
-        profile['name'],
-        basic['displayName'],
-        basic['name'],
-        data['panel_displayName'],
-        data['displayName'],
-        data['name'],
-      ]);
-      final image = _firstNonEmpty([
-        order.artistProfileImage,
-        profile['profileImageUrl'],
-        profile['avatarUrl'],
-        profile['profileImagePath'],
-        basic['profileImageUrl'],
-        basic['avatarUrl'],
-        data['panel_profileImageUrl'],
-        data['panel_profile_image_url'],
-        data['profileImageUrl'],
-        data['profile_image_url'],
-        data['avatarUrl'],
-        data['avatar_url'],
-      ]);
-      final city = _firstNonEmpty([
-        address['city'],
-        profile['city'],
-        data['panel_city'],
-        data['city'],
-      ]);
-      final state = _firstNonEmpty([
-        address['state'],
-        profile['state'],
-        data['panel_state'],
-        data['state'],
-      ]);
-      final rating = _asDouble(stats['rating']) ?? _asDouble(data['rating']);
+        final name = _firstNonEmpty([
+          order.artistName,
+          profile['displayName'],
+          profile['name'],
+          basic['displayName'],
+          basic['name'],
+          data['panel_displayName'],
+          data['displayName'],
+          data['name'],
+        ]);
+        final image = _firstNonEmpty([
+          order.artistProfileImage,
+          profile['profileImageUrl'],
+          profile['avatarUrl'],
+          profile['profileImagePath'],
+          basic['profileImageUrl'],
+          basic['avatarUrl'],
+          data['panel_profileImageUrl'],
+          data['panel_profile_image_url'],
+          data['profileImageUrl'],
+          data['profile_image_url'],
+          data['avatarUrl'],
+          data['avatar_url'],
+        ]);
+        final city = _firstNonEmpty([
+          address['city'],
+          profile['city'],
+          data['panel_city'],
+          data['city'],
+        ]);
+        final state = _firstNonEmpty([
+          address['state'],
+          profile['state'],
+          data['panel_state'],
+          data['state'],
+        ]);
+        final rating = _asDouble(stats['rating']) ?? _asDouble(data['rating']);
 
-      return _AcceptedArtistMeta(
-        name: name,
-        profileImage: image,
-        city: city,
-        state: state,
-        rating: rating,
-      );
+        return _AcceptedArtistMeta(
+          name: name,
+          profileImage: image,
+          city: city,
+          state: state,
+          rating: rating,
+        );
+      }
+    } catch (e) {
+      debugPrint('[BrandOrderDetails] failed to load accepted artist meta: $e');
     }
 
     return fallback;
-  }
-
-  void _openRequestChat(BuildContext context) {
-    final clientEmail = order.clientEmail.trim().toLowerCase();
-    final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
-    if (clientEmail.isEmpty || artistEmail.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Chat unavailable until both client and artist are assigned.',
-          ),
-        ),
-      );
-      return;
-    }
-    final currentName = _currentName.trim();
-    final fallbackCurrentName = _currentEmail.trim();
-    final clientName = currentName.isNotEmpty
-        ? currentName
-        : (fallbackCurrentName.contains('@')
-              ? fallbackCurrentName.split('@').first
-              : 'Client');
-    showRequestChatModal(
-      context: context,
-      requestId: order.id,
-      clientEmail: clientEmail,
-      artistEmail: artistEmail,
-      clientName: clientName,
-      artistName: order.artistName.trim(),
-    );
   }
 
   void _openAiSupportChat(BuildContext context) {
@@ -1028,7 +1002,8 @@ class _BaseOrderDetails extends StatelessWidget {
               : 'Client');
     showRequestChatModal(
       context: context,
-      requestId: '${order.id}-ai-support',
+      requestId: order.id,
+      conversationSuffix: 'ai_support',
       clientEmail: clientEmail,
       artistEmail: 'ai.chatbot@jnt.com',
       clientName: clientName,
@@ -1467,7 +1442,9 @@ class _BaseOrderDetails extends StatelessWidget {
                     elevation: 0,
                   ),
                   onPressed: () {
-                    _openRequestChat(context);
+                    // Brand-submitted requests always talk to the JNT AI
+                    // Assistant, never directly with the accepted artist.
+                    _openAiSupportChat(context);
                   },
                   child: const Text(
                     'Chat',
@@ -3469,7 +3446,10 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       final provider = providerFor(resolved);
       return ClipRRect(
         borderRadius: BorderRadius.zero,
-        child: InkWell(
+        child: Semantics(
+          button: true,
+          label: 'View photo full screen',
+          child: InkWell(
           onTap: () {
             showDialog<void>(
               context: context,
@@ -3495,6 +3475,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
                       top: 8,
                       right: 8,
                       child: IconButton(
+                        tooltip: 'Close image preview',
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close, color: AppColors.snow),
                       ),
@@ -3512,6 +3493,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
+          ),
           ),
         ),
       );
@@ -4239,7 +4221,10 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -4258,6 +4243,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -4271,7 +4257,12 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           builder: (context, modalSetState) {
             Widget star(int index) {
               final selected = _rating >= index;
-              return IconButton(
+              return Semantics(
+                button: true,
+                selected: _rating.round() == index,
+                label: '$index ${index == 1 ? 'star' : 'stars'}',
+                child: ExcludeSemantics(
+                  child: IconButton(
                 onPressed: () {
                   setState(() => _rating = index.toDouble());
                   modalSetState(() {});
@@ -4283,6 +4274,8 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ),
               );
             }
 
@@ -4315,6 +4308,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               ),
                             ),
                             IconButton(
+                              tooltip: 'Close',
                               onPressed: () => Navigator.of(sheetContext).pop(),
                               icon: const Icon(Icons.close_rounded),
                             ),

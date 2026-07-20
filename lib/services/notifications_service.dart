@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/scenario_4_1.dart';
@@ -123,41 +124,46 @@ class NotificationsService {
     final safeOrderId = _looksLikeUuid(orderId) ? orderId.trim() : '';
     final safeOrderNumber = orderNumber.trim();
 
-    dynamic query = _supabase
-        .from('user_notifications')
-        .select('id')
-        .eq('receiver_email', normalized)
-        .eq('type', type);
-
-    if (safeOrderId.isNotEmpty) {
-      query = query.eq('order_id', safeOrderId);
-    } else if (safeOrderNumber.isNotEmpty) {
-      query = query.eq('order_number', safeOrderNumber);
-    }
-
-    final existing = await query.limit(1);
-    final row = _notificationRow(
-      receiverEmail: normalized,
-      title: title,
-      body: body,
-      type: type,
-      orderId: safeOrderId,
-      orderNumber: safeOrderNumber,
-      sourceCollection: sourceCollection,
-    );
-
-    if (existing is List && existing.isNotEmpty) {
-      final id = existing.first['id'];
-      await _supabase
+    try {
+      dynamic query = _supabase
           .from('user_notifications')
-          .update(
-            row
-              ..remove('created_at')
-              ..remove('created_at_millis'),
-          )
-          .eq('id', id);
-    } else {
-      await _supabase.from('user_notifications').insert(row);
+          .select('id')
+          .eq('receiver_email', normalized)
+          .eq('type', type);
+
+      if (safeOrderId.isNotEmpty) {
+        query = query.eq('order_id', safeOrderId);
+      } else if (safeOrderNumber.isNotEmpty) {
+        query = query.eq('order_number', safeOrderNumber);
+      }
+
+      final existing = await query.limit(1);
+      final row = _notificationRow(
+        receiverEmail: normalized,
+        title: title,
+        body: body,
+        type: type,
+        orderId: safeOrderId,
+        orderNumber: safeOrderNumber,
+        sourceCollection: sourceCollection,
+      );
+
+      if (existing is List && existing.isNotEmpty) {
+        final id = existing.first['id'];
+        await _supabase
+            .from('user_notifications')
+            .update(
+              row
+                ..remove('created_at')
+                ..remove('created_at_millis'),
+            )
+            .eq('id', id);
+      } else {
+        await _supabase.from('user_notifications').insert(row);
+      }
+    } catch (e) {
+      debugPrint('NotificationsService.upsertUserNotification failed: $e');
+      return;
     }
 
     await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
@@ -176,20 +182,25 @@ class NotificationsService {
     final normalized = receiverEmail.trim().toLowerCase();
     if (normalized.isEmpty) return;
 
-    await _supabase
-        .from('user_notifications')
-        .insert(
-          _notificationRow(
-            receiverEmail: normalized,
-            title: title,
-            body: body,
-            type: type,
-            orderId: orderId,
-            orderNumber: orderNumber,
-            sourceCollection: sourceCollection,
-            extra: extra,
-          ),
-        );
+    try {
+      await _supabase
+          .from('user_notifications')
+          .insert(
+            _notificationRow(
+              receiverEmail: normalized,
+              title: title,
+              body: body,
+              type: type,
+              orderId: orderId,
+              orderNumber: orderNumber,
+              sourceCollection: sourceCollection,
+              extra: extra,
+            ),
+          );
+    } catch (e) {
+      debugPrint('NotificationsService.createUserNotification failed: $e');
+      return;
+    }
     await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
   }
 
@@ -232,7 +243,11 @@ class NotificationsService {
         .subscribe();
 
     controller.onCancel = () async {
-      await _supabase.removeChannel(channel);
+      try {
+        await _supabase.removeChannel(channel);
+      } catch (e) {
+        debugPrint('NotificationsService.watchUnreadCount removeChannel failed: $e');
+      }
     };
 
     return controller.stream;
@@ -244,28 +259,33 @@ class NotificationsService {
     final normalized = receiverEmail.trim().toLowerCase();
     if (normalized.isEmpty) return 0;
 
-    final unreadRows = _rows(
+    try {
+      final unreadRows = _rows(
+        await _supabase
+            .from('user_notifications')
+            .select('id, read')
+            .eq('receiver_email', normalized)
+            .limit(500),
+      );
+
+      final unreadIds = unreadRows
+          .where((row) => row['read'] != true)
+          .map((row) => (row['id'] ?? '').toString().trim())
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
+      if (unreadIds.isEmpty) return 0;
+
       await _supabase
           .from('user_notifications')
-          .select('id, read')
-          .eq('receiver_email', normalized)
-          .limit(500),
-    );
+          .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
+          .inFilter('id', unreadIds);
 
-    final unreadIds = unreadRows
-        .where((row) => row['read'] != true)
-        .map((row) => (row['id'] ?? '').toString().trim())
-        .where((id) => id.isNotEmpty)
-        .toList(growable: false);
-    if (unreadIds.isEmpty) return 0;
-
-    await _supabase
-        .from('user_notifications')
-        .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
-        .inFilter('id', unreadIds);
-
-    await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
-    return unreadIds.length;
+      await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
+      return unreadIds.length;
+    } catch (e) {
+      debugPrint('NotificationsService.markAllNotificationsRead failed: $e');
+      return 0;
+    }
   }
 
   static Future<bool> markNotificationRead({
@@ -276,14 +296,19 @@ class NotificationsService {
     final id = notificationId.trim();
     if (normalized.isEmpty || id.isEmpty) return false;
 
-    await _supabase
-        .from('user_notifications')
-        .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
-        .eq('receiver_email', normalized)
-        .eq('id', id);
+    try {
+      await _supabase
+          .from('user_notifications')
+          .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('receiver_email', normalized)
+          .eq('id', id);
 
-    await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
-    return true;
+      await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
+      return true;
+    } catch (e) {
+      debugPrint('NotificationsService.markNotificationRead failed: $e');
+      return false;
+    }
   }
 
   static Future<void> trimUserNotifications({
@@ -293,12 +318,18 @@ class NotificationsService {
     final normalized = receiverEmail.trim().toLowerCase();
     if (normalized.isEmpty || maxKeep < 1) return;
 
-    final rows = _rows(
-      await _supabase
-          .from('user_notifications')
-          .select()
-          .eq('receiver_email', normalized),
-    );
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = _rows(
+        await _supabase
+            .from('user_notifications')
+            .select()
+            .eq('receiver_email', normalized),
+      );
+    } catch (e) {
+      debugPrint('NotificationsService.trimUserNotifications fetch failed: $e');
+      return;
+    }
     if (rows.length <= maxKeep) return;
 
     rows.sort((a, b) => _dateFromRow(a).compareTo(_dateFromRow(b)));
@@ -327,10 +358,14 @@ class NotificationsService {
     }
     if (idsToDelete.isEmpty) return;
 
-    await _supabase
-        .from('user_notifications')
-        .delete()
-        .inFilter('id', idsToDelete);
+    try {
+      await _supabase
+          .from('user_notifications')
+          .delete()
+          .inFilter('id', idsToDelete);
+    } catch (e) {
+      debugPrint('NotificationsService.trimUserNotifications delete failed: $e');
+    }
   }
 
   static Future<void> notifyArtistsForNewClientRequest({
@@ -945,23 +980,27 @@ class NotificationsService {
     final normalized = to.trim().toLowerCase();
     if (normalized.isEmpty) return;
 
-    await _supabase.from('mail_queue').insert({
-      'to_email': normalized,
-      'to_list': <String>[normalized],
-      'subject': subject,
-      'text': text,
-      if (html != null && html.trim().isNotEmpty) 'html': html.trim(),
-      'status': 'queued',
-      'created_at': DateTime.now().toIso8601String(),
-      'payload': <String, dynamic>{
-        'to': <String>[normalized],
-        'message': {
-          'subject': subject,
-          'text': text,
-          if (html != null && html.trim().isNotEmpty) 'html': html.trim(),
+    try {
+      await _supabase.from('mail_queue').insert({
+        'to_email': normalized,
+        'to_list': <String>[normalized],
+        'subject': subject,
+        'text': text,
+        if (html != null && html.trim().isNotEmpty) 'html': html.trim(),
+        'status': 'queued',
+        'created_at': DateTime.now().toIso8601String(),
+        'payload': <String, dynamic>{
+          'to': <String>[normalized],
+          'message': {
+            'subject': subject,
+            'text': text,
+            if (html != null && html.trim().isNotEmpty) 'html': html.trim(),
+          },
         },
-      },
-    });
+      });
+    } catch (e) {
+      debugPrint('NotificationsService.queueEmail failed: $e');
+    }
   }
 
   static Future<void> queueTemplatedEmail({
@@ -972,19 +1011,23 @@ class NotificationsService {
     final normalized = to.trim().toLowerCase();
     if (normalized.isEmpty || templateName.trim().isEmpty) return;
 
-    await _supabase.from('mail_queue').insert({
-      'to_email': normalized,
-      'to_list': <String>[normalized],
-      'template_name': templateName.trim(),
-      'template_data': data,
-      'status': 'queued',
-      'created_at': DateTime.now().toIso8601String(),
-      'payload': <String, dynamic>{
-        'to': <String>[normalized],
-        'toEmail': normalized,
-        'template': {'name': templateName.trim(), 'data': data},
-      },
-    });
+    try {
+      await _supabase.from('mail_queue').insert({
+        'to_email': normalized,
+        'to_list': <String>[normalized],
+        'template_name': templateName.trim(),
+        'template_data': data,
+        'status': 'queued',
+        'created_at': DateTime.now().toIso8601String(),
+        'payload': <String, dynamic>{
+          'to': <String>[normalized],
+          'toEmail': normalized,
+          'template': {'name': templateName.trim(), 'data': data},
+        },
+      });
+    } catch (e) {
+      debugPrint('NotificationsService.queueTemplatedEmail failed: $e');
+    }
   }
 
   static Future<void> queueSms({
@@ -994,11 +1037,15 @@ class NotificationsService {
     final normalized = to.trim();
     if (normalized.isEmpty) return;
 
-    await _supabase.from('sms_outbox').insert({
-      'to_number': normalized,
-      'message': text.trim(),
-      'status': 'queued',
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    try {
+      await _supabase.from('sms_outbox').insert({
+        'to_number': normalized,
+        'message': text.trim(),
+        'status': 'queued',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('NotificationsService.queueSms failed: $e');
+    }
   }
 }

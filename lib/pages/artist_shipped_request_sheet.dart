@@ -878,7 +878,12 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
         Positioned(
           right: 6,
           top: 6,
-          child: InkWell(
+          child: Semantics(
+            button: true,
+            label: 'Close',
+            onTap: onClose,
+            child: ExcludeSemantics(
+              child: InkWell(
             borderRadius: BorderRadius.zero,
             onTap: onClose,
             child: Padding(
@@ -887,6 +892,8 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
                 Icons.close_rounded,
                 size: 24,
                 color: AppColors.blackCat.withValues(alpha: 0.70),
+              ),
+            ),
               ),
             ),
           ),
@@ -1989,12 +1996,19 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
           final src = renderable[i];
           return SizedBox(
             width: 112,
-            child: InkWell(
+            child: Semantics(
+              button: true,
+              label: 'View photo ${i + 1} full screen',
+              onTap: () => _openImagePreview(src),
+              child: ExcludeSemantics(
+                child: InkWell(
               borderRadius: BorderRadius.zero,
               onTap: () => _openImagePreview(src),
               child: ClipRRect(
                 borderRadius: BorderRadius.zero,
                 child: _imageForPath(src),
+              ),
+                ),
               ),
             ),
           );
@@ -2017,6 +2031,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
               right: 6,
               top: 6,
               child: IconButton(
+                tooltip: 'Close image preview',
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close_rounded),
               ),

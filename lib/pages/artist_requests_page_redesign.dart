@@ -2110,7 +2110,12 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       children: [
         Expanded(child: _searchBar()),
         const SizedBox(width: 10),
-        InkWell(
+        Semantics(
+          button: true,
+          label: _hasActiveFilters ? 'Filters, active' : 'Filters',
+          onTap: _openFiltersModal,
+          child: ExcludeSemantics(
+            child: InkWell(
           borderRadius: BorderRadius.zero,
           onTap: _openFiltersModal,
           child: Container(
@@ -2152,6 +2157,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     ),
                   ),
               ],
+            ),
+          ),
             ),
           ),
         ),
@@ -2225,6 +2232,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                           ),
                         ),
                         IconButton(
+                          tooltip: 'Close',
                           color: AppColors.blackCat,
                           onPressed: () => Navigator.pop(dialogContext),
                           icon: const Icon(Icons.close_rounded),
@@ -2508,7 +2516,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -2542,6 +2553,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -4557,7 +4569,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               shippedAt: shippedDate,
             );
             _replaceById(r.id, updated);
-            await _persistStatusUpdate(
+            try {
+              await _persistStatusUpdate(
               request: r,
               status: 'shipped',
               summaryExtra: {
@@ -4689,6 +4702,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 },
               );
             }
+            } catch (e) {
+              debugPrint('[Artist Mark Shipped] failed: $e');
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Failed to mark request shipped: $e')),
+              );
+            }
           },
     );
   }
@@ -4705,6 +4725,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           deliveredAt: DateTime.now(),
         );
         _replaceById(r.id, updated);
+        try {
         await _persistStatusUpdate(
           request: r,
           status: 'delivered',
@@ -4858,6 +4879,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             },
           );
         }
+        } catch (e) {
+          debugPrint('[Artist Mark Delivered] failed: $e');
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to mark request delivered: $e')),
+          );
+        }
       },
     );
   }
@@ -4880,6 +4908,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             Navigator.pop(context);
             try {
               await _persistClientPoolResponse(request: request, accept: false);
+              if (!mounted) return;
               _removeRequestLocally(request.id);
               unawaited(_loadRequestsFromDb());
             } catch (e) {
@@ -5235,7 +5264,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
     final s = _reqScale(context);
 
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: () {
         if (r.status == RequestStatusV2.inReview) {
@@ -5477,6 +5509,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -9508,7 +9542,12 @@ class InReviewDetailsSheet extends StatelessWidget {
         Positioned(
           right: 6,
           top: 6,
-          child: InkWell(
+          child: Semantics(
+            button: true,
+            label: 'Close',
+            onTap: () => Navigator.pop(context),
+            child: ExcludeSemantics(
+              child: InkWell(
             borderRadius: BorderRadius.zero,
             onTap: () => Navigator.pop(context),
             child: Padding(
@@ -9517,6 +9556,8 @@ class InReviewDetailsSheet extends StatelessWidget {
                 Icons.close_rounded,
                 size: 18 * s,
                 color: AppColors.blackCat,
+              ),
+            ),
               ),
             ),
           ),
@@ -10137,12 +10178,19 @@ class InReviewDetailsSheet extends StatelessWidget {
           ),
           itemBuilder: (context, i) {
             final path = unique[i];
-            return InkWell(
+            return Semantics(
+              button: true,
+              label: 'View photo ${i + 1} full screen',
+              onTap: () => _openImagePreview(context, path),
+              child: ExcludeSemantics(
+                child: InkWell(
               borderRadius: BorderRadius.zero,
               onTap: () => _openImagePreview(context, path),
               child: ClipRRect(
                 borderRadius: BorderRadius.zero,
                 child: SizedBox.expand(child: imageFor(path)),
+              ),
+                ),
               ),
             );
           },
@@ -10165,6 +10213,7 @@ class InReviewDetailsSheet extends StatelessWidget {
               right: 6,
               top: 6,
               child: IconButton(
+                tooltip: 'Close',
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close_rounded),
               ),

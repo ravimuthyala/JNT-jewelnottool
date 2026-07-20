@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthEmailAliasService {
@@ -21,18 +22,22 @@ class AuthEmailAliasService {
       'uid': uid.trim(),
       'updated_at': DateTime.now().toIso8601String(),
     };
-    final existing = await _supabase
-        .from(_collection)
-        .select('login_email')
-        .eq('login_email', normalizedLogin)
-        .maybeSingle();
-    if (existing == null) {
-      await _supabase.from(_collection).insert(payload);
-    } else {
-      await _supabase
+    try {
+      final existing = await _supabase
           .from(_collection)
-          .update(payload)
-          .eq('login_email', normalizedLogin);
+          .select('login_email')
+          .eq('login_email', normalizedLogin)
+          .maybeSingle();
+      if (existing == null) {
+        await _supabase.from(_collection).insert(payload);
+      } else {
+        await _supabase
+            .from(_collection)
+            .update(payload)
+            .eq('login_email', normalizedLogin);
+      }
+    } catch (e) {
+      debugPrint('AuthEmailAliasService.saveAliasMapping failed: $e');
     }
   }
 

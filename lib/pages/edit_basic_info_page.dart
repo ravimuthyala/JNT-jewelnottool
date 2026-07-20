@@ -82,6 +82,7 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
                       icon: Icon(
                         Icons.close_rounded,

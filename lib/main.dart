@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:app_links/app_links.dart';
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
@@ -12,6 +13,7 @@ import 'pages/artist_login_page.dart';
 import 'pages/reset_password_page.dart';
 import 'pages/reset_password_success_page.dart';
 
+import 'config/environment.dart';
 import 'theme/app_colors.dart';
 import 'utlis/responsive_text.dart';
 import 'services/supabase_bootstrap.dart';
@@ -23,7 +25,24 @@ import 'pages/artist_registration/artist_registration_flow.dart';
 import 'pages/review_artist_page.dart';
 import 'pages/tip_artist_page.dart';
 
+// Sentry DSN is intentionally blank by default: the Sentry SDK safely no-ops
+// (runs the app normally, just doesn't send events) when the DSN is empty.
+// Supply the real DSN at build time with:
+//   flutter run --dart-define=SENTRY_DSN=https://...
+const String _sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
 Future<void> main() async {
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = _sentryDsn;
+      options.environment = Environment.name;
+      options.tracesSampleRate = 0.2;
+    },
+    appRunner: _startApp,
+  );
+}
+
+Future<void> _startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   StartupFrameGate.deferFirstFrame();
   final supabaseOk = await SupabaseBootstrap.ensureInitialized();
@@ -31,8 +50,119 @@ Future<void> main() async {
     debugPrint(
       'Supabase initialization failed: ${SupabaseBootstrap.lastError}',
     );
+    runApp(_SupabaseInitFailedApp(error: SupabaseBootstrap.lastError));
+    return;
   }
   runApp(const JntApp());
+}
+
+/// Shown only when Supabase fails to initialize at startup (e.g. no network,
+/// bad config). Lets the user retry instead of the app silently proceeding
+/// into a broken state with no working backend client.
+class _SupabaseInitFailedApp extends StatefulWidget {
+  const _SupabaseInitFailedApp({this.error});
+
+  final String? error;
+
+  @override
+  State<_SupabaseInitFailedApp> createState() =>
+      _SupabaseInitFailedAppState();
+}
+
+class _SupabaseInitFailedAppState extends State<_SupabaseInitFailedApp> {
+  bool _retrying = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _error = widget.error;
+  }
+
+  Future<void> _retry() async {
+    setState(() => _retrying = true);
+    final ok = await SupabaseBootstrap.ensureInitialized();
+    if (!mounted) return;
+    if (ok) {
+      runApp(const JntApp());
+      return;
+    }
+    setState(() {
+      _retrying = false;
+      _error = SupabaseBootstrap.lastError;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true, fontFamily: 'Arial'),
+      home: Scaffold(
+        backgroundColor: const Color(0xFF292222),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    color: Colors.white70,
+                    size: 56,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Unable to connect',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'We could not reach our servers. Please check your '
+                    'connection and try again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 11,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _retrying ? null : _retry,
+                    child: _retrying
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class JntApp extends StatelessWidget {
@@ -265,6 +395,8 @@ class JntApp extends StatelessWidget {
                   bottom: true,
                   left: true,
                   right: true,
+                  // MaterialApp always invokes `builder` with a non-null
+                  // child when `home`/`routes` are configured (as above).
                   child: child!,
                 ),
               ),

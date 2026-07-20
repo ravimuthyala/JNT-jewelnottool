@@ -155,6 +155,7 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
         elevation: 0,
         automaticallyImplyLeading: false,
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => widget.onBackHome?.call(),
         ),
@@ -356,7 +357,10 @@ class _ArtistFilterTabs extends StatelessWidget {
   Widget _tab(String label, ArtistOrdersFilter value) {
     final bool isSelected = selected == value;
 
-    return InkWell(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.zero,
       child: Padding(
@@ -386,6 +390,7 @@ class _ArtistFilterTabs extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -473,7 +478,9 @@ class _ArtistOrderCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    InkWell(
+                    Semantics(
+                      button: true,
+                      child: InkWell(
                       onTap: onDetails,
                       borderRadius: BorderRadius.zero,
                       child: Padding(
@@ -497,6 +504,7 @@ class _ArtistOrderCard extends StatelessWidget {
                             ),
                           ],
                         ),
+                      ),
                       ),
                     ),
                   ],

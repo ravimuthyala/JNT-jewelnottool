@@ -2141,7 +2141,11 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       await widget.onLogout!.call();
       return;
     }
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('Sign out failed: $e');
+    }
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }

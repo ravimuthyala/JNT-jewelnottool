@@ -2068,7 +2068,11 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       await widget.onLogout!.call();
       return;
     }
-    await Supabase.instance.client.auth.signOut();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('Sign out failed: $e');
+    }
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
@@ -2546,7 +2550,11 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             showBackArrow: false,
             showBottomNav: true,
             bottomNavIndex: 1,
-            onNavTap: widget.onNavTap,
+            // This page is pushed as its own route (not a shell tab), so
+            // onNavTap must stay null — that's what makes _goHomeAfterSubmit
+            // pop this route away after a successful (re)submit instead of
+            // switching a tab on the shell underneath, which leaves this
+            // page stuck on screen.
             onOpenProfile: widget.onOpenProfile,
             onOpenHistory: widget.onOpenHistory,
             onOpenCalendar: widget.onOpenCalendar,

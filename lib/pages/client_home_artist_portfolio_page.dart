@@ -812,8 +812,10 @@ class _ClientHomeArtistPortfolioPageState
   ) async {
     if (anchorKey.currentContext == null) return;
 
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final box = anchorKey.currentContext!.findRenderObject() as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final box = anchorKey.currentContext!.findRenderObject() as RenderBox?;
+    if (overlay == null || box == null) return;
     final bottomRight = box.localToGlobal(
       box.size.bottomRight(Offset.zero),
       ancestor: overlay,
@@ -1114,7 +1116,12 @@ class _PortfolioTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: 'Portfolio work by ${data.artistName}',
+        onTap: onTap,
+        child: InkWell(
       borderRadius: BorderRadius.zero,
       onTap: onTap,
       child: Container(
@@ -1187,6 +1194,8 @@ class _PortfolioTile extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -1262,6 +1271,7 @@ class _ImagePreviewDialog extends StatelessWidget {
             top: 8,
             right: 8,
             child: IconButton(
+              tooltip: 'Close',
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.close_rounded, color: AppColors.blackCat),
             ),

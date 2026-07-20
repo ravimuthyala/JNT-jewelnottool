@@ -120,6 +120,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       ),
       suffixIcon: IconButton(
         iconSize: 18,
+        tooltip: obscure ? 'Show password' : 'Hide password',
         onPressed: onToggle,
         icon: Icon(
           obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,

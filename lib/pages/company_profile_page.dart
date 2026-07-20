@@ -223,6 +223,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         );
         return;
       }
+      if (!mounted) return;
       setState(() => _businessInfo = updated);
     }
   }
@@ -245,6 +246,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         );
         return;
       }
+      if (!mounted) return;
       setState(() => _billingInfo = updated);
     }
   }
@@ -379,6 +381,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         );
         return;
       }
+      if (!mounted) return;
       setState(() => _addressInfo = updated);
     }
   }
@@ -632,7 +635,14 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                       child: Material(
                         color: AppColors.snow,
                         borderRadius: BorderRadius.zero,
-                        child: InkWell(
+                        child: Semantics(
+                          button: true,
+                          label: 'Change company logo',
+                          onTap: _uploadingPhoto
+                              ? null
+                              : _pickAndUploadProfilePhoto,
+                          child: ExcludeSemantics(
+                            child: InkWell(
                           onTap: _uploadingPhoto
                               ? null
                               : _pickAndUploadProfilePhoto,
@@ -654,8 +664,10 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                                   )
                                 : const Icon(Icons.edit, size: 14),
                           ),
+                          ),
                         ),
                       ),
+                    ),
                     ),
                   ],
                 ),
@@ -788,7 +800,11 @@ class _RowChevronTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        onTap: onTap,
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
@@ -818,6 +834,8 @@ class _RowChevronTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -1580,6 +1598,7 @@ class _CompanyPopupScaffold extends StatelessWidget {
                           ),
                         ),
                         IconButton(
+                          tooltip: 'Close',
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close_rounded),
                         ),

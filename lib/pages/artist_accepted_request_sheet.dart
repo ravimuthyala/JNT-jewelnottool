@@ -769,6 +769,32 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                           ),
                         ),
                         onPressed: () {
+                          if (widget.request.clientEmail.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Chat unavailable until both client and artist are assigned.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // Brand-submitted requests always talk to the JNT
+                          // AI Assistant, never directly with the artist.
+                          if (_isBrandRequest(widget.request)) {
+                            showRequestChatModal(
+                              context: context,
+                              requestId: widget.request.id,
+                              conversationSuffix: 'ai_support',
+                              clientEmail: widget.request.clientEmail,
+                              artistEmail: 'ai.chatbot@jnt.com',
+                              clientName: widget.request.clientName,
+                              artistName: 'JNT AI Assistant',
+                            );
+                            return;
+                          }
+
                           final artistEmail =
                               (widget.request.acceptedByArtistEmail
                                           .trim()
@@ -777,8 +803,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                       : _currentUserEmail())
                                   .trim()
                                   .toLowerCase();
-                          if (widget.request.clientEmail.trim().isEmpty ||
-                              artistEmail.isEmpty) {
+                          if (artistEmail.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(

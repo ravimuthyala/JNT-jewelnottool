@@ -268,11 +268,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 'assets/images/jnt_logo_black.png',
                 height: 50,
                 fit: BoxFit.contain,
+                semanticLabel: 'JNT',
               ),
             ),
             Positioned(
               left: 2,
               child: IconButton(
+                tooltip: 'Close',
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.pop(context, null),
               ),
@@ -508,6 +510,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 fit: BoxFit.contain,
               ),
               leading: IconButton(
+                tooltip: 'Close',
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.pop(context, null),
               ),
