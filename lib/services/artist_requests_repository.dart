@@ -649,6 +649,7 @@ class ArtistRequestsRepository {
       ).toLowerCase(),
       acceptedByClientEmail: _firstNonEmptyString(
         data['acceptedByClientEmail'],
+        data['accepted_by_client_email'],
       ).toLowerCase(),
       clientResponseStatus: _firstNonEmptyString(
         data['clientResponseStatus'],
@@ -960,6 +961,7 @@ class ArtistRequestsRepository {
     ).toLowerCase();
     final acceptedByClientEmail = _firstNonEmptyString(
       data['acceptedByClientEmail'],
+      data['accepted_by_client_email'],
       _asMap(detailData['acceptance'])['acceptedByClientEmail'],
     ).toLowerCase();
 
