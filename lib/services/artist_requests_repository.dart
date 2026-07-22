@@ -15,7 +15,18 @@ class ArtistRequestsRepository {
   static const int _maxResolvedDesignPreviewPhotos = 1;
 
   static const int _maxInitialRequestsPerCollection = 10;
-  static const int _maxActiveRequestsPerCollection = 6;
+  static const int _maxActiveRequestsPerCollection = 200;
+
+  // Requests in these terminal statuses are excluded from
+  // fetchActiveRequests() so they never compete with genuinely active
+  // orders for the limited row budget above.
+  static const List<String> _terminalStatuses = <String>[
+    'delivered',
+    'declined',
+    'expired',
+    'cancelled',
+    'canceled',
+  ];
 
   // Column projection for client_custom_requests: verified against the live
   // Supabase schema (2026-07) and cross-referenced against every field this
@@ -82,6 +93,7 @@ class ArtistRequestsRepository {
     final rows = await _fetchRows(
       limit: _maxActiveRequestsPerCollection,
       preferRecentOnly: true,
+      excludeTerminalStatuses: true,
     );
 
     final items = await Future.wait(
@@ -162,6 +174,7 @@ class ArtistRequestsRepository {
   static Future<List<Map<String, dynamic>>> _fetchRows({
     int? limit,
     bool preferRecentOnly = false,
+    bool excludeTerminalStatuses = false,
   }) async {
     final requestLimit = limit ?? _maxInitialRequestsPerCollection;
 
@@ -171,6 +184,15 @@ class ArtistRequestsRepository {
     }) async {
       try {
         dynamic query = _supabase.from(tableName).select();
+
+        if (excludeTerminalStatuses) {
+          // Rows with a null status (legacy/unbackfilled data) must stay
+          // included -- `not.in` alone would silently drop them since
+          // NULL never matches an IN/NOT IN comparison in SQL.
+          query = query.or(
+            'status.is.null,status.not.in.(${_terminalStatuses.join(',')})',
+          );
+        }
 
         if (preferRecentOnly) {
           query = query.order('created_at', ascending: false);
