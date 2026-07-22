@@ -572,6 +572,28 @@ class ArtistRequestsRepository {
       data['previewImage'],
     );
 
+    // Resolve the brand/client avatar directly from data already fetched
+    // for this row so it shows on the very first list load, without
+    // waiting for a details-view hydration to populate it. This mirrors
+    // the candidate list used by the full/hydrated fetch.
+    final clientProfileImageRaw = _firstNonEmptyFromList([
+      data['clientProfileImage'],
+      data['clientProfilePic'],
+      data['clientProfilePhoto'],
+      data['clientAvatar'],
+      data['clientAvatarUrl'],
+      data['companyProfileImage'],
+      data['brandProfileImage'],
+      data['companyLogoUrl'],
+      data['brandLogoUrl'],
+      data['client_profile_image'],
+      data['logoUrl'],
+    ]);
+    var clientProfileImage = clientProfileImageRaw.trim();
+    if (clientProfileImage.isNotEmpty) {
+      clientProfileImage = (await _resolvePhotoRef(clientProfileImage)).trim();
+    }
+
     return ClientRequestV2(
       id: (row['id'] ?? '').toString(),
       sourceCollection: sourceCollection,
@@ -584,6 +606,8 @@ class ArtistRequestsRepository {
         data['client_email'],
       ).toLowerCase(),
       clientName: brandName,
+      brandName: brandName,
+      clientProfileImage: clientProfileImage,
       title: title,
       subtitle: subtitle,
       neededBy: neededBy,
