@@ -252,7 +252,25 @@ class DocumentReference<T extends Map<String, dynamic>> {
     // fall back to a `data:` wrapped upsert here: that column does not
     // exist on these tables and previously masked the real error with a
     // confusing PGRST204 "Could not find the 'data' column" failure.
-    await Supabase.instance.client.from(table).upsert(encoded, onConflict: 'id');
+    if (merge) {
+      // A merge write always targets a request that already exists (e.g.
+      // an artist updating status on a request created by a brand/client).
+      // `upsert()` compiles to INSERT ... ON CONFLICT DO UPDATE, and
+      // Postgres RLS evaluates the INSERT policy's WITH CHECK for that
+      // regardless of the conflict outcome. company_custom_requests only
+      // grants INSERT to the owning brand/company, so an artist's upsert
+      // was rejected with 42501 even though the artist UPDATE policy
+      // would have allowed a plain UPDATE. Use UPDATE here instead.
+      final idValue = encoded.remove('id');
+      await Supabase.instance.client
+          .from(table)
+          .update(encoded)
+          .eq('id', idValue as Object);
+    } else {
+      await Supabase.instance.client
+          .from(table)
+          .upsert(encoded, onConflict: 'id');
+    }
   }
 
   Future<void> _writeDetails(Map<String, dynamic> values) async {

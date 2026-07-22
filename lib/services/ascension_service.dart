@@ -367,7 +367,11 @@ class AscensionService {
     try {
       final rows = await supabase
           .from('ascension_overrides')
-          .select('id, artist_email, artist_doc_path, artist_doc_path_lower, override_level, active')
+          .select(
+            'id, artist_email, artist_doc_path, artist_doc_path_lower, '
+            'active, level_name, tier, level, tier_name, sponsorship_tier, '
+            'points, sponsorship_eligible, reason, updated_at',
+          )
           .or(filterParts.join(','))
           .limit(20);
 
