@@ -18,6 +18,9 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# Claude Code local settings (machine/user-specific, not shared project config)
+.claude/settings.local.json
+
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
@@ -63,4 +66,3 @@ docs/ARTIST_PAGES_REFACTOR_PROMPT.md
 .tmp_docx_uc1.zip
 .tmp_docx_uc1/
 memory/
-*.md

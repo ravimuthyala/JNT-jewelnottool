@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthException, UserAttributes, FileOptions;
+    show AuthException, User, UserAttributes, FileOptions;
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/address_validation_service.dart';
@@ -54,6 +54,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   bool _showValidationErrors = false;
   int _registrationStep = 0;
   int? _validationTriggeredStep;
+  final ScrollController _registrationScrollController = ScrollController();
   bool _pickingImage = false;
   final ImagePicker _picker = ImagePicker();
   final FocusNode _profilePhotoFocusNode = FocusNode(debugLabel: 'clientProfilePhotoUpload');
@@ -63,6 +64,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   // Basic info
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  Timer? _emailAvailabilityDebounce;
+  bool _checkingEmailAvailability = false;
+  String? _lastCheckedEmail;
+  String? _emailTakenRole;
   final _passCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
@@ -100,6 +105,8 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   String get _fullPhone => '$_normalizedAreaCode$_normalizedPhone';
 
   bool _obscure = true;
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   // User can proceed by either completing measurements or purchasing the kit.
   bool _kitPurchased = false;
@@ -174,7 +181,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
             (cvv.length == 3 || cvv.length == 4) &&
             _payment.zip.trim().isNotEmpty;
       case PaymentMethod.applePay:
-        return false;
+        // Apple Pay has no extra fields to fill in -- selecting it is
+        // itself a complete, valid payment method.
+        return true;
     }
   }
 
@@ -1216,6 +1225,8 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _streetAutocompleteDebounce?.cancel();
+    _emailAvailabilityDebounce?.cancel();
+    _registrationScrollController.dispose();
     _profilePhotoFocusNode.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
@@ -1274,6 +1285,23 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       _manualStateCtrl.clear();
       _streetSuggestions = const [];
     });
+  }
+
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyStreetSuggestion(selected);
   }
 
   // -----------------------
@@ -1554,13 +1582,148 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   String? _emailValidator(String? v) {
     if (v == null || v.trim().isEmpty) return 'Email is required';
     if (!v.contains('@')) return 'Enter a valid email';
+    final normalized = v.trim().toLowerCase();
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return SupabaseAuthService.emailAlreadyRegisteredMessage;
+    }
     return null;
   }
 
+  void _onEmailChanged(String value) {
+    _emailAvailabilityDebounce?.cancel();
+    final normalized = value.trim().toLowerCase();
+
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      if (_emailTakenRole != null || _checkingEmailAvailability) {
+        setState(() {
+          _emailTakenRole = null;
+          _checkingEmailAvailability = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _checkingEmailAvailability = true);
+    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final role = await SupabaseAuthService.findExistingRoleForEmail(
+        normalized,
+      );
+      if (!mounted) return;
+      if (_emailCtrl.text.trim().toLowerCase() != normalized) {
+        // Text changed again while the check was in flight; ignore this
+        // stale result, the newer debounce cycle will handle it.
+        return;
+      }
+      setState(() {
+        _checkingEmailAvailability = false;
+        _lastCheckedEmail = normalized;
+        _emailTakenRole = role;
+      });
+    });
+  }
+
+  /// Real-time email availability feedback, shown as the user types/pauses
+  /// instead of only surfacing on Create Account submission. Hidden once the
+  /// user has attempted to submit, since the standard field validator takes
+  /// over displaying the same message at that point.
+  Widget _buildEmailAvailabilityStatus() {
+    if (_showValidationErrors) return const SizedBox.shrink();
+
+    final normalized = _emailCtrl.text.trim().toLowerCase();
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      return const SizedBox.shrink();
+    }
+
+    if (_checkingEmailAvailability) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          'Checking email availability…',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          SupabaseAuthService.emailAlreadyRegisteredMessage,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   String? _passwordValidator(String? v) {
-    if (v == null || v.isEmpty) return 'Password is required';
-    if (v.length < 6) return 'Minimum 6 characters';
+    final value = (v ?? '').trim();
+    if (value.isEmpty) return 'Password is required';
+    if (!RegistrationInputUtils.isStrongPassword(value)) {
+      return 'Use 8+ chars with upper, lower, number, and symbol';
+    }
     return null;
+  }
+
+  void _onPasswordChanged(String value) {
+    setState(() {
+      _passwordError = _passwordValidator(value);
+      // Confirm-password's match state depends on the password value, so
+      // re-check it live too instead of waiting for that field to be edited.
+      if (_confirmPassCtrl.text.isNotEmpty) {
+        _confirmPasswordError = _confirmPasswordValidator(
+          _confirmPassCtrl.text,
+        );
+      }
+    });
+  }
+
+  void _onConfirmPasswordChanged(String value) {
+    setState(() {
+      _confirmPasswordError = _confirmPasswordValidator(value);
+    });
+  }
+
+  Widget _buildPasswordStatus() {
+    if (_passCtrl.text.isEmpty || _passwordError == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        _passwordError!,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.red,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmPasswordStatus() {
+    if (_confirmPassCtrl.text.isEmpty || _confirmPasswordError == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        _confirmPasswordError!,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.red,
+        ),
+      ),
+    );
   }
 
   String? _phoneValidator(String? v) {
@@ -1717,6 +1880,109 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     );
   }
 
+  Future<void> _finishClientRegistrationForUser({
+    required User user,
+    required ClientProfileDraft draft,
+  }) async {
+    final uid = user.id;
+
+    final displayName = _nameCtrl.text.trim();
+    if (displayName.isNotEmpty) {
+      _authLog('updating display name');
+      try {
+        await SupabaseBootstrap.client.auth.updateUser(
+          UserAttributes(
+            data: <String, dynamic>{
+              'display_name': displayName,
+              'full_name': displayName,
+            },
+          ),
+        );
+      } catch (_) {}
+    }
+
+    _authLog('uploading profile photo');
+    final uploadedProfilePhotoUrl = await _uploadProfileImage(uid);
+    _authLog(
+      'profile photo upload complete hasUrl=${uploadedProfilePhotoUrl.isNotEmpty}',
+    );
+
+    final profilePhotoUrl = uploadedProfilePhotoUrl.trim();
+
+    _authLog('uploading guided measurement photos');
+    final guidedMeasurementPhotoUrls = await _uploadGuidedMeasurementPhotos(
+      uid,
+    );
+    _authLog(
+      'guided measurement photo upload count=${guidedMeasurementPhotoUrls.length}',
+    );
+
+    draft = draft.copyWith(
+      basic: draft.basic.copyWith(profileImageUrl: profilePhotoUrl),
+    );
+    final payload = _buildClientFirestorePayload(draft: draft);
+    final registration = Map<String, dynamic>.from(
+      (payload['registration'] as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{},
+    )..['guidedMeasurementPhotos'] = guidedMeasurementPhotoUrls;
+    final supabase = SupabaseBootstrap.client;
+
+    _authLog('upserting client row');
+    await supabase.from('client').upsert({
+      'id': uid,
+      'email': draft.basic.email,
+      'account_type': 'client',
+
+      'profile': payload['profile'],
+      'basic': payload['basic'],
+      'address': payload['address'],
+      'payment': payload['payment'],
+      'nail_preferences': payload['nailPreferences'],
+      'registration': registration,
+
+      'panel_display_name': draft.basic.name,
+      'panel_phone': draft.basic.phone,
+
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+
+    final registeredName = draft.basic.name.trim().isNotEmpty
+        ? draft.basic.name.trim()
+        : draft.basic.email.trim();
+    _authLog('notifying admins');
+    await NotificationsService.notifyAdmins(
+      title: 'New User Registered',
+      body: 'New Client: $registeredName registered',
+      type: 'admin_new_user_registered',
+      sourceCollection: 'client',
+      extra: <String, dynamic>{
+        'registeredRole': 'Client',
+        'registeredName': registeredName,
+        'registeredEmail': draft.basic.email.trim().toLowerCase(),
+        'registeredUid': uid,
+      },
+    );
+
+    _authLog('navigation after signup');
+    if (!mounted) return;
+    if (kRequireEmailVerification) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationPendingPage(
+            email: _emailCtrl.text.trim().toLowerCase(),
+            loginPageBuilder: (_) => const HomePage(),
+          ),
+        ),
+        (route) => false,
+      );
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => ClientShellPage(profile: draft)),
+        (route) => false,
+      );
+    }
+  }
+
   // -----------------------
   // Create Account
   // -----------------------
@@ -1790,6 +2056,13 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     setState(() => _submitting = true);
 
     try {
+      // Clear any stale session from a previously logged-in user before
+      // signing up. Without this, if signup doesn't return a fresh session
+      // (e.g. email confirmation required), the app proceeds as if the new
+      // client is "in", while every per-user query (like Notifications)
+      // still reads whichever OTHER account's session was left active.
+      await SupabaseAuthService.logout();
+
       _authLog('calling SupabaseAuthService.signup');
       final user = await SupabaseAuthService.signup(
         email: _emailCtrl.text.trim(),
@@ -1797,114 +2070,59 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       );
       _authLog('signup returned userId=${user?.id ?? 'null'}');
 
-      final uid = user?.id;
-      if (uid == null) {
-        _authLog('signup returned null uid');
+      if (user == null) {
+        _authLog('signup returned null user');
         throw Exception('Unable to create user.');
       }
 
-      final displayName = _nameCtrl.text.trim();
-      if (displayName.isNotEmpty) {
-        _authLog('updating display name');
-        try {
-          await SupabaseBootstrap.client.auth.updateUser(
-            UserAttributes(
-              data: <String, dynamic>{
-                'display_name': displayName,
-                'full_name': displayName,
-              },
+      await _finishClientRegistrationForUser(user: user, draft: draft);
+    } on AuthException catch (e) {
+      final message = e.message.toLowerCase();
+      final isAlreadyRegistered =
+          message.contains('already registered') ||
+          message.contains('already exists') ||
+          message.contains('user already registered');
+
+      if (isAlreadyRegistered) {
+        final existingRole = await SupabaseAuthService.findExistingRoleForEmail(
+          _emailCtrl.text,
+        );
+
+        // An email maps to exactly one account. If it's already registered
+        // under a DIFFERENT role table, block rather than silently
+        // attaching a second role to it. Same-role (or no role data yet,
+        // e.g. a prior signup that never finished writing its row) is a
+        // safe repair/resubmit case.
+        if (existingRole != null && existingRole != 'client') {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(SupabaseAuthService.emailAlreadyRegisteredMessage),
             ),
           );
-        } catch (_) {}
+          return;
+        }
+
+        try {
+          _authLog('already registered, retrying as login');
+          final existingUser = await SupabaseAuthService.login(
+            email: _emailCtrl.text.trim(),
+            password: _passCtrl.text.trim(),
+          );
+          if (existingUser != null) {
+            await _finishClientRegistrationForUser(
+              user: existingUser,
+              draft: draft,
+            );
+            return;
+          }
+        } on AuthException {
+          // Fall through to the user-facing sign-in message below.
+        }
       }
 
-      _authLog('uploading profile photo');
-      final uploadedProfilePhotoUrl = await _uploadProfileImage(uid);
-      _authLog(
-        'profile photo upload complete hasUrl=${uploadedProfilePhotoUrl.isNotEmpty}',
-      );
-
-      final profilePhotoUrl = uploadedProfilePhotoUrl.trim();
-
-      _authLog('uploading guided measurement photos');
-      final guidedMeasurementPhotoUrls = await _uploadGuidedMeasurementPhotos(
-        uid,
-      );
-      _authLog(
-        'guided measurement photo upload count=${guidedMeasurementPhotoUrls.length}',
-      );
-
-      draft = draft.copyWith(
-        basic: draft.basic.copyWith(profileImageUrl: profilePhotoUrl),
-      );
-      final payload = _buildClientFirestorePayload(draft: draft);
-      final registration = Map<String, dynamic>.from(
-        (payload['registration'] as Map?)?.cast<String, dynamic>() ??
-            const <String, dynamic>{},
-      )..['guidedMeasurementPhotos'] = guidedMeasurementPhotoUrls;
-      final supabase = SupabaseBootstrap.client;
-
-      _authLog('upserting client row');
-      await supabase.from('client').upsert({
-        'id': uid,
-        'email': draft.basic.email,
-        'account_type': 'client',
-
-        'profile': payload['profile'],
-        'basic': payload['basic'],
-        'address': payload['address'],
-        'payment': payload['payment'],
-        'nail_preferences': payload['nailPreferences'],
-        'registration': registration,
-
-        'panel_display_name': draft.basic.name,
-        'panel_phone': draft.basic.phone,
-
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-
-      final registeredName = draft.basic.name.trim().isNotEmpty
-          ? draft.basic.name.trim()
-          : draft.basic.email.trim();
-      _authLog('notifying admins');
-      await NotificationsService.notifyAdmins(
-        title: 'New User Registered',
-        body: 'New Client: $registeredName registered',
-        type: 'admin_new_user_registered',
-        sourceCollection: 'client',
-        extra: <String, dynamic>{
-          'registeredRole': 'Client',
-          'registeredName': registeredName,
-          'registeredEmail': draft.basic.email.trim().toLowerCase(),
-          'registeredUid': uid,
-        },
-      );
-
-      _authLog('navigation after signup');
       if (!mounted) return;
-      if (kRequireEmailVerification) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => EmailVerificationPendingPage(
-              email: _emailCtrl.text.trim().toLowerCase(),
-              loginPageBuilder: (_) => const HomePage(),
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => ClientShellPage(profile: draft)),
-          (route) => false,
-        );
-      }
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      final message = e.message.toLowerCase();
-      final msg =
-          message.contains('already registered') ||
-              message.contains('already exists') ||
-              message.contains('user already registered')
+      final msg = isAlreadyRegistered
           ? 'Email already registered. Please sign in.'
           : message.contains('invalid')
           ? 'Invalid email or password.'
@@ -1998,6 +2216,18 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       _validationTriggeredStep = null;
     });
     _announceStep(_registrationStep);
+    _scrollRegistrationToTop();
+  }
+
+  /// Advancing/going back a step swaps which fields render within the same
+  /// single scrollable, so without this the new step opens at whatever
+  /// scroll offset the Next/Back button happened to be at (often the
+  /// bottom), instead of showing the step from its top.
+  void _scrollRegistrationToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_registrationScrollController.hasClients) return;
+      _registrationScrollController.jumpTo(0);
+    });
   }
 
   Widget _registrationProgressTabs() {
@@ -2166,6 +2396,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                     _validationTriggeredStep = null;
                   });
                   _announceStep(_registrationStep);
+                  _scrollRegistrationToTop();
                 },
                 child: const Text(
                   'Back',
@@ -2250,6 +2481,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Client registration',
       child: Theme(
@@ -2282,6 +2514,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         ),
         body: SafeArea(
           child: ListView(
+            controller: _registrationScrollController,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
               Form(
@@ -2336,8 +2569,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               keyboardType: TextInputType.emailAddress,
                               decoration: _dec('Email', 'Enter Email'),
                               validator: _emailValidator,
+                              onChanged: _onEmailChanged,
                             ),
                           ),
+                          _buildEmailAvailabilityStatus(),
                           const SizedBox(height: 6),
 
                           _FieldLabel.required('Password'),
@@ -2369,8 +2604,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                 ),
                               ),
                               validator: _passwordValidator,
+                              onChanged: _onPasswordChanged,
                             ),
                           ),
+                          _buildPasswordStatus(),
                           const SizedBox(height: 6),
                           // ✅ Confirm Password (NEW)
                           _FieldLabel.required('Confirm Password'),
@@ -2402,8 +2639,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                               ),
                             ),
                             validator: _confirmPasswordValidator,
+                            onChanged: _onConfirmPasswordChanged,
                             ),
                           ),
+                          _buildConfirmPasswordStatus(),
                           const SizedBox(height: 6),
                           _FieldLabel.required('Phone'),
                           const SizedBox(height: 6),
@@ -2625,7 +2864,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                         _streetSuggestions[i].displayLabel,
                                         style: const TextStyle(fontSize: 12),
                                       ),
-                                      onTap: () => _applyStreetSuggestion(
+                                      onTap: () => _selectStreetSuggestion(
                                         _streetSuggestions[i],
                                       ),
                                     ),

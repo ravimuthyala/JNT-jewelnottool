@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../constants/currency_options.dart';
+import '../../services/supabase_auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/registration_input_utils.dart';
 import '../../widgets/registration_profile_upload.dart';
@@ -28,6 +31,10 @@ class Step1AccountState extends State<Step1Account> {
   late final TextEditingController _bioCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _emailCtrl;
+  Timer? _emailAvailabilityDebounce;
+  bool _checkingEmailAvailability = false;
+  String? _lastCheckedEmail;
+  String? _emailTakenRole;
   late final TextEditingController _addressLine1Ctrl;
   late final TextEditingController _addressCityCtrl;
   late final TextEditingController _zipCtrl;
@@ -126,6 +133,7 @@ class Step1AccountState extends State<Step1Account> {
 
   @override
   void dispose() {
+    _emailAvailabilityDebounce?.cancel();
     _studioNameCtrl.dispose();
     _displayNameCtrl.dispose();
     _languageCtrl.dispose();
@@ -168,6 +176,68 @@ class Step1AccountState extends State<Step1Account> {
       _country = 'United States';
       _emailCtrl.text = 'luna.nails@test.com';
     });
+  }
+
+  void _onEmailChanged(String value) {
+    _emailAvailabilityDebounce?.cancel();
+    final normalized = value.trim().toLowerCase();
+
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      if (_emailTakenRole != null || _checkingEmailAvailability) {
+        setState(() {
+          _emailTakenRole = null;
+          _checkingEmailAvailability = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _checkingEmailAvailability = true);
+    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final role = await SupabaseAuthService.findExistingRoleForEmail(
+        normalized,
+      );
+      if (!mounted) return;
+      if (_emailCtrl.text.trim().toLowerCase() != normalized) return;
+      setState(() {
+        _checkingEmailAvailability = false;
+        _lastCheckedEmail = normalized;
+        _emailTakenRole = role;
+      });
+    });
+  }
+
+  Widget _buildEmailAvailabilityStatus() {
+    final normalized = _emailCtrl.text.trim().toLowerCase();
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      return const SizedBox.shrink();
+    }
+    if (_checkingEmailAvailability) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          'Checking email availability…',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          SupabaseAuthService.emailAlreadyRegisteredMessage,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFB3261E),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   bool validateAndSave(RegistrationDraft draft) {
@@ -372,11 +442,17 @@ class Step1AccountState extends State<Step1Account> {
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
+                  onChanged: _onEmailChanged,
                   validator: (value) {
                     final email = (value ?? '').trim();
                     if (email.isEmpty) return 'Email is required';
                     if (!email.contains('@') || !email.contains('.')) {
                       return 'Enter a valid email address';
+                    }
+                    final normalized = email.toLowerCase();
+                    if (_emailTakenRole != null &&
+                        normalized == _lastCheckedEmail) {
+                      return SupabaseAuthService.emailAlreadyRegisteredMessage;
                     }
                     return null;
                   },
@@ -384,6 +460,7 @@ class Step1AccountState extends State<Step1Account> {
                   style: fieldStyle,
                   ),
                 ),
+                _buildEmailAvailabilityStatus(),
                 const SizedBox(height: kFieldGap),
                 Semantics(
                   isRequired: true,

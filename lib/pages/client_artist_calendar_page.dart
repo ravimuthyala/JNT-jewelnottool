@@ -475,6 +475,7 @@ class _ClientArtistCalendarPageState extends State<ClientArtistCalendarPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist calendar',
       child: Scaffold(

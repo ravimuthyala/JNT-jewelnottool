@@ -451,6 +451,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Company',
       child: Scaffold(

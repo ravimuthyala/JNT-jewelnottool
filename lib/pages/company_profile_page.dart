@@ -1126,6 +1126,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Company profile',
       child: Scaffold(
@@ -1286,6 +1287,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         child: Image.network(
           src,
           fit: BoxFit.cover,
+          cacheWidth: 216,
+          cacheHeight: 216,
           errorBuilder: (_, _, _) =>
               ClientProfileAvatarIcon(displayName: displayName, size: 72),
         ),

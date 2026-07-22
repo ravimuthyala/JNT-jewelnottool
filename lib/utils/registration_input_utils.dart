@@ -58,6 +58,34 @@ class RegistrationInputUtils {
     return RegExp(r'^\+\d{1,4}$').hasMatch(normalized);
   }
 
+  /// Splits a stored phone number (e.g. "+447911123456", saved by the
+  /// registration pages as areaCode + local digits concatenated) back into
+  /// its dial code and local number, so profile edit screens can prefill a
+  /// country-code picker the same way registration does instead of always
+  /// assuming the number is a US local number.
+  ///
+  /// Falls back to '+1' with the input treated as a local number if no
+  /// known area code prefix matches (e.g. legacy data saved before a
+  /// country was tracked).
+  static ({String areaCode, String localNumber}) splitStoredPhone(
+    String value,
+  ) {
+    final raw = value.trim();
+    if (raw.isEmpty) return (areaCode: '+1', localNumber: '');
+    final withPlus = raw.startsWith('+') ? raw : '+$raw';
+    final byLengthDesc = List<String>.from(areaCodes)
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final code in byLengthDesc) {
+      if (withPlus.startsWith(code)) {
+        return (
+          areaCode: code,
+          localNumber: normalizePhone(withPlus.substring(code.length)),
+        );
+      }
+    }
+    return (areaCode: '+1', localNumber: normalizePhone(raw));
+  }
+
   static String normalizeCardNumber(String value) =>
       value.replaceAll(RegExp(r'\D'), '');
 

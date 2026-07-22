@@ -6,6 +6,7 @@ import 'dart:io';
 import 'artist_history_page.dart'; // ✅ for ArtistOrderLite
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 
 Future<void> showDeliveredHistorySheetLite({
   required BuildContext context,
@@ -62,6 +63,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       return Image.memory(
         dataBytes,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback(),
       );
     }
@@ -74,6 +76,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       return Image.network(
         path,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback(),
       );
     }
@@ -86,6 +89,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -114,6 +118,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
         return Image.network(
           url,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => fallback(),
         );
       },
@@ -139,6 +144,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Delivery history',
       child: Align(

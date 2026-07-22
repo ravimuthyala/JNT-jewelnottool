@@ -57,6 +57,7 @@ class _ArtistInboxPageState extends State<ArtistInboxPage>
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist inbox',
       child: Scaffold(

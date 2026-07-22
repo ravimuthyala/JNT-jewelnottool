@@ -241,6 +241,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Delivered request details',
       child: MediaQuery(

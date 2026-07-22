@@ -1,5 +1,5 @@
-import 'package:jnt_app_0120/models/client_request_v2.dart';
-import 'package:jnt_app_0120/utils/scenario_4_1.dart';
+import 'package:jewelnottool/models/client_request_v2.dart';
+import 'package:jewelnottool/utils/scenario_4_1.dart';
 
 Map<String, String> scenario43StatusesAfterBrandSubmit() =>
     scenario41StatusesAfterBrandSubmit();

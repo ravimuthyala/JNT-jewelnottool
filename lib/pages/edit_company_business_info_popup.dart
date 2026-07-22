@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/company_business_options.dart';
 import '../theme/app_colors.dart';
+import '../utils/registration_input_utils.dart';
+import '../widgets/phone_country_code_field.dart';
 
 /// Lightweight draft model (keep here until you create a real model file).
 class CompanyBusinessInfoDraft {
@@ -84,6 +86,8 @@ class _EditCompanyBusinessInfoPopupState
   late final TextEditingController _companyEmailCtrl;
   late final TextEditingController _companyPhoneCtrl;
   late final TextEditingController _companyUrlCtrl;
+  late String _contactPhoneAreaCode;
+  late String _companyPhoneAreaCode;
 
   String? _businessType;
 
@@ -97,15 +101,23 @@ class _EditCompanyBusinessInfoPopupState
     _contactEmailCtrl = TextEditingController(
       text: widget.initial.contactEmail,
     );
+    final splitContactPhone = RegistrationInputUtils.splitStoredPhone(
+      widget.initial.contactPhone,
+    );
+    _contactPhoneAreaCode = splitContactPhone.areaCode;
     _contactPhoneCtrl = TextEditingController(
-      text: widget.initial.contactPhone,
+      text: splitContactPhone.localNumber,
     );
 
     _companyEmailCtrl = TextEditingController(
       text: widget.initial.companyEmail,
     );
+    final splitCompanyPhone = RegistrationInputUtils.splitStoredPhone(
+      widget.initial.companyPhone,
+    );
+    _companyPhoneAreaCode = splitCompanyPhone.areaCode;
     _companyPhoneCtrl = TextEditingController(
-      text: widget.initial.companyPhone,
+      text: splitCompanyPhone.localNumber,
     );
     _companyUrlCtrl = TextEditingController(text: widget.initial.companyUrl);
 
@@ -163,6 +175,12 @@ class _EditCompanyBusinessInfoPopupState
     return true;
   }
 
+  String _combinedPhone(String areaCode, String localPhone) {
+    final normalizedLocal = RegistrationInputUtils.normalizePhone(localPhone);
+    if (normalizedLocal.isEmpty) return '';
+    return '${RegistrationInputUtils.normalizeAreaCode(areaCode)}$normalizedLocal';
+  }
+
   Future<void> _save() async {
     if (!_validate()) return;
 
@@ -170,9 +188,15 @@ class _EditCompanyBusinessInfoPopupState
       companyName: _companyNameCtrl.text.trim(),
       contactName: _contactNameCtrl.text.trim(),
       contactEmail: _contactEmailCtrl.text.trim(),
-      contactPhone: _contactPhoneCtrl.text.trim(),
+      contactPhone: _combinedPhone(
+        _contactPhoneAreaCode,
+        _contactPhoneCtrl.text,
+      ),
       companyEmail: _companyEmailCtrl.text.trim(),
-      companyPhone: _companyPhoneCtrl.text.trim(),
+      companyPhone: _combinedPhone(
+        _companyPhoneAreaCode,
+        _companyPhoneCtrl.text,
+      ),
       companyUrl: _companyUrlCtrl.text.trim(),
       businessType: _businessType?.trim() ?? '',
     );
@@ -266,10 +290,14 @@ class _EditCompanyBusinessInfoPopupState
                           const SizedBox(height: 8),
                           _fieldLabel('Company Phone # *'),
                           const SizedBox(height: 8),
-                          _InputField(
+                          PhoneCountryCodeField(
+                            areaCode: _companyPhoneAreaCode,
+                            onAreaCodeChanged: (code) =>
+                                setState(() => _companyPhoneAreaCode = code),
                             controller: _companyPhoneCtrl,
-                            hint: '(555) 555-5555',
-                            keyboardType: TextInputType.phone,
+                            height: 52,
+                            fontSize: 11.5,
+                            semanticLabel: 'Company phone number',
                           ),
 
                           const SizedBox(height: 8),
@@ -311,10 +339,14 @@ class _EditCompanyBusinessInfoPopupState
                           const SizedBox(height: 8),
                           _fieldLabel('Contact Phone # *'),
                           const SizedBox(height: 8),
-                          _InputField(
+                          PhoneCountryCodeField(
+                            areaCode: _contactPhoneAreaCode,
+                            onAreaCodeChanged: (code) =>
+                                setState(() => _contactPhoneAreaCode = code),
                             controller: _contactPhoneCtrl,
-                            hint: '(555) 555-5555',
-                            keyboardType: TextInputType.phone,
+                            height: 52,
+                            fontSize: 11.5,
+                            semanticLabel: 'Contact phone number',
                           ),
                         ],
                       ),

@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import '../utils/request_nfc_details_loader.dart';
 
@@ -478,6 +479,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Shipped request details',
       child: MediaQuery(
@@ -1900,6 +1902,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
       return Image.memory(
         dataBytes,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback(),
       );
     }
@@ -1930,6 +1933,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -1968,6 +1972,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
         return Image.network(
           url,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => fallback(),
         );
       },

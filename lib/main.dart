@@ -17,7 +17,6 @@ import 'config/environment.dart';
 import 'theme/app_colors.dart';
 import 'utlis/responsive_text.dart';
 import 'services/supabase_bootstrap.dart';
-import 'services/startup_frame_gate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/client_profile_models.dart';
@@ -32,6 +31,15 @@ import 'pages/tip_artist_page.dart';
 const String _sentryDsn = String.fromEnvironment('SENTRY_DSN');
 
 Future<void> main() async {
+  // Skip Sentry entirely when no DSN is configured: SentryFlutter.init()
+  // still spins up the native SDK (file manager, ANR watchdog, transport
+  // factory) even with a blank DSN, which repeatedly fails to parse it and
+  // logs errors on every launch for no benefit.
+  if (_sentryDsn.isEmpty) {
+    await _startApp();
+    return;
+  }
+
   await SentryFlutter.init(
     (options) {
       options.dsn = _sentryDsn;
@@ -44,16 +52,67 @@ Future<void> main() async {
 
 Future<void> _startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
-  StartupFrameGate.deferFirstFrame();
-  final supabaseOk = await SupabaseBootstrap.ensureInitialized();
-  if (!supabaseOk) {
-    debugPrint(
-      'Supabase initialization failed: ${SupabaseBootstrap.lastError}',
-    );
-    runApp(_SupabaseInitFailedApp(error: SupabaseBootstrap.lastError));
-    return;
+  // Show Flutter's own boot splash immediately instead of holding the native
+  // launch screen frozen for the duration of Supabase.initialize() (session
+  // restore + token refresh, which is network-bound and can take seconds on
+  // a slow connection). _AppBootstrapper renders a splash matching the
+  // native launch screen's background on the very first frame, then swaps
+  // to the real app (or the retry screen) once init settles.
+  runApp(const _AppBootstrapper());
+}
+
+/// Renders instantly (matching the native launch screen) while
+/// [SupabaseBootstrap.ensureInitialized] runs in the background, then swaps
+/// to [JntApp] on success or [_SupabaseInitFailedApp] on failure.
+class _AppBootstrapper extends StatefulWidget {
+  const _AppBootstrapper();
+
+  @override
+  State<_AppBootstrapper> createState() => _AppBootstrapperState();
+}
+
+class _AppBootstrapperState extends State<_AppBootstrapper> {
+  late Future<bool> _supabaseReady;
+
+  @override
+  void initState() {
+    super.initState();
+    _supabaseReady = SupabaseBootstrap.ensureInitialized();
   }
-  runApp(const JntApp());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _supabaseReady,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _BootSplash();
+        }
+        if (snapshot.data != true) {
+          debugPrint(
+            'Supabase initialization failed: ${SupabaseBootstrap.lastError}',
+          );
+          return _SupabaseInitFailedApp(error: SupabaseBootstrap.lastError);
+        }
+        return const JntApp();
+      },
+    );
+  }
+}
+
+/// Matches the native launch screen's plain `#292222` background
+/// (ios/Runner/Base.lproj/LaunchScreen.storyboard) so the handoff from
+/// native splash to Flutter is seamless instead of a visible flash.
+class _BootSplash extends StatelessWidget {
+  const _BootSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(backgroundColor: AppColors.blackCat),
+    );
+  }
 }
 
 /// Shown only when Supabase fails to initialize at startup (e.g. no network,

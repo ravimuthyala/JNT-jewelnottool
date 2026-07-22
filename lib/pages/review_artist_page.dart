@@ -374,6 +374,7 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
     if (_loading) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Review artist',
         child: const Scaffold(
@@ -385,6 +386,7 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
     if (_order == null) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Review artist',
         child: Scaffold(
@@ -410,6 +412,7 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Review artist',
       child: Scaffold(

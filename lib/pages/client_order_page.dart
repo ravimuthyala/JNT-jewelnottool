@@ -2081,6 +2081,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Client order',
       child: Scaffold(
@@ -3113,6 +3114,8 @@ class _Thumb extends StatelessWidget {
             height: 64,
             width: 64,
             fit: BoxFit.cover,
+            cacheWidth: 192,
+            cacheHeight: 192,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -3128,6 +3131,8 @@ class _Thumb extends StatelessWidget {
             height: 64,
             width: 64,
             fit: BoxFit.cover,
+            cacheWidth: 192,
+            cacheHeight: 192,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -3138,6 +3143,8 @@ class _Thumb extends StatelessWidget {
         height: 64,
         width: 64,
         fit: BoxFit.cover,
+        cacheWidth: 192,
+        cacheHeight: 192,
         errorBuilder: (_, _, _) => fallback(),
       );
     } else if (isAsset) {

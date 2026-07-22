@@ -340,6 +340,7 @@ class _CoinSelectorPageState extends State<CoinSelectorPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: widget.title,
       child: Scaffold(
@@ -786,6 +787,8 @@ class _CountryFlag extends StatelessWidget {
         width: 32,
         height: 24,
         fit: BoxFit.cover,
+        cacheWidth: 96,
+        cacheHeight: 72,
         errorBuilder:
             (BuildContext context, Object error, StackTrace? stackTrace) {
               return _FallbackFlag(label: code);

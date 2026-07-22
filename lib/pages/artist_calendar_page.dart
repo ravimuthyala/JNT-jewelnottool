@@ -474,6 +474,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist calendar',
       child: Scaffold(

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jnt_app_0120/utils/scenario_6_7.dart';
+import 'package:jewelnottool/utils/scenario_6_7.dart';
 
 void main() {
   group('Scenario 6.7 UI rules', () {

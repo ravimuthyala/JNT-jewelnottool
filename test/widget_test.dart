@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:jnt_app_0120/main.dart';
+import 'package:jewelnottool/main.dart';
 
 void main() {
   testWidgets('JntApp renders smoke test', (WidgetTester tester) async {

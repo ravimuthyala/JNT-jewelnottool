@@ -182,6 +182,15 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
                   activeColor: AppColors.blackCat,
                   contentPadding: EdgeInsets.zero,
                 ),
+                if (_method == PaymentMethod.venmo) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _venmoCtrl,
+                    style: const TextStyle(fontSize: _inputFs),
+                    decoration: _dec('Venmo Handle', '@username'),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 RadioListTile<PaymentMethod>(
                   value: PaymentMethod.paypal,
                   title: const Text(
@@ -191,6 +200,16 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
                   activeColor: AppColors.blackCat,
                   contentPadding: EdgeInsets.zero,
                 ),
+                if (_method == PaymentMethod.paypal) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _paypalCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(fontSize: _inputFs),
+                    decoration: _dec('PayPal Email', 'name@email.com'),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 RadioListTile<PaymentMethod>(
                   value: PaymentMethod.card,
                   title: const Text(
@@ -200,91 +219,71 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
                   activeColor: AppColors.blackCat,
                   contentPadding: EdgeInsets.zero,
                 ),
+                if (_isCard) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _cardNumberCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(19),
+                      CardNumberTextInputFormatter(),
+                    ],
+                    style: const TextStyle(fontSize: _inputFs),
+                    decoration: _dec('Card Number', '1234 5678 9012 3456'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _nameOnCardCtrl,
+                    style: const TextStyle(fontSize: _inputFs),
+                    decoration: _dec('Name on Card', 'Full name'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _expCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.datetime,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(4),
+                            ExpiryDateTextInputFormatter(),
+                          ],
+                          decoration: _dec('Expiration Date', 'MM/YY'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _cvvCtrl,
+                          style: const TextStyle(fontSize: _inputFs),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(4),
+                          ],
+                          decoration: _dec('CVV', '123'),
+                          obscureText: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _zipCtrl,
+                    style: const TextStyle(fontSize: _inputFs),
+                    keyboardType: TextInputType.number,
+                    decoration: _dec('Billing ZIP', '12345'),
+                  ),
+                  const SizedBox(height: 10),
+                ],
               ],
             ),
           ),
 
           const SizedBox(height: 10),
-
-          // Optional extra fields (only show when relevant)
-          if (_method == PaymentMethod.venmo) ...[
-            TextField(
-              controller: _venmoCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Venmo Handle', '@username'),
-            ),
-            const SizedBox(height: 10),
-          ],
-
-          if (_method == PaymentMethod.paypal) ...[
-            TextField(
-              controller: _paypalCtrl,
-              keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('PayPal Email', 'name@email.com'),
-            ),
-            const SizedBox(height: 10),
-          ],
-
-          if (_isCard) ...[
-            TextField(
-              controller: _cardNumberCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(19),
-                CardNumberTextInputFormatter(),
-              ],
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Card Number', '1234 5678 9012 3456'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _nameOnCardCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              decoration: _dec('Name on Card', 'Full name'),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _expCtrl,
-                    style: const TextStyle(fontSize: _inputFs),
-                    keyboardType: TextInputType.datetime,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(4),
-                      ExpiryDateTextInputFormatter(),
-                    ],
-                    decoration: _dec('Expiration Date', 'MM/YY'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _cvvCtrl,
-                    style: const TextStyle(fontSize: _inputFs),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(4),
-                    ],
-                    decoration: _dec('CVV', '123'),
-                    obscureText: true,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _zipCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              keyboardType: TextInputType.number,
-              decoration: _dec('Billing ZIP', '12345'),
-            ),
-            const SizedBox(height: 10),
-          ],
 
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,

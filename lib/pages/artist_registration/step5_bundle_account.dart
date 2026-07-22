@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../artist_checkout_page.dart';
+import '../../services/supabase_auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/registration_input_utils.dart';
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
@@ -35,6 +39,13 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   bool _emailTouched = false;
+  String? _passwordError;
+  String? _confirmPasswordError;
+
+  Timer? _emailAvailabilityDebounce;
+  bool _checkingEmailAvailability = false;
+  String? _lastCheckedEmail;
+  String? _emailTakenRole;
 
   bool get _isEmailValid =>
       _emailCtrl.text.contains('@') && _emailCtrl.text.contains('.');
@@ -56,10 +67,148 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
 
   @override
   void dispose() {
+    _emailAvailabilityDebounce?.cancel();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
+  }
+
+  void _onEmailChanged(String value) {
+    if (_emailTouched) setState(() {});
+
+    _emailAvailabilityDebounce?.cancel();
+    final normalized = value.trim().toLowerCase();
+
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      if (_emailTakenRole != null || _checkingEmailAvailability) {
+        setState(() {
+          _emailTakenRole = null;
+          _checkingEmailAvailability = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _checkingEmailAvailability = true);
+    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final role = await SupabaseAuthService.findExistingRoleForEmail(
+        normalized,
+      );
+      if (!mounted) return;
+      if (_emailCtrl.text.trim().toLowerCase() != normalized) return;
+      setState(() {
+        _checkingEmailAvailability = false;
+        _lastCheckedEmail = normalized;
+        _emailTakenRole = role;
+      });
+    });
+  }
+
+  Widget _buildEmailAvailabilityStatus() {
+    final normalized = _emailCtrl.text.trim().toLowerCase();
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      return const SizedBox.shrink();
+    }
+    if (_checkingEmailAvailability) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          'Checking email availability…',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          SupabaseAuthService.emailAlreadyRegisteredMessage,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  String? _passwordValidator(String? v) {
+    final value = (v ?? '').trim();
+    if (value.isEmpty) return 'Password is required';
+    if (!RegistrationInputUtils.isStrongPassword(value)) {
+      return 'Use 8+ chars with upper, lower, number, and symbol';
+    }
+    return null;
+  }
+
+  String? _confirmPasswordValidator(String? v) {
+    if (v == null || v.isEmpty) return 'Please confirm your password';
+    if (v != _passCtrl.text) return 'Passwords do not match';
+    return null;
+  }
+
+  void _onPasswordChanged(String value) {
+    setState(() {
+      _passwordError = _passwordValidator(value);
+      if (_confirmCtrl.text.isNotEmpty) {
+        _confirmPasswordError = _confirmPasswordValidator(_confirmCtrl.text);
+      }
+    });
+  }
+
+  void _onConfirmPasswordChanged(String value) {
+    setState(() {
+      _confirmPasswordError = _confirmPasswordValidator(value);
+    });
+  }
+
+  Widget _buildPasswordStatus() {
+    if (_passCtrl.text.isNotEmpty && _passwordError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          _passwordError!,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        'Password must be 8+ characters and include uppercase, lowercase, number, and symbol.',
+        style: TextStyle(
+          fontSize: 11,
+          color: AppColors.blackCat.withValues(alpha: 0.55),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmPasswordStatus() {
+    if (_confirmCtrl.text.isEmpty || _confirmPasswordError == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        _confirmPasswordError!,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.red,
+        ),
+      ),
+    );
   }
 
   void autofill() {
@@ -198,9 +347,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   autocorrect: false,
-                  onChanged: (_) {
-                    if (_emailTouched) setState(() {});
-                  },
+                  onChanged: _onEmailChanged,
                   onEditingComplete: () {
                     setState(() => _emailTouched = true);
                     FocusScope.of(context).nextFocus();
@@ -211,6 +358,11 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                       return 'Email is required';
                     }
                     if (!_isEmailValid) return 'Enter a valid email address';
+                    final normalized = _emailCtrl.text.trim().toLowerCase();
+                    if (_emailTakenRole != null &&
+                        normalized == _lastCheckedEmail) {
+                      return SupabaseAuthService.emailAlreadyRegisteredMessage;
+                    }
                     return null;
                   },
                   decoration: regDec('Email', 'you@example.com'),
@@ -221,6 +373,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                   ),
                   ),
                 ),
+                _buildEmailAvailabilityStatus(),
                 const SizedBox(height: kFieldGap),
                 Semantics(
                   isRequired: true,
@@ -228,15 +381,8 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                   controller: _passCtrl,
                   obscureText: _obscurePass,
                   textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Password is required';
-                    }
-                    if (value.length < 8) {
-                      return 'Must be at least 8 characters';
-                    }
-                    return null;
-                  },
+                  onChanged: _onPasswordChanged,
+                  validator: _passwordValidator,
                   decoration: regDec(
                     'Password',
                     'At least 8 characters',
@@ -258,6 +404,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                   ),
                   ),
                 ),
+                _buildPasswordStatus(),
                 const SizedBox(height: kFieldGap),
                 Semantics(
                   isRequired: true,
@@ -265,15 +412,8 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                   controller: _confirmCtrl,
                   obscureText: _obscureConfirm,
                   textInputAction: TextInputAction.done,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _passCtrl.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
+                  onChanged: _onConfirmPasswordChanged,
+                  validator: _confirmPasswordValidator,
                   decoration: regDec(
                     'Confirm password',
                     '',
@@ -297,6 +437,7 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                   ),
                   ),
                 ),
+                _buildConfirmPasswordStatus(),
               ],
             ),
           ),

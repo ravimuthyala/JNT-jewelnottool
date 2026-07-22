@@ -1,4 +1,4 @@
-import 'package:jnt_app_0120/models/client_request_v2.dart';
+import 'package:jewelnottool/models/client_request_v2.dart';
 
 enum Scenario45RequestType {
   standard,

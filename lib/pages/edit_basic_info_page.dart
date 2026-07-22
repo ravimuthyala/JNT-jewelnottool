@@ -59,6 +59,7 @@ class _EditBasicInfoPageState extends State<EditBasicInfoPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Edit basic info',
       child: Material(

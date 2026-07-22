@@ -1087,6 +1087,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Brand order details',
       child: Scaffold(
@@ -2299,6 +2300,8 @@ class _BaseOrderDetails extends StatelessWidget {
       height: 56,
       width: 56,
       fit: BoxFit.cover,
+      cacheWidth: 168,
+      cacheHeight: 168,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
@@ -2351,6 +2354,8 @@ class _BaseOrderDetails extends StatelessWidget {
       height: 56,
       width: 56,
       fit: BoxFit.cover,
+      cacheWidth: 168,
+      cacheHeight: 168,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
@@ -3064,7 +3069,7 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   }
 }
 
-class _SubmittedPhotosStrip extends StatelessWidget {
+class _SubmittedPhotosStrip extends StatefulWidget {
   const _SubmittedPhotosStrip({
     required this.paths,
     this.fallbackOrderId = '',
@@ -3079,6 +3084,9 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   final String sourceCollection;
   final bool enableFirestoreFallback;
   final bool showAll;
+
+  @override
+  State<_SubmittedPhotosStrip> createState() => _SubmittedPhotosStripState();
 
   static bool _isImageLikePath(String raw) {
     final noQuery = raw.trim().toLowerCase().split('?').first.split('#').first;
@@ -3127,8 +3135,6 @@ class _SubmittedPhotosStrip extends StatelessWidget {
 
     return _isImageLikePath(lower);
   }
-
-  bool _isAllowedForDisplay(String raw) => _isUsablePhotoRef(raw);
 
   static List<String> _collectPhotoRefs(List<dynamic> values) {
     final out = <String>[];
@@ -3186,13 +3192,63 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     }
     return out;
   }
+}
+
+class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
+  // Memoized here (recomputed only when the underlying paths/flags actually
+  // change, via didUpdateWidget) rather than created inline in build().
+  // Creating a fresh Future in build() meant every unrelated ancestor
+  // rebuild reset the FutureBuilder below to its loading/blank placeholder
+  // and re-ran the network existence-check + precache calls from scratch --
+  // visible as photos that load fine once, then flash blank again on the
+  // next incidental rebuild.
+  Future<List<String>>? _fallbackPhotosFuture;
+  Future<List<String>>? _displayPathsFuture;
+  List<String> _lastRenderable = const <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleFutures();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SubmittedPhotosStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.paths, widget.paths) ||
+        oldWidget.enableFirestoreFallback != widget.enableFirestoreFallback ||
+        oldWidget.fallbackOrderId != widget.fallbackOrderId) {
+      _scheduleFutures();
+    }
+  }
+
+  void _scheduleFutures() {
+    if (widget.enableFirestoreFallback &&
+        widget.fallbackOrderId.trim().isNotEmpty) {
+      _fallbackPhotosFuture = _loadFallbackPhotos();
+      _displayPathsFuture = null;
+      return;
+    }
+    _fallbackPhotosFuture = null;
+    final renderable = widget.paths
+        .map((p) => p.trim())
+        .where(_isAllowedForDisplay)
+        .toList(growable: false);
+    _lastRenderable = renderable;
+    _displayPathsFuture = renderable.isEmpty
+        ? Future.value(const <String>[])
+        : _validDisplayPaths(renderable);
+  }
+
+  bool _isAllowedForDisplay(String raw) =>
+      _SubmittedPhotosStrip._isUsablePhotoRef(raw);
 
   Future<List<String>> _loadFallbackPhotos() async {
-    final orderId = fallbackOrderId.trim();
+    final orderId = widget.fallbackOrderId.trim();
     if (orderId.isEmpty) return const <String>[];
     final root = await _supabaseFetchOrderRow(
-      fallbackOrderId,
-      orderNumber: fallbackOrderNumber,
+      widget.fallbackOrderId,
+      orderNumber: widget.fallbackOrderNumber,
     );
     if (root == null) return const <String>[];
     final payload = _asMap(root['payload']);
@@ -3202,7 +3258,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     final order =
         (payload['order'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-    final collected = _collectPhotoRefs(<dynamic>[
+    final collected = _SubmittedPhotosStrip._collectPhotoRefs(<dynamic>[
       payload['brandInspirationPhotos'],
       payload['inspirationPhotos'],
       payload['clientImages'],
@@ -3300,7 +3356,9 @@ class _SubmittedPhotosStrip extends StatelessWidget {
           } catch (_) {}
           final fullPath = '$folder/$name';
           final normalized = _normalizeStorageUrl(fullPath);
-          if (_isUsablePhotoRef(normalized)) folderRefs.add(normalized);
+          if (_SubmittedPhotosStrip._isUsablePhotoRef(normalized)) {
+            folderRefs.add(normalized);
+          }
         }
       } catch (_) {}
     }
@@ -3308,16 +3366,170 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     return <String>{...collected, ...folderRefs}.toList(growable: false);
   }
 
+  ImageProvider _providerFor(String p) {
+    if (p.startsWith('data:image/')) {
+      try {
+        final comma = p.indexOf(',');
+        if (comma > 0) {
+          final b64 = p.substring(comma + 1).trim();
+          final bytes = base64Decode(b64);
+          return MemoryImage(bytes);
+        }
+      } catch (_) {}
+    }
+    if (p.startsWith('http://') || p.startsWith('https://')) {
+      return NetworkImage(p);
+    }
+    if (p.startsWith('assets/')) return AssetImage(p);
+    if (p.startsWith('file://')) {
+      final localPath = p.replaceFirst('file://', '');
+      if (kIsWeb) return NetworkImage(p);
+      return FileImage(File(localPath));
+    }
+    if (kIsWeb) return NetworkImage(p);
+    return FileImage(File(p));
+  }
+
+  Future<String> _resolveDisplayPath(String raw) async {
+    var p = raw.trim();
+    for (var j = 0; j < 3; j++) {
+      final decoded = Uri.decodeFull(p);
+      if (decoded == p) break;
+      p = decoded.trim();
+    }
+    if (p.isEmpty || !_isAllowedForDisplay(p)) return '';
+    if (p.startsWith('http://') ||
+        p.startsWith('https://') ||
+        p.startsWith('assets/') ||
+        p.startsWith('data:image/') ||
+        p.startsWith('file://')) {
+      if (!_isAllowedForDisplay(p)) return '';
+      return p;
+    }
+    final looksStoragePath =
+        p.startsWith('gs://') ||
+        p.startsWith('company_custom_requests/') ||
+        p.startsWith('client_custom_requests/') ||
+        p.startsWith('clients/') ||
+        p.startsWith('artists/') ||
+        p.startsWith('client_artists/') ||
+        p.startsWith('company/') ||
+        (!p.contains('://') && p.contains('/'));
+    if (looksStoragePath) {
+      final resolved = await StorageUrlResolver.resolve(p);
+      final text = (resolved ?? '').trim();
+      if (_isAllowedForDisplay(text) &&
+          (text.startsWith('http://') ||
+              text.startsWith('https://') ||
+              text.startsWith('assets/') ||
+              text.startsWith('data:image/') ||
+              text.startsWith('file://'))) {
+        return text;
+      }
+    }
+    final resolved = await StorageUrlResolver.resolve(p);
+    final text = (resolved ?? '').trim();
+    if (_isAllowedForDisplay(text) &&
+        (text.startsWith('http://') ||
+            text.startsWith('https://') ||
+            text.startsWith('assets/') ||
+            text.startsWith('data:image/') ||
+            text.startsWith('file://'))) {
+      return text;
+    }
+    return '';
+  }
+
+  Future<List<String>> _validDisplayPaths(List<String> rawPaths) async {
+    final seen = <String>{};
+    final valid = <String>[];
+
+    for (final raw in rawPaths) {
+      final resolved = await _resolveDisplayPath(raw);
+      if (resolved.isEmpty || !seen.add(resolved)) continue;
+
+      try {
+        await precacheImage(_providerFor(resolved), context);
+        valid.add(resolved);
+      } catch (_) {
+        // Broken image refs should not reserve an empty tile.
+      }
+    }
+
+    return valid;
+  }
+
+  Widget _buildTile(String resolved, {required double size}) {
+    // No FutureBuilder/precacheImage wrapper here: _validDisplayPaths()
+    // already awaited precacheImage for this exact path before including it
+    // in the resolved list, so the image is already in Flutter's image
+    // cache by the time a tile is built.
+    final provider = _providerFor(resolved);
+    return ClipRRect(
+      borderRadius: BorderRadius.zero,
+      child: Semantics(
+        button: true,
+        label: 'View photo full screen',
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: () {
+              showDialog<void>(
+                context: context,
+                builder: (_) => Dialog(
+                  backgroundColor: Colors.black,
+                  insetPadding: const EdgeInsets.all(8),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: InteractiveViewer(
+                          minScale: 0.8,
+                          maxScale: 4,
+                          child: Center(
+                            child: Image(
+                              image: provider,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: IconButton(
+                          tooltip: 'Close image preview',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close, color: AppColors.snow),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Image(
+                image: provider,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final renderable = paths
-        .map((p) => p.trim())
-        .where(_isAllowedForDisplay)
-        .toList(growable: false);
-
-    if (enableFirestoreFallback && fallbackOrderId.trim().isNotEmpty) {
+    final fallbackFuture = _fallbackPhotosFuture;
+    if (fallbackFuture != null) {
+      final renderable = _lastRenderable;
       return FutureBuilder<List<String>>(
-        future: _loadFallbackPhotos(),
+        future: fallbackFuture,
         builder: (context, snap) {
           final fetched = (snap.data ?? const <String>[])
               .map((e) => e.trim())
@@ -3331,7 +3543,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
             return _SubmittedPhotosStrip(
               paths: merged,
               enableFirestoreFallback: false,
-              showAll: showAll,
+              showAll: widget.showAll,
             );
           }
           return Text(
@@ -3346,7 +3558,8 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       );
     }
 
-    if (renderable.isEmpty) {
+    final displayFuture = _displayPathsFuture;
+    if (displayFuture == null) {
       return Text(
         'No photos were uploaded by Brand.',
         style: TextStyle(
@@ -3357,163 +3570,11 @@ class _SubmittedPhotosStrip extends StatelessWidget {
       );
     }
 
-    ImageProvider providerFor(String p) {
-      if (p.startsWith('data:image/')) {
-        try {
-          final comma = p.indexOf(',');
-          if (comma > 0) {
-            final b64 = p.substring(comma + 1).trim();
-            final bytes = base64Decode(b64);
-            return MemoryImage(bytes);
-          }
-        } catch (_) {}
-      }
-      if (p.startsWith('http://') || p.startsWith('https://')) {
-        return NetworkImage(p);
-      }
-      if (p.startsWith('assets/')) return AssetImage(p);
-      if (p.startsWith('file://')) {
-        final localPath = p.replaceFirst('file://', '');
-        if (kIsWeb) return NetworkImage(p);
-        return FileImage(File(localPath));
-      }
-      if (kIsWeb) return NetworkImage(p);
-      return FileImage(File(p));
-    }
-
-    Future<String> resolveDisplayPath(String raw) async {
-      var p = raw.trim();
-      for (var j = 0; j < 3; j++) {
-        final decoded = Uri.decodeFull(p);
-        if (decoded == p) break;
-        p = decoded.trim();
-      }
-      if (p.isEmpty || !_isAllowedForDisplay(p)) return '';
-      if (p.startsWith('http://') ||
-          p.startsWith('https://') ||
-          p.startsWith('assets/') ||
-          p.startsWith('data:image/') ||
-          p.startsWith('file://')) {
-        if (!_isAllowedForDisplay(p)) return '';
-        return p;
-      }
-      final looksStoragePath =
-          p.startsWith('gs://') ||
-          p.startsWith('company_custom_requests/') ||
-          p.startsWith('client_custom_requests/') ||
-          p.startsWith('clients/') ||
-          p.startsWith('artists/') ||
-          p.startsWith('client_artists/') ||
-          p.startsWith('company/') ||
-          (!p.contains('://') && p.contains('/'));
-      if (looksStoragePath) {
-        final resolved = await StorageUrlResolver.resolve(p);
-        final text = (resolved ?? '').trim();
-        if (_isAllowedForDisplay(text) &&
-            (text.startsWith('http://') ||
-                text.startsWith('https://') ||
-                text.startsWith('assets/') ||
-                text.startsWith('data:image/') ||
-                text.startsWith('file://'))) {
-          return text;
-        }
-      }
-      final resolved = await StorageUrlResolver.resolve(p);
-      final text = (resolved ?? '').trim();
-      if (_isAllowedForDisplay(text) &&
-          (text.startsWith('http://') ||
-              text.startsWith('https://') ||
-              text.startsWith('assets/') ||
-              text.startsWith('data:image/') ||
-              text.startsWith('file://'))) {
-        return text;
-      }
-      return '';
-    }
-
-    Future<List<String>> validDisplayPaths(List<String> rawPaths) async {
-      final seen = <String>{};
-      final valid = <String>[];
-
-      for (final raw in rawPaths) {
-        final resolved = await resolveDisplayPath(raw);
-        if (resolved.isEmpty || !seen.add(resolved)) continue;
-
-        try {
-          await precacheImage(providerFor(resolved), context);
-          valid.add(resolved);
-        } catch (_) {
-          // Broken image refs should not reserve an empty tile.
-        }
-      }
-
-      return valid;
-    }
-
-    Widget buildTile(String resolved, {required double size}) {
-      final provider = providerFor(resolved);
-      return ClipRRect(
-        borderRadius: BorderRadius.zero,
-        child: Semantics(
-          button: true,
-          label: 'View photo full screen',
-          child: ExcludeSemantics(
-            child: InkWell(
-          onTap: () {
-            showDialog<void>(
-              context: context,
-              builder: (_) => Dialog(
-                backgroundColor: Colors.black,
-                insetPadding: const EdgeInsets.all(8),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: InteractiveViewer(
-                        minScale: 0.8,
-                        maxScale: 4,
-                        child: Center(
-                          child: Image(
-                            image: provider,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: IconButton(
-                        tooltip: 'Close image preview',
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close, color: AppColors.snow),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Image(
-              image: provider,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          ),
-          ),
-          ),
-        ),
-      );
-    }
-
     return FutureBuilder<List<String>>(
-      future: validDisplayPaths(renderable),
+      future: displayFuture,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return SizedBox(height: showAll ? 96 : 120);
+          return SizedBox(height: widget.showAll ? 96 : 120);
         }
 
         final displayPaths = snap.data ?? const <String>[];
@@ -3530,15 +3591,15 @@ class _SubmittedPhotosStrip extends StatelessWidget {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final tileSize = showAll
+            final tileSize = widget.showAll
                 ? ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0)
                 : 120.0;
-            if (showAll) {
+            if (widget.showAll) {
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: displayPaths
-                    .map((path) => buildTile(path, size: tileSize))
+                    .map((path) => _buildTile(path, size: tileSize))
                     .toList(growable: false),
               );
             }
@@ -3550,7 +3611,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
                 itemCount: displayPaths.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 10),
                 itemBuilder: (_, i) =>
-                    buildTile(displayPaths[i], size: tileSize),
+                    _buildTile(displayPaths[i], size: tileSize),
               ),
             );
           },

@@ -377,6 +377,7 @@ class _ResetLinkSentDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Reset link sent',
       child: AlertDialog(

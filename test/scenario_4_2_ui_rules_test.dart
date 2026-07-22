@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jnt_app_0120/models/client_request_v2.dart';
-import 'package:jnt_app_0120/utils/scenario_4_1.dart';
-import 'package:jnt_app_0120/utils/scenario_4_2.dart';
+import 'package:jewelnottool/models/client_request_v2.dart';
+import 'package:jewelnottool/utils/scenario_4_1.dart';
+import 'package:jewelnottool/utils/scenario_4_2.dart';
 
 void main() {
   group('Scenario 4.2 UI rules', () {

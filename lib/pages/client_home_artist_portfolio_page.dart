@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import 'notifications_page.dart';
 
@@ -896,6 +897,7 @@ class _ClientHomeArtistPortfolioPageState
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist portfolio',
       child: Scaffold(
@@ -1016,6 +1018,8 @@ class _SafeSquareAvatar extends StatelessWidget {
           child: Image.memory(
             bytes,
             fit: BoxFit.cover,
+            cacheWidth: (size * 3).round(),
+            cacheHeight: (size * 3).round(),
             errorBuilder: (_, _, _) => _fallback(),
           ),
         );
@@ -1028,6 +1032,8 @@ class _SafeSquareAvatar extends StatelessWidget {
         child: Image.network(
           src,
           fit: BoxFit.cover,
+          cacheWidth: (size * 3).round(),
+          cacheHeight: (size * 3).round(),
           errorBuilder: (_, _, _) => _fallback(),
         ),
       );
@@ -1225,6 +1231,7 @@ class _ResolvedPortfolioImage extends StatelessWidget {
       return Image.memory(
         dataBytes,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => _fallback(),
       );
     }
@@ -1233,6 +1240,7 @@ class _ResolvedPortfolioImage extends StatelessWidget {
       return Image.network(
         normalized,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => _fallback(),
       );
     }

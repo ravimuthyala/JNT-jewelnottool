@@ -192,6 +192,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'NFC nail profile',
       child: Scaffold(
@@ -698,6 +699,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'NFC saved items',
       child: Scaffold(
@@ -1036,6 +1038,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'NFC scan activation',
       child: Scaffold(

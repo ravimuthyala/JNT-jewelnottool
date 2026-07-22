@@ -80,6 +80,7 @@ class ClientArtistArtistPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Client artist view',
       child: Scaffold(

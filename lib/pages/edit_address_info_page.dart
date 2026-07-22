@@ -71,6 +71,7 @@ class _EditAddressInfoPageState extends State<EditAddressInfoPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Edit address',
       child: Material(

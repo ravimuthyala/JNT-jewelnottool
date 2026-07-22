@@ -257,6 +257,23 @@ class _ClientCustomRequestWithArtistPageState
     });
   }
 
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyShippingStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyShippingStreetSuggestion(selected);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1732,8 +1749,23 @@ class _ClientCustomRequestWithArtistPageState
   ImageProvider _imageProviderFor(String path) {
     final p = path.trim();
 
-    if (_isUrl(p)) return NetworkImage(p);
-    if (p.startsWith('data:')) return NetworkImage(p);
+    // Cap decode resolution to the thumbnail's actual display size (this
+    // preview renders at 110x110) instead of the full native camera
+    // resolution of an uploaded/previously-uploaded photo — undecoded full
+    // resolution across several thumbnails at once is what drove an
+    // EXC_RESOURCE memory crash elsewhere in the app (see client_artists_page
+    // and friends). kIsWeb skips ResizeImage since the browser handles
+    // network image decoding itself.
+    if (_isUrl(p)) {
+      return kIsWeb
+          ? NetworkImage(p)
+          : ResizeImage(NetworkImage(p), width: 300, height: 300);
+    }
+    if (p.startsWith('data:')) {
+      return kIsWeb
+          ? NetworkImage(p)
+          : ResizeImage(NetworkImage(p), width: 300, height: 300);
+    }
     if (p.startsWith('assets/')) return AssetImage(p);
     if (kIsWeb) return NetworkImage(p);
 
@@ -2523,19 +2555,17 @@ class _ClientCustomRequestWithArtistPageState
                     textField: true,
                     multiline: true,
                     label: 'Description, required',
-                    child: ExcludeSemantics(
-                      child: _FocusRingWrapper(
+                    child: _FocusRingWrapper(
+                      focusNode: _descriptionFocusNode,
+                      ringColor: _focusRing,
+                      child: _TextArea(
+                        controller: _descCtrl,
                         focusNode: _descriptionFocusNode,
-                        ringColor: _focusRing,
-                        child: _TextArea(
-                          controller: _descCtrl,
-                          focusNode: _descriptionFocusNode,
-                          hint: 'Describe your ideal design in detail...',
-                          errorText: _fieldErrors['description'],
-                          onChanged: (_) => setState(() {
-                            _fieldErrors.remove('description');
-                          }),
-                        ),
+                        hint: 'Describe your ideal design in detail...',
+                        errorText: _fieldErrors['description'],
+                        onChanged: (_) => setState(() {
+                          _fieldErrors.remove('description');
+                        }),
                       ),
                     ),
                   ),
@@ -3358,7 +3388,7 @@ class _ClientCustomRequestWithArtistPageState
                                   _shipStreetSuggestions[i].displayLabel,
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                                onTap: () => _applyShippingStreetSuggestion(
+                                onTap: () => _selectShippingStreetSuggestion(
                                   _shipStreetSuggestions[i],
                                 ),
                               ),

@@ -7,6 +7,7 @@ class BrandShellPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Brand',
       child: Scaffold(

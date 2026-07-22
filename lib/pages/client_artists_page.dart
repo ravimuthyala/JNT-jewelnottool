@@ -2130,6 +2130,19 @@ Widget _buildAnyImage(
   final value = _normalizeImageRef(src);
   if (value.isEmpty) return fallback;
 
+  // Cap decode resolution to roughly what's actually displayed instead of
+  // decoding at full native camera resolution (often 40+MB per image as an
+  // uncompressed bitmap regardless of how small it's drawn) — this is what
+  // was driving an EXC_RESOURCE memory crash when a list of several artist
+  // avatars/portfolio thumbnails rendered at once. The *3 accounts for
+  // high-density (3x) screens without needing a BuildContext here.
+  final cacheWidth = (width != null && width.isFinite)
+      ? (width * 3).round()
+      : null;
+  final cacheHeight = (height != null && height.isFinite)
+      ? (height * 3).round()
+      : null;
+
   if (value.startsWith('data:image/')) {
     final comma = value.indexOf(',');
     if (comma > 0 && comma < value.length - 1) {
@@ -2140,6 +2153,8 @@ Widget _buildAnyImage(
           width: width,
           height: height,
           fit: fit,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
           errorBuilder: (_, _, _) => fallback,
         );
       } catch (_) {
@@ -2155,6 +2170,8 @@ Widget _buildAnyImage(
       width: width,
       height: height,
       fit: fit,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       errorBuilder: (_, _, _) => fallback,
     );
   }

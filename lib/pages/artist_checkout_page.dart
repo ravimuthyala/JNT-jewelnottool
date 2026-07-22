@@ -299,6 +299,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist checkout',
       child: Scaffold(

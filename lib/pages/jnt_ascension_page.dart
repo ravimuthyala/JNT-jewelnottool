@@ -638,6 +638,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     if (!_artistLoaded || !_hasServerSnapshot || !_initialAscensionResolved) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'JNT Ascension',
         child: Scaffold(
@@ -670,6 +671,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'JNT Ascension',
       child: Scaffold(

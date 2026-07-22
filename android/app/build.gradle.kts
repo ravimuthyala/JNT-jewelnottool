@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.jnt_app_0120"
+    namespace = "com.example.jewelnottool"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.jnt_app_0120"
+        applicationId = "com.example.jewelnottool"
 
         minSdk = flutter.minSdkVersion
         targetSdk = 35

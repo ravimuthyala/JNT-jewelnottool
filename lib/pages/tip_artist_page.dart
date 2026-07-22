@@ -333,6 +333,7 @@ class _TipArtistPageState extends State<TipArtistPage> {
     if (_loading) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Tip artist',
         child: const Scaffold(
@@ -344,6 +345,7 @@ class _TipArtistPageState extends State<TipArtistPage> {
     if (_order == null) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Tip artist',
         child: Scaffold(
@@ -369,6 +371,7 @@ class _TipArtistPageState extends State<TipArtistPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Tip artist',
       child: Scaffold(

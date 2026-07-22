@@ -11,6 +11,7 @@ import '../services/artist_requests_repository.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart' as storage_resolver;
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 import '../utils/scenario_4_1.dart';
 import '../widgets/company_client_request_card.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -1968,6 +1969,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Client campaigns',
       child: Scaffold(
@@ -2192,6 +2194,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       return Image.network(
         path,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback,
       );
     }
@@ -2203,6 +2206,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           return Image.memory(
             bytes,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback,
           );
         }
@@ -2220,6 +2224,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback,
           );
         },
@@ -2249,6 +2254,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback,
           );
         },

@@ -417,34 +417,34 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
     try {
       await _upsertArtistRow('client_artist', resolvedId, {
-      'account_type': 'client_artist',
-      'displayName': _profile.basic.name.trim(),
-      'name': _profile.basic.name.trim(),
-      'profileImageUrl': _profile.basic.profileImageUrl.trim(),
-      'photoUrl': _profile.basic.profileImageUrl.trim(),
-      'avatarUrl': _profile.basic.profileImageUrl.trim(),
-      'profile': {
-        ...currentProfile,
+        'account_type': 'client_artist',
         'displayName': _profile.basic.name.trim(),
         'name': _profile.basic.name.trim(),
+        'profileImageUrl': _profile.basic.profileImageUrl.trim(),
         'photoUrl': _profile.basic.profileImageUrl.trim(),
         'avatarUrl': _profile.basic.profileImageUrl.trim(),
-        'profileImageUrl': _profile.basic.profileImageUrl.trim(),
-      },
-      'address': {
-        ...currentAddress,
-        'street': _profile.address.street.trim(),
-        'city': _profile.address.city.trim(),
-        'state': _profile.address.state.trim(),
-        'zip': _profile.address.zip.trim(),
-        'country': _profile.address.country.trim(),
-      },
-      'artist': {...currentArtist, ...currentArtistProfile},
-      'artist_profile': {...currentArtistProfile, ...currentArtist},
-      'availability': currentAvailability,
-      'pricing': currentPricing,
-      'credentials': currentCredentials,
-    }, email: email);
+        'profile': {
+          ...currentProfile,
+          'displayName': _profile.basic.name.trim(),
+          'name': _profile.basic.name.trim(),
+          'photoUrl': _profile.basic.profileImageUrl.trim(),
+          'avatarUrl': _profile.basic.profileImageUrl.trim(),
+          'profileImageUrl': _profile.basic.profileImageUrl.trim(),
+        },
+        'address': {
+          ...currentAddress,
+          'street': _profile.address.street.trim(),
+          'city': _profile.address.city.trim(),
+          'state': _profile.address.state.trim(),
+          'zip': _profile.address.zip.trim(),
+          'country': _profile.address.country.trim(),
+        },
+        'artist': {...currentArtist, ...currentArtistProfile},
+        'artist_profile': {...currentArtistProfile, ...currentArtist},
+        'availability': currentAvailability,
+        'pricing': currentPricing,
+        'credentials': currentCredentials,
+      }, email: email);
     } catch (e) {
       debugPrint('ClientArtistProfilePage: failed to create artist row: $e');
     }
@@ -1021,6 +1021,36 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         unawaited(_saveProfilePhotoInBackground(selectedPhotoBytes));
       }
     }
+  }
+
+  Future<void> _editArtistProfile() async {
+    final ref = await _artistModalRef();
+    if (!mounted || ref == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to load artist profile.')),
+        );
+      }
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistEditProfilePage(
+            supabaseTable: ref.table,
+            supabaseId: ref.id,
+            initialData: ref.data,
+          ),
+        ),
+      ),
+    );
+    if (mounted) await _loadProfileFromSupabase();
   }
 
   Future<void> _saveProfilePhotoInBackground(Uint8List bytes) async {
@@ -2217,349 +2247,363 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Client artist profile',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
+        backgroundColor: AppColors.snow,
 
-      // ✅ Your custom header
-      appBar: JntModalAppBar(
-        onClose: _closeProfilePage,
-        closeTooltip: 'Close profile',
-        leading: NotificationBellButton(
-          onTap: _openNotifications,
-          iconSize: JntHeaderMetrics.notificationIconSize,
-        ),
-        title: ExcludeSemantics(
-          child: Image.asset(
-            'assets/images/jnt_logo_black.png',
-            height: JntModalHeaderMetrics.logoHeight,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        // ✅ Your custom header
+        appBar: JntModalAppBar(
+          onClose: _closeProfilePage,
+          closeTooltip: 'Close profile',
+          leading: NotificationBellButton(
+            onTap: _openNotifications,
+            iconSize: JntHeaderMetrics.notificationIconSize,
+          ),
+          title: ExcludeSemantics(
+            child: Image.asset(
+              'assets/images/jnt_logo_black.png',
+              height: JntModalHeaderMetrics.logoHeight,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
           ),
         ),
-      ),
 
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-          children: [
-            _headerGradientCard(
-              child: Column(
-                children: [
-                  Column(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.zero,
-                        child: SizedBox(
-                          height: 92,
-                          width: 92,
-                          child: ClientProfileAvatarIcon(
-                            imageUrl: _profile.basic.profileImageUrl,
-                            displayName: _profile.basic.name,
-                            size: 92,
-                            resolveCurrentUserFallback: true,
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+            children: [
+              _headerGradientCard(
+                child: Column(
+                  children: [
+                    Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.zero,
+                          child: SizedBox(
+                            height: 92,
+                            width: 92,
+                            child: ClientProfileAvatarIcon(
+                              imageUrl: _profile.basic.profileImageUrl,
+                              displayName: _profile.basic.name,
+                              size: 92,
+                              resolveCurrentUserFallback: true,
+                            ),
                           ),
                         ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _profile.basic.name.trim().isEmpty
+                              ? 'Client Artist'
+                              : _profile.basic.name.trim(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _profile.basic.email.trim().isEmpty
+                              ? '—'
+                              : _profile.basic.email.trim(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
+                            fontWeight: FontWeight.w400,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_profile.address.city.trim()}, ${_profile.address.state.trim()}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
+                            fontWeight: FontWeight.w400,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (_showClientTab && _hasAmbassadorTag(_profileData))
+                          _buildProfileTag('Ambassador')
+                        else if (!_showClientTab)
+                          _buildProfileTag(
+                            _resolveArtistTierLabel(_profileData),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    const SizedBox(height: 8),
+                    _profileTabs(),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              if (_showClientTab) ...[
+                _menuTile(
+                  icon: Icons.person_outline,
+                  title: 'Personal Information',
+                  onTap: _editBasic,
+                ),
+                _menuTile(
+                  icon: Icons.credit_card_outlined,
+                  title: 'Payment Methods',
+                  onTap: _editPayment,
+                ),
+                _menuTile(
+                  icon: Icons.location_on_outlined,
+                  title: 'Shipping Address',
+                  onTap: _editShipping,
+                ),
+                _menuTile(
+                  icon: Icons.straighten_outlined,
+                  title: 'Measurements',
+                  onTap: _editMeasurements,
+                ),
+                _menuTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Communication Preference',
+                  onTap: _editCommunicationPreference,
+                ),
+              ] else ...[
+                _menuTile(
+                  icon: Icons.person_outline,
+                  title: 'Edit Profile',
+                  onTap: () {
+                    unawaited(_editArtistProfile());
+                  },
+                ),
+                _menuTile(
+                  icon: Icons.image_outlined,
+                  title: 'Portfolio',
+                  onTap: _openPortfolio,
+                ),
+                _menuTile(
+                  icon: Icons.tune_rounded,
+                  title: 'Specialization & Service Area',
+                  onTap: () {
+                    unawaited(_openSpecializationServiceArea());
+                  },
+                ),
+                _menuTile(
+                  icon: Icons.payments_outlined,
+                  title: 'Payout Settings',
+                  onTap: () {
+                    unawaited(_openPayoutSettings());
+                  },
+                ),
+                _menuTile(
+                  icon: Icons.calendar_month_outlined,
+                  title: 'Availability',
+                  onTap: () {
+                    unawaited(_openAvailability());
+                  },
+                ),
+                // Direct Requests toggle
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 12,
+                  ),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.blackCatBorderLight),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.notifications_active_outlined,
+                        color: AppColors.blackCat,
+                        size: 20,
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _profile.basic.name.trim().isEmpty
-                            ? 'Client Artist'
-                            : _profile.basic.name.trim(),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: AppColors.blackCat,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Direct Requests',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _directRequestsOn
+                                  ? 'Accepting requests now 😊'
+                                  : 'Not accepting requests',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.55,
+                                ),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _profile.basic.email.trim().isEmpty
-                            ? '—'
-                            : _profile.basic.email.trim(),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.blackCat.withValues(alpha: 0.65),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12.5,
+                      Switch(
+                        value: _directRequestsOn,
+                        activeThumbColor: AppColors.blackCat,
+                        inactiveThumbColor: AppColors.blackCatLight,
+                        inactiveTrackColor: AppColors.blackCatLight.withValues(
+                          alpha: 0.35,
                         ),
+                        onChanged: _savingDirectRequestPref
+                            ? null
+                            : (v) => _setDirectRequestsEnabled(v),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${_profile.address.city.trim()}, ${_profile.address.state.trim()}',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.blackCat.withValues(alpha: 0.60),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (_showClientTab && _hasAmbassadorTag(_profileData))
-                        _buildProfileTag('Ambassador')
-                      else if (!_showClientTab)
-                        _buildProfileTag(_resolveArtistTierLabel(_profileData)),
                     ],
                   ),
-                  const SizedBox(height: 14),
-
-                  const SizedBox(height: 8),
-                  _profileTabs(),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-            if (_showClientTab) ...[
-              _menuTile(
-                icon: Icons.person_outline,
-                title: 'Personal Information',
-                onTap: _editBasic,
-              ),
-              _menuTile(
-                icon: Icons.credit_card_outlined,
-                title: 'Payment Methods',
-                onTap: _editPayment,
-              ),
-              _menuTile(
-                icon: Icons.location_on_outlined,
-                title: 'Shipping Address',
-                onTap: _editShipping,
-              ),
-              _menuTile(
-                icon: Icons.straighten_outlined,
-                title: 'Measurements',
-                onTap: _editMeasurements,
-              ),
-              _menuTile(
-                icon: Icons.notifications_outlined,
-                title: 'Communication Preference',
-                onTap: _editCommunicationPreference,
-              ),
-            ] else ...[
-              _menuTile(
-                icon: Icons.image_outlined,
-                title: 'Portfolio',
-                onTap: _openPortfolio,
-              ),
-              _menuTile(
-                icon: Icons.tune_rounded,
-                title: 'Specialization & Service Area',
-                onTap: () {
-                  unawaited(_openSpecializationServiceArea());
-                },
-              ),
-              _menuTile(
-                icon: Icons.payments_outlined,
-                title: 'Payout Settings',
-                onTap: () {
-                  unawaited(_openPayoutSettings());
-                },
-              ),
-              _menuTile(
-                icon: Icons.calendar_month_outlined,
-                title: 'Availability',
-                onTap: () {
-                  unawaited(_openAvailability());
-                },
-              ),
-              // Direct Requests toggle
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 2,
-                  vertical: 12,
                 ),
-                decoration: const BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.blackCatBorderLight),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 12,
+                  ),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.blackCatBorderLight),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.nfc_rounded,
+                        color: AppColors.blackCat,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'NFC Request',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _nfcRequestsOn
+                                  ? 'Accepting NFC upgrade requests'
+                                  : 'Not accepting NFC upgrade requests',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.55,
+                                ),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _nfcRequestsOn,
+                        activeThumbColor: AppColors.blackCat,
+                        inactiveThumbColor: AppColors.blackCatLight,
+                        inactiveTrackColor: AppColors.blackCatLight.withValues(
+                          alpha: 0.35,
+                        ),
+                        onChanged: _savingNfcRequestPref
+                            ? null
+                            : (v) => _setNfcRequestsEnabled(v),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.notifications_active_outlined,
-                      color: AppColors.blackCat,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Direct Requests',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            _directRequestsOn
-                                ? 'Accepting requests now 😊'
-                                : 'Not accepting requests',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.blackCat.withValues(alpha: 0.55),
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
+                _menuTile(
+                  icon: Icons.star_outline_rounded,
+                  title: 'JNT Ascension',
+                  onTap: _openAscension,
+                ),
+              ],
+
+              const SizedBox(height: 16),
+              Center(
+                child: SizedBox(
+                  width: 180,
+                  height: 42,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
-                    Switch(
-                      value: _directRequestsOn,
-                      activeThumbColor: AppColors.blackCat,
-                      inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withValues(
-                        alpha: 0.35,
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/', (route) => false),
+                    child: const Text(
+                      'Log out',
+                      style: TextStyle(
+                        color: AppColors.snow,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        fontFamily: 'Arial',
                       ),
-                      onChanged: _savingDirectRequestPref
-                          ? null
-                          : (v) => _setDirectRequestsEnabled(v),
                     ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 2,
-                  vertical: 12,
-                ),
-                decoration: const BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.blackCatBorderLight),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.nfc_rounded,
-                      color: AppColors.blackCat,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'NFC Request',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            _nfcRequestsOn
-                                ? 'Accepting NFC upgrade requests'
-                                : 'Not accepting NFC upgrade requests',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.blackCat.withValues(alpha: 0.55),
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: _nfcRequestsOn,
-                      activeThumbColor: AppColors.blackCat,
-                      inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withValues(
-                        alpha: 0.35,
-                      ),
-                      onChanged: _savingNfcRequestPref
-                          ? null
-                          : (v) => _setNfcRequestsEnabled(v),
-                    ),
-                  ],
-                ),
               ),
-              _menuTile(
-                icon: Icons.star_outline_rounded,
-                title: 'JNT Ascension',
-                onTap: _openAscension,
-              ),
+              const SizedBox(height: 10),
             ],
-
-            const SizedBox(height: 16),
-            Center(
-              child: SizedBox(
-                width: 180,
-                height: 42,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat,
-                    foregroundColor: AppColors.snow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                  ),
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil('/', (route) => false),
-                  child: const Text(
-                    'Log out',
-                    style: TextStyle(
-                      color: AppColors.snow,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      fontFamily: 'Arial',
-                    ),
-                  ),
-                ),
-              ),
+          ),
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _index,
+          backgroundColor: AppColors.balletSlippers,
+          selectedItemColor: AppColors.blackCat,
+          unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
+          type: BottomNavigationBarType.fixed,
+          onTap: _onBottomNavTap,
+          items: [
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'Home',
             ),
-            const SizedBox(height: 10),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.add_circle_outline),
+              activeIcon: Icon(Icons.add_circle),
+              label: 'Design',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.inbox_outlined),
+              activeIcon: Icon(Icons.inbox),
+              label: 'Requests',
+            ),
+            if (_showCampaignsTab)
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.campaign_outlined),
+                activeIcon: Icon(Icons.campaign),
+                label: 'Campaigns',
+              ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_outlined),
+              activeIcon: Icon(Icons.receipt_long),
+              label: 'Orders',
+            ),
+            if (!_showCampaignsTab)
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.attach_money_outlined),
+                activeIcon: Icon(Icons.attach_money),
+                label: 'Earnings',
+              ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        backgroundColor: AppColors.balletSlippers,
-        selectedItemColor: AppColors.blackCat,
-        unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
-        type: BottomNavigationBarType.fixed,
-        onTap: _onBottomNavTap,
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            activeIcon: Icon(Icons.add_circle),
-            label: 'Design',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.inbox_outlined),
-            activeIcon: Icon(Icons.inbox),
-            label: 'Requests',
-          ),
-          if (_showCampaignsTab)
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.campaign_outlined),
-              activeIcon: Icon(Icons.campaign),
-              label: 'Campaigns',
-            ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_long_outlined),
-            activeIcon: Icon(Icons.receipt_long),
-            label: 'Orders',
-          ),
-          if (!_showCampaignsTab)
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.attach_money_outlined),
-              activeIcon: Icon(Icons.attach_money),
-              label: 'Earnings',
-            ),
-        ],
-      ),
       ),
     );
   }
@@ -2656,36 +2700,36 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       label: title,
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 12),
-        decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: AppColors.blackCatBorderLight),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.blackCat, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                ),
+          onTap: onTap,
+          borderRadius: BorderRadius.zero,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.blackCatBorderLight),
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.blackCat.withValues(alpha: 0.35),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.blackCat, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }

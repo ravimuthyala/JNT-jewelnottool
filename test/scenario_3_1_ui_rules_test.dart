@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jnt_app_0120/models/client_request_v2.dart';
-import 'package:jnt_app_0120/pages/artist_requests_page_redesign.dart';
-import 'package:jnt_app_0120/pages/client_campaigns_page.dart';
-import 'package:jnt_app_0120/pages/brand_custom_request_page.dart';
+import 'package:jewelnottool/models/client_request_v2.dart';
+import 'package:jewelnottool/pages/artist_requests_page_redesign.dart';
+import 'package:jewelnottool/pages/client_campaigns_page.dart';
+import 'package:jewelnottool/pages/brand_custom_request_page.dart';
 
 void main() {
   group('Scenario 3.1 UI rules', () {

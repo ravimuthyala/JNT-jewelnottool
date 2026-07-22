@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 // for ClientRequestV2 + NailDimensionsV2 (or move models to a shared file)
 import '../models/client_request_v2.dart';
 import '../widgets/group_client_measurements_tabs.dart';
@@ -409,6 +410,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Completed request details',
       child: MediaQuery(
@@ -1771,6 +1773,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       return Image.memory(
         dataBytes,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback(),
       );
     }
@@ -1792,6 +1795,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -1820,6 +1824,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         return Image.network(
           url,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => fallback(),
         );
       },

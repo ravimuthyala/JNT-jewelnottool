@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "jnt_app_0120" "\0"
+            VALUE "FileDescription", "jewelnottool" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "jnt_app_0120" "\0"
+            VALUE "InternalName", "jewelnottool" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "jnt_app_0120.exe" "\0"
-            VALUE "ProductName", "jnt_app_0120" "\0"
+            VALUE "OriginalFilename", "jewelnottool.exe" "\0"
+            VALUE "ProductName", "jewelnottool" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

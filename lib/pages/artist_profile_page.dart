@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:typed_data';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -18,7 +17,9 @@ import 'notifications_page.dart';
 import 'artist_reviews_page.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
+import '../widgets/phone_country_code_field.dart';
 import '../widgets/searchable_dropdown_field.dart';
+import '../utils/image_cache_utils.dart';
 import '../utils/registration_input_utils.dart';
 
 String _storageBucketForReference(String raw) {
@@ -691,6 +692,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         ),
       ),
     );
+    if (mounted) await _bindArtistProfile();
   }
 
   List<ArtistPortfolioItem> _portfolioItemsFromData(Map<String, dynamic> data) {
@@ -1096,7 +1098,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Unable to upload image(s). Please try again.'),
+                          content: Text(
+                            'Unable to upload image(s). Please try again.',
+                          ),
                         ),
                       );
                     }
@@ -1205,145 +1209,148 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist profile',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.only(
-            bottom: widget.showBottomNav ? kBottomNavigationBarHeight + 16 : 16,
-          ),
-          children: [
-            // ✅ Separate top header strip
-            _topHeaderStrip(),
-
-            // ✅ Separate hero section (as its own section)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: _profileHeroCard(),
+        backgroundColor: AppColors.snow,
+        body: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.only(
+              bottom: widget.showBottomNav
+                  ? kBottomNavigationBarHeight + 16
+                  : 16,
             ),
+            children: [
+              // ✅ Separate top header strip
+              _topHeaderStrip(),
 
-            const SizedBox(height: 14),
+              // ✅ Separate hero section (as its own section)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _profileHeroCard(),
+              ),
 
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
-              child: Column(
-                children: [
-                  _menuTile(
-                    icon: Icons.photo_library_outlined,
-                    title: 'Portfolio',
-                    subtitle: 'Upload designs & showcase your work.',
-                    onTap: _openPortfolio,
-                  ),
-                  _menuTile(
-                    icon: Icons.tune_rounded,
-                    title: 'Specialization & Service Area',
-                    subtitle: 'Update services, pricing, and location.',
-                    onTap: _openSpecializationServiceArea,
-                  ),
-                  _menuTile(
-                    icon: Icons.account_balance_wallet_outlined,
-                    title: 'Payout Settings',
-                    subtitle: 'Manage payout & banking details.',
-                    onTap: _openPayoutSettings,
-                  ),
-                  _menuTile(
-                    icon: Icons.access_time_rounded,
-                    title: 'Availability',
-                    subtitle: 'Update your schedule & turnaround.',
-                    onTap: _openAvailability,
-                  ),
+              const SizedBox(height: 14),
 
-                  // ✅ Direct Requests section (after Availability)
-                  _directRequestsCard(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
+                child: Column(
+                  children: [
+                    _menuTile(
+                      icon: Icons.photo_library_outlined,
+                      title: 'Portfolio',
+                      subtitle: 'Upload designs & showcase your work.',
+                      onTap: _openPortfolio,
+                    ),
+                    _menuTile(
+                      icon: Icons.tune_rounded,
+                      title: 'Specialization & Service Area',
+                      subtitle: 'Update services, pricing, and location.',
+                      onTap: _openSpecializationServiceArea,
+                    ),
+                    _menuTile(
+                      icon: Icons.account_balance_wallet_outlined,
+                      title: 'Payout Settings',
+                      subtitle: 'Manage payout & banking details.',
+                      onTap: _openPayoutSettings,
+                    ),
+                    _menuTile(
+                      icon: Icons.access_time_rounded,
+                      title: 'Availability',
+                      subtitle: 'Update your schedule & turnaround.',
+                      onTap: _openAvailability,
+                    ),
 
-                  _nfcRequestsCard(),
+                    // ✅ Direct Requests section (after Availability)
+                    _directRequestsCard(),
 
-                  _requestNotificationsCard(),
+                    _nfcRequestsCard(),
 
-                  _jntAscensionTile(context),
+                    _requestNotificationsCard(),
 
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: 180,
-                    height: 42,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
+                    _jntAscensionTile(context),
+
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: 180,
+                      height: 42,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat,
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
                         ),
-                      ),
-                      onPressed: _loggingOutFromProfile
-                          ? null
-                          : _logoutFromProfile,
-                      icon: const Icon(Icons.logout_rounded, size: 18),
-                      label: Text(
-                        _loggingOutFromProfile ? 'Logging out...' : 'Logout',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          color: AppColors.snow,
-                          fontFamily: 'Arial',
+                        onPressed: _loggingOutFromProfile
+                            ? null
+                            : _logoutFromProfile,
+                        icon: const Icon(Icons.logout_rounded, size: 18),
+                        label: Text(
+                          _loggingOutFromProfile ? 'Logging out...' : 'Logout',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppColors.snow,
+                            fontFamily: 'Arial',
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+        bottomNavigationBar: widget.showBottomNav
+            ? BottomNavigationBar(
+                currentIndex: widget.bottomNavIndex,
+                backgroundColor: AppColors.balletSlippers,
+                selectedItemColor: AppColors.blackCat,
+                unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
+                type: BottomNavigationBarType.fixed,
+                onTap: (i) {
+                  if (widget.onNavTap != null) {
+                    widget.onNavTap!(i);
+                    return;
+                  }
+                  if (i != widget.bottomNavIndex) {
+                    Navigator.pop(context);
+                  }
+                },
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.home_outlined),
+                    activeIcon: Icon(Icons.home),
+                    label: 'Home',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.inbox_outlined),
+                    activeIcon: Icon(Icons.inbox),
+                    label: 'Requests',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    activeIcon: Icon(Icons.calendar_month),
+                    label: 'Calendar',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.history_outlined),
+                    activeIcon: Icon(Icons.history),
+                    label: 'History',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.attach_money_outlined),
+                    activeIcon: Icon(Icons.attach_money),
+                    label: 'Earnings',
+                  ),
+                ],
+              )
+            : null,
       ),
-      bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigationBar(
-              currentIndex: widget.bottomNavIndex,
-              backgroundColor: AppColors.balletSlippers,
-              selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
-              type: BottomNavigationBarType.fixed,
-              onTap: (i) {
-                if (widget.onNavTap != null) {
-                  widget.onNavTap!(i);
-                  return;
-                }
-                if (i != widget.bottomNavIndex) {
-                  Navigator.pop(context);
-                }
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.inbox_outlined),
-                  activeIcon: Icon(Icons.inbox),
-                  label: 'Requests',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  activeIcon: Icon(Icons.calendar_month),
-                  label: 'Calendar',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.history_outlined),
-                  activeIcon: Icon(Icons.history),
-                  label: 'History',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.attach_money_outlined),
-                  activeIcon: Icon(Icons.attach_money),
-                  label: 'Earnings',
-                ),
-              ],
-            )
-          : null,
-    ),
     );
   }
 
@@ -1454,27 +1461,27 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 button: true,
                 label: 'View all reviews',
                 child: ExcludeSemantics(
-                child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ArtistReviewsPage(),
-                    ),
-                  );
-                },
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Text(
-                    'View all reviews',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ArtistReviewsPage(),
+                        ),
+                      );
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Text(
+                        'View all reviews',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -1564,54 +1571,54 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         button: true,
         onTap: onTap,
         child: ExcludeSemantics(
-        child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-        decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: AppColors.blackCatBorderLight),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: AppColors.blackCat.withValues(alpha: 0.75),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: InkWell(
+            borderRadius: BorderRadius.zero,
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppColors.blackCatBorderLight),
+                ),
+              ),
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.blackCat,
+                  Icon(
+                    icon,
+                    size: 22,
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
+                            fontWeight: FontWeight.w400,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
-                    ),
-                  ),
+                  Icon(Icons.chevron_right_rounded, color: AppColors.blackCat),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: AppColors.blackCat),
-          ],
+          ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }
@@ -1832,39 +1839,43 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         button: true,
         onTap: _openAscension,
         child: ExcludeSemantics(
-        child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: _openAscension,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-        decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: AppColors.blackCatBorderLight),
-          ),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.star_rounded, color: AppColors.blackCat, size: 22),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'JNT Ascension',
-                style: TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 14,
-                  color: AppColors.blackCat,
+          child: InkWell(
+            borderRadius: BorderRadius.zero,
+            onTap: _openAscension,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppColors.blackCatBorderLight),
                 ),
               ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.star_rounded,
+                    color: AppColors.blackCat,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'JNT Ascension',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w400,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
+                ],
+              ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.blackCat.withValues(alpha: 0.35),
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }
@@ -1936,6 +1947,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           return Image.network(
             resolved,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -1950,6 +1962,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           return Image.memory(
             bytes,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         } catch (_) {
@@ -1963,6 +1976,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       return Image.network(
         src,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => FutureBuilder<String>(
           future: _resolveStorageAvatarFallback(),
           builder: (context, snapshot) {
@@ -1971,6 +1985,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             return Image.network(
               resolved,
               fit: BoxFit.cover,
+              cacheWidth: kMaxImageDecodeDimension,
               errorBuilder: (_, _, _) => fallback(),
             );
           },
@@ -1989,6 +2004,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           return Image.network(
             resolved,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => FutureBuilder<String>(
               future: _resolveStorageAvatarFallback(),
               builder: (context, snapshot) {
@@ -1997,6 +2013,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 return Image.network(
                   fallbackSrc,
                   fit: BoxFit.cover,
+                  cacheWidth: kMaxImageDecodeDimension,
                   errorBuilder: (_, _, _) => fallback(),
                 );
               },
@@ -2445,7 +2462,8 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
         return;
       } on PostgrestException catch (error) {
         final missingColumn = _missingColumnFromPostgrest(error.message);
-        final canRetry = missingColumn != null && payload.containsKey(missingColumn);
+        final canRetry =
+            missingColumn != null && payload.containsKey(missingColumn);
         if (!canRetry) rethrow;
         payload.remove(missingColumn);
       }
@@ -2702,33 +2720,37 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
               selected: open,
               onTap: onTap,
               child: ExcludeSemantics(
-              child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.zero,
-            child: Row(
-              children: [
-                SizedBox(height: 34, width: 56, child: Center(child: leading)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blackCat,
-                    ),
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.zero,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        height: 34,
+                        width: 56,
+                        child: Center(child: leading),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        open
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.chevron_right_rounded,
+                        color: AppColors.blackCat.withValues(alpha: 0.45),
+                      ),
+                    ],
                   ),
                 ),
-                Icon(
-                  open
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.chevron_right_rounded,
-                  color: AppColors.blackCat.withValues(alpha: 0.45),
-                ),
-              ],
-            ),
-          ),
-            ),
+              ),
             ),
           ),
           if (open) ...[const SizedBox(height: 6), ...children],
@@ -3043,6 +3065,8 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   final TextEditingController _schoolCtrl = TextEditingController();
   final TextEditingController _instagramCtrl = TextEditingController();
   final TextEditingController _tiktokCtrl = TextEditingController();
+  final TextEditingController _projectNotesCtrl = TextEditingController();
+  final TextEditingController _portfolioLinkCtrl = TextEditingController();
   List<ArtistPortfolioItem> _seedItems = const <ArtistPortfolioItem>[];
   List<ArtistPortfolioItem> _pagedItems = const <ArtistPortfolioItem>[];
   String _nailTechType = 'professional';
@@ -3065,6 +3089,8 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     _schoolCtrl.dispose();
     _instagramCtrl.dispose();
     _tiktokCtrl.dispose();
+    _projectNotesCtrl.dispose();
+    _portfolioLinkCtrl.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -3079,6 +3105,8 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     final artistProfile = _asMap(data['artist_profile']);
     final artistCredentials = _asMap(artist['credentials']);
     final artistProfileCredentials = _asMap(artistProfile['credentials']);
+    final portfolio = _asMap(data['portfolio']);
+    final artistPortfolio = _asMap(artist['portfolio']);
 
     _licenseCtrl.text = _firstNonEmpty([
       data['panel_licenseNumber'],
@@ -3128,6 +3156,22 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       data['panel_tiktok'],
       artistProfile['tiktok'],
       artist['tiktok'],
+    ]);
+    _projectNotesCtrl.text = _firstNonEmpty([
+      data['panel_projectNotes'],
+      data['panel_project_notes'],
+      portfolio['projectNotes'],
+      portfolio['project_notes'],
+      artistPortfolio['projectNotes'],
+      artistPortfolio['project_notes'],
+    ]);
+    _portfolioLinkCtrl.text = _firstNonEmpty([
+      data['panel_portfolioLink'],
+      data['panel_portfolio_link'],
+      portfolio['portfolioLink'],
+      portfolio['portfolio_link'],
+      artistPortfolio['portfolioLink'],
+      artistPortfolio['portfolio_link'],
     ]);
     _nailTechType = _normalizedNailTechType(
       _firstNonEmpty([
@@ -3287,8 +3331,12 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       final profile = _asMap(widget.initialData['profile']);
       final credentials = _asMap(widget.initialData['credentials']);
       final artist = _asMap(widget.initialData['artist']);
+      final portfolio = _asMap(widget.initialData['portfolio']);
+      final artistPortfolio = _asMap(artist['portfolio']);
       final instagram = _instagramCtrl.text.trim();
       final tiktok = _tiktokCtrl.text.trim();
+      final projectNotes = _projectNotesCtrl.text.trim();
+      final portfolioLink = _portfolioLinkCtrl.text.trim();
       final licenseNumber = _licenseCtrl.text.trim();
       final jurisdiction = _jurisdictionCtrl.text.trim();
       final yearsExperience = (_yearsExperience ?? '').trim();
@@ -3305,6 +3353,14 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             'tiktok': tiktok,
             'panel_instagram': instagram,
             'panel_tiktok': tiktok,
+            if (widget.initialData.containsKey('panel_projectNotes'))
+              'panel_projectNotes': projectNotes,
+            if (widget.initialData.containsKey('panel_project_notes'))
+              'panel_project_notes': projectNotes,
+            if (widget.initialData.containsKey('panel_portfolioLink'))
+              'panel_portfolioLink': portfolioLink,
+            if (widget.initialData.containsKey('panel_portfolio_link'))
+              'panel_portfolio_link': portfolioLink,
             'panel_nailTechType': nailTechType,
             'panel_artist_nailTechType': nailTechType,
             'panel_nail_tech_type': nailTechType,
@@ -3346,6 +3402,11 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                   'practiceDuration': practiceDuration,
                   'practice_duration': practiceDuration,
                 }),
+            'portfolio': _encodeLikeOriginal(widget.initialData['portfolio'], {
+              ...portfolio,
+              'projectNotes': projectNotes,
+              'portfolioLink': portfolioLink,
+            }),
             'artist': _encodeLikeOriginal(widget.initialData['artist'], {
               ...artist,
               'instagram': instagram,
@@ -3360,6 +3421,11 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
               'school': school,
               'practiceDuration': practiceDuration,
               'practice_duration': practiceDuration,
+              'portfolio': {
+                ...artistPortfolio,
+                'projectNotes': projectNotes,
+                'portfolioLink': portfolioLink,
+              },
             }),
             'updated_at': DateTime.now().toIso8601String(),
           })
@@ -3755,6 +3821,18 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           _detailsField('Instagram', _instagramCtrl),
           _detailsField('TikTok', _tiktokCtrl),
           const SizedBox(height: 4),
+          const Text(
+            'Portfolio Details',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _detailsField('Project Notes', _projectNotesCtrl),
+          _detailsField('Portfolio Link', _portfolioLinkCtrl),
+          const SizedBox(height: 4),
           Align(
             alignment: Alignment.centerRight,
             child: SizedBox(
@@ -3790,43 +3868,43 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       button: true,
       selected: selected,
       child: ExcludeSemantics(
-      child: InkWell(
-      onTap: () => setState(() => _nailTechType = value),
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        height: 74,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          border: Border.all(
-            color: selected
-                ? AppColors.blackCat
-                : AppColors.blackCatBorderLight,
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.blackCat,
-                  fontWeight: FontWeight.w400,
-                ),
+        child: InkWell(
+          onTap: () => setState(() => _nailTechType = value),
+          borderRadius: BorderRadius.zero,
+          child: Container(
+            height: 74,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              border: Border.all(
+                color: selected
+                    ? AppColors.blackCat
+                    : AppColors.blackCatBorderLight,
               ),
             ),
-            Icon(
-              selected ? Icons.check_circle : Icons.circle_outlined,
-              size: 18,
-              color: selected
-                  ? AppColors.blackCat
-                  : AppColors.blackCat.withValues(alpha: 0.35),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.blackCat,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+                Icon(
+                  selected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 18,
+                  color: selected
+                      ? AppColors.blackCat
+                      : AppColors.blackCat.withValues(alpha: 0.35),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -3966,34 +4044,34 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                   onTap: deleting ? null : () => _deletePortfolioItem(item),
                   child: ExcludeSemantics(
                     child: InkWell(
-                  onTap: deleting ? null : () => _deletePortfolioItem(item),
-                  borderRadius: BorderRadius.zero,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.blackCat.withValues(alpha: 0.65),
-                      shape: BoxShape.circle,
-                    ),
-                    child: deleting
-                        ? const Padding(
-                            padding: EdgeInsets.all(5),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                AppColors.snow,
+                      onTap: deleting ? null : () => _deletePortfolioItem(item),
+                      borderRadius: BorderRadius.zero,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: AppColors.blackCat.withValues(alpha: 0.65),
+                          shape: BoxShape.circle,
+                        ),
+                        child: deleting
+                            ? const Padding(
+                                padding: EdgeInsets.all(5),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppColors.snow,
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: AppColors.snow,
                               ),
-                            ),
-                          )
-                        : const Icon(
-                            Icons.close_rounded,
-                            size: 16,
-                            color: AppColors.snow,
-                          ),
+                      ),
+                    ),
                   ),
                 ),
-                    ),
-                  ),
               ),
             ],
           ),
@@ -4095,6 +4173,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           return Image.memory(
             bytes,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         } catch (_) {
@@ -4108,6 +4187,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
       return Image.network(
         value,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback(),
       );
     }
@@ -4125,6 +4205,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                 return Image.memory(
                   bytes,
                   fit: BoxFit.cover,
+                  cacheWidth: kMaxImageDecodeDimension,
                   errorBuilder: (_, _, _) => fallback(),
                 );
               },
@@ -4133,6 +4214,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           return Image.network(
             resolved,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -4656,18 +4738,18 @@ class _ArtistSpecializationServiceAreaModalState
                     onTap: () => Navigator.pop(context),
                     child: ExcludeSemantics(
                       child: InkWell(
-                    borderRadius: BorderRadius.zero,
-                    onTap: () => Navigator.pop(context),
-                    child: const Padding(
-                      padding: EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 22,
-                        color: AppColors.blackCat,
+                        borderRadius: BorderRadius.zero,
+                        onTap: () => Navigator.pop(context),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 22,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
                       ),
                     ),
-                    ),
-                  ),
                   ),
                 ],
               ),
@@ -4699,59 +4781,61 @@ class _ArtistSpecializationServiceAreaModalState
                         button: true,
                         selected: selected,
                         child: ExcludeSemantics(
-                        child: InkWell(
-                        onTap: () {
-                          setState(() {
-                            if (selected) {
-                              _services.remove(service);
-                            } else {
-                              _services.add(service);
-                            }
-                          });
-                        },
-                        borderRadius: BorderRadius.zero,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? AppColors.blackCat.withValues(alpha: 0.12)
-                                : AppColors.snow,
-                            border: Border.all(
-                              color: selected
-                                  ? AppColors.blackCat.withValues(alpha: 0.75)
-                                  : AppColors.blackCatBorderLight,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (selected) ...[
-                                const Icon(
-                                  Icons.check,
-                                  size: 16,
-                                  color: AppColors.blackCat,
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Text(
-                                service,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                if (selected) {
+                                  _services.remove(service);
+                                } else {
+                                  _services.add(service);
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.zero,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? AppColors.blackCat.withValues(alpha: 0.12)
+                                    : AppColors.snow,
+                                border: Border.all(
                                   color: selected
-                                      ? AppColors.blackCat
-                                      : AppColors.blackCat.withValues(
-                                          alpha: 0.88,
-                                        ),
+                                      ? AppColors.blackCat.withValues(
+                                          alpha: 0.75,
+                                        )
+                                      : AppColors.blackCatBorderLight,
                                 ),
                               ),
-                            ],
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (selected) ...[
+                                    const Icon(
+                                      Icons.check,
+                                      size: 16,
+                                      color: AppColors.blackCat,
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Text(
+                                    service,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: selected
+                                          ? AppColors.blackCat
+                                          : AppColors.blackCat.withValues(
+                                              alpha: 0.88,
+                                            ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                        ),
                         ),
                       );
                     })
@@ -5348,34 +5432,38 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                           constraints.maxHeight,
                         );
                         return Semantics(
-                          label: 'Availability calendar. Drag to select multiple days.',
+                          label:
+                              'Availability calendar. Drag to select multiple days.',
                           child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onPanStart: (details) =>
-                              _startDrag(details.localPosition, days, gridSize),
-                          onPanUpdate: (details) => _updateDrag(
-                            details.localPosition,
-                            days,
-                            gridSize,
+                            behavior: HitTestBehavior.translucent,
+                            onPanStart: (details) => _startDrag(
+                              details.localPosition,
+                              days,
+                              gridSize,
+                            ),
+                            onPanUpdate: (details) => _updateDrag(
+                              details.localPosition,
+                              days,
+                              gridSize,
+                            ),
+                            onPanEnd: (_) {
+                              unawaited(_endDrag());
+                            },
+                            child: Column(
+                              children: List<Widget>.generate(6, (week) {
+                                return Expanded(
+                                  child: Row(
+                                    children: List<Widget>.generate(7, (
+                                      dayIndex,
+                                    ) {
+                                      final day = days[(week * 7) + dayIndex];
+                                      return Expanded(child: _dayCell(day));
+                                    }),
+                                  ),
+                                );
+                              }),
+                            ),
                           ),
-                          onPanEnd: (_) {
-                            unawaited(_endDrag());
-                          },
-                          child: Column(
-                            children: List<Widget>.generate(6, (week) {
-                              return Expanded(
-                                child: Row(
-                                  children: List<Widget>.generate(7, (
-                                    dayIndex,
-                                  ) {
-                                    final day = days[(week * 7) + dayIndex];
-                                    return Expanded(child: _dayCell(day));
-                                  }),
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
                         );
                       },
                     ),
@@ -5474,40 +5562,40 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
       onTap: () => _onDayTap(day),
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: () => _onDayTap(day),
-      child: Container(
-        margin: const EdgeInsets.all(1),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.zero,
-          border: isUnavailable
-              ? Border.all(color: AppColors.blackCatLight)
-              : null,
-        ),
-        alignment: Alignment.center,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (isUnavailable && isCurrentMonth)
-              Transform.rotate(
-                angle: -0.75,
-                child: Container(
-                  width: 20,
-                  height: 1.6,
-                  color: AppColors.blackCatLight,
-                ),
-              ),
-            Text(
-              '${day.day}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: text,
-              ),
+          onTap: () => _onDayTap(day),
+          child: Container(
+            margin: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.zero,
+              border: isUnavailable
+                  ? Border.all(color: AppColors.blackCatLight)
+                  : null,
             ),
-          ],
-        ),
-      ),
+            alignment: Alignment.center,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isUnavailable && isCurrentMonth)
+                  Transform.rotate(
+                    angle: -0.75,
+                    child: Container(
+                      width: 20,
+                      height: 1.6,
+                      color: AppColors.blackCatLight,
+                    ),
+                  ),
+                Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: text,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -5578,8 +5666,16 @@ class ArtistEditProfilePage extends StatefulWidget {
 class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
   final _displayNameCtrl = TextEditingController();
   final _studioNameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  String _phoneAreaCode = '+1';
+  final _languageCtrl = TextEditingController();
+  final _currencyCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
-  final _cityCtrl = TextEditingController();
+  final _addressLine1Ctrl = TextEditingController();
+  final _addressLine2Ctrl = TextEditingController();
+  final _addressCityCtrl = TextEditingController();
+  final _zipCtrl = TextEditingController();
   final _stateCtrl = TextEditingController();
   final _instagramCtrl = TextEditingController();
   final _tiktokCtrl = TextEditingController();
@@ -5850,6 +5946,8 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
     final data = widget.initialData;
     final profile =
         (data['profile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final address =
+        (data['address'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
 
     String firstNonEmpty(List<Object?> values) {
       for (final raw in values) {
@@ -5873,10 +5971,75 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
       data['studioName'],
       data['studio_name'],
     ]);
+    _emailCtrl.text = firstNonEmpty([
+      data['email'],
+      data['panel_email'],
+      profile['email'],
+    ]);
+    final splitPhone = RegistrationInputUtils.splitStoredPhone(
+      firstNonEmpty([profile['phone'], data['panel_phone'], data['phone']]),
+    );
+    _phoneAreaCode = splitPhone.areaCode;
+    _phoneCtrl.text = splitPhone.localNumber;
+    _languageCtrl.text = firstNonEmpty([
+      profile['languageSpoken'],
+      profile['language_spoken'],
+      data['panel_languageSpoken'],
+      data['panel_language_spoken'],
+      data['languageSpoken'],
+      data['language_spoken'],
+    ]);
+    _currencyCtrl.text = firstNonEmpty([
+      profile['currency'],
+      data['panel_currency'],
+      data['currency'],
+      'US Dollar (USD)',
+    ]);
     _bioCtrl.text = firstNonEmpty([profile['bio'], data['panel_bio']]);
-    _cityCtrl.text = firstNonEmpty([profile['city'], data['panel_city']]);
-    _stateCtrl.text = firstNonEmpty([profile['state'], data['panel_state']]);
+    _addressLine1Ctrl.text = firstNonEmpty([
+      profile['addressLine1'],
+      profile['address_line1'],
+      address['street'],
+      address['addressLine1'],
+      data['panel_addressLine1'],
+      data['panel_address_line1'],
+      data['panel_street'],
+    ]);
+    _addressLine2Ctrl.text = firstNonEmpty([
+      profile['addressLine2'],
+      profile['address_line2'],
+      address['addressLine2'],
+      address['address_line2'],
+      data['panel_addressLine2'],
+      data['panel_address_line2'],
+    ]);
+    _addressCityCtrl.text = firstNonEmpty([
+      profile['addressCity'],
+      profile['address_city'],
+      address['city'],
+      data['panel_addressCity'],
+      data['panel_address_city'],
+      data['panel_shipping_city'],
+    ]);
+    _zipCtrl.text = firstNonEmpty([
+      profile['zip'],
+      address['zip'],
+      data['panel_zip'],
+      data['zip'],
+    ]);
+    _stateCtrl.text = firstNonEmpty([
+      address['state'],
+      profile['addressState'],
+      profile['address_state'],
+      data['panel_shipping_state'],
+      profile['state'],
+      data['panel_state'],
+    ]);
     final savedCountry = firstNonEmpty([
+      address['country'],
+      profile['addressCountry'],
+      profile['address_country'],
+      data['panel_shipping_country'],
       profile['country'],
       data['panel_country'],
     ]);
@@ -5907,8 +6070,15 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
   void dispose() {
     _displayNameCtrl.dispose();
     _studioNameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _languageCtrl.dispose();
+    _currencyCtrl.dispose();
     _bioCtrl.dispose();
-    _cityCtrl.dispose();
+    _addressLine1Ctrl.dispose();
+    _addressLine2Ctrl.dispose();
+    _addressCityCtrl.dispose();
+    _zipCtrl.dispose();
     _stateCtrl.dispose();
     _instagramCtrl.dispose();
     _tiktokCtrl.dispose();
@@ -5921,13 +6091,28 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
     try {
       final displayName = _displayNameCtrl.text.trim();
       final studioName = _studioNameCtrl.text.trim();
+      final email = _emailCtrl.text.trim().toLowerCase();
+      final normalizedLocalPhone = RegistrationInputUtils.normalizePhone(
+        _phoneCtrl.text,
+      );
+      final phone = normalizedLocalPhone.isEmpty
+          ? ''
+          : '${RegistrationInputUtils.normalizeAreaCode(_phoneAreaCode)}$normalizedLocalPhone';
+      final language = _languageCtrl.text.trim();
+      final currency = _currencyCtrl.text.trim();
       final bio = _bioCtrl.text.trim();
-      final city = _cityCtrl.text.trim();
+      final addressLine1 = _addressLine1Ctrl.text.trim();
+      final addressLine2 = _addressLine2Ctrl.text.trim();
+      final addressCity = _addressCityCtrl.text.trim();
+      final zip = _zipCtrl.text.trim();
       final instagram = _instagramCtrl.text.trim();
       final tiktok = _tiktokCtrl.text.trim();
       final stateToSave = _selectedCountry == _usCountry
           ? (_selectedUsState ?? _stateCtrl.text.trim())
           : _stateCtrl.text.trim();
+      if (email.isEmpty || !RegistrationInputUtils.isValidEmail(email)) {
+        throw const FormatException('Enter a valid email address.');
+      }
       final uid = (SupabaseAuthService.currentUserId ?? widget.supabaseId)
           .trim();
       var profilePhotoUrlToSave = _profilePhotoUrl.trim();
@@ -5937,42 +6122,94 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
           _profilePhotoBytes!,
         );
       }
+      final existingColumns = widget.initialData.keys
+          .map((key) => key.toString())
+          .toSet();
+      final currentProfile = Map<String, dynamic>.from(
+        (widget.initialData['profile'] as Map?) ?? const <String, dynamic>{},
+      );
+      final currentAddress = Map<String, dynamic>.from(
+        (widget.initialData['address'] as Map?) ?? const <String, dynamic>{},
+      );
+      final requestedUpdate = <String, dynamic>{
+        'email': email,
+        'panel_email': email,
+        'phone': phone,
+        'panel_phone': phone,
+        'languageSpoken': language,
+        'language_spoken': language,
+        'panel_languageSpoken': language,
+        'panel_language_spoken': language,
+        'currency': currency,
+        'panel_currency': currency,
+        'displayName': displayName,
+        'name': displayName,
+        'studioName': studioName,
+        'bio': bio,
+        'instagram': instagram,
+        'tiktok': tiktok,
+        'panel_addressLine1': addressLine1,
+        'panel_address_line1': addressLine1,
+        'panel_addressLine2': addressLine2,
+        'panel_address_line2': addressLine2,
+        'panel_addressCity': addressCity,
+        'panel_address_city': addressCity,
+        'panel_zip': zip,
+        'panel_shipping_state': stateToSave,
+        'panel_shipping_country': _selectedCountry,
+        'profileImageUrl': profilePhotoUrlToSave,
+        'photoUrl': profilePhotoUrlToSave,
+        'avatarUrl': profilePhotoUrlToSave,
+        'address': {
+          ...currentAddress,
+          'street': addressLine1,
+          'addressLine1': addressLine1,
+          'addressLine2': addressLine2,
+          'city': addressCity,
+          'state': stateToSave,
+          'zip': zip,
+          'country': _selectedCountry,
+        },
+        'profile': {
+          ...currentProfile,
+          'name': displayName,
+          'displayName': displayName,
+          'studioName': studioName,
+          'email': email,
+          'phone': phone,
+          'languageSpoken': language,
+          'currency': currency,
+          'bio': bio,
+          'addressLine1': addressLine1,
+          'addressLine2': addressLine2,
+          'addressCity': addressCity,
+          'addressState': stateToSave,
+          'addressCountry': _selectedCountry,
+          'zip': zip,
+          'instagram': instagram,
+          'tiktok': tiktok,
+          'photoUrl': profilePhotoUrlToSave,
+          'avatarUrl': profilePhotoUrlToSave,
+          'profileImageUrl': profilePhotoUrlToSave,
+        },
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      final update = <String, dynamic>{
+        for (final entry in requestedUpdate.entries)
+          if (existingColumns.contains(entry.key)) entry.key: entry.value,
+      };
       await SupabaseBootstrap.client
           .from(widget.supabaseTable)
-          .update({
-            'displayName': displayName,
-            'name': displayName,
-            'studioName': studioName,
-            'bio': bio,
-            'city': city,
-            'state': stateToSave,
-            'country': _selectedCountry,
-            'instagram': instagram,
-            'tiktok': tiktok,
-            'profileImageUrl': profilePhotoUrlToSave,
-            'photoUrl': profilePhotoUrlToSave,
-            'avatarUrl': profilePhotoUrlToSave,
-            'profile': {
-              ...((widget.initialData['profile'] as Map?) ??
-                  const <String, dynamic>{}),
-              'displayName': displayName,
-              'studioName': studioName,
-              'bio': bio,
-              'city': city,
-              'state': stateToSave,
-              'country': _selectedCountry,
-              'instagram': instagram,
-              'tiktok': tiktok,
-              'photoUrl': profilePhotoUrlToSave,
-              'avatarUrl': profilePhotoUrlToSave,
-              'profileImageUrl': profilePhotoUrlToSave,
-            },
-            'updated_at': DateTime.now().toIso8601String(),
-          })
+          .update(update)
           .eq('id', widget.supabaseId);
 
       if (!mounted) return;
       Navigator.pop(context);
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6049,18 +6286,18 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                     onTap: () => Navigator.pop(context),
                     child: ExcludeSemantics(
                       child: InkWell(
-                    borderRadius: BorderRadius.zero,
-                    onTap: () => Navigator.pop(context),
-                    child: const Padding(
-                      padding: EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 22,
-                        color: AppColors.blackCat,
+                        borderRadius: BorderRadius.zero,
+                        onTap: () => Navigator.pop(context),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 22,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
                       ),
                     ),
-                    ),
-                  ),
                   ),
                 ],
               ),
@@ -6069,12 +6306,38 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
               const SizedBox(height: 6),
               _field('Display Name', _displayNameCtrl),
               _field('Studio Name', _studioNameCtrl),
+              _field(
+                'Email ID',
+                _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              _phoneField(),
+              _field('Language Spoken', _languageCtrl),
+              _field('Currency', _currencyCtrl),
               _field('Bio', _bioCtrl, maxLines: 3),
-              _field('City', _cityCtrl),
-              _countryDropdown(),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(0, 8, 0, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Address',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                      fontFamily: 'ArialBold',
+                    ),
+                  ),
+                ),
+              ),
+              _field('Address Line 1', _addressLine1Ctrl),
+              _field('Address Line 2', _addressLine2Ctrl),
+              _field('City', _addressCityCtrl),
+              _field('ZIP / Postal Code', _zipCtrl),
               _selectedCountry == _usCountry
                   ? _usStateDropdown()
                   : _field('State', _stateCtrl),
+              _countryDropdown(),
               _field('Instagram', _instagramCtrl),
               _field('TikTok', _tiktokCtrl),
               const SizedBox(height: 14),
@@ -6134,7 +6397,10 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
       final safeUid = uid.trim().isEmpty
           ? (SupabaseAuthService.currentUser?.id ?? 'unknown')
           : uid.trim();
-      final path = 'artists/$safeUid/profile/avatar.jpg';
+      final ownerFolder = widget.supabaseTable == 'client_artist'
+          ? 'client_artists'
+          : 'artists';
+      final path = '$ownerFolder/$safeUid/profile/avatar.jpg';
       final storage = SupabaseBootstrap.client.storage.from('profile-pictures');
 
       await storage.uploadBinary(
@@ -6178,90 +6444,125 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
         onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
         child: ExcludeSemantics(
           child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          GestureDetector(
-            onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
-            child: Container(
-              height: 88,
-              width: 88,
-              decoration: BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
-                  width: 1.4,
+            clipBehavior: Clip.none,
+            children: [
+              GestureDetector(
+                onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
+                child: Container(
+                  height: 88,
+                  width: 88,
+                  decoration: BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                    border: Border.all(
+                      color: AppColors.blackCat.withValues(alpha: 0.35),
+                      width: 1.4,
+                    ),
+                  ),
+                  child: _profilePhotoBytes != null
+                      ? Image.memory(
+                          _profilePhotoBytes!,
+                          fit: BoxFit.cover,
+                          width: 88,
+                          height: 88,
+                          cacheWidth: 264,
+                          cacheHeight: 264,
+                        )
+                      : imageProvider != null
+                      ? Image(
+                          image: imageProvider,
+                          fit: BoxFit.cover,
+                          width: 88,
+                          height: 88,
+                        )
+                      : Icon(
+                          Icons.camera_alt_outlined,
+                          size: 26,
+                          color: AppColors.blackCat,
+                        ),
                 ),
               ),
-              child: _profilePhotoBytes != null
-                  ? Image.memory(
-                      _profilePhotoBytes!,
-                      fit: BoxFit.cover,
-                      width: 88,
-                      height: 88,
-                    )
-                  : imageProvider != null
-                  ? Image(
-                      image: imageProvider,
-                      fit: BoxFit.cover,
-                      width: 88,
-                      height: 88,
-                    )
-                  : Icon(
-                      Icons.camera_alt_outlined,
-                      size: 26,
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: GestureDetector(
+                  onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
+                  child: Container(
+                    height: 24,
+                    width: 24,
+                    decoration: BoxDecoration(
+                      color: AppColors.snow,
+                      borderRadius: BorderRadius.zero,
+                      border: Border.all(color: AppColors.blackCatBorderLight),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.blackCat.withValues(alpha: 0.10),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      hasImage
+                          ? Icons.file_upload_outlined
+                          : Icons.photo_camera_outlined,
                       color: AppColors.blackCat,
+                      size: 16,
                     ),
-            ),
-          ),
-          Positioned(
-            right: -4,
-            bottom: -4,
-            child: GestureDetector(
-              onTap: (_saving || _pickingPhoto) ? null : _pickProfilePhoto,
-              child: Container(
-                height: 24,
-                width: 24,
-                decoration: BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                  border: Border.all(color: AppColors.blackCatBorderLight),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.blackCat.withValues(alpha: 0.10),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  hasImage
-                      ? Icons.file_upload_outlined
-                      : Icons.photo_camera_outlined,
-                  color: AppColors.blackCat,
-                  size: 16,
+                  ),
                 ),
               ),
-            ),
-          ),
-          if (_pickingPhoto)
-            const Positioned.fill(
-              child: Center(
-                child: SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              if (_pickingPhoto)
+                const Positioned.fill(
+                  child: Center(
+                    child: SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
-      ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _field(String label, TextEditingController c, {int maxLines = 1}) {
+  Widget _phoneField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Phone #',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: AppColors.blackCat.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 6),
+          PhoneCountryCodeField(
+            areaCode: _phoneAreaCode,
+            onAreaCodeChanged: (code) =>
+                setState(() => _phoneAreaCode = code),
+            controller: _phoneCtrl,
+            height: 46,
+            fontSize: 12,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(
+    String label,
+    TextEditingController c, {
+    int maxLines = 1,
+    TextInputType? keyboardType,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -6279,6 +6580,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
           TextField(
             controller: c,
             maxLines: maxLines,
+            keyboardType: keyboardType,
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
               filled: true,

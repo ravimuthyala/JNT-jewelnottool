@@ -114,6 +114,23 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
     });
   }
 
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyStreetSuggestion(selected);
+  }
+
   Future<void> _save() async {
     final updated = AddressInfo(
       street: _street.text.trim(),
@@ -251,7 +268,7 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
                                     _streetSuggestions[i].displayLabel,
                                     style: const TextStyle(fontSize: 12),
                                   ),
-                                  onTap: () => _applyStreetSuggestion(
+                                  onTap: () => _selectStreetSuggestion(
                                     _streetSuggestions[i],
                                   ),
                                 ),

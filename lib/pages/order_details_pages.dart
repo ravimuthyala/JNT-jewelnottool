@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
+import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
@@ -1620,6 +1621,7 @@ class ShippedOrderDetailsPage extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Shipped order details',
       child: _BaseOrderDetails(
@@ -1658,6 +1660,7 @@ class InProgressOrderDetailsPage extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'In progress order details',
       child: _BaseOrderDetails(
@@ -1702,6 +1705,7 @@ class InReviewOrderDetailsPage extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'In review order details',
       child: _BaseOrderDetails(
@@ -1745,6 +1749,7 @@ class NewOrderDetailsPage extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'New order details',
       child: _BaseOrderDetails(
@@ -3389,6 +3394,8 @@ class _BaseOrderDetails extends StatelessWidget {
       height: 56,
       width: 56,
       fit: BoxFit.cover,
+      cacheWidth: 168,
+      cacheHeight: 168,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
@@ -3439,6 +3446,8 @@ class _BaseOrderDetails extends StatelessWidget {
       height: 56,
       width: 56,
       fit: BoxFit.cover,
+      cacheWidth: 168,
+      cacheHeight: 168,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
@@ -5535,6 +5544,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
             return Image.memory(
               bytes,
               fit: BoxFit.cover,
+              cacheWidth: kMaxImageDecodeDimension,
               errorBuilder: (_, _, _) => broken(),
             );
           }
@@ -5545,6 +5555,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
         return Image.network(
           p,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => broken(),
         );
       }
@@ -5572,6 +5583,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => broken(),
           );
         },

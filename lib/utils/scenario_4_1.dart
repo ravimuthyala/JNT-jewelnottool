@@ -1,4 +1,4 @@
-import 'package:jnt_app_0120/models/client_request_v2.dart';
+import 'package:jewelnottool/models/client_request_v2.dart';
 
 const String scenario41BrandStatusPending = 'pending';
 const String scenario41BrandStatusInProgress = 'in_progress';

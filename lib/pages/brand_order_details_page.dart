@@ -2314,6 +2314,8 @@ class _BaseOrderDetails extends StatelessWidget {
       height: 56,
       width: 56,
       fit: BoxFit.cover,
+      cacheWidth: 168,
+      cacheHeight: 168,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
@@ -2366,6 +2368,8 @@ class _BaseOrderDetails extends StatelessWidget {
       height: 56,
       width: 56,
       fit: BoxFit.cover,
+      cacheWidth: 168,
+      cacheHeight: 168,
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
@@ -3077,7 +3081,7 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   }
 }
 
-class _SubmittedPhotosStrip extends StatelessWidget {
+class _SubmittedPhotosStrip extends StatefulWidget {
   const _SubmittedPhotosStrip({
     required this.paths,
     this.fallbackOrderId = '',
@@ -3097,6 +3101,9 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   final bool showAll;
   final bool uploadedOnly;
   final int? maxItems;
+
+  @override
+  State<_SubmittedPhotosStrip> createState() => _SubmittedPhotosStripState();
 
   static bool _isImageLikePath(String raw) {
     final noQuery = raw.trim().toLowerCase().split('?').first.split('#').first;
@@ -3144,27 +3151,6 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     if (lower.startsWith('gs://')) return _isImageLikePath(lower);
 
     return _isImageLikePath(lower);
-  }
-
-  bool _isAllowedForDisplay(String raw) {
-    if (!_isUsablePhotoRef(raw)) return false;
-    if (!uploadedOnly) return true;
-
-    final value = raw.trim().toLowerCase();
-    if (value.startsWith('assets/')) return false;
-    if (value.startsWith('file://')) return false;
-    if (value.startsWith('data:image/')) return false;
-
-    return value.startsWith('http://') ||
-        value.startsWith('https://') ||
-        value.startsWith('gs://') ||
-        value.startsWith('company_custom_requests/') ||
-        value.startsWith('client_custom_requests/') ||
-        value.startsWith('clients/') ||
-        value.startsWith('artists/') ||
-        value.startsWith('client_artists/') ||
-        value.startsWith('company/') ||
-        (!value.contains('://') && value.contains('/'));
   }
 
   static List<String> _collectPhotoRefs(List<dynamic> values) {
@@ -3224,14 +3210,87 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     }
     return out;
   }
+}
+
+class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
+  // Both futures below are memoized here (recomputed only when the
+  // underlying paths actually change, via didUpdateWidget) rather than
+  // being created inline in build(). Creating them inline meant every
+  // unrelated ancestor rebuild (any other FutureBuilder/setState on the
+  // order details page) tore down and recreated these futures, which reset
+  // the FutureBuilders below to their loading/blank placeholder and
+  // re-ran the network existence-check + precache calls from scratch --
+  // visible as photos that load fine once, then flash blank again on the
+  // next incidental rebuild.
+  Future<List<String>>? _fallbackPhotosFuture;
+  Future<List<String>>? _displayPathsFuture;
+  List<String> _lastInitial = const <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleFutures();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SubmittedPhotosStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.paths, widget.paths) ||
+        oldWidget.enableFirestoreFallback != widget.enableFirestoreFallback ||
+        oldWidget.fallbackOrderId != widget.fallbackOrderId ||
+        oldWidget.maxItems != widget.maxItems ||
+        oldWidget.uploadedOnly != widget.uploadedOnly) {
+      _scheduleFutures();
+    }
+  }
+
+  void _scheduleFutures() {
+    if (widget.enableFirestoreFallback &&
+        widget.fallbackOrderId.trim().isNotEmpty) {
+      _fallbackPhotosFuture = _loadFallbackPhotos();
+      _displayPathsFuture = null;
+      return;
+    }
+    _fallbackPhotosFuture = null;
+    final initial = widget.paths
+        .map((p) => p.trim())
+        .where(_isAllowedForDisplay)
+        .take(widget.maxItems ?? widget.paths.length)
+        .toList(growable: false);
+    _lastInitial = initial;
+    _displayPathsFuture = initial.isEmpty
+        ? Future.value(const <String>[])
+        : _validDisplayPaths(context, initial);
+  }
+
+  bool _isAllowedForDisplay(String raw) {
+    if (!_SubmittedPhotosStrip._isUsablePhotoRef(raw)) return false;
+    if (!widget.uploadedOnly) return true;
+
+    final value = raw.trim().toLowerCase();
+    if (value.startsWith('assets/')) return false;
+    if (value.startsWith('file://')) return false;
+    if (value.startsWith('data:image/')) return false;
+
+    return value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('gs://') ||
+        value.startsWith('company_custom_requests/') ||
+        value.startsWith('client_custom_requests/') ||
+        value.startsWith('clients/') ||
+        value.startsWith('artists/') ||
+        value.startsWith('client_artists/') ||
+        value.startsWith('company/') ||
+        (!value.contains('://') && value.contains('/'));
+  }
 
   Future<List<String>> _loadFallbackPhotos() async {
-    final orderId = fallbackOrderId.trim();
+    final orderId = widget.fallbackOrderId.trim();
     if (orderId.isEmpty) return const <String>[];
 
     final root = await _supabaseFetchOrderRow(
-      fallbackOrderId,
-      orderNumber: fallbackOrderNumber,
+      widget.fallbackOrderId,
+      orderNumber: widget.fallbackOrderNumber,
     );
     if (root == null) return const <String>[];
 
@@ -3243,7 +3302,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
         (payload['order'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
 
-    final collected = _collectPhotoRefs(<dynamic>[
+    final collected = _SubmittedPhotosStrip._collectPhotoRefs(<dynamic>[
       payload['brandInspirationPhotos'],
       payload['inspirationPhotos'],
       payload['clientImages'],
@@ -3509,7 +3568,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   Future<List<String>> _validDisplayPaths(BuildContext context, List<String> rawPaths) async {
     final seen = <String>{};
     final valid = <String>[];
-    final limit = maxItems;
+    final limit = widget.maxItems;
 
     for (final raw in rawPaths) {
       if (limit != null && valid.length >= limit) break;
@@ -3543,112 +3602,104 @@ class _SubmittedPhotosStrip extends StatelessWidget {
   }
 
   Widget _buildTile(BuildContext context, String path, {required double size}) {
+    // No FutureBuilder/precacheImage wrapper here: _validDisplayPaths()
+    // already awaited precacheImage for this exact path before including it
+    // in the resolved list, so the image is already in Flutter's image
+    // cache by the time a tile is built. Re-wrapping in a fresh
+    // FutureBuilder here recreated a new Future on every rebuild, which
+    // reset to its loading placeholder (a blank tile) on every unrelated
+    // rebuild of the page, even though the image was already cached.
     final provider = _providerFor(path);
-    return FutureBuilder<void>(
-      future: precacheImage(provider, context),
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done || snap.hasError) {
-          return const SizedBox.shrink();
-        }
-        return ClipRRect(
-          borderRadius: BorderRadius.zero,
-          child: InkWell(
-            onTap: () {
-              showDialog<void>(
-                context: context,
-                builder: (_) => Dialog(
-                  backgroundColor: Colors.black,
-                  insetPadding: const EdgeInsets.all(8),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: InteractiveViewer(
-                          minScale: 0.8,
-                          maxScale: 4,
-                          child: Center(
-                            child: Image(
-                              image: provider,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) =>
-                                  const SizedBox.shrink(),
-                            ),
-                          ),
+    return ClipRRect(
+      borderRadius: BorderRadius.zero,
+      child: InkWell(
+        onTap: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => Dialog(
+              backgroundColor: Colors.black,
+              insetPadding: const EdgeInsets.all(8),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4,
+                      child: Center(
+                        child: Image(
+                          image: provider,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
                         ),
                       ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(
-                            Icons.close,
-                            color: AppColors.snow,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: Image(
-                image: provider,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: AppColors.snow),
+                    ),
+                  ),
+                ],
               ),
             ),
+          );
+        },
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Image(
+            image: provider,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final initial = paths
-        .map((p) => p.trim())
-        .where(_isAllowedForDisplay)
-        .take(maxItems ?? paths.length)
-        .toList(growable: false);
-
-    if (enableFirestoreFallback && fallbackOrderId.trim().isNotEmpty) {
+    final fallbackFuture = _fallbackPhotosFuture;
+    if (fallbackFuture != null) {
+      final initial = _lastInitial;
       return FutureBuilder<List<String>>(
-        future: _loadFallbackPhotos(),
+        future: fallbackFuture,
         builder: (context, snap) {
           final fetched = (snap.data ?? const <String>[])
               .map((e) => e.trim())
               .where(_isAllowedForDisplay)
               .toList(growable: false);
           var merged = <String>{...initial, ...fetched}.toList(growable: false);
-          final limit = maxItems;
+          final limit = widget.maxItems;
           if (limit != null && merged.length > limit) {
             merged = merged.take(limit).toList(growable: false);
           }
           if (snap.connectionState != ConnectionState.done && merged.isEmpty) {
-            return SizedBox(height: showAll ? 96 : 120);
+            return SizedBox(height: widget.showAll ? 96 : 120);
           }
           if (merged.isEmpty) return _emptyMessage();
           return _SubmittedPhotosStrip(
             paths: merged,
             enableFirestoreFallback: false,
-            showAll: showAll,
-            uploadedOnly: uploadedOnly,
-            maxItems: maxItems,
+            showAll: widget.showAll,
+            uploadedOnly: widget.uploadedOnly,
+            maxItems: widget.maxItems,
           );
         },
       );
     }
 
-    if (initial.isEmpty) return _emptyMessage();
+    final displayFuture = _displayPathsFuture;
+    if (displayFuture == null) return _emptyMessage();
 
     return FutureBuilder<List<String>>(
-      future: _validDisplayPaths(context, initial),
+      future: displayFuture,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return SizedBox(height: showAll ? 96 : 120);
+          return SizedBox(height: widget.showAll ? 96 : 120);
         }
 
         final displayPaths = snap.data ?? const <String>[];
@@ -3656,11 +3707,11 @@ class _SubmittedPhotosStrip extends StatelessWidget {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final tileSize = showAll
+            final tileSize = widget.showAll
                 ? ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0)
                 : 120.0;
 
-            if (showAll) {
+            if (widget.showAll) {
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,

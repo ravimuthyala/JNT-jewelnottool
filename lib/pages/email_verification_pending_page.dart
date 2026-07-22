@@ -148,6 +148,7 @@ class _EmailVerificationPendingPageState
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Verify your email',
       child: Scaffold(

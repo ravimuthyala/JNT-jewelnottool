@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 import 'artist_designing_request_sheet.dart';
 import '../models/client_request_v2.dart';
 import 'artist_completed_request_sheet.dart';
@@ -1977,6 +1978,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist requests',
       child: Scaffold(
@@ -5837,6 +5839,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             return Image.network(
               url,
               fit: BoxFit.cover,
+              cacheWidth: kMaxImageDecodeDimension,
               errorBuilder: (_, _, _) => Icon(
                 Icons.image_outlined,
                 color: AppColors.blackCat.withValues(alpha: 0.35),
@@ -5856,6 +5859,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               return Image.memory(
                 bytes,
                 fit: BoxFit.cover,
+                cacheWidth: kMaxImageDecodeDimension,
                 errorBuilder: (_, _, _) => Icon(
                   Icons.image_outlined,
                   color: AppColors.blackCat.withValues(alpha: 0.35),
@@ -5870,6 +5874,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       return Image.memory(
         dataBytes,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => Icon(
           Icons.image_outlined,
           color: AppColors.blackCat.withValues(alpha: 0.35),
@@ -5880,6 +5885,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       return Image.network(
         trimmed,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => Icon(
           Icons.image_outlined,
           color: AppColors.blackCat.withValues(alpha: 0.35),
@@ -9621,6 +9627,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         return Image.memory(
           bytes,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => _clientDetailsAvatarFallback(),
         );
       }
@@ -9629,6 +9636,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         return Image.network(
           normalized,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => _clientDetailsAvatarFallback(),
         );
       }
@@ -9948,6 +9956,7 @@ class InReviewDetailsSheet extends StatelessWidget {
               Image.network(
                 url,
                 fit: BoxFit.cover,
+                cacheWidth: kMaxImageDecodeDimension,
                 errorBuilder: (_, _, _) => initialFallback(),
               ),
             );
@@ -9961,6 +9970,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 Image.memory(
                   bytes,
                   fit: BoxFit.cover,
+                  cacheWidth: kMaxImageDecodeDimension,
                   errorBuilder: (_, _, _) => initialFallback(),
                 ),
               );
@@ -9974,6 +9984,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         Image.memory(
           dataBytes,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => initialFallback(),
         ),
       );
@@ -10099,6 +10110,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         return Image.memory(
           dataBytes,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => broken(),
         );
       }
@@ -10107,6 +10119,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         return Image.network(
           path,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => broken(),
         );
       }
@@ -10138,6 +10151,7 @@ class InReviewDetailsSheet extends StatelessWidget {
             return Image.network(
               url,
               fit: BoxFit.cover,
+              cacheWidth: kMaxImageDecodeDimension,
               errorBuilder: (_, _, _) => FutureBuilder<Uint8List?>(
                 future: _readStorageBytes(path),
                 builder: (_, bytesSnap) {
@@ -10148,6 +10162,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                   return Image.memory(
                     bytes,
                     fit: BoxFit.cover,
+                    cacheWidth: kMaxImageDecodeDimension,
                     errorBuilder: (_, _, _) => broken(),
                   );
                 },
@@ -10164,6 +10179,7 @@ class InReviewDetailsSheet extends StatelessWidget {
               return Image.memory(
                 bytes,
                 fit: BoxFit.cover,
+                cacheWidth: kMaxImageDecodeDimension,
                 errorBuilder: (_, _, _) => broken(),
               );
             },
@@ -10253,13 +10269,19 @@ class InReviewDetailsSheet extends StatelessWidget {
         );
 
     if (dataBytes != null) {
-      return Image.memory(dataBytes, fit: BoxFit.contain, errorBuilder: (_, _, _) => broken());
+      return Image.memory(
+        dataBytes,
+        fit: BoxFit.contain,
+        cacheWidth: kMaxImageDecodeDimension,
+        errorBuilder: (_, _, _) => broken(),
+      );
     }
     if ((path.startsWith('http://') || path.startsWith('https://')) &&
         !path.contains('/storage/v1/object/')) {
       return Image.network(
         path,
         fit: BoxFit.contain,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => broken(),
       );
     }
@@ -10291,6 +10313,7 @@ class InReviewDetailsSheet extends StatelessWidget {
           return Image.network(
             url,
             fit: BoxFit.contain,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => FutureBuilder<Uint8List?>(
               future: _readStorageBytes(path),
               builder: (_, bytesSnap) {
@@ -10301,6 +10324,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 return Image.memory(
                   bytes,
                   fit: BoxFit.contain,
+                  cacheWidth: kMaxImageDecodeDimension,
                   errorBuilder: (_, _, _) => broken(),
                 );
               },
@@ -10317,6 +10341,7 @@ class InReviewDetailsSheet extends StatelessWidget {
             return Image.memory(
               bytes,
               fit: BoxFit.contain,
+              cacheWidth: kMaxImageDecodeDimension,
               errorBuilder: (_, _, _) => broken(),
             );
           },

@@ -48,6 +48,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     final maxH = MediaQuery.of(context).size.height * 0.96;
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Campaign details',
       child: Align(
@@ -621,6 +622,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       image = Image.network(
         path,
         fit: BoxFit.cover,
+        cacheWidth: 252,
+        cacheHeight: 252,
         errorBuilder: (_, _, _) => fallback,
       );
     } else if (path.startsWith('gs://')) {
@@ -632,6 +635,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: 252,
+            cacheHeight: 252,
             errorBuilder: (_, _, _) => fallback,
           );
         },
@@ -660,6 +665,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: 252,
+            cacheHeight: 252,
             errorBuilder: (_, _, _) => fallback,
           );
         },

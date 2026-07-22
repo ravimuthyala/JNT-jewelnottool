@@ -14,6 +14,7 @@ import '../services/artist_directory_service.dart';
 import '../services/address_validation_service.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
+import '../utils/image_cache_utils.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -296,6 +297,23 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       _fieldErrors.remove('shipZip');
       _fieldErrors.remove('shipCountry');
     });
+  }
+
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyShippingStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyShippingStreetSuggestion(selected);
   }
 
   @override
@@ -2015,6 +2033,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           return Image.network(
             resolved,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => _photoFallback(path),
           );
         },
@@ -3195,19 +3214,17 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     textField: true,
                     multiline: true,
                     label: 'Description, required',
-                    child: ExcludeSemantics(
-                      child: _FocusRingWrapper(
+                    child: _FocusRingWrapper(
+                      focusNode: _descriptionFocusNode,
+                      ringColor: _focusRing,
+                      child: _TextArea(
+                        controller: _descCtrl,
                         focusNode: _descriptionFocusNode,
-                        ringColor: _focusRing,
-                        child: _TextArea(
-                          controller: _descCtrl,
-                          focusNode: _descriptionFocusNode,
-                          hint: 'Describe your ideal design in detail...',
-                          errorText: _fieldErrors['description'],
-                          onChanged: (_) => setState(() {
-                            _fieldErrors.remove('description');
-                          }),
-                        ),
+                        hint: 'Describe your ideal design in detail...',
+                        errorText: _fieldErrors['description'],
+                        onChanged: (_) => setState(() {
+                          _fieldErrors.remove('description');
+                        }),
                       ),
                     ),
                   ),
@@ -4015,7 +4032,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                                   _shipStreetSuggestions[i].displayLabel,
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                                onTap: () => _applyShippingStreetSuggestion(
+                                onTap: () => _selectShippingStreetSuggestion(
                                   _shipStreetSuggestions[i],
                                 ),
                               ),

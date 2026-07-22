@@ -450,6 +450,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist reviews',
       child: Scaffold(

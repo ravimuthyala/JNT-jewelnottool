@@ -821,6 +821,7 @@ class _RequestChatModalState extends State<RequestChatModal> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Request chat',
       child: Scaffold(
@@ -968,6 +969,8 @@ class _RequestChatModalState extends State<RequestChatModal> {
                                         fit: BoxFit.cover,
                                         height: 170,
                                         width: 220,
+                                        cacheWidth: 660,
+                                        cacheHeight: 510,
                                         errorBuilder: (_, _, _) =>
                                             const SizedBox.shrink(),
                                       ),
@@ -1129,6 +1132,10 @@ class _RequestChatModalState extends State<RequestChatModal> {
                 child: Image.network(
                   url,
                   fit: BoxFit.contain,
+                  // Higher than kMaxImageDecodeDimension: this preview
+                  // allows 4x pinch-zoom (InteractiveViewer maxScale: 4),
+                  // so a tighter cap would look visibly soft when zoomed.
+                  cacheWidth: 2048,
                   errorBuilder: (_, _, _) => const Center(
                     child: Icon(
                       Icons.broken_image_outlined,

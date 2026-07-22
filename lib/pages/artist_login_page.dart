@@ -78,6 +78,7 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist login',
       child: Scaffold(

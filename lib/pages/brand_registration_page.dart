@@ -60,6 +60,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   bool _showValidationErrors = false;
   int _registrationStep = 0;
   int? _validationTriggeredStep;
+  final ScrollController _registrationScrollController = ScrollController();
 
   static const List<String> _registrationStepTitles = <String>[
     'Company Profile\n& Primary Contact',
@@ -71,6 +72,10 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   // -----------------------
   final _nameCtrl = TextEditingController(); // (kept) original "Name"
   final _emailCtrl = TextEditingController();
+  Timer? _emailAvailabilityDebounce;
+  bool _checkingEmailAvailability = false;
+  String? _lastCheckedEmail;
+  String? _emailTakenRole;
   final _passCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _instagramCtrl = TextEditingController();
@@ -114,6 +119,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
   bool _obscure = true;
   bool _obscureConfirm = true;
+  String? _passwordError;
+  String? _confirmPasswordError;
   Uint8List? _logoBytes;
   String? _logoPath;
 
@@ -359,6 +366,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   void dispose() {
     _billingStreetAutocompleteDebounce?.cancel();
     _shippingStreetAutocompleteDebounce?.cancel();
+    _emailAvailabilityDebounce?.cancel();
+    _registrationScrollController.dispose();
     _logoUploadFocusNode.dispose();
     // existing
     _nameCtrl.dispose();
@@ -745,6 +754,88 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     return null;
   }
 
+  /// Validates the account signup email (_emailCtrl) specifically, adding
+  /// the cross-role "already registered" check on top of the shared format
+  /// validation used by [_emailValidator] elsewhere (contact/payout emails).
+  String? _accountEmailValidator(String? v) {
+    final formatError = _emailValidator(v);
+    if (formatError != null) return formatError;
+    final normalized = (v ?? '').trim().toLowerCase();
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return SupabaseAuthService.emailAlreadyRegisteredMessage;
+    }
+    return null;
+  }
+
+  void _onEmailChanged(String value) {
+    _emailAvailabilityDebounce?.cancel();
+    final normalized = value.trim().toLowerCase();
+
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      if (_emailTakenRole != null || _checkingEmailAvailability) {
+        setState(() {
+          _emailTakenRole = null;
+          _checkingEmailAvailability = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _checkingEmailAvailability = true);
+    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final role = await SupabaseAuthService.findExistingRoleForEmail(
+        normalized,
+      );
+      if (!mounted) return;
+      if (_emailCtrl.text.trim().toLowerCase() != normalized) {
+        return;
+      }
+      setState(() {
+        _checkingEmailAvailability = false;
+        _lastCheckedEmail = normalized;
+        _emailTakenRole = role;
+      });
+    });
+  }
+
+  Widget _buildEmailAvailabilityStatus() {
+    if (_showValidationErrors) return const SizedBox.shrink();
+
+    final normalized = _emailCtrl.text.trim().toLowerCase();
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      return const SizedBox.shrink();
+    }
+
+    if (_checkingEmailAvailability) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          'Checking email availability…',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          SupabaseAuthService.emailAlreadyRegisteredMessage,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   String? _passwordValidator(String? v) {
     final value = (v ?? '').trim();
     if (value.isEmpty) return 'Password is required';
@@ -758,6 +849,66 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     if (v == null || v.isEmpty) return 'Confirm Password is required';
     if (v != _passCtrl.text) return 'Passwords do not match';
     return null;
+  }
+
+  void _onPasswordChanged(String value) {
+    setState(() {
+      _passwordError = _passwordValidator(value);
+      if (_confirmPassCtrl.text.isNotEmpty) {
+        _confirmPasswordError = _confirmPasswordValidator(
+          _confirmPassCtrl.text,
+        );
+      }
+    });
+  }
+
+  void _onConfirmPasswordChanged(String value) {
+    setState(() {
+      _confirmPasswordError = _confirmPasswordValidator(value);
+    });
+  }
+
+  Widget _buildPasswordStatus() {
+    if (_passCtrl.text.isNotEmpty && _passwordError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          _passwordError!,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        'Password must include uppercase, lowercase, number, and symbol.',
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.black.withValues(alpha: 0.55),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmPasswordStatus() {
+    if (_confirmPassCtrl.text.isEmpty || _confirmPasswordError == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        _confirmPasswordError!,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.red,
+        ),
+      ),
+    );
   }
 
   String? _phoneValidator(String? v) {
@@ -1498,6 +1649,24 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     } on AuthException catch (e) {
       final isAlreadyRegistered = e.message.toLowerCase().contains('already');
       if (isAlreadyRegistered) {
+        final existingRole = await SupabaseAuthService.findExistingRoleForEmail(
+          _emailCtrl.text,
+        );
+
+        // An email maps to exactly one account. Block cross-role reuse
+        // instead of silently attaching a second role to it. Same-role (or
+        // no role data yet — a prior signup that never finished writing its
+        // row) is a safe repair/resubmit case.
+        if (existingRole != null && existingRole != 'company') {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(SupabaseAuthService.emailAlreadyRegisteredMessage),
+            ),
+          );
+          return;
+        }
+
         try {
           final existingUser = await SupabaseAuthService.login(
             email: _emailCtrl.text.trim().toLowerCase(),
@@ -1588,6 +1757,23 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     });
   }
 
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectBillingStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyBillingStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyBillingStreetSuggestion(selected);
+  }
+
   Future<void> _autofillShippingAddressFromStreet() async {
     _shippingStreetAutocompleteDebounce?.cancel();
     final query = _shipStreetCtrl.text.trim();
@@ -1628,6 +1814,23 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       _shipManualStateCtrl.clear();
       _shippingStreetSuggestions = const [];
     });
+  }
+
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyShippingStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyShippingStreetSuggestion(selected);
   }
 
   Future<bool> _validateCurrentRegistrationStep() async {
@@ -1676,6 +1879,18 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       _validationTriggeredStep = null;
     });
     _announceStep(_registrationStep);
+    _scrollRegistrationToTop();
+  }
+
+  /// Advancing/going back a step swaps which fields render within the same
+  /// single scrollable, so without this the new step opens at whatever
+  /// scroll offset the Next/Back button happened to be at (often the
+  /// bottom), instead of showing the step from its top.
+  void _scrollRegistrationToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_registrationScrollController.hasClients) return;
+      _registrationScrollController.jumpTo(0);
+    });
   }
 
   Widget _registrationProgressTabs() {
@@ -1826,6 +2041,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                     _validationTriggeredStep = null;
                   });
                   _announceStep(_registrationStep);
+                  _scrollRegistrationToTop();
                 },
                 child: const Text(
                   'Back',
@@ -1889,6 +2105,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     return Semantics(
       scopesRoute: true,
       namesRoute: true,
+      explicitChildNodes: true,
       label: 'Brand registration',
       child: Theme(
       data: Theme.of(context).copyWith(
@@ -1910,6 +2127,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         ),
         body: SafeArea(
           child: ListView(
+            controller: _registrationScrollController,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
             children: [
               Form(
@@ -2013,9 +2231,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 'Company Email',
                                 'Enter Company Email',
                               ),
-                              validator: _emailValidator,
+                              validator: _accountEmailValidator,
+                              onChanged: _onEmailChanged,
                             ),
                           ),
+                          _buildEmailAvailabilityStatus(),
                           const SizedBox(height: 16),
 
                           _FieldLabel.required('Company Phone#'),
@@ -2149,16 +2369,10 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 ),
                               ),
                               validator: _passwordValidator,
+                              onChanged: _onPasswordChanged,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Password must include uppercase, lowercase, number, and symbol.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.black.withValues(alpha: 0.55),
-                            ),
-                          ),
+                          _buildPasswordStatus(),
                           const SizedBox(height: 16),
 
                           _FieldLabel.required('Confirm Password'),
@@ -2188,8 +2402,10 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 ),
                               ),
                               validator: _confirmPasswordValidator,
+                              onChanged: _onConfirmPasswordChanged,
                             ),
                           ),
+                          _buildConfirmPasswordStatus(),
                           const SizedBox(height: 16),
 
                           _FieldLabel.normal('Company URL'),
@@ -2554,7 +2770,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                         style: const TextStyle(fontSize: 12),
                                       ),
                                       onTap: () =>
-                                          _applyBillingStreetSuggestion(
+                                          _selectBillingStreetSuggestion(
                                             _billingStreetSuggestions[i],
                                           ),
                                     ),
@@ -2761,7 +2977,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           style: const TextStyle(fontSize: 12),
                                         ),
                                         onTap: () =>
-                                            _applyShippingStreetSuggestion(
+                                            _selectShippingStreetSuggestion(
                                               _shippingStreetSuggestions[i],
                                             ),
                                       ),

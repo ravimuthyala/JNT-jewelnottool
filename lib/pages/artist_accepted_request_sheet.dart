@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../models/client_request_v2.dart';
 import '../services/notifications_service.dart';
+import '../utils/image_cache_utils.dart';
 import '../utils/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/group_client_measurements_tabs.dart';
@@ -517,6 +518,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final clientModalPhotos = _clientModalPhotos();
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Accepted request details',
       child: Align(
@@ -1614,7 +1616,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           final x = photos[i];
 
           final imageWidget = kIsWeb
-              ? Image.network(x.path, fit: BoxFit.cover)
+              ? Image.network(
+                  x.path,
+                  fit: BoxFit.cover,
+                  cacheWidth: kMaxImageDecodeDimension,
+                )
               : Image.file(File(x.path), fit: BoxFit.cover);
 
           return SizedBox(
@@ -3064,6 +3070,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       return Image.memory(
         dataBytes,
         fit: BoxFit.cover,
+        cacheWidth: kMaxImageDecodeDimension,
         errorBuilder: (_, _, _) => fallback(),
       );
     }
@@ -3089,6 +3096,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           return Image.network(
             url,
             fit: BoxFit.cover,
+            cacheWidth: kMaxImageDecodeDimension,
             errorBuilder: (_, _, _) => fallback(),
           );
         },
@@ -3123,6 +3131,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         return Image.network(
           url,
           fit: BoxFit.cover,
+          cacheWidth: kMaxImageDecodeDimension,
           errorBuilder: (_, _, _) => fallback(),
         );
       },
@@ -3236,7 +3245,11 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         builder: (_, snap) {
           final url = (snap.data ?? '').trim();
           if (url.isEmpty) return const SizedBox.shrink();
-          return Image.network(url, fit: BoxFit.contain);
+          return Image.network(
+            url,
+            fit: BoxFit.contain,
+            cacheWidth: kMaxImageDecodeDimension,
+          );
         },
       );
     }

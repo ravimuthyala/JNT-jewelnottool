@@ -4,13 +4,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:jnt_app_0120/widgets/role_pill.dart';
-import 'package:jnt_app_0120/widgets/role_card.dart';
-import 'package:jnt_app_0120/widgets/role_tile_modern.dart';
-import 'package:jnt_app_0120/widgets/selectable_role_tile.dart';
-import 'package:jnt_app_0120/widgets/artist_profile_avatar_icon.dart';
-import 'package:jnt_app_0120/widgets/artist_ascension_card.dart';
-import 'package:jnt_app_0120/helpers/artist_ascension.dart';
+import 'package:jewelnottool/widgets/role_pill.dart';
+import 'package:jewelnottool/widgets/role_card.dart';
+import 'package:jewelnottool/widgets/role_tile_modern.dart';
+import 'package:jewelnottool/widgets/selectable_role_tile.dart';
+import 'package:jewelnottool/widgets/artist_profile_avatar_icon.dart';
+import 'package:jewelnottool/widgets/artist_ascension_card.dart';
+import 'package:jewelnottool/helpers/artist_ascension.dart';
 
 Widget _wrap(Widget child) {
   return MaterialApp(

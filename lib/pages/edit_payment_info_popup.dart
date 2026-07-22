@@ -92,6 +92,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Edit payment info',
       child: Material(

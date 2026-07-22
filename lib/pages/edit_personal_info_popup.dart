@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
 import '../utils/registration_input_utils.dart';
+import '../widgets/phone_country_code_field.dart';
 
 class PersonalInfoEditResult {
   const PersonalInfoEditResult({
@@ -37,6 +38,7 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
   late final TextEditingController nameCtrl;
   late final TextEditingController emailCtrl;
   late final TextEditingController phoneCtrl;
+  late String _phoneAreaCode;
 
   final FocusNode _nameFocusNode = FocusNode(debugLabel: 'personalInfoName');
   final FocusNode _emailFocusNode = FocusNode(debugLabel: 'personalInfoEmail');
@@ -52,10 +54,12 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
     super.initState();
     nameCtrl = TextEditingController(text: widget.profile.basic.name);
     emailCtrl = TextEditingController(text: widget.profile.basic.email);
+    final splitPhone = RegistrationInputUtils.splitStoredPhone(
+      widget.profile.basic.phone,
+    );
+    _phoneAreaCode = splitPhone.areaCode;
     phoneCtrl = TextEditingController(
-      text: RegistrationInputUtils.formatUsPhoneLocal(
-        widget.profile.basic.phone,
-      ),
+      text: RegistrationInputUtils.formatUsPhoneLocal(splitPhone.localNumber),
     );
     _photoUrl = widget.profile.basic.profileImageUrl.trim();
 
@@ -168,11 +172,19 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
       }
     }
 
+    final normalizedAreaCode = RegistrationInputUtils.normalizeAreaCode(
+      _phoneAreaCode,
+    );
+    final normalizedLocalPhone = RegistrationInputUtils.normalizePhone(
+      phoneCtrl.text,
+    );
     final updated = widget.profile.copyWith(
       basic: widget.profile.basic.copyWith(
         name: nameCtrl.text.trim(),
         email: emailCtrl.text.trim(),
-        phone: phoneCtrl.text.trim(),
+        phone: normalizedLocalPhone.isEmpty
+            ? ''
+            : '$normalizedAreaCode$normalizedLocalPhone',
         profileImageUrl: resolvedPhotoUrl,
       ),
     );
@@ -300,13 +312,7 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
                     semanticLabel: 'Email, email address, text field',
                   ),
                   const SizedBox(height: 6),
-                  _field(
-                    'Phone',
-                    phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    focusNode: _phoneFocusNode,
-                    semanticLabel: 'Phone, phone number, text field',
-                  ),
+                  _phoneField(),
 
                   const SizedBox(height: 18),
 
@@ -360,6 +366,34 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
       return NetworkImage(value);
     }
     return null;
+  }
+
+  Widget _phoneField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ExcludeSemantics(
+          child: Text(
+            'Phone',
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 14,
+              color: AppColors.blackCat,
+              fontFamily: 'ArialBold',
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        PhoneCountryCodeField(
+          areaCode: _phoneAreaCode,
+          onAreaCodeChanged: (code) => setState(() => _phoneAreaCode = code),
+          controller: phoneCtrl,
+          focusNode: _phoneFocusNode,
+          fontSize: 10.5,
+          semanticLabel: 'Phone, phone number, text field',
+        ),
+      ],
+    );
   }
 
   Widget _field(

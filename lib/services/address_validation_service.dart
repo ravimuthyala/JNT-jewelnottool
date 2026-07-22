@@ -17,6 +17,7 @@ class AddressSuggestion {
     required this.zip,
     required this.country,
     required this.displayLabel,
+    this.placeId,
   });
 
   final String street;
@@ -25,9 +26,31 @@ class AddressSuggestion {
   final String zip;
   final String country;
   final String displayLabel;
+
+  /// Set only for Google Places-backed suggestions (see
+  /// [AddressValidationService.isGooglePlacesConfigured]). street/city/
+  /// state/zip are left blank on the initial prediction — Google's
+  /// Autocomplete endpoint returns matching text only, not structured
+  /// address components. Call [AddressValidationService.resolvePlaceDetails]
+  /// with this id when the user actually selects the suggestion to fetch
+  /// the full address; that's deferred (rather than resolved for every
+  /// prediction up front) so a Place Details lookup — and its cost — is
+  /// only ever made for the one suggestion actually picked.
+  final String? placeId;
 }
 
 class AddressValidationService {
+  // Dormant until a key is supplied: provide one at build time with
+  //   flutter run --dart-define=GOOGLE_PLACES_API_KEY=your-key-here
+  // Until then, isGooglePlacesConfigured is false and every address lookup
+  // below transparently falls back to the existing free Nominatim path —
+  // no behavior change with no key set.
+  static const String _googlePlacesApiKey = String.fromEnvironment(
+    'GOOGLE_PLACES_API_KEY',
+  );
+
+  static bool get isGooglePlacesConfigured => _googlePlacesApiKey.isNotEmpty;
+
   static String? matchUsStateName(String value) {
     final normalized = value.trim().toUpperCase();
     if (normalized.isEmpty) return null;
@@ -49,6 +72,157 @@ class AddressValidationService {
     final trimmed = query.trim();
     if (trimmed.length < 3) return const <AddressSuggestion>[];
 
+    if (isGooglePlacesConfigured) {
+      return _searchGooglePlacesAutocomplete(trimmed);
+    }
+    return _searchNominatimStreetSuggestions(trimmed);
+  }
+
+  /// Resolves a Google Places prediction (see [AddressSuggestion.placeId])
+  /// into a fully populated address. Call this only when the user selects
+  /// a suggestion, not for every prediction returned — Place Details is a
+  /// separate billed call from Autocomplete. Returns null if Google Places
+  /// isn't configured, or the lookup fails.
+  static Future<AddressSuggestion?> resolvePlaceDetails(String placeId) async {
+    if (!isGooglePlacesConfigured || placeId.trim().isEmpty) return null;
+
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final uri = Uri.parse(
+        'https://places.googleapis.com/v1/places/${placeId.trim()}',
+      );
+      final request = await client.getUrl(uri);
+      request.headers.set('X-Goog-Api-Key', _googlePlacesApiKey);
+      request.headers.set(
+        'X-Goog-FieldMask',
+        'addressComponents,formattedAddress',
+      );
+      final response = await request.close();
+      if (response.statusCode != 200) return null;
+
+      final raw = await utf8.decoder.bind(response).join();
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      final components = (decoded['addressComponents'] as List<dynamic>? ??
+          const <dynamic>[]);
+
+      var streetNumber = '';
+      var route = '';
+      var city = '';
+      var state = '';
+      var zip = '';
+      var country = '';
+
+      for (final entry in components) {
+        if (entry is! Map<String, dynamic>) continue;
+        final types = (entry['types'] as List<dynamic>? ?? const <dynamic>[])
+            .map((e) => e.toString())
+            .toSet();
+        final longText = (entry['longText'] ?? '').toString().trim();
+        if (longText.isEmpty) continue;
+
+        if (types.contains('street_number')) streetNumber = longText;
+        if (types.contains('route')) route = longText;
+        if (types.contains('locality')) city = longText;
+        if (city.isEmpty && types.contains('postal_town')) city = longText;
+        if (city.isEmpty && types.contains('sublocality')) city = longText;
+        if (types.contains('administrative_area_level_1')) state = longText;
+        if (types.contains('postal_code')) zip = longText;
+        if (types.contains('country')) country = longText;
+      }
+
+      final street = [
+        streetNumber,
+        route,
+      ].where((v) => v.isNotEmpty).join(' ');
+      final formattedAddress = (decoded['formattedAddress'] ?? '')
+          .toString()
+          .trim();
+
+      return AddressSuggestion(
+        street: street.isEmpty ? formattedAddress : street,
+        city: city,
+        state: matchUsStateName(state) ?? state,
+        zip: zip,
+        country: country.isEmpty ? 'United States' : country,
+        displayLabel: formattedAddress.isNotEmpty
+            ? formattedAddress
+            : street,
+        placeId: placeId,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static Future<List<AddressSuggestion>> _searchGooglePlacesAutocomplete(
+    String trimmed,
+  ) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final uri = Uri.parse('https://places.googleapis.com/v1/places:autocomplete');
+      final request = await client.postUrl(uri);
+      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set('X-Goog-Api-Key', _googlePlacesApiKey);
+      request.write(
+        jsonEncode({
+          'input': trimmed,
+          'includedRegionCodes': ['us'],
+          'languageCode': 'en',
+        }),
+      );
+      final response = await request.close();
+      if (response.statusCode != 200) return const <AddressSuggestion>[];
+
+      final raw = await utf8.decoder.bind(response).join();
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return const <AddressSuggestion>[];
+
+      final rawSuggestions =
+          (decoded['suggestions'] as List<dynamic>? ?? const <dynamic>[]);
+      final suggestions = <AddressSuggestion>[];
+
+      for (final item in rawSuggestions) {
+        if (item is! Map<String, dynamic>) continue;
+        final prediction = item['placePrediction'] as Map<String, dynamic>?;
+        if (prediction == null) continue;
+
+        final placeId = (prediction['placeId'] ?? '').toString().trim();
+        final textField = prediction['text'];
+        final text = (textField is Map
+                ? (textField['text'] ?? '')
+                : (textField ?? ''))
+            .toString()
+            .trim();
+        if (placeId.isEmpty || text.isEmpty) continue;
+
+        suggestions.add(
+          AddressSuggestion(
+            street: '',
+            city: '',
+            state: '',
+            zip: '',
+            country: 'United States',
+            displayLabel: text,
+            placeId: placeId,
+          ),
+        );
+      }
+
+      return suggestions;
+    } catch (_) {
+      return const <AddressSuggestion>[];
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static Future<List<AddressSuggestion>> _searchNominatimStreetSuggestions(
+    String trimmed,
+  ) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
     try {
       final q = Uri.encodeQueryComponent('$trimmed, USA');

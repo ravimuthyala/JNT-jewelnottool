@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
 /// =======================================================
@@ -132,6 +133,7 @@ class NewArtistOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'New order details',
       child: _OrderDetailsShell(
@@ -227,6 +229,7 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'In review order details',
       child: _OrderDetailsShell(
@@ -340,6 +343,7 @@ class AcceptedArtistOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Accepted order details',
       child: _OrderDetailsShell(
@@ -397,6 +401,7 @@ class InProgressArtistOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'In progress order details',
       child: _InProgressScaffold(order: order, onUpdate: onUpdate),
@@ -1310,6 +1315,8 @@ class _Thumb extends StatelessWidget {
         height: 64,
         width: 64,
         fit: BoxFit.cover,
+        cacheWidth: 192,
+        cacheHeight: 192,
         errorBuilder: (_, _, _) => const SizedBox.shrink(),
       );
     } else if (isAsset) {
@@ -1498,6 +1505,7 @@ class _PhotoGrid extends StatelessWidget {
                       fit: BoxFit.cover,
                       width: double.infinity,
                       height: double.infinity,
+                      cacheWidth: kMaxImageDecodeDimension,
                     ),
                   ),
                 ),

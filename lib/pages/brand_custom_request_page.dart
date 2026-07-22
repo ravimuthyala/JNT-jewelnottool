@@ -283,6 +283,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   final Map<String, bool> _clientNfcEligibleByNameLower = <String, bool>{};
   bool _nfcRequest = false;
   String _groupClientToAdd = '';
+  // Bumped whenever _groupClientToAdd is cleared programmatically (add,
+  // duplicate-add, or eligibility invalidation) so the "Select clients"
+  // field's key can reset just that field's text -- without also keying on
+  // the in-progress query text itself, which would tear the field down on
+  // every keystroke.
+  int _groupClientFieldResetTick = 0;
   final List<String> _groupSelectedClients = <String>[];
   final TextEditingController _shipStreetCtrl = TextEditingController();
   final TextEditingController _shipCityCtrl = TextEditingController();
@@ -324,12 +330,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   // -----------------------------
   late String _shape;
   late NailLength _length;
-
-  static const List<String> _defaultArtistOptions = [
-    'Artist Mia',
-    'Artist Zoe',
-    'Artist Lana',
-  ];
 
   late final ClientProfileDraft _profile;
 
@@ -429,6 +429,23 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           selected.state;
       _shipStreetSuggestions = const [];
     });
+  }
+
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyShippingStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyShippingStreetSuggestion(selected);
   }
 
   SupabaseClient get _client => Supabase.instance.client;
@@ -808,6 +825,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         'displayName',
         'clientName',
         'panel_displayName',
+        'panel_display_name',
+        'panel_name',
       ]);
       if (name.isNotEmpty) return name;
     }
@@ -875,17 +894,29 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     final profile = asMap(data['profile']);
     final basic = asMap(data['basic']);
     final client = asMap(data['client']);
-    final nailPreferences = asMap(data['nailPreferences']);
-    final profileNailPreferences = asMap(profile['nailPreferences']);
-    final basicNailPreferences = asMap(basic['nailPreferences']);
-    final clientNailPreferences = asMap(client['nailPreferences']);
+    // The client table's real column is the snake_case `nail_preferences`
+    // (confirmed via the brand-outreach RPC's raw row shape) -- the
+    // camelCase `nailPreferences` variants below are kept only in case some
+    // other source (e.g. a legacy payload) uses that spelling instead.
+    final nailPreferences = asMap(data['nail_preferences']);
+    final nailPreferencesCamel = asMap(data['nailPreferences']);
+    final profileNailPreferences = asMap(profile['nail_preferences']);
+    final profileNailPreferencesCamel = asMap(profile['nailPreferences']);
+    final basicNailPreferences = asMap(basic['nail_preferences']);
+    final basicNailPreferencesCamel = asMap(basic['nailPreferences']);
+    final clientNailPreferences = asMap(client['nail_preferences']);
+    final clientNailPreferencesCamel = asMap(client['nailPreferences']);
     final apiNailMeasurements = asMap(data['apiNailMeasurements']);
 
     final dimensionMaps = <Map<String, dynamic>>[
       asMap(nailPreferences['dimensions']),
+      asMap(nailPreferencesCamel['dimensions']),
       asMap(profileNailPreferences['dimensions']),
+      asMap(profileNailPreferencesCamel['dimensions']),
       asMap(basicNailPreferences['dimensions']),
+      asMap(basicNailPreferencesCamel['dimensions']),
       asMap(clientNailPreferences['dimensions']),
+      asMap(clientNailPreferencesCamel['dimensions']),
       asMap(data['dimensions']),
       asMap(profile['dimensions']),
       asMap(basic['dimensions']),
@@ -898,9 +929,14 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     }
 
     if (data['nfcEligible'] == true ||
+        data['nfc_eligible'] == true ||
+        data['eligible_for_nfc'] == true ||
+        data['eligibleForNfc'] == true ||
         profile['nfcEligible'] == true ||
         basic['nfcEligible'] == true ||
-        client['nfcEligible'] == true) {
+        client['nfcEligible'] == true ||
+        nailPreferences['nfcEligible'] == true ||
+        nailPreferences['eligibleForNfc'] == true) {
       return true;
     }
 
@@ -940,6 +976,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         if (_groupClientToAdd.trim().isNotEmpty &&
             !allowed.contains(_groupClientToAdd.trim().toLowerCase())) {
           _groupClientToAdd = '';
+          _groupClientFieldResetTick++;
         }
       }
     });
@@ -964,6 +1001,15 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           'nameOrStudio',
           'name',
           'fullName',
+          'panel_displayName',
+          'panel_display_name',
+          'panel_name',
+          'panel_nameOrStudio',
+          'panel_fullName',
+          'studioName',
+          'panel_studio_name',
+          'displayname',
+          'studioname',
         ]),
       );
       if (name.isNotEmpty) return name;
@@ -1004,6 +1050,30 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     String table, {
     int limit = 300,
   }) async {
+    // A direct select here silently returns nothing for `client` under RLS
+    // (SELECT is restricted to your own row only, so a brand account can
+    // never see other users' client rows) -- that's why "Designate a
+    // specific client"/"Group Client" showed no eligible clients. The RPC
+    // (see supabase/migrations/20260721210424_add_brand_outreach_rows_rpc.sql)
+    // is SECURITY DEFINER and scoped to brand/company callers only, so it
+    // bypasses that restriction safely. Falls back to the old direct select
+    // if the RPC isn't available yet (e.g. migration not applied) or fails
+    // for any other reason, matching prior behavior rather than erroring.
+    try {
+      final rpcRows = await _client.rpc(
+        'fetch_role_rows_for_brand_outreach',
+        params: {'p_table': table, 'p_limit': limit},
+      );
+      if (rpcRows is List) {
+        return rpcRows
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+      }
+    } catch (e) {
+      debugPrint('_fetchTableRows RPC failed for $table, falling back: $e');
+    }
+
     try {
       final rows = await _client
           .from(table)
@@ -1100,6 +1170,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         if (_groupClientToAdd.trim().isNotEmpty &&
             !allowed.contains(_groupClientToAdd.trim().toLowerCase())) {
           _groupClientToAdd = '';
+          _groupClientFieldResetTick++;
         }
         _clientEmailByNameLower
           ..clear()
@@ -1112,13 +1183,15 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                 .toList()
               ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('_loadSelectionSources failed: $e');
       if (!mounted) return;
       setState(() {
         _brandPartnerClients = <String>[];
         //_allClients = _clientOptions;
         _requestedClient = null;
         _groupClientToAdd = '';
+        _groupClientFieldResetTick++;
         _groupSelectedClients.clear();
         _clientEmailByNameLower.clear();
         _clientNfcEligibleByNameLower.clear();
@@ -1301,7 +1374,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     if (_groupSelectedClients.any(
       (c) => c.toLowerCase() == value.toLowerCase(),
     )) {
-      setState(() => _groupClientToAdd = '');
+      setState(() {
+        _groupClientToAdd = '';
+        _groupClientFieldResetTick++;
+      });
       unawaited(
         _showRequestInfoDialog(
           title: 'Client Already Added',
@@ -1313,6 +1389,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     setState(() {
       _groupSelectedClients.add(value);
       _groupClientToAdd = '';
+      _groupClientFieldResetTick++;
     });
   }
 
@@ -1461,8 +1538,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       final safeUploadUid = uid.trim().isEmpty ? 'unknown' : uid.trim();
       final plannedInspirationPhotos = List<String>.generate(
         selectedPhotoCount,
-        (index) =>
-            'company-custom-requests/$safeUploadUid/$requestId/inspiration_${index + 1}.jpg',
+        (index) => _normalizeStorageUrl(
+          '$safeUploadUid/$requestId/inspiration_${index + 1}.jpg',
+        ),
         growable: false,
       );
       String companyBioSnapshot = '';
@@ -1949,8 +2027,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     Future<String?> uploadOne(int i, _UploadedReferenceImage file) async {
       final uploadBytes = _bytesForUpload(file.bytes);
       final ext = 'jpg';
-      final path =
-          'company-custom-requests/$safeUid/$orderId/inspiration_${i + 1}.$ext';
+      // Path is relative to the bucket -- _companyCustomRequestsStorage is
+      // already scoped to the 'company-custom-requests' bucket via
+      // .from('company-custom-requests'), so repeating the bucket name here
+      // would upload into a nested company-custom-requests/company-custom-
+      // requests/... subfolder that nothing else expects to find.
+      final path = '$safeUid/$orderId/inspiration_${i + 1}.$ext';
       final uploaded = await uploadToPath(path: path, uploadBytes: uploadBytes);
       if ((uploaded ?? '').trim().isNotEmpty) {
         return uploaded!.trim();
@@ -2437,6 +2519,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Brand custom request',
       child: Theme(
@@ -2824,9 +2907,18 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                       children: [
                         Expanded(
                           child: _SearchableSelectField(
-                            key: ValueKey<String>(
-                              'group-client-${_groupClientToAdd.trim().toLowerCase()}-${_groupSelectedClients.length}',
-                            ),
+                            // Keyed only on the selected-count, not on the
+                            // in-progress query text: this field must reset
+                            // (clear its text) after "Add" changes the
+                            // selection, but must NOT be torn down and
+                            // recreated on every keystroke -- doing so
+                            // discarded and rebuilt the Autocomplete/
+                            // FocusNode wiring on every character typed,
+                            // which could leave duplicate stale focus
+                            // listeners registered on the shared external
+                            // FocusNode (a rebuild churn bug, not a text
+                            // filtering requirement).
+                            key: ValueKey<int>(_groupClientFieldResetTick),
                             value: _groupClientToAdd,
                             hint: 'Select clients',
                             focusNode: _groupClientFocusNode,
@@ -3259,7 +3351,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                   _shipStreetSuggestions[i].displayLabel,
                                   style: const TextStyle(fontSize: 12),
                                 ),
-                                onTap: () => _applyShippingStreetSuggestion(
+                                onTap: () => _selectShippingStreetSuggestion(
                                   _shipStreetSuggestions[i],
                                 ),
                               ),
@@ -3391,7 +3483,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     final result = <String>[];
     final incoming = <String>[
       ...?widget.artistOptions,
-      ..._defaultArtistOptions,
       if ((_requestedArtist ?? '').trim().isNotEmpty) _requestedArtist!.trim(),
     ];
     for (final raw in incoming) {
@@ -3569,7 +3660,7 @@ class _OptionCard extends StatelessWidget {
   }
 }
 
-class _SearchableSelectField extends StatelessWidget {
+class _SearchableSelectField extends StatefulWidget {
   const _SearchableSelectField({
     super.key,
     required this.value,
@@ -3586,18 +3677,47 @@ class _SearchableSelectField extends StatelessWidget {
   final FocusNode? focusNode;
 
   @override
+  State<_SearchableSelectField> createState() => _SearchableSelectFieldState();
+}
+
+class _SearchableSelectFieldState extends State<_SearchableSelectField> {
+  // Autocomplete gates its options-overlay visibility on
+  // `_focusNode.hasFocus` for the *exact* FocusNode instance it was given.
+  // When an external FocusNode is attached only to the TextField built in
+  // fieldViewBuilder (as this used to do) but never passed to Autocomplete
+  // itself, Autocomplete falls back to an internal FocusNode that never
+  // receives focus, so the options overlay never shows even though the
+  // options list is populated correctly. Passing a FocusNode to Autocomplete
+  // requires pairing it with an explicit TextEditingController (Flutter's
+  // "split field" API), so this field owns both together.
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value.trim(),
+  );
+  FocusNode? _internalFocusNode;
+
+  FocusNode get _effectiveFocusNode =>
+      widget.focusNode ?? (_internalFocusNode ??= FocusNode());
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _internalFocusNode?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final normalizedItems = items
+    final normalizedItems = widget.items
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList(growable: false);
-    final initialValue = value.trim();
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final fieldWidth = constraints.maxWidth;
         return Autocomplete<String>(
-          initialValue: TextEditingValue(text: initialValue),
+          focusNode: _effectiveFocusNode,
+          textEditingController: _controller,
           optionsBuilder: (textEditingValue) {
             final query = textEditingValue.text.trim().toLowerCase();
             if (query.isEmpty) return normalizedItems;
@@ -3617,36 +3737,42 @@ class _SearchableSelectField extends StatelessWidget {
             if (ranked.isEmpty) return normalizedItems;
             return ranked.map((entry) => entry.key);
           },
-          onSelected: onChanged,
+          onSelected: widget.onChanged,
           fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-            final effectiveFocusNode = this.focusNode ?? focusNode;
             return Semantics(
-              label: hint,
+              label: widget.hint,
               textField: true,
               child: TextField(
               controller: controller,
-              focusNode: effectiveFocusNode,
+              focusNode: focusNode,
               onChanged: (text) {
                 final normalizedText = text.trim();
                 final matchesExisting = normalizedItems.any(
                   (item) => item.toLowerCase() == normalizedText.toLowerCase(),
                 );
                 if (normalizedText.isEmpty || !matchesExisting) {
-                  onChanged('');
+                  widget.onChanged('');
                 }
               },
-              onTap: () {
+              onTap: () async {
                 if (controller.text.trim().isEmpty &&
                     normalizedItems.isNotEmpty) {
-                  controller.value = const TextEditingValue(text: ' ');
-                  controller.selection = const TextSelection.collapsed(
-                    offset: 1,
+                  // Autocomplete only calls optionsBuilder in response to a
+                  // real text change (empty -> empty is a no-op, so tapping
+                  // an already-empty field wouldn't otherwise populate the
+                  // options list at all). Mutating to ' ' and back to ''
+                  // forces that change so the full list populates before the
+                  // options overlay becomes visible.
+                  controller.value = const TextEditingValue(
+                    text: ' ',
+                    selection: TextSelection.collapsed(offset: 1),
                   );
+                  await Future<void>.delayed(const Duration(milliseconds: 16));
                   controller.value = const TextEditingValue(text: '');
                 }
               },
               onSubmitted: (_) => onSubmit(),
-              onTapOutside: (_) => effectiveFocusNode.unfocus(),
+              onTapOutside: (_) => focusNode.unfocus(),
               style: const TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w400,
@@ -3654,7 +3780,7 @@ class _SearchableSelectField extends StatelessWidget {
                 color: AppColors.blackCat,
               ),
               decoration: InputDecoration(
-                hintText: hint,
+                hintText: widget.hint,
                 hintStyle: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w400,

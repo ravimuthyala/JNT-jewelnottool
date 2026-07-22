@@ -709,6 +709,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Client artist home',
       child: Scaffold(

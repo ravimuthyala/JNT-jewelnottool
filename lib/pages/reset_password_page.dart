@@ -134,6 +134,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     if (_loading) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Reset password',
         child: const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -143,6 +144,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     if (_error != null) {
       return Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Reset password',
         child: Scaffold(
@@ -200,6 +202,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Reset password',
       child: Scaffold(

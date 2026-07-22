@@ -63,6 +63,7 @@ class _ClientArtistRegistrationPageState
   bool _submitting = false;
   int _registrationStep = 0;
   int? _validationTriggeredStep;
+  final ScrollController _registrationScrollController = ScrollController();
 
   static const List<String> _registrationStepTitles = <String>[
     'Profile &\nAddress',
@@ -101,12 +102,18 @@ class _ClientArtistRegistrationPageState
   // Shared Account Credentials (no duplicates)
   // -----------------------
   final _emailCtrl = TextEditingController();
+  Timer? _emailAvailabilityDebounce;
+  bool _checkingEmailAvailability = false;
+  String? _lastCheckedEmail;
+  String? _emailTakenRole;
   final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController(); // needed for Artist
   final _phoneCtrl = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   // -----------------------
   // Shared Basic Profile (no duplicates)
@@ -1627,6 +1634,81 @@ class _ClientArtistRegistrationPageState
     return null;
   }
 
+  /// Validates the account signup email (_emailCtrl) specifically, adding
+  /// the cross-role "already registered" check on top of the shared format
+  /// validation used by [_emailValidator] elsewhere (payout emails etc).
+  String? _accountEmailValidator(String? v) {
+    final formatError = _emailValidator(v);
+    if (formatError != null) return formatError;
+    final normalized = (v ?? '').trim().toLowerCase();
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return SupabaseAuthService.emailAlreadyRegisteredMessage;
+    }
+    return null;
+  }
+
+  void _onEmailChanged(String value) {
+    _emailAvailabilityDebounce?.cancel();
+    final normalized = value.trim().toLowerCase();
+
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      if (_emailTakenRole != null || _checkingEmailAvailability) {
+        setState(() {
+          _emailTakenRole = null;
+          _checkingEmailAvailability = false;
+        });
+      }
+      return;
+    }
+
+    setState(() => _checkingEmailAvailability = true);
+    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final role = await SupabaseAuthService.findExistingRoleForEmail(
+        normalized,
+      );
+      if (!mounted) return;
+      if (_emailCtrl.text.trim().toLowerCase() != normalized) return;
+      setState(() {
+        _checkingEmailAvailability = false;
+        _lastCheckedEmail = normalized;
+        _emailTakenRole = role;
+      });
+    });
+  }
+
+  Widget _buildEmailAvailabilityStatus() {
+    final normalized = _emailCtrl.text.trim().toLowerCase();
+    if (normalized.isEmpty || !normalized.contains('@')) {
+      return const SizedBox.shrink();
+    }
+    if (_checkingEmailAvailability) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          'Checking email availability…',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.black.withValues(alpha: 0.5),
+          ),
+        ),
+      );
+    }
+    if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          SupabaseAuthService.emailAlreadyRegisteredMessage,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   String? _passwordValidator(String? v) {
     final t = (v ?? '');
     if (t.isEmpty) return 'Password is required';
@@ -1641,6 +1723,64 @@ class _ClientArtistRegistrationPageState
     if (t.isEmpty) return 'Confirm your password';
     if (t != _passCtrl.text) return 'Passwords do not match';
     return null;
+  }
+
+  void _onPasswordChanged(String value) {
+    setState(() {
+      _passwordError = _passwordValidator(value);
+      if (_confirmCtrl.text.isNotEmpty) {
+        _confirmPasswordError = _confirmPasswordValidator(_confirmCtrl.text);
+      }
+    });
+  }
+
+  void _onConfirmPasswordChanged(String value) {
+    setState(() {
+      _confirmPasswordError = _confirmPasswordValidator(value);
+    });
+  }
+
+  Widget _buildPasswordStatus() {
+    if (_passCtrl.text.isNotEmpty && _passwordError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, left: 2),
+        child: Text(
+          _passwordError!,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.red,
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        'Password must be 8+ characters and include uppercase, lowercase, number, and symbol.',
+        style: TextStyle(
+          fontSize: 11,
+          color: AppColors.blackCat.withValues(alpha: 0.55),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmPasswordStatus() {
+    if (_confirmCtrl.text.isEmpty || _confirmPasswordError == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 2),
+      child: Text(
+        _confirmPasswordError!,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Colors.red,
+        ),
+      ),
+    );
   }
 
   String? _phoneValidator(String? v) {
@@ -2079,6 +2219,8 @@ class _ClientArtistRegistrationPageState
     final XFile? img = await _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 80,
+      maxWidth: 2000,
+      maxHeight: 2000,
     );
     if (img != null) {
       final bytes = await img.readAsBytes();
@@ -2105,7 +2247,18 @@ class _ClientArtistRegistrationPageState
       return;
     }
 
-    final files = await _picker.pickMultiImage(imageQuality: 85);
+    // Cap dimensions at the OS picker level: without this, selecting
+    // several full-resolution camera photos (each potentially 10+ MB, tens
+    // of megapixels) at once means every one of them gets fully decoded to
+    // an uncompressed pixel buffer later in _optimizePortfolioBytes, one
+    // after another in a tight synchronous loop -- easily enough peak
+    // memory to get the app killed by the OS with no Dart-level exception
+    // (seen as "Lost connection to device" with no stack trace).
+    final files = await _picker.pickMultiImage(
+      imageQuality: 85,
+      maxWidth: 2000,
+      maxHeight: 2000,
+    );
     if (files.isEmpty) return;
 
     final selectedFiles = files.take(remainingSlots).toList(growable: false);
@@ -2263,6 +2416,23 @@ class _ClientArtistRegistrationPageState
     });
   }
 
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields — resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyStreetSuggestion(selected);
+  }
+
   NailDimensions _dimensionsWithOverrides(Map<String, double> measured) {
     final d = _nailPrefs.dimensions;
     return NailDimensions(
@@ -2371,6 +2541,7 @@ class _ClientArtistRegistrationPageState
         fullscreenDialog: true,
         builder: (_) => Semantics(
           scopesRoute: true,
+          explicitChildNodes: true,
           namesRoute: true,
           label: 'Nail measurement guide',
           child: Scaffold(
@@ -3228,6 +3399,20 @@ class _ClientArtistRegistrationPageState
         final alreadyRegistered = e.message.toLowerCase().contains('already');
         if (!alreadyRegistered) rethrow;
 
+        // An email maps to exactly one account. Block cross-role reuse
+        // instead of silently attaching a second role to it. Same-role (or
+        // no role data yet — a prior signup that never finished writing
+        // its row) is a safe repair/resubmit case.
+        final existingRole =
+            await SupabaseAuthService.findExistingRoleForEmail(
+              _emailCtrl.text,
+            );
+        if (existingRole != null && existingRole != 'client_artist') {
+          throw const AuthException(
+            SupabaseAuthService.emailAlreadyRegisteredMessage,
+          );
+        }
+
         final existingUser = await SupabaseAuthService.login(
           email: _emailCtrl.text.trim().toLowerCase(),
           password: _passCtrl.text.trim(),
@@ -3278,7 +3463,10 @@ class _ClientArtistRegistrationPageState
       ).showSnackBar(SnackBar(content: Text('Registration timed out: $e')));
     } on AuthException catch (e) {
       if (!mounted) return;
-      final message = e.message.toLowerCase().contains('already')
+      final lower = e.message.toLowerCase();
+      final message = lower.contains('please use a different email')
+          ? e.message
+          : lower.contains('already')
           ? 'Email already registered. Please sign in.'
           : e.message;
       ScaffoldMessenger.of(
@@ -3300,6 +3488,8 @@ class _ClientArtistRegistrationPageState
   @override
   void dispose() {
     _streetAutocompleteDebounce?.cancel();
+    _emailAvailabilityDebounce?.cancel();
+    _registrationScrollController.dispose();
     _profilePhotoFocusNode.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
@@ -3525,9 +3715,11 @@ class _ClientArtistRegistrationPageState
                 style: const TextStyle(fontSize: _inputFs),
                 keyboardType: TextInputType.emailAddress,
                 decoration: _dec('Email', 'Enter Email'),
-                validator: _emailValidator,
+                validator: _accountEmailValidator,
+                onChanged: _onEmailChanged,
               ),
             ),
+            _buildEmailAvailabilityStatus(),
           ],
         ),
       ),
@@ -3551,9 +3743,11 @@ class _ClientArtistRegistrationPageState
                 style: const TextStyle(fontSize: _inputFs),
                 keyboardType: TextInputType.emailAddress,
                 decoration: _dec('Email', 'Enter Email'),
-                validator: _emailValidator,
+                validator: _accountEmailValidator,
+                onChanged: _onEmailChanged,
               ),
             ),
+            _buildEmailAvailabilityStatus(),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Password'),
@@ -3578,16 +3772,10 @@ class _ClientArtistRegistrationPageState
                   ),
                 ),
                 validator: _passwordValidator,
+                onChanged: _onPasswordChanged,
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Password must be 8+ characters and include uppercase, lowercase, number, and symbol.',
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.blackCat.withValues(alpha: 0.55),
-              ),
-            ),
+            _buildPasswordStatus(),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Confirm Password'),
@@ -3617,8 +3805,10 @@ class _ClientArtistRegistrationPageState
                 ),
               ),
               validator: _confirmPasswordValidator,
+              onChanged: _onConfirmPasswordChanged,
               ),
             ),
+            _buildConfirmPasswordStatus(),
           ],
         ),
       ),
@@ -3684,7 +3874,7 @@ class _ClientArtistRegistrationPageState
                           style: const TextStyle(fontSize: 12),
                         ),
                         onTap: () =>
-                            _applyStreetSuggestion(_streetSuggestions[i]),
+                            _selectStreetSuggestion(_streetSuggestions[i]),
                       ),
                     ),
                   );
@@ -5267,6 +5457,18 @@ class _ClientArtistRegistrationPageState
       _validationTriggeredStep = null;
     });
     _announceStep(_registrationStep);
+    _scrollRegistrationToTop();
+  }
+
+  /// Advancing/going back a step swaps which fields render within the same
+  /// single scrollable, so without this the new step opens at whatever
+  /// scroll offset the Next/Back button happened to be at (often the
+  /// bottom), instead of showing the step from its top.
+  void _scrollRegistrationToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_registrationScrollController.hasClients) return;
+      _registrationScrollController.jumpTo(0);
+    });
   }
 
   Widget _wizardNavButtons() {
@@ -5295,6 +5497,7 @@ class _ClientArtistRegistrationPageState
                     _validationTriggeredStep = null;
                   });
                   _announceStep(_registrationStep);
+                  _scrollRegistrationToTop();
                 },
                 child: const Text(
                   'Back',
@@ -5421,6 +5624,7 @@ class _ClientArtistRegistrationPageState
       ),
       child: Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Client artist registration',
         child: Scaffold(
@@ -5446,6 +5650,7 @@ class _ClientArtistRegistrationPageState
                   _registrationProgressTabs(),
                   Expanded(
                     child: SingleChildScrollView(
+                      controller: _registrationScrollController,
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Column(
                         children: _currentRegistrationStepWidgets(),
@@ -5710,6 +5915,7 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Select measurement coin',
       child: Scaffold(

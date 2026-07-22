@@ -920,6 +920,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Brand orders',
       child: Scaffold(

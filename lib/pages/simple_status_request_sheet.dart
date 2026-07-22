@@ -60,6 +60,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Request status',
       child: MediaQuery(

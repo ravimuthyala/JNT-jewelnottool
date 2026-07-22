@@ -506,6 +506,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Checkout',
       child: Scaffold(

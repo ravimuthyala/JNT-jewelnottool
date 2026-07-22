@@ -1909,6 +1909,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       ),
       child: Semantics(
         scopesRoute: true,
+        explicitChildNodes: true,
         namesRoute: true,
         label: 'Artist registration',
         child: Scaffold(

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'login_page.dart';
-import '../services/startup_frame_gate.dart';
 
 // -----------------------------------------------------------------------
 // ADA / Section 508 (WCAG 2.1 AA) convention — reference implementation.
@@ -87,7 +86,7 @@ class _HomePageState extends State<HomePage> {
     _precacheHomeAssets();
   }
 
-  Future<void> _precacheHomeAssets() async {
+  void _precacheHomeAssets() {
     final mediaQuery = MediaQuery.maybeOf(context);
     final dpr = mediaQuery?.devicePixelRatio ?? 1.0;
     final size = mediaQuery?.size ?? const Size(1080, 1920);
@@ -105,16 +104,12 @@ class _HomePageState extends State<HomePage> {
       width: safeLogoWidth,
     );
 
-    // Keep native splash only briefly, then continue warming assets in background.
     unawaited(
       Future.wait([
         precacheImage(bgProvider, context),
         precacheImage(logoProvider, context),
       ]),
     );
-
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    StartupFrameGate.allowFirstFrame();
   }
 
   Future<void> _openLoginPopup() async {

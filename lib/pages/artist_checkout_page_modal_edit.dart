@@ -184,6 +184,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
         final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
         return Semantics(
           scopesRoute: true,
+          explicitChildNodes: true,
           namesRoute: true,
           label: 'Edit checkout info',
           child: AnimatedPadding(
@@ -322,6 +323,7 @@ class _ArtistCheckoutPageState extends State<ArtistCheckoutPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Edit checkout info',
       child: Scaffold(

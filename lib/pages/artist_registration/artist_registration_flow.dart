@@ -184,6 +184,20 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       } on AuthException catch (e) {
         final message = e.message.toLowerCase();
         if (!message.contains('already')) rethrow;
+
+        // An email maps to exactly one account. Block cross-role reuse
+        // instead of silently attaching a second role to it. Same-role (or
+        // no role data yet — a prior signup that never finished writing
+        // its row) is a safe repair/resubmit case.
+        final existingRole = await SupabaseAuthService.findExistingRoleForEmail(
+          email,
+        );
+        if (existingRole != null && existingRole != 'artist') {
+          throw const AuthException(
+            SupabaseAuthService.emailAlreadyRegisteredMessage,
+          );
+        }
+
         supabaseUser = await SupabaseAuthService.login(
           email: email,
           password: password,
@@ -270,7 +284,10 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       }
     } on AuthException catch (e) {
       if (!mounted) return;
-      final message = e.message.toLowerCase().contains('already')
+      final lower = e.message.toLowerCase();
+      final message = lower.contains('please use a different email')
+          ? e.message
+          : lower.contains('already')
           ? 'Email already registered. Please sign in.'
           : e.message;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -647,6 +664,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist registration',
       child: Scaffold(

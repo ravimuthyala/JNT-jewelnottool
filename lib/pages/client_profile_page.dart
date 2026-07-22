@@ -435,7 +435,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     await Supabase.instance.client.from(table).upsert({
       'id': uid,
       'email': (user?.email ?? _profile.basic.email).trim().toLowerCase(),
-      'communicationPreferences': preferences.toMap(),
+      // Real column is snake_case on both `client` and `client_artist` —
+      // see lib/constants/profile_table_columns.dart. The camelCase key
+      // this used to send doesn't exist as a column on either table, so
+      // PostgREST rejected the whole upsert (PGRST204) and nothing saved.
+      'communication_preferences': preferences.toMap(),
       'client': {'communicationPreferences': preferences.toMap()},
       'updated_at': DateTime.now().toIso8601String(),
     });
@@ -507,8 +511,15 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
     final table = await _targetTable();
     final profileImage = next.profileImageUrl.trim();
+    // `client_artist` carries legacy top-level camelCase duplicate columns
+    // that `client` does not (see lib/constants/profile_table_columns.dart).
+    // Sending them unconditionally made every save fail on `client` with a
+    // PostgREST "could not find column" error, since none of
+    // profileImageUrl/photoUrl/avatarUrl/panel_displayName/
+    // panel_profileImageUrl exist there.
+    final isClientArtist = table == 'client_artist';
 
-    await Supabase.instance.client.from(table).upsert({
+    final row = <String, dynamic>{
       'id': uid,
       'email': next.email.trim().toLowerCase(),
       'profile': {
@@ -536,14 +547,20 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           'avatarUrl': profileImage,
         },
       },
-      'panel_displayName': next.name.trim(),
+      'panel_display_name': next.name.trim(),
       'panel_phone': next.phone.trim(),
-      'panel_profileImageUrl': profileImage,
-      'profileImageUrl': profileImage,
-      'photoUrl': profileImage,
-      'avatarUrl': profileImage,
       'updated_at': DateTime.now().toIso8601String(),
-    });
+    };
+
+    if (isClientArtist) {
+      row['panel_displayName'] = next.name.trim();
+      row['panel_profileImageUrl'] = profileImage;
+      row['profileImageUrl'] = profileImage;
+      row['photoUrl'] = profileImage;
+      row['avatarUrl'] = profileImage;
+    }
+
+    await Supabase.instance.client.from(table).upsert(row);
 
     final profileChanged =
         previous.name.trim() != next.name.trim() ||
@@ -671,7 +688,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     await Supabase.instance.client.from(table).upsert({
       'id': uid,
       'email': (user?.email ?? _profile.basic.email).trim().toLowerCase(),
-      'nailPreferences': payload,
+      // Real column is snake_case on both `client` and `client_artist` —
+      // see lib/constants/profile_table_columns.dart. The camelCase key
+      // this used to send doesn't exist as a column on either table, so
+      // PostgREST rejected the whole upsert (PGRST204) and nothing saved.
+      'nail_preferences': payload,
       'client': {'nailPreferences': payload},
       'updated_at': DateTime.now().toIso8601String(),
     });
@@ -999,6 +1020,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               child: Image.memory(
                 bytes,
                 fit: BoxFit.cover,
+                cacheWidth: (avatarSize * 3).round(),
+                cacheHeight: (avatarSize * 3).round(),
                 errorBuilder: (_, _, _) => _avatarLetter(fallbackLetter),
               ),
             ),
@@ -1016,6 +1039,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           child: Image.network(
             src,
             fit: BoxFit.cover,
+            cacheWidth: (avatarSize * 3).round(),
+            cacheHeight: (avatarSize * 3).round(),
             errorBuilder: (_, _, _) => _avatarLetter(fallbackLetter),
           ),
         ),

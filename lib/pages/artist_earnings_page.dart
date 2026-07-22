@@ -618,6 +618,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     final summary = _summary;
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist earnings',
       child: Scaffold(

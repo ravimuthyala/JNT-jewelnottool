@@ -1278,6 +1278,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist history',
       child: Scaffold(

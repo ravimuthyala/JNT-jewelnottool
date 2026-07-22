@@ -149,6 +149,7 @@ class _ArtistOrdersPageState extends State<ArtistOrdersPage> {
   Widget build(BuildContext context) {
     return Semantics(
       scopesRoute: true,
+      explicitChildNodes: true,
       namesRoute: true,
       label: 'Artist orders',
       child: Scaffold(

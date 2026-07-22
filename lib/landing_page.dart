@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:jnt_app_0120/theme/app_colors.dart';
+import 'package:jewelnottool/theme/app_colors.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
