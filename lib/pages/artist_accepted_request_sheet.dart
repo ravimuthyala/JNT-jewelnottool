@@ -523,344 +523,350 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       namesRoute: true,
       label: 'Accepted request details',
       child: Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        constraints: BoxConstraints(maxHeight: maxH),
-        decoration: const BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              height: 5,
-              width: 54,
-              decoration: BoxDecoration(
-                color: AppColors.blackCat.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.zero,
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxH),
+          decoration: const BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                height: 5,
+                width: 54,
+                decoration: BoxDecoration(
+                  color: AppColors.blackCat.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.zero,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 10),
 
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                children: [
-                  _topHeader(widget.request, shipDays: widget.shipDays),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    _topHeader(widget.request, shipDays: widget.shipDays),
 
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  // ✅ Accepted / Designing card
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 22,
-                        width: 22,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4CBF6A),
-                          shape: BoxShape.circle,
+                    // ✅ Accepted / Designing card
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 22,
+                          width: 22,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF4CBF6A),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            size: 14,
+                            color: Colors.white,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.check,
-                          size: 14,
-                          color: Colors.white,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.78,
+                                ),
+                                fontWeight: FontWeight.w600,
+                                height: 1.25,
+                                fontSize: 13.5,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: _isDesigningMode
+                                      ? 'Designing!\n'
+                                      : 'Accepted!\n',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: _isDesigningMode
+                                      ? 'You are now designing '
+                                      : 'You accepted ',
+                                ),
+                                TextSpan(
+                                  text:
+                                      "${widget.request.clientName}'s request",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: _isDesigningMode
+                                      ? '. Continue designing the set, upload photos, and mark as completed.'
+                                      : '. Once the set is ready, upload photos and mark as completed.',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (!_isDesigningMode) _paymentSectionBox(widget.request),
+                    if (!_isDesigningMode) ...[const SizedBox(height: 10)],
+                    if (_showClientDeclineInfo) ...[
+                      _clientDeclineReasonSection(widget.request),
+                      const SizedBox(height: 10),
+                    ],
+
+                    _descriptionAndCompanyBioSection(widget.request),
+                    const SizedBox(height: 12),
+                    if (_isBrandRequest(widget.request)) ...[
+                      _acceptedClientDetailsSection(widget.request),
+                      const SizedBox(height: 10),
+                    ],
+                    _measurementSection(),
+                    if (_isDesigningMode) ...[
+                      const SizedBox(height: 12),
+                      _finalAcceptedAmountBox(widget.request),
+                    ],
+                    const SizedBox(height: 12),
+                    _softBox(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionTitle('Uploaded Photos (Client)'),
+                          const SizedBox(height: 10),
+                          if (clientModalPhotos.isEmpty)
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.image_outlined,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'No images uploaded',
+                                  style: TextStyle(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.65,
+                                    ),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            _clientPhotosGrid(clientModalPhotos),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    if (_isDesigningMode) ...[
+                      _softBox(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _sectionTitle('Upload Completed Set (Artist)'),
+                            const SizedBox(height: 10),
+                            Center(
+                              child: SizedBox(
+                                height: 50,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.blackCat
+                                        .withValues(alpha: 0.78),
+                                    foregroundColor: AppColors.snow,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                    ),
+                                  ),
+                                  onPressed: () => _openPickOptions(),
+                                  icon: const Icon(Icons.add_a_photo_outlined),
+                                  label: const Text(
+                                    'Upload',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Allowed formats: JPG, JPEG, PNG. Max file size: < 2 MB each. Maximum 10 photos.',
+                              style: TextStyle(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.55,
+                                ),
+                                fontWeight: FontWeight.w500,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                            if (_artistPhotos.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              _artistPhotosGrid(),
+                            ],
+                            if (_artistPhotos.isEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                'Add photos of the finished nails before marking as completed.',
+                                style: TextStyle(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.60,
+                                  ),
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                  ],
+                ),
+              ),
+
+              // Bottom actions
+              if (_isDesigningMode)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 132,
+                        height: 54,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat.withValues(
+                              alpha: 0.16,
+                            ),
+                            foregroundColor: AppColors.blackCat,
+                            side: BorderSide(
+                              color: AppColors.blackCat.withValues(alpha: 0.30),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: () {
+                            if (widget.request.clientEmail.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Chat unavailable until both client and artist are assigned.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            // Brand-submitted requests always talk to the JNT
+                            // AI Assistant, never directly with the artist.
+                            if (_isBrandRequest(widget.request)) {
+                              showRequestChatModal(
+                                context: context,
+                                requestId: widget.request.id,
+                                conversationSuffix: 'ai_support',
+                                clientEmail: widget.request.clientEmail,
+                                artistEmail: 'ai.chatbot@jnt.com',
+                                clientName: widget.request.clientName,
+                                artistName: 'JNT AI Assistant',
+                              );
+                              return;
+                            }
+
+                            final artistEmail =
+                                (widget.request.acceptedByArtistEmail
+                                            .trim()
+                                            .isNotEmpty
+                                        ? widget.request.acceptedByArtistEmail
+                                        : _currentUserEmail())
+                                    .trim()
+                                    .toLowerCase();
+                            if (artistEmail.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Chat unavailable until both client and artist are assigned.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            showRequestChatModal(
+                              context: context,
+                              requestId: widget.request.id,
+                              clientEmail: widget.request.clientEmail,
+                              artistEmail: artistEmail,
+                              clientName: widget.request.clientName,
+                              artistName: _currentUserDisplayName(),
+                            );
+                          },
+                          child: const Text(
+                            'Chat',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              fontFamily: 'Arial',
+                              color: AppColors.snow,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.78),
-                              fontWeight: FontWeight.w600,
-                              height: 1.25,
-                              fontSize: 13.5,
+                      SizedBox(
+                        width: 166,
+                        height: 54,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
                             ),
-                            children: [
-                              TextSpan(
-                                text: _isDesigningMode
-                                    ? 'Designing!\n'
-                                    : 'Accepted!\n',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              TextSpan(
-                                text: _isDesigningMode
-                                    ? 'You are now designing '
-                                    : 'You accepted ',
-                              ),
-                              TextSpan(
-                                text: "${widget.request.clientName}'s request",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              TextSpan(
-                                text: _isDesigningMode
-                                    ? '. Continue designing the set, upload photos, and mark as completed.'
-                                    : '. Once the set is ready, upload photos and mark as completed.',
-                              ),
-                            ],
+                            elevation: 0,
                           ),
+                          onPressed:
+                              (_markingCompleted || _artistPhotos.isEmpty)
+                              ? null
+                              : _handleMarkCompleted,
+                          child: _markingCompleted
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'Mark as Completed',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 12,
+                                    fontFamily: 'Arial',
+                                  ),
+                                ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  if (!_isDesigningMode) _paymentSectionBox(widget.request),
-                  if (!_isDesigningMode) ...[const SizedBox(height: 10)],
-                  if (_showClientDeclineInfo) ...[
-                    _clientDeclineReasonSection(widget.request),
-                    const SizedBox(height: 10),
-                  ],
-
-                  _descriptionAndCompanyBioSection(widget.request),
-                  const SizedBox(height: 12),
-                  if (_isBrandRequest(widget.request)) ...[
-                    _acceptedClientDetailsSection(widget.request),
-                    const SizedBox(height: 10),
-                  ],
-                  _measurementSection(),
-                  if (_isDesigningMode) ...[
-                    const SizedBox(height: 12),
-                    _finalAcceptedAmountBox(widget.request),
-                  ],
-                  const SizedBox(height: 12),
-                  _softBox(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _sectionTitle('Uploaded Photos (Client)'),
-                        const SizedBox(height: 10),
-                        if (clientModalPhotos.isEmpty)
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.image_outlined,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.45,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'No images uploaded',
-                                style: TextStyle(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.65,
-                                  ),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          )
-                        else
-                          _clientPhotosGrid(clientModalPhotos),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  if (_isDesigningMode) ...[
-                    _softBox(
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _sectionTitle('Upload Completed Set (Artist)'),
-                          const SizedBox(height: 10),
-                          Center(
-                            child: SizedBox(
-                              height: 50,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.blackCat
-                                      .withValues(alpha: 0.78),
-                                  foregroundColor: AppColors.snow,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.zero,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 18,
-                                  ),
-                                ),
-                                onPressed: () => _openPickOptions(),
-                                icon: const Icon(Icons.add_a_photo_outlined),
-                                label: const Text(
-                                  'Upload',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Allowed formats: JPG, JPEG, PNG. Max file size: < 2 MB each. Maximum 10 photos.',
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.55),
-                              fontWeight: FontWeight.w500,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          if (_artistPhotos.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _artistPhotosGrid(),
-                          ],
-                          if (_artistPhotos.isEmpty) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              'Add photos of the finished nails before marking as completed.',
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.60,
-                                ),
-                                fontWeight: FontWeight.w400,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-                ],
-              ),
-            ),
-
-            // Bottom actions
-            if (_isDesigningMode)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 132,
-                      height: 54,
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat.withValues(
-                            alpha: 0.16,
-                          ),
-                          foregroundColor: AppColors.blackCat,
-                          side: BorderSide(
-                            color: AppColors.blackCat.withValues(alpha: 0.30),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        onPressed: () {
-                          if (widget.request.clientEmail.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Chat unavailable until both client and artist are assigned.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          // Brand-submitted requests always talk to the JNT
-                          // AI Assistant, never directly with the artist.
-                          if (_isBrandRequest(widget.request)) {
-                            showRequestChatModal(
-                              context: context,
-                              requestId: widget.request.id,
-                              conversationSuffix: 'ai_support',
-                              clientEmail: widget.request.clientEmail,
-                              artistEmail: 'ai.chatbot@jnt.com',
-                              clientName: widget.request.clientName,
-                              artistName: 'JNT AI Assistant',
-                            );
-                            return;
-                          }
-
-                          final artistEmail =
-                              (widget.request.acceptedByArtistEmail
-                                          .trim()
-                                          .isNotEmpty
-                                      ? widget.request.acceptedByArtistEmail
-                                      : _currentUserEmail())
-                                  .trim()
-                                  .toLowerCase();
-                          if (artistEmail.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Chat unavailable until both client and artist are assigned.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-                          showRequestChatModal(
-                            context: context,
-                            requestId: widget.request.id,
-                            clientEmail: widget.request.clientEmail,
-                            artistEmail: artistEmail,
-                            clientName: widget.request.clientName,
-                            artistName: _currentUserDisplayName(),
-                          );
-                        },
-                        child: const Text(
-                          'Chat',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                            fontFamily: 'Arial',
-                            color: AppColors.snow,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      width: 166,
-                      height: 54,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat,
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: (_markingCompleted || _artistPhotos.isEmpty)
-                            ? null
-                            : _handleMarkCompleted,
-                        child: _markingCompleted
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                'Mark as Completed',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w400,
-                                  fontSize: 12,
-                                  fontFamily: 'Arial',
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1915,36 +1921,37 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              k,
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.65),
-                fontWeight: FontWeight.w600,
-                fontSize: 11.5,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    k,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.fade,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+                if (nfcRequested) ...[
+                  const SizedBox(width: 6),
+                  _nfcDimensionChip(),
+                ],
+              ],
             ),
           ),
-          SizedBox(
-            width: 34,
-            child: nfcRequested
-                ? Center(child: _nfcDimensionChip())
-                : const SizedBox.shrink(),
-          ),
-          Expanded(
-            child: Text(
-              formatMm(v),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 11.5,
-              ),
-            ),
+          const SizedBox(width: 10),
+          Text(
+            formatMm(v),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
           ),
         ],
       ),
@@ -1956,25 +1963,23 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     NailDimensionsV2 d, {
     Map<String, bool> nfc = const <String, bool>{},
   }) {
-    return _softBox(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           ),
-          const SizedBox(height: 10),
-          _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
-          _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
-          _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
-          _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
-          _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
+        _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
+        _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
+        _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
+        _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
+      ],
     );
   }
 
@@ -2209,25 +2214,25 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       future: _loadSubmittedMeasurementClient(),
       builder: (context, snapshot) {
         final client = snapshot.data ?? _requestMeasurementFallback();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Center(
-                  child: Text(
-                    'Nail Dimensions',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
-                    ),
+        return _softBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Center(
+                child: Text(
+                  'Nail Dimensions',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontFamily: 'ArialBold',
+                    color: AppColors.blackCat,
                   ),
                 ),
-                const SizedBox(height: 10),
-                Row(
+              ),
+              const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
                       child: _handCardCentered(
@@ -2236,6 +2241,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         nfc: client.leftNfc,
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    Container(width: 1, color: AppColors.blackCatBorderLight),
                     const SizedBox(width: 10),
                     Expanded(
                       child: _handCardCentered(
@@ -2246,89 +2253,87 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _softBox(
-                        Row(
-                          children: [
-                            const Text(
-                              'Shape',
-                              style: TextStyle(
-                                color: AppColors.blackCat,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                client.nailShape.trim().isEmpty
-                                    ? '-'
-                                    : client.nailShape,
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  color: AppColors.blackCat,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                  fontFamily: 'ArialBold',
-                                ),
-                              ),
-                            ),
-                          ],
+              ),
+              const SizedBox(height: 10),
+              Container(height: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Shape',
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                          ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            client.nailShape.trim().isEmpty
+                                ? '-'
+                                : client.nailShape,
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              color: AppColors.blackCat,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              fontFamily: 'ArialBold',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: SizedBox(
+                      height: 20,
+                      child: VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: AppColors.blackCatBorderLight,
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: SizedBox(
-                        height: 42,
-                        child: VerticalDivider(
-                          width: 1,
-                          thickness: 1,
-                          color: AppColors.blackCatBorderLight,
+                  ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Length',
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                          ),
                         ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _softBox(
-                        Row(
-                          children: [
-                            const Text(
-                              'Length',
-                              style: TextStyle(
-                                color: AppColors.blackCat,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                                fontFamily: 'Arial',
-                              ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _lengthLabel(client.nailLength).trim().isEmpty
+                                ? '-'
+                                : _lengthLabel(client.nailLength),
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              color: AppColors.blackCat,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              fontFamily: 'ArialBold',
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _lengthLabel(client.nailLength).trim().isEmpty
-                                    ? '-'
-                                    : _lengthLabel(client.nailLength),
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  color: AppColors.blackCat,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                  fontFamily: 'ArialBold',
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -3000,9 +3005,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   }
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
-    final requestType = r.isDirectRequest
-        ? 'Direct'
-        : 'Standard';
+    final requestType = r.isDirectRequest ? 'Direct' : 'Standard';
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group'
         : 'Single';
@@ -3069,6 +3072,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       },
     );
   }
+
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -3554,43 +3558,43 @@ class _CompactGroupClientMeasurementsTabsState
                 label: name,
                 child: ExcludeSemantics(
                   child: InkWell(
-                borderRadius: BorderRadius.zero,
-                onTap: () => setState(() => _selectedIndex = index),
-                child: Container(
-                  constraints: const BoxConstraints(minWidth: 68),
-                  padding: const EdgeInsets.fromLTRB(6, 0, 6, 11),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: selected
-                            ? AppColors.alabaster
-                            : Colors.transparent,
-                        width: 3,
+                    borderRadius: BorderRadius.zero,
+                    onTap: () => setState(() => _selectedIndex = index),
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 68),
+                      padding: const EdgeInsets.fromLTRB(6, 0, 6, 11),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: selected
+                                ? AppColors.alabaster
+                                : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  child: SizedBox(
-                    height: 38,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.visible,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                          color: AppColors.blackCat.withValues(
-                            alpha: selected ? 1 : 0.78,
+                      child: SizedBox(
+                        height: 38,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.visible,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: selected
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                              color: AppColors.blackCat.withValues(
+                                alpha: selected ? 1 : 0.78,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
                   ),
                 ),
               ),
@@ -3695,4 +3699,3 @@ class _CompactGroupClientMeasurementsTabsState
 }
 
 enum _AcceptedSheetMode { accepted, designing }
-

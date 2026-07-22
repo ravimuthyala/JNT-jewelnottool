@@ -1494,47 +1494,37 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 40,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.60),
-                fontWeight: FontWeight.w600,
-                fontSize: 13.5,
-              ),
-            ),
-          ),
           Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (nfcRequested) ...[
-                    _nfcDimensionChip(),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    formatMm(raw),
-                    textAlign: TextAlign.right,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
+                    softWrap: false,
+                    overflow: TextOverflow.fade,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
+                      fontWeight: FontWeight.w600,
                       fontSize: 13.5,
                     ),
                   ),
+                ),
+                if (nfcRequested) ...[
+                  const SizedBox(width: 6),
+                  _nfcDimensionChip(),
                 ],
-              ),
+              ],
             ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            formatMm(raw),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
           ),
         ],
       ),

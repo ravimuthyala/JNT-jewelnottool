@@ -415,46 +415,46 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       namesRoute: true,
       label: 'Completed request details',
       child: MediaQuery(
-      data: sheetMediaQuery,
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        padding: EdgeInsets.only(bottom: bottomInset),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            constraints: BoxConstraints(maxHeight: maxH),
-            decoration: const BoxDecoration(
-              color: AppColors.snow,
-              borderRadius: BorderRadius.zero,
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  height: 5,
-                  width: 54,
-                  decoration: BoxDecoration(
-                    color: AppColors.blackCat.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.zero,
+        data: sheetMediaQuery,
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              constraints: BoxConstraints(maxHeight: maxH),
+              decoration: const BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    height: 5,
+                    width: 54,
+                    decoration: BoxDecoration(
+                      color: AppColors.blackCat.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.zero,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: IndexedStack(
-                    index: _completedTabIndex,
-                    children: [
-                      _completedDetailsTab(context, bottomInset),
-                      _completedPhotosTab(context, bottomInset),
-                      _completedShippingTab(context, bottomInset),
-                    ],
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _completedTabIndex,
+                      children: [
+                        _completedDetailsTab(context, bottomInset),
+                        _completedPhotosTab(context, bottomInset),
+                        _completedShippingTab(context, bottomInset),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -517,38 +517,36 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         button: true,
         selected: selected,
         child: ExcludeSemantics(
-        child: InkWell(
-        borderRadius: BorderRadius.zero,
-        onTap: () => setState(() => _completedTabIndex = index),
-        child: Container(
-          height: 44,
-          decoration: BoxDecoration(
-            color: AppColors.snow,
+          child: InkWell(
             borderRadius: BorderRadius.zero,
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? AppColors.blackCat : Colors.transparent,
-                width: 3,
+            onTap: () => setState(() => _completedTabIndex = index),
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border(
+                  bottom: BorderSide(
+                    color: selected ? AppColors.blackCat : Colors.transparent,
+                    width: 3,
+                  ),
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13.5,
+                  color: AppColors.blackCat,
+                ),
               ),
             ),
           ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              fontSize: 13.5,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ),
-        ),
         ),
       ),
     );
   }
-
-
 
   Widget _topHeroCentered(
     BuildContext context,
@@ -688,16 +686,16 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             onTap: onClose,
             child: ExcludeSemantics(
               child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: onClose,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Icon(
-                Icons.close_rounded,
-                size: 24,
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-              ),
-            ),
+                borderRadius: BorderRadius.zero,
+                onTap: onClose,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 24,
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1009,9 +1007,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
-    final requestType = r.isDirectRequest
-        ? 'Direct'
-        : 'Standard';
+    final requestType = r.isDirectRequest ? 'Direct' : 'Standard';
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group'
         : 'Single';
@@ -1121,24 +1117,22 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     NailDimensionsV2 d, {
     Map<String, bool> nfc = const <String, bool>{},
   }) {
-    return _softBox(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 10),
-          _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
-          _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
-          _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
-          _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
-          _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        _dimRow('Thumb', d.thumb, nfcRequested: nfc['thumb'] == true),
+        _dimRow('Index', d.index, nfcRequested: nfc['index'] == true),
+        _dimRow('Middle', d.middle, nfcRequested: nfc['middle'] == true),
+        _dimRow('Ring', d.ring, nfcRequested: nfc['ring'] == true),
+        _dimRow('Pinky', d.pinky, nfcRequested: nfc['pinky'] == true),
+      ],
     );
   }
 
@@ -1153,33 +1147,37 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              k,
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.65),
-                fontWeight: FontWeight.w400,
-                fontSize: 14,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    k,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.fade,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (nfcRequested) ...[
+                  const SizedBox(width: 6),
+                  _nfcDimensionChip(),
+                ],
+              ],
             ),
           ),
-          SizedBox(
-            width: 34,
-            child: nfcRequested
-                ? Center(child: _nfcDimensionChip())
-                : const SizedBox.shrink(),
-          ),
-          Expanded(
-            child: Text(
-              formatMm(v),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
+          const SizedBox(width: 10),
+          Text(
+            formatMm(v),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
       ),
@@ -1357,128 +1355,122 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       builder: (context, snapshot) {
         final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const Center(
+              child: Text(
+                'Nail Dimensions',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  fontFamily: 'ArialBold',
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _handCardCentered(
+                      'Left Hand',
+                      widget.request.leftHand,
+                      nfc: nfc.main.left,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(width: 1, color: AppColors.blackCatBorderLight),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _handCardCentered(
+                      'Right Hand',
+                      widget.request.rightHand,
+                      nfc: nfc.main.right,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(height: 1, color: AppColors.blackCatBorderLight),
+            const SizedBox(height: 10),
+            Row(
               children: [
-                const Center(
-                  child: Text(
-                    'Nail Dimensions',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      fontFamily: 'ArialBold',
-                      color: AppColors.blackCat,
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Shape',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          fontFamily: 'Arial',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.request.nailShape.trim().isEmpty
+                              ? '-'
+                              : widget.request.nailShape,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            fontFamily: 'ArialBold',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: SizedBox(
+                    height: 20,
+                    child: VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: AppColors.blackCatBorderLight,
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _handCardCentered(
-                        'Left Hand',
-                        widget.request.leftHand,
-                        nfc: nfc.main.left,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _handCardCentered(
-                        'Right Hand',
-                        widget.request.rightHand,
-                        nfc: nfc.main.right,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _softBox(
-                        Row(
-                          children: [
-                            const Text(
-                              'Shape',
-                              style: TextStyle(
-                                color: AppColors.blackCat,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                widget.request.nailShape.trim().isEmpty
-                                    ? '-'
-                                    : widget.request.nailShape,
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  color: AppColors.blackCat,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                  fontFamily: 'ArialBold',
-                                ),
-                              ),
-                            ),
-                          ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Length',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          fontFamily: 'Arial',
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: SizedBox(
-                        height: 42,
-                        child: VerticalDivider(
-                          width: 1,
-                          thickness: 1,
-                          color: AppColors.blackCatBorderLight,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _lengthLabel(widget.request.nailLength).trim().isEmpty
+                              ? '-'
+                              : _lengthLabel(widget.request.nailLength),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            fontFamily: 'ArialBold',
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: _softBox(
-                        Row(
-                          children: [
-                            const Text(
-                              'Length',
-                              style: TextStyle(
-                                color: AppColors.blackCat,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _lengthLabel(
-                                      widget.request.nailLength,
-                                    ).trim().isEmpty
-                                    ? '-'
-                                    : _lengthLabel(widget.request.nailLength),
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  color: AppColors.blackCat,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                  fontFamily: 'ArialBold',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
           ],
         );
       },
@@ -1975,11 +1967,11 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               onTap: () => _openImagePreview(path),
               child: ExcludeSemantics(
                 child: InkWell(
-              onTap: () => _openImagePreview(path),
-              child: ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: _imageForPath(path),
-              ),
+                  onTap: () => _openImagePreview(path),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: _imageForPath(path),
+                  ),
                 ),
               ),
             ),
@@ -2118,4 +2110,3 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     return len.trim();
   }
 }
-

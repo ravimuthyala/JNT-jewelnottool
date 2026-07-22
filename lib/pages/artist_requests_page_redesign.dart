@@ -246,16 +246,13 @@ class DocumentReference<T extends Map<String, dynamic>> {
       existing: merge ? await _fetchOne() : null,
     );
     encoded['id'] = id;
-    try {
-      await Supabase.instance.client
-          .from(table)
-          .upsert(encoded, onConflict: 'id');
-    } catch (_) {
-      final dataPayload = <String, dynamic>{'id': id, 'data': encoded};
-      await Supabase.instance.client
-          .from(table)
-          .upsert(dataPayload, onConflict: 'id');
-    }
+    // Top-level request tables (company_custom_requests,
+    // client_custom_requests) store real per-field columns, not a
+    // Firestore-style `data` blob -- unlike their *_details tables. Do not
+    // fall back to a `data:` wrapped upsert here: that column does not
+    // exist on these tables and previously masked the real error with a
+    // confusing PGRST204 "Could not find the 'data' column" failure.
+    await Supabase.instance.client.from(table).upsert(encoded, onConflict: 'id');
   }
 
   Future<void> _writeDetails(Map<String, dynamic> values) async {
@@ -263,12 +260,16 @@ class DocumentReference<T extends Map<String, dynamic>> {
     final existing = await _fetchOne();
     final encoded = await _prepareValues(values, existing: existing);
 
-    // Supabase detail tables do not all share the same schema.
-    // In this project, client_custom_requests_details does not have a
-    // `payload` column, so never send `payload` to that table.
-    // This keeps accept/decline writes from failing with PGRST204.
-    final isClientDetailsTable = table == 'client_custom_requests_details';
-    if (isClientDetailsTable) {
+    // Supabase detail tables do not all share the same schema. Both
+    // client_custom_requests_details and company_custom_requests_details
+    // use the same {id, request_id, detail_key, data, updated_at} shape --
+    // neither has `payload`, `doc_id`, or `details` columns (verified live).
+    // Sending those to either table fails with PGRST204 (column not found
+    // in schema cache).
+    final isFirestoreCompatDetailsTable =
+        table == 'client_custom_requests_details' ||
+        table == 'company_custom_requests_details';
+    if (isFirestoreCompatDetailsTable) {
       await Supabase.instance.client.from(table).upsert(<String, dynamic>{
         'id': '$parentId:$id',
         'request_id': parentId,
@@ -283,21 +284,17 @@ class DocumentReference<T extends Map<String, dynamic>> {
       <String, dynamic>{
         'request_id': parentId,
         'doc_id': id,
-        if (!isClientDetailsTable) 'payload': encoded,
+        'payload': encoded,
         'data': encoded,
         ...encoded,
       },
       <String, dynamic>{
         'request_id': parentId,
-        if (!isClientDetailsTable) 'payload': encoded,
+        'payload': encoded,
         'data': encoded,
         ...encoded,
       },
-      <String, dynamic>{
-        'id': parentId,
-        if (!isClientDetailsTable) 'payload': encoded,
-        'data': encoded,
-      },
+      <String, dynamic>{'id': parentId, 'payload': encoded, 'data': encoded},
       <String, dynamic>{'id': parentId, 'details': encoded},
     ];
 

@@ -135,12 +135,12 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final path = _normalizeImagePath(raw);
 
     Widget fallback() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.06),
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-          ),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.06),
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: AppColors.blackCat.withValues(alpha: 0.35),
+      ),
+    );
 
     if (path.isEmpty) return fallback();
 
@@ -159,7 +159,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final isNetwork = path.startsWith('http://') || path.startsWith('https://');
     final isAsset = path.startsWith('assets/');
     final isFileUri = path.startsWith('file://');
-    final isFilePath = !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
+    final isFilePath =
+        !kIsWeb && (path.startsWith('/') || path.contains(':\\'));
 
     if (isNetwork) {
       return Image.network(
@@ -246,104 +247,104 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       namesRoute: true,
       label: 'Delivered request details',
       child: MediaQuery(
-      data: sheetMediaQuery,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Stack(
-          children: [
-            Container(
-              constraints: BoxConstraints(maxHeight: maxH),
-              decoration: const BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-              ),
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  _dragHandle(),
-                  _topHero(context),
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      children: [
-                        _infoChips(),
-                        const SizedBox(height: 14),
-                        _deliveredBanner(),
-                        const SizedBox(height: 18),
-                        _tabBar(),
-                        const SizedBox(height: 14),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          child: KeyedSubtree(
-                            key: ValueKey<int>(_selectedTab),
-                            child: _selectedTab == 0
-                                ? _detailsTab()
-                                : _selectedTab == 1
-                                ? _photosTab()
-                                : _deliveredTab(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-                    child: Center(
-                      child: SizedBox(
-                        height: 52,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
+        data: sheetMediaQuery,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Stack(
+            children: [
+              Container(
+                constraints: BoxConstraints(maxHeight: maxH),
+                decoration: const BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    _dragHandle(),
+                    _topHero(context),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        children: [
+                          _infoChips(),
+                          const SizedBox(height: 14),
+                          _deliveredBanner(),
+                          const SizedBox(height: 18),
+                          _tabBar(),
+                          const SizedBox(height: 14),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: KeyedSubtree(
+                              key: ValueKey<int>(_selectedTab),
+                              child: _selectedTab == 0
+                                  ? _detailsTab()
+                                  : _selectedTab == 1
+                                  ? _photosTab()
+                                  : _deliveredTab(),
                             ),
                           ),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 18),
-                            child: Text(
-                              'Close',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                          const SizedBox(height: 12),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+                      child: Center(
+                        child: SizedBox(
+                          height: 52,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 18),
+                              child: Text(
+                                'Close',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Positioned(
-              right: 6,
-              top: 6,
-              child: IconButton(
-                tooltip: 'Close',
-                icon: const Icon(Icons.close_rounded, size: 30),
-                color: AppColors.blackCat.withValues(alpha: 0.72),
-                onPressed: () => Navigator.pop(context),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: IconButton(
+                  tooltip: 'Close',
+                  icon: const Icon(Icons.close_rounded, size: 30),
+                  color: AppColors.blackCat.withValues(alpha: 0.72),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
 
   Widget _dragHandle() => Container(
-        height: 5,
-        width: 54,
-        decoration: BoxDecoration(
-          color: AppColors.blackCat.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.zero,
-        ),
-      );
+    height: 5,
+    width: 54,
+    decoration: BoxDecoration(
+      color: AppColors.blackCat.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.zero,
+    ),
+  );
 
   Widget _topHero(BuildContext context) {
     final isBrandRequest = _isBrandRequest(request);
@@ -411,9 +412,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _requestTypeRow() {
-    final requestLabel = request.isDirectRequest
-        ? 'Direct'
-        : 'Standard';
+    final requestLabel = request.isDirectRequest ? 'Direct' : 'Standard';
     final orderLabel = request.orderType == RequestOrderTypeV2.group
         ? 'Group'
         : 'Single';
@@ -498,7 +497,11 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                 color: AppColors.blackCatBorderLight,
               ),
               const SizedBox(width: 10),
-              const Icon(Icons.nfc_rounded, size: 15, color: AppColors.blackCat),
+              const Icon(
+                Icons.nfc_rounded,
+                size: 15,
+                color: AppColors.blackCat,
+              ),
               const SizedBox(width: 5),
               const Text(
                 'NFC',
@@ -756,30 +759,30 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         button: true,
         selected: selected,
         child: ExcludeSemantics(
-        child: InkWell(
-        onTap: () => setState(() => _selectedTab = index),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                  color: AppColors.blackCat,
+          child: InkWell(
+            onTap: () => setState(() => _selectedTab = index),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
-              ),
+                Container(
+                  height: 3,
+                  width: double.infinity,
+                  color: selected ? AppColors.blackCat : Colors.transparent,
+                ),
+              ],
             ),
-            Container(
-              height: 3,
-              width: double.infinity,
-              color: selected ? AppColors.blackCat : Colors.transparent,
-            ),
-          ],
-        ),
-        ),
+          ),
         ),
       ),
     );
@@ -998,7 +1001,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   String _safeAcceptedClientAvatarPath(ClientRequestV2 request) {
-    final accepted = _normalizeImagePath(request.acceptedClientProfileImage.trim());
+    final accepted = _normalizeImagePath(
+      request.acceptedClientProfileImage.trim(),
+    );
     if (accepted.isEmpty) return '';
     final blocked = <String>{
       _normalizeImagePath(request.clientProfileImage),
@@ -1093,26 +1098,32 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _dimsCard(
-                    'Left Hand',
-                    request.leftHand,
-                    nfc: nfc.main.left,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _dimsCard(
+                      'Left Hand',
+                      request.leftHand,
+                      nfc: nfc.main.left,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _dimsCard(
-                    'Right Hand',
-                    request.rightHand,
-                    nfc: nfc.main.right,
+                  const SizedBox(width: 12),
+                  Container(width: 1, color: AppColors.blackCatBorderLight),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _dimsCard(
+                      'Right Hand',
+                      request.rightHand,
+                      nfc: nfc.main.right,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(height: 12),
+            Container(height: 1, color: AppColors.blackCatBorderLight),
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1230,36 +1241,37 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
     Widget row(String label, String value, {bool nfcRequested = false}) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                  fontWeight: FontWeight.w400,
-                  fontSize: 14,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.fade,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  if (nfcRequested) ...[const SizedBox(width: 6), _nfcChip()],
+                ],
               ),
             ),
-            SizedBox(
-              width: 34,
-              child: nfcRequested
-                  ? Center(child: _nfcChip())
-                  : const SizedBox.shrink(),
-            ),
-            Expanded(
-              child: Text(
-                withMm(value),
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: AppColors.blackCat,
-                ),
+            const SizedBox(width: 10),
+            Text(
+              withMm(value),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.blackCat,
               ),
             ),
           ],
@@ -1267,29 +1279,26 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       );
     }
 
-    return _borderBox(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppColors.blackCat,
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppColors.blackCat,
             ),
           ),
-          const SizedBox(height: 12),
-          row('Thumb', dims.thumb, nfcRequested: nfc['thumb'] == true),
-          row('Index', dims.index, nfcRequested: nfc['index'] == true),
-          row('Middle', dims.middle, nfcRequested: nfc['middle'] == true),
-          row('Ring', dims.ring, nfcRequested: nfc['ring'] == true),
-          row('Pinky', dims.pinky, nfcRequested: nfc['pinky'] == true),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+        ),
+        const SizedBox(height: 12),
+        row('Thumb', dims.thumb, nfcRequested: nfc['thumb'] == true),
+        row('Index', dims.index, nfcRequested: nfc['index'] == true),
+        row('Middle', dims.middle, nfcRequested: nfc['middle'] == true),
+        row('Ring', dims.ring, nfcRequested: nfc['ring'] == true),
+        row('Pinky', dims.pinky, nfcRequested: nfc['pinky'] == true),
+      ],
     );
   }
 
@@ -1314,32 +1323,29 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
   Widget _metaValueCard(String label, String value) {
     final v = value.trim().isEmpty ? '-' : value.trim();
-    return _borderBox(
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.blackCat,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          Text(
-            v,
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
             style: const TextStyle(
+              color: AppColors.blackCat,
               fontWeight: FontWeight.w700,
               fontSize: 14,
-              color: AppColors.blackCat,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        ),
+        Text(
+          v,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            color: AppColors.blackCat,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 
