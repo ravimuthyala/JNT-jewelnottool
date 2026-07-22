@@ -839,6 +839,7 @@ class SubmittedClientRequestSummary {
     required this.trackingNumber,
     required this.shippedAt,
     required this.deliveredAt,
+    this.nfcRequested = false,
   });
 
   final String id;
@@ -901,6 +902,7 @@ class SubmittedClientRequestSummary {
   final String trackingNumber;
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
+  final bool nfcRequested;
 
   static Future<SubmittedClientRequestSummary> fromDocWithDetails(dynamic doc) async {
     final data = doc.data();
@@ -2099,8 +2101,38 @@ class SubmittedClientRequestSummary {
         ? 'cancelled'
         : rootStatus;
 
+    // brand_custom_request_page.dart writes this flag as 'nfcRequested' /
+    // 'requiresNfcEligibleClient' on the summary/details payload.
+    bool truthyNfc(Object? value) {
+      if (value == null) return false;
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      final text = value.toString().trim().toLowerCase();
+      return text == 'true' || text == '1' || text == 'yes';
+    }
+
+    final nfcRequested = <Object?>[
+      data['nfcRequested'],
+      data['nfc_requested'],
+      data['requiresNfcEligibleClient'],
+      data['requires_nfc_eligible_client'],
+      detailData['nfcRequested'],
+      detailData['nfc_requested'],
+      detailData['requiresNfcEligibleClient'],
+      detailData['requires_nfc_eligible_client'],
+      payloadData['nfcRequested'],
+      payloadData['nfc_requested'],
+      payloadData['requiresNfcEligibleClient'],
+      payloadData['requires_nfc_eligible_client'],
+      requestDetails['nfcRequested'],
+      requestDetails['requiresNfcEligibleClient'],
+      orderDetails['nfcRequested'],
+      orderDetails['requiresNfcEligibleClient'],
+    ].any(truthyNfc);
+
     return SubmittedClientRequestSummary(
       id: data['id']?.toString() ?? '',
+      nfcRequested: nfcRequested,
       sourceCollection: sourceCollection,
       orderNumber: canonicalOrderNumber([
         (data['admin'] is Map ? (data['admin'] as Map)['orderNumber'] : null),

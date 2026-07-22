@@ -3867,24 +3867,28 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final left = _dimensionHandCard('Left Hand', leftHand, nfc.left);
-              final right = _dimensionHandCard(
-                'Right Hand',
-                rightHand,
-                nfc.right,
-              );
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: left),
-                  const SizedBox(width: 10),
-                  Expanded(child: right),
-                ],
-              );
-            },
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _dimensionHandCard('Left Hand', leftHand, nfc.left),
+                ),
+                const SizedBox(width: 10),
+                Container(width: 1, color: AppColors.blackCatBorderLight),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _dimensionHandCard(
+                    'Right Hand',
+                    rightHand,
+                    nfc.right,
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: 10),
+          Container(height: 1, color: AppColors.blackCatBorderLight),
           const SizedBox(height: 10),
           _measurementSummaryRow(
             nailShape: _valueOrDash(nailShape),
@@ -3920,12 +3924,8 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   Widget _measurementSummaryItem(String label, String value) {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -3978,79 +3978,78 @@ class _BaseOrderDetails extends StatelessWidget {
       return nfc[key] == true;
     }
 
-    Widget row(String label, String key) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Arial',
+    Widget row(String label, String key, {bool showDivider = true}) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
                       ),
-                    ),
+                      if (showNfc(key)) ...[
+                        const SizedBox(width: 6),
+                        _nfcDimensionChip(),
+                      ],
+                    ],
                   ),
-                  if (showNfc(key)) ...[
-                    const SizedBox(width: 6),
-                    _nfcDimensionChip(),
-                  ],
-                ],
-              ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  value(key),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'ArialBold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Text(
-              value(key),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'ArialBold',
-                color: AppColors.blackCat,
-              ),
-            ),
-          ],
-        ),
+          ),
+          if (showDivider)
+            Container(height: 1, color: AppColors.blackCatBorderLight),
+        ],
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              fontFamily: 'ArialBold',
-              color: AppColors.blackCat,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+            fontFamily: 'ArialBold',
+            color: AppColors.blackCat,
           ),
-          const SizedBox(height: 8),
-          row('Thumb', 'thumb'),
-          row('Index', 'index'),
-          row('Middle', 'middle'),
-          row('Ring', 'ring'),
-          row('Pinky', 'pinky'),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        row('Thumb', 'thumb'),
+        row('Index', 'index'),
+        row('Middle', 'middle'),
+        row('Ring', 'ring'),
+        row('Pinky', 'pinky', showDivider: false),
+      ],
     );
   }
 
@@ -4397,20 +4396,22 @@ class _FingerNfcSelection {
       return dimensions['${key}Nfc'];
     }
 
+    // NFC is only ever eligible on the thumb -- never on index/middle/ring/
+    // pinky, regardless of what any stored per-finger flag says.
     return _FingerNfcSelection(
       left: <String, bool>{
         'thumb': truthy(nfcValue('lThumb')),
-        'index': truthy(nfcValue('lIndex')),
-        'middle': truthy(nfcValue('lMiddle')),
-        'ring': truthy(nfcValue('lRing')),
-        'pinky': truthy(nfcValue('lPinky')),
+        'index': false,
+        'middle': false,
+        'ring': false,
+        'pinky': false,
       },
       right: <String, bool>{
         'thumb': truthy(nfcValue('rThumb')),
-        'index': truthy(nfcValue('rIndex')),
-        'middle': truthy(nfcValue('rMiddle')),
-        'ring': truthy(nfcValue('rRing')),
-        'pinky': truthy(nfcValue('rPinky')),
+        'index': false,
+        'middle': false,
+        'ring': false,
+        'pinky': false,
       },
     );
   }
@@ -4431,20 +4432,21 @@ class _FingerNfcSelection {
       return parsed != null && parsed.isFinite && parsed >= 8;
     }
 
+    // Same rule: only the thumb can ever be NFC-eligible.
     return _FingerNfcSelection(
       left: <String, bool>{
         'thumb': eligible('lThumb'),
-        'index': eligible('lIndex'),
-        'middle': eligible('lMiddle'),
-        'ring': eligible('lRing'),
-        'pinky': eligible('lPinky'),
+        'index': false,
+        'middle': false,
+        'ring': false,
+        'pinky': false,
       },
       right: <String, bool>{
         'thumb': eligible('rThumb'),
-        'index': eligible('rIndex'),
-        'middle': eligible('rMiddle'),
-        'ring': eligible('rRing'),
-        'pinky': eligible('rPinky'),
+        'index': false,
+        'middle': false,
+        'ring': false,
+        'pinky': false,
       },
     );
   }

@@ -3001,34 +3001,40 @@ class _OrderCard extends StatelessWidget {
                     fontFamily: 'Arial',
                   ),
                 ),
-                _OrderNfcChipLine(order: order),
-                const SizedBox(height: 8),
-                if (isBrandRequest)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.balletSlippers,
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: AppColors.blackCatBorderLight,
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _OrderNfcChipLine(order: order, trailingGap: 8),
+                      if (isBrandRequest) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.balletSlippers,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          child: const Text(
+                            'Brand Request',
+                            style: TextStyle(
+                              color: AppColors.blackCat,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
                         ),
-                      ),
-                      child: const Text(
-                        'Brand Request',
-                        style: TextStyle(
-                          color: AppColors.blackCat,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'Arial',
-                        ),
-                      ),
-                    ),
+                      ],
+                    ],
                   ),
+                ),
                 if (isBrandRequest) ...[
                   const SizedBox(height: 6),
                   if ((order.brandName ?? '').trim().isNotEmpty)
@@ -3260,9 +3266,10 @@ class _Thumb extends StatelessWidget {
 }
 
 class _OrderNfcChipLine extends StatelessWidget {
-  const _OrderNfcChipLine({required this.order});
+  const _OrderNfcChipLine({required this.order, this.trailingGap = 0});
 
   final ClientOrder order;
+  final double trailingGap;
 
   @override
   Widget build(BuildContext context) {
@@ -3276,9 +3283,10 @@ class _OrderNfcChipLine extends StatelessWidget {
       future: _shouldShowNfcChip(collection: collection, id: id),
       builder: (context, snapshot) {
         if (snapshot.data != true) return const SizedBox.shrink();
-        return const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: Align(alignment: Alignment.centerLeft, child: _NfcChip()),
+        if (trailingGap <= 0) return const _NfcChip();
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [const _NfcChip(), SizedBox(width: trailingGap)],
         );
       },
     );

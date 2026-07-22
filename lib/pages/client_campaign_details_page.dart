@@ -106,30 +106,16 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              widget.headerTitleOverride ??
-                                  (vm.isBrandRequest
-                                      ? 'Brand Request Details'
-                                      : 'Client Request Details'),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.blackCat,
-                              ),
-                            ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          vm.statusLabel,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
                           ),
-                          Text(
-                            vm.statusLabel,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 14),
                       _overviewCard(vm),
@@ -151,8 +137,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                           body: vm.customDescription,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      _sectionContainer(child: _orderDetailsSection(vm)),
                       const SizedBox(height: 12),
                       _sectionContainer(child: _nailDimensionsSection(vm)),
                       const SizedBox(height: 12),
@@ -330,41 +314,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
   }
 
-  Widget _orderDetailsSection(_RequestDetailsVm vm) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Order Details',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _needBudgetRow(vm),
-        const SizedBox(height: 8),
-        Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(
-                text: 'Accept By: ',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              TextSpan(text: vm.requestAcceptByLabel),
-            ],
-          ),
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.blackCat,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _nailDimensionsSection(_RequestDetailsVm vm) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,74 +327,77 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _dimensionHandCard(
-                'Left Hand',
-                vm.leftHand,
-                showNfcTags: vm.requiresNfc,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _dimensionHandCard(
+                  'Left Hand',
+                  vm.leftHand,
+                  showNfcTags: vm.requiresNfc,
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _dimensionHandCard(
-                'Right Hand',
-                vm.rightHand,
-                showNfcTags: vm.requiresNfc,
+              const SizedBox(width: 10),
+              Container(width: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _dimensionHandCard(
+                  'Right Hand',
+                  vm.rightHand,
+                  showNfcTags: vm.requiresNfc,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _summaryBox('Shape', _valueOrDash(vm.nailShape)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _summaryBox('Length', _valueOrDash(vm.nailLength)),
-            ),
-          ],
+        Container(height: 1, color: AppColors.blackCatBorderLight),
+        const SizedBox(height: 10),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _summaryValue('Shape', _valueOrDash(vm.nailShape)),
+              ),
+              const SizedBox(width: 10),
+              Container(width: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryValue('Length', _valueOrDash(vm.nailLength)),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _summaryBox(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            textAlign: TextAlign.right,
+  Widget _summaryValue(String label, String value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: AppColors.blackCat,
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.blackCat,
+          ),
+        ),
+      ],
     );
   }
 
@@ -465,97 +417,86 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       return parsed != null && parsed >= 8;
     }
 
-    Widget row(String label, String raw, {bool showNfc = false}) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: const TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Arial',
+    Widget row(
+      String label,
+      String raw, {
+      bool showNfc = false,
+      bool showDivider = true,
+    }) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: const TextStyle(
+                            color: AppColors.blackCat,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
                       ),
-                    ),
+                      if (showNfc) ...[const SizedBox(width: 6), _nfcChip()],
+                    ],
                   ),
-                  if (showNfc) ...[const SizedBox(width: 6), _nfcChip()],
-                ],
-              ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  value(raw),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'ArialBold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Text(
-              value(raw),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'ArialBold',
-                color: AppColors.blackCat,
-              ),
-            ),
-          ],
-        ),
+          ),
+          if (showDivider)
+            Container(height: 1, color: AppColors.blackCatBorderLight),
+        ],
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              fontFamily: 'ArialBold',
-              color: AppColors.blackCat,
-            ),
+    // NFC is only eligible on the thumb -- the tag never appears on any
+    // other finger, even if that finger's own measurement is >= 8mm.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+            fontFamily: 'ArialBold',
+            color: AppColors.blackCat,
           ),
-          const SizedBox(height: 8),
-          row(
-            'Thumb',
-            hand.thumb,
-            showNfc: showNfcTags && isNfcEligibleDimension(hand.thumb),
-          ),
-          row(
-            'Index',
-            hand.index,
-            showNfc: showNfcTags && isNfcEligibleDimension(hand.index),
-          ),
-          row(
-            'Middle',
-            hand.middle,
-            showNfc: showNfcTags && isNfcEligibleDimension(hand.middle),
-          ),
-          row(
-            'Ring',
-            hand.ring,
-            showNfc: showNfcTags && isNfcEligibleDimension(hand.ring),
-          ),
-          row(
-            'Pinky',
-            hand.pinky,
-            showNfc: showNfcTags && isNfcEligibleDimension(hand.pinky),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        row(
+          'Thumb',
+          hand.thumb,
+          showNfc: showNfcTags && isNfcEligibleDimension(hand.thumb),
+        ),
+        row('Index', hand.index),
+        row('Middle', hand.middle),
+        row('Ring', hand.ring),
+        row('Pinky', hand.pinky, showDivider: false),
+      ],
     );
   }
 
@@ -715,68 +656,100 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   }
 
   Widget _requestTypeOrderRow(_RequestDetailsVm vm) {
+    Widget divider() =>
+        Container(width: 1, height: 16, color: AppColors.blackCatBorderLight);
+
+    final requestTypeSegment = Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          vm.requestType.toLowerCase().contains('direct')
+              ? Icons.arrow_outward_rounded
+              : Icons.arrow_forward_rounded,
+          size: 16,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            vm.requestType,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final orderTypeSegment = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          vm.orderType.toLowerCase().contains('group')
+              ? Icons.groups_2_outlined
+              : Icons.person_outline_rounded,
+          size: 16,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            vm.orderType,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final nfcSegment = Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.nfc_rounded, size: 16, color: AppColors.blackCat),
+        const SizedBox(width: 6),
+        const Flexible(
+          child: Text(
+            'NFC Request',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
+      ],
+    );
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Expanded(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                vm.requestType.toLowerCase().contains('direct')
-                    ? Icons.arrow_outward_rounded
-                    : Icons.arrow_forward_rounded,
-                size: 16,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  vm.requestType,
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: requestTypeSegment),
         const SizedBox(width: 12),
-        Container(width: 1, height: 16, color: AppColors.blackCatBorderLight),
+        divider(),
         const SizedBox(width: 12),
-        Expanded(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                vm.orderType.toLowerCase().contains('group')
-                    ? Icons.groups_2_outlined
-                    : Icons.person_outline_rounded,
-                size: 16,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  vm.orderType,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: orderTypeSegment),
+        // Dynamic: only shown when this brand request requires NFC.
+        if (vm.requiresNfc) ...[
+          const SizedBox(width: 12),
+          divider(),
+          const SizedBox(width: 12),
+          Expanded(child: nfcSegment),
+        ],
       ],
     );
   }
@@ -793,6 +766,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   label: 'Need By',
                   value: vm.needByLabel,
                   center: true,
+                  fontSize: 11.5,
                 ),
               ),
               if (vm.jntRevealDateLabel.trim().isNotEmpty) ...[
@@ -805,6 +779,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                     label: 'JNT Reveal',
                     value: vm.jntRevealDateLabel,
                     center: true,
+                    fontSize: 11.5,
                   ),
                 ),
               ],
@@ -819,6 +794,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   label: 'Budget',
                   value: vm.clientBudgetLabel,
                   center: true,
+                  fontSize: 11.5,
                 ),
               ),
               const SizedBox(width: 12),
@@ -830,6 +806,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   label: 'Accept By',
                   value: vm.requestAcceptByLabel,
                   center: true,
+                  fontSize: 11.5,
                 ),
               ),
             ],
@@ -875,6 +852,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     required String label,
     required String value,
     bool center = false,
+    double? fontSize,
   }) {
     return Row(
       mainAxisSize: center ? MainAxisSize.max : MainAxisSize.min,
@@ -888,10 +866,10 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           child: Text(
             '$label: $value',
             textAlign: center ? TextAlign.center : TextAlign.start,
-            maxLines: 2,
-            overflow: TextOverflow.visible,
-            style: const TextStyle(
-              fontSize: 14,
+            maxLines: center ? 1 : 2,
+            overflow: center ? TextOverflow.ellipsis : TextOverflow.visible,
+            style: TextStyle(
+              fontSize: fontSize ?? 14,
               fontWeight: FontWeight.w700,
               color: AppColors.blackCat,
             ),
@@ -906,61 +884,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       width: 1,
       height: 16,
       color: AppColors.blackCatBorderLight,
-    );
-  }
-
-  Widget _needBudgetRow(_RequestDetailsVm vm) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              const Icon(
-                Icons.calendar_today_outlined,
-                size: 16,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Need By: ${vm.needByLabel}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Row(
-            children: [
-              const Icon(
-                Icons.attach_money_rounded,
-                size: 16,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  'Budget: ${vm.clientBudgetLabel}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -2577,6 +2500,10 @@ class _RequestDetailsVm {
               ? asMap(details['nfc'])
               : asMap(root['nfc']));
 
+    // brand_custom_request_page.dart writes this flag as 'nfcRequested' /
+    // 'requiresNfcEligibleClient' -- those exact keys (camelCase and
+    // snake_case) were missing below, so this always evaluated to false for
+    // real brand requests.
     final candidates = <Object?>[
       root['requiresNfc'],
       root['requiresNFC'],
@@ -2585,30 +2512,50 @@ class _RequestDetailsVm {
       root['hasNfc'],
       root['hasNFC'],
       root['nfcEnabled'],
+      root['nfcRequested'],
+      root['nfc_requested'],
+      root['requiresNfcEligibleClient'],
+      root['requires_nfc_eligible_client'],
       details['requiresNfc'],
       details['requiresNFC'],
       details['nfcRequired'],
       details['isNfcRequired'],
       details['hasNfc'],
       details['hasNFC'],
+      details['nfcRequested'],
+      details['nfc_requested'],
+      details['requiresNfcEligibleClient'],
+      details['requires_nfc_eligible_client'],
       payload['requiresNfc'],
       payload['requiresNFC'],
       payload['nfcRequired'],
       payload['isNfcRequired'],
       payload['hasNfc'],
       payload['hasNFC'],
+      payload['nfcRequested'],
+      payload['nfc_requested'],
+      payload['requiresNfcEligibleClient'],
+      payload['requires_nfc_eligible_client'],
       requestDetails['requiresNfc'],
       requestDetails['requiresNFC'],
       requestDetails['nfcRequired'],
       requestDetails['isNfcRequired'],
       requestDetails['hasNfc'],
       requestDetails['hasNFC'],
+      requestDetails['nfcRequested'],
+      requestDetails['nfc_requested'],
+      requestDetails['requiresNfcEligibleClient'],
+      requestDetails['requires_nfc_eligible_client'],
       order['requiresNfc'],
       order['requiresNFC'],
       order['nfcRequired'],
       order['isNfcRequired'],
       order['hasNfc'],
       order['hasNFC'],
+      order['nfcRequested'],
+      order['nfc_requested'],
+      order['requiresNfcEligibleClient'],
+      order['requires_nfc_eligible_client'],
       nfc['required'],
       nfc['enabled'],
       nfc['requiresNfc'],

@@ -69,6 +69,7 @@ class _OrderSafe {
   final String trackingNumber;
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
+  final bool nfcRequested;
 
   const _OrderSafe({
     required this.sourceCollection,
@@ -123,6 +124,7 @@ class _OrderSafe {
     required this.trackingNumber,
     required this.shippedAt,
     required this.deliveredAt,
+    this.nfcRequested = false,
   });
 
   static _OrderSafe from(dynamic o) {
@@ -407,6 +409,7 @@ class _OrderSafe {
       trackingNumber: s(o?.trackingNumber, ''),
       shippedAt: dt(o?.shippedAt),
       deliveredAt: dt(o?.deliveredAt),
+      nfcRequested: tryRead(() => (o as dynamic).nfcRequested) == true,
     );
   }
 
@@ -701,6 +704,42 @@ Future<Map<String, dynamic>?> _supabaseFetchClientRowByEmail(
     } catch (_) {}
   }
   return null;
+}
+
+class _NfcRequestTag extends StatelessWidget {
+  const _NfcRequestTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'NFC request',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.blackCat,
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.nfc_rounded, size: 12, color: AppColors.snow),
+            const SizedBox(width: 4),
+            ExcludeSemantics(
+              child: Text(
+                'NFC request',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                  color: AppColors.snow,
+                  fontFamily: 'Arial',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OrderGroupClient {
@@ -2514,9 +2553,16 @@ class _BaseOrderDetails extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Order Details',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Order Details',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+              ),
+              if (order.nfcRequested) const _NfcRequestTag(),
+            ],
           ),
           const SizedBox(height: 10),
           _bullet('Campaign Name', _valueOrDash(order.title)),
@@ -2694,14 +2740,30 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   String _acceptedClientsDisplay() {
-    final accepted = order.groupClients
-        .where(
-          (client) => client.responseStatus.trim().toLowerCase() == 'accepted',
-        )
-        .map((client) => client.clientName.trim())
-        .where((name) => name.isNotEmpty)
-        .toList(growable: false);
-    if (accepted.isNotEmpty) return accepted.toSet().join(', ');
+    final isGroupOrder =
+        order.orderType.trim().toLowerCase() == 'group' ||
+        order.groupClients.isNotEmpty;
+    if (isGroupOrder) {
+      final accepted = order.groupClients
+          .where(
+            (client) =>
+                client.responseStatus.trim().toLowerCase() == 'accepted',
+          )
+          .map((client) => client.clientName.trim())
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+      if (accepted.isNotEmpty) return accepted.join(', ');
+      return '-';
+    }
+
+    // Single/direct client (or open pool claimed by one client): show that
+    // client once they've actually accepted, independent of whether an
+    // artist has accepted yet.
+    if (order.directClientStatus.trim().toLowerCase() == 'accepted') {
+      final name = order.selectedClientName.trim();
+      if (name.isNotEmpty) return name;
+    }
     return '-';
   }
 

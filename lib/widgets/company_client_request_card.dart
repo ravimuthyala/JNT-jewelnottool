@@ -143,6 +143,10 @@ class CompanyClientRequestCard extends StatelessWidget {
                     color: AppColors.blackCat,
                   ),
                 ),
+                if (showNfcChip) ...[
+                  const SizedBox(height: 5),
+                  _nfcChip(),
+                ],
                 const SizedBox(height: 4),
                 ClipRRect(
                   borderRadius: BorderRadius.zero,
@@ -153,10 +157,6 @@ class CompanyClientRequestCard extends StatelessWidget {
                     child: previewImage,
                   ),
                 ),
-                if (showNfcChip) ...[
-                  const SizedBox(height: 5),
-                  Align(alignment: Alignment.centerRight, child: _nfcChip()),
-                ],
               ],
             ),
           ],
@@ -204,19 +204,31 @@ class CompanyClientRequestCard extends StatelessWidget {
   }
 
   Widget _nfcChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: const BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Text(
-        'NFC',
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 11 * scale,
+    return Semantics(
+      label: 'NFC request',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: const BoxDecoration(
           color: AppColors.blackCat,
-          height: 1.05,
+          borderRadius: BorderRadius.zero,
+        ),
+        child: ExcludeSemantics(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.nfc_rounded, size: 11 * scale, color: AppColors.snow),
+              SizedBox(width: 3 * scale),
+              Text(
+                'NFC request',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10 * scale,
+                  color: AppColors.snow,
+                  height: 1.05,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

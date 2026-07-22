@@ -179,17 +179,28 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     final profile = asMap(data['profile']);
     final basic = asMap(data['basic']);
     final client = asMap(data['client']);
-    final nailPreferences = asMap(data['nailPreferences']);
-    final profileNailPreferences = asMap(profile['nailPreferences']);
-    final basicNailPreferences = asMap(basic['nailPreferences']);
-    final clientNailPreferences = asMap(client['nailPreferences']);
+    // The client table's real column is the snake_case `nail_preferences`
+    // (confirmed against live data) -- the camelCase variants are kept in
+    // case some other source uses that spelling instead.
+    final nailPreferences = asMap(data['nail_preferences']);
+    final nailPreferencesCamel = asMap(data['nailPreferences']);
+    final profileNailPreferences = asMap(profile['nail_preferences']);
+    final profileNailPreferencesCamel = asMap(profile['nailPreferences']);
+    final basicNailPreferences = asMap(basic['nail_preferences']);
+    final basicNailPreferencesCamel = asMap(basic['nailPreferences']);
+    final clientNailPreferences = asMap(client['nail_preferences']);
+    final clientNailPreferencesCamel = asMap(client['nailPreferences']);
     final apiNailMeasurements = asMap(data['apiNailMeasurements']);
 
     final dimensionMaps = <Map<String, dynamic>>[
       asMap(nailPreferences['dimensions']),
+      asMap(nailPreferencesCamel['dimensions']),
       asMap(profileNailPreferences['dimensions']),
+      asMap(profileNailPreferencesCamel['dimensions']),
       asMap(basicNailPreferences['dimensions']),
+      asMap(basicNailPreferencesCamel['dimensions']),
       asMap(clientNailPreferences['dimensions']),
+      asMap(clientNailPreferencesCamel['dimensions']),
       asMap(data['dimensions']),
       asMap(profile['dimensions']),
       asMap(basic['dimensions']),
@@ -209,9 +220,14 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     }
 
     return truthy(data['nfcEligible']) ||
+        truthy(data['nfc_eligible']) ||
+        truthy(data['eligible_for_nfc']) ||
+        truthy(data['eligibleForNfc']) ||
         truthy(profile['nfcEligible']) ||
         truthy(basic['nfcEligible']) ||
-        truthy(client['nfcEligible']);
+        truthy(client['nfcEligible']) ||
+        truthy(nailPreferences['nfcEligible']) ||
+        truthy(nailPreferences['eligibleForNfc']);
   }
 
   Future<bool> _isCurrentClientNfcEligible(String clientEmail) async {
@@ -612,9 +628,20 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             clientEmail: currentEmail,
           );
           if (visibleAsClient) {
-            final requiresNfc = await _requestRequiresNfc(request);
-            if (!requiresNfc ||
-                (_currentClientIsBrandPartner && _currentClientNfcEligible)) {
+            // Open client pool: every viewer must be an Ambassador; NFC
+            // requests additionally require the viewer to be NFC-eligible.
+            // Specific-client/Group-client requests are already scoped to
+            // exactly the client(s) the brand selected from the (already
+            // Ambassador/NFC-filtered) dropdown, so no further gate is
+            // needed here -- _isVisibleForClient already confirmed this
+            // viewer is one of those selected clients.
+            final passesBrandVisibilityRule = request.openToClientPool
+                ? (await _requestRequiresNfc(request)
+                      ? (_currentClientIsBrandPartner &&
+                            _currentClientNfcEligible)
+                      : _currentClientIsBrandPartner)
+                : true;
+            if (passesBrandVisibilityRule) {
               brandVisible.add(request);
               continue;
             }
@@ -909,6 +936,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
               ? asMap(details['nfc'])
               : asMap(root['nfc']));
 
+    // The brand custom request page (brand_custom_request_page.dart) writes
+    // this flag as 'nfcRequested' / 'requiresNfcEligibleClient' (and
+    // snake_case equivalents on the top-level row columns) -- those exact
+    // keys were missing below, so this always fell through to `false` and
+    // the NFC-eligibility gate at the call site was never actually applied.
     final candidates = <Object?>[
       root['requiresNfc'],
       root['requiresNFC'],
@@ -917,63 +949,56 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       root['hasNfc'],
       root['hasNFC'],
       root['nfcEnabled'],
+      root['nfcRequested'],
+      root['nfc_requested'],
+      root['requiresNfcEligibleClient'],
+      root['requires_nfc_eligible_client'],
       details['requiresNfc'],
       details['requiresNFC'],
       details['nfcRequired'],
       details['isNfcRequired'],
       details['hasNfc'],
       details['hasNFC'],
+      details['nfcRequested'],
+      details['nfc_requested'],
+      details['requiresNfcEligibleClient'],
+      details['requires_nfc_eligible_client'],
       payload['requiresNfc'],
       payload['requiresNFC'],
       payload['nfcRequired'],
       payload['isNfcRequired'],
       payload['hasNfc'],
       payload['hasNFC'],
+      payload['nfcRequested'],
+      payload['nfc_requested'],
+      payload['requiresNfcEligibleClient'],
+      payload['requires_nfc_eligible_client'],
       requestDetails['requiresNfc'],
       requestDetails['requiresNFC'],
       requestDetails['nfcRequired'],
       requestDetails['isNfcRequired'],
       requestDetails['hasNfc'],
       requestDetails['hasNFC'],
+      requestDetails['nfcRequested'],
+      requestDetails['nfc_requested'],
+      requestDetails['requiresNfcEligibleClient'],
+      requestDetails['requires_nfc_eligible_client'],
       order['requiresNfc'],
       order['requiresNFC'],
       order['nfcRequired'],
       order['isNfcRequired'],
       order['hasNfc'],
       order['hasNFC'],
+      order['nfcRequested'],
+      order['nfc_requested'],
+      order['requiresNfcEligibleClient'],
+      order['requires_nfc_eligible_client'],
       nfc['required'],
       nfc['enabled'],
       nfc['requiresNfc'],
       nfc['hasNfc'],
     ];
     return candidates.any(truthy);
-  }
-
-  Widget _nfcRequiredBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.nfc_rounded, size: 14, color: AppColors.blackCat),
-          SizedBox(width: 4),
-          Text(
-            'NFC',
-            style: TextStyle(
-              color: AppColors.blackCat,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'Arial',
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   String _statusLabel(ClientRequestV2 request) {
@@ -1790,50 +1815,44 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         return FutureBuilder<String>(
           future: _loadJntRevealDateLabel(request),
           builder: (context, revealSnap) {
-            final card = Semantics(
-              button: true,
-              label: 'Open request details for ${request.clientName}',
-              child: ExcludeSemantics(
-                child: InkWell(
-                borderRadius: BorderRadius.zero,
-                onTap: () => _openDetails(request),
-                child: CompanyClientRequestCard(
-                  request: request,
-                  scale: 1.0,
-                  displayStatus: _statusLabel(request),
-                  needByLabel: _needByLabel(request.neededBy),
-                  submittedLabel: _submittedLabel(
-                    request.submittedAt ?? request.neededBy,
-                  ),
-                  acceptByLabel:
-                      _isCompanyCustomRequestSource(request.sourceCollection)
-                      ? _acceptByLabel(
-                          DateTime(
-                            request.neededBy.year,
-                            request.neededBy.month,
-                            request.neededBy.day,
-                          ).subtract(const Duration(days: 5)),
-                        )
-                      : '',
-                  jntRevealDateLabel: revealSnap.data?.trim() ?? '',
-                  avatar: _avatarWidget(request),
-                  previewImage: _previewWidget(request),
-                  onTap: () => _openDetails(request),
-                ),
-              ),
-              ),
-            );
-
             return FutureBuilder<bool>(
               future: _requestRequiresNfc(request),
-              builder: (context, snap) {
-                final requiresNfc = snap.data ?? false;
-                if (!requiresNfc) return card;
-                return Stack(
-                  children: [
-                    card,
-                    Positioned(top: 10, right: 10, child: _nfcRequiredBadge()),
-                  ],
+              builder: (context, nfcSnap) {
+                return Semantics(
+                  button: true,
+                  label: 'Open request details for ${request.clientName}',
+                  child: ExcludeSemantics(
+                    child: InkWell(
+                      borderRadius: BorderRadius.zero,
+                      onTap: () => _openDetails(request),
+                      child: CompanyClientRequestCard(
+                        request: request,
+                        scale: 1.0,
+                        displayStatus: _statusLabel(request),
+                        needByLabel: _needByLabel(request.neededBy),
+                        submittedLabel: _submittedLabel(
+                          request.submittedAt ?? request.neededBy,
+                        ),
+                        acceptByLabel:
+                            _isCompanyCustomRequestSource(
+                              request.sourceCollection,
+                            )
+                            ? _acceptByLabel(
+                                DateTime(
+                                  request.neededBy.year,
+                                  request.neededBy.month,
+                                  request.neededBy.day,
+                                ).subtract(const Duration(days: 5)),
+                              )
+                            : '',
+                        jntRevealDateLabel: revealSnap.data?.trim() ?? '',
+                        avatar: _avatarWidget(request),
+                        previewImage: _previewWidget(request),
+                        onTap: () => _openDetails(request),
+                        showNfcChip: nfcSnap.data ?? false,
+                      ),
+                    ),
+                  ),
                 );
               },
             );

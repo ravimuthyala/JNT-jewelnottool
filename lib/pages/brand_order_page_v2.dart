@@ -620,6 +620,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           ? req.description
           : req.descriptionPreview,
       cancelReason: req.cancelReason,
+      nfcRequested: req.nfcRequested,
       inspirationPhotos: req.inspirationPhotos,
       needByDisplay: req.needByDisplay,
       jntRevealDateDisplay: req.jntRevealDateDisplay,
@@ -691,21 +692,30 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
         mapped == OrderStatus.declined ||
         mapped == OrderStatus.shipped ||
         mapped == OrderStatus.delivered ||
-        mapped == OrderStatus.inProgress ||
         mapped == OrderStatus.expired) {
       return mapped;
     }
 
-    final accepted =
+    final artistAccepted =
         req.acceptedByArtistEmail.trim().isNotEmpty ||
         (req.artistFinalAmount != null && req.artistFinalAmount! > 0);
+
+    if (mapped == OrderStatus.inProgress) {
+      // req.status maps to inProgress as soon as the CLIENT accepts (moving
+      // the request into the artist pool) -- that alone doesn't mean an
+      // artist has accepted it. Keep showing Pending until an artist
+      // actually has, so the order/artist section doesn't imply someone is
+      // already working on it before that's true.
+      return artistAccepted ? mapped : OrderStatus.newOrder;
+    }
+
     final due = req.needBy;
     final isPastDue =
         due != null &&
         DateTime.now().isAfter(
           DateTime(due.year, due.month, due.day).add(const Duration(days: 1)),
         );
-    if (!accepted && isPastDue) {
+    if (!artistAccepted && isPastDue) {
       return OrderStatus.expired;
     }
     return mapped;
@@ -1566,6 +1576,10 @@ class _OrderCard extends StatelessWidget {
                     _StatusChip(status: order.status),
                   ],
                 ),
+                if (order.nfcRequested) ...[
+                  const SizedBox(height: 6),
+                  const _NfcRequestTag(),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   order.subtitle,
@@ -1727,6 +1741,42 @@ class _StatusChip extends StatelessWidget {
         fontWeight: FontWeight.w700,
         fontSize: 14,
         color: AppColors.blackCat,
+      ),
+    );
+  }
+}
+
+class _NfcRequestTag extends StatelessWidget {
+  const _NfcRequestTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'NFC request',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.blackCat,
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.nfc_rounded, size: 12, color: AppColors.snow),
+            const SizedBox(width: 4),
+            ExcludeSemantics(
+              child: Text(
+                'NFC request',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                  color: AppColors.snow,
+                  fontFamily: 'Arial',
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1905,6 +1955,7 @@ class ClientOrder {
   final String trackingNumber;
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
+  final bool nfcRequested;
 
   /// 0..1 progress for in-progress only
   final double? progress;
@@ -1970,6 +2021,7 @@ class ClientOrder {
     this.trackingNumber = '',
     this.shippedAt,
     this.deliveredAt,
+    this.nfcRequested = false,
     this.progress,
     this.rating,
     this.reviewText = '',
