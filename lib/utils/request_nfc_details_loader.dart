@@ -116,6 +116,101 @@ class RequestNfcDetails {
   final Map<int, RequestFingerNfcSelection> groupBySlotIndex;
 }
 
+bool _truthy(dynamic value) {
+  if (value == true) return true;
+  if (value is num) return value == 1;
+  final text = (value ?? '').toString().trim().toLowerCase();
+  return text == 'true' ||
+      text == 'yes' ||
+      text == '1' ||
+      text == 'selected' ||
+      text == 'requested' ||
+      text == 'enabled';
+}
+
+bool _requestHasNfc(Map<String, dynamic> source) {
+  Map<String, dynamic> asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+    return <String, dynamic>{};
+  }
+
+  final summary = asMap(source['summary']);
+  final nfc = asMap(source['nfc']);
+  return _truthy(source['nfcRequested']) ||
+      _truthy(source['nfcSelected']) ||
+      _truthy(source['hasNfc']) ||
+      _truthy(source['nfc_requested']) ||
+      _truthy(source['nfc_selected']) ||
+      _truthy(source['has_nfc']) ||
+      _truthy(summary['nfcRequested']) ||
+      _truthy(summary['nfcSelected']) ||
+      _truthy(summary['hasNfc']) ||
+      _truthy(summary['nfc_requested']) ||
+      _truthy(summary['nfc_selected']) ||
+      _truthy(summary['has_nfc']) ||
+      _truthy(nfc['requested']) ||
+      _truthy(nfc['selected']) ||
+      _truthy(nfc['hasNfc']) ||
+      _truthy(nfc['has_nfc']);
+}
+
+String _extractAcceptedClientEmail(
+  Map<String, dynamic> root,
+  Map<String, dynamic> details,
+) {
+  Map<String, dynamic> asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.map((k, v) => MapEntry(k.toString(), v));
+    return <String, dynamic>{};
+  }
+
+  final rootAcceptance = asMap(root['acceptance']);
+  final detailsAcceptance = asMap(details['acceptance']);
+  for (final candidate in <dynamic>[
+    root['accepted_by_client_email'],
+    root['acceptedByClientEmail'],
+    rootAcceptance['acceptedByClientEmail'],
+    details['accepted_by_client_email'],
+    details['acceptedByClientEmail'],
+    detailsAcceptance['acceptedByClientEmail'],
+  ]) {
+    final text = (candidate ?? '').toString().trim();
+    if (text.isNotEmpty) return text.toLowerCase();
+  }
+  return '';
+}
+
+/// Some brand-sourced (open client pool) requests never snapshot the
+/// accepting client's own finger measurements onto the request row itself
+/// -- `nailPreferences.dimensions` stays null there even after acceptance.
+/// When that happens, fall back to the accepted client's own saved
+/// measurements on their profile.
+Future<RequestFingerNfcSelection> _loadFallbackFromClientProfile(
+  String acceptedClientEmail,
+) async {
+  if (acceptedClientEmail.isEmpty) return RequestFingerNfcSelection.emptyConst;
+  try {
+    final supabase = Supabase.instance.client;
+    final clientRow =
+        await supabase
+            .from('client')
+            .select('nail_preferences')
+            .ilike('email', acceptedClientEmail)
+            .maybeSingle() ??
+        const <String, dynamic>{};
+    final nailPrefs = clientRow['nail_preferences'];
+    final dimensions = (nailPrefs is Map ? nailPrefs['dimensions'] : null);
+    if (dimensions is! Map) return RequestFingerNfcSelection.emptyConst;
+    final dimsMap = dimensions.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    return RequestFingerNfcSelection.fromEligibleDimensions(dimsMap);
+  } catch (_) {
+    return RequestFingerNfcSelection.emptyConst;
+  }
+}
+
 Future<RequestNfcDetails> loadRequestNfcDetails({
   required String sourceCollection,
   required String requestId,
@@ -204,7 +299,28 @@ Future<RequestNfcDetails> loadRequestNfcDetails({
     } catch (_) {}
 
     final detailsRow = mergedDetailRows(detailRows);
-    return _parseRequestNfc(root: asMap(rootRow), details: detailsRow);
+    final rootMap = asMap(rootRow);
+    final parsed = _parseRequestNfc(root: rootMap, details: detailsRow);
+    if (parsed.main.anySelected) return parsed;
+
+    final nfcWasRequested =
+        _requestHasNfc(rootMap) || _requestHasNfc(detailsRow);
+    if (!nfcWasRequested) return parsed;
+
+    final acceptedClientEmail = _extractAcceptedClientEmail(
+      rootMap,
+      detailsRow,
+    );
+    if (acceptedClientEmail.isEmpty) return parsed;
+
+    final fallbackMain = await _loadFallbackFromClientProfile(
+      acceptedClientEmail,
+    );
+    if (!fallbackMain.anySelected) return parsed;
+    return RequestNfcDetails(
+      main: fallbackMain,
+      groupBySlotIndex: parsed.groupBySlotIndex,
+    );
   } catch (_) {
     return RequestNfcDetails.emptyConst;
   }

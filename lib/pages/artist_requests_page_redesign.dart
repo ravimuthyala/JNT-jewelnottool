@@ -4031,14 +4031,16 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   Future<void> _openDesigningDetails(ClientRequestV2 r) async {
+    final hydrated = await _hydrateRequestForDetails(r);
+    if (!mounted) return;
     final shipDays = _estimateShipDays(
       artistLocation: widget.artistLocation,
-      clientLocation: r.clientLocation,
+      clientLocation: hydrated.clientLocation,
     );
 
     await showArtistDesigningRequestSheet(
       context: context,
-      request: r,
+      request: hydrated,
       shipDays: shipDays,
       onClose: () {},
       onMarkCompleted: (completed, artistPhotos) async =>
@@ -4550,14 +4552,16 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   Future<void> _openCompletedDetails(ClientRequestV2 r) async {
+    final hydrated = await _hydrateRequestForDetails(r);
+    if (!mounted) return;
     final shipDays = _estimateShipDays(
       artistLocation: widget.artistLocation,
-      clientLocation: r.clientLocation,
+      clientLocation: hydrated.clientLocation,
     );
 
     await showCompletedRequestSheet(
       context: context,
-      request: r,
+      request: hydrated,
       shipDays: shipDays,
       onClose: () => Navigator.pop(context),
 
@@ -4723,9 +4727,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   Future<void> _openShippedDetails(ClientRequestV2 r) async {
+    final hydrated = await _hydrateRequestForDetails(r);
+    if (!mounted) return;
     await showShippedRequestSheet(
       context: context,
-      request: r,
+      request: hydrated,
       onClose: () => Navigator.pop(context),
       onMarkDelivered: () async {
         // 1) update local UI
@@ -5374,7 +5380,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                       ),
                       decoration: BoxDecoration(
                         border: Border.all(color: AppColors.blackCat),
-                        color: AppColors.snow,
+                        color: AppColors.balletSlippers,
                       ),
                       child: Text(
                         'Brand Request',
@@ -6932,7 +6938,17 @@ class InReviewDetailsSheet extends StatelessWidget {
     return name[0].toUpperCase();
   }
 
-  Future<_RequestNfcDetails> _loadRequestedNfcDetails() async {
+  static final Map<String, Future<_RequestNfcDetails>>
+  _nfcDetailsFutureCache = <String, Future<_RequestNfcDetails>>{};
+
+  Future<_RequestNfcDetails> _loadRequestedNfcDetails() {
+    return _nfcDetailsFutureCache.putIfAbsent(
+      _displayContextCacheKey,
+      () => _loadRequestedNfcDetailsUncached(),
+    );
+  }
+
+  Future<_RequestNfcDetails> _loadRequestedNfcDetailsUncached() async {
     try {
       RequestNfcDetails sharedNfc = RequestNfcDetails.emptyConst;
       try {
@@ -8631,8 +8647,6 @@ class InReviewDetailsSheet extends StatelessWidget {
                   ] else ...[
                     if (request.sourceCollection == 'Company_Custom_Requests')
                       _brandClientDetailsBlock(),
-                    _sectionTitle('Nail Dimensions (mm)'),
-                    const SizedBox(height: 10),
                     FutureBuilder<_RequestNfcDetails>(
                       future: _loadRequestedNfcDetails(),
                       builder: (context, snapshot) {
@@ -8658,105 +8672,15 @@ class InReviewDetailsSheet extends StatelessWidget {
                               rightHand: request.rightHand,
                               nfc: nfc.main,
                             );
-                        return Column(
-                          children: [
-                            LayoutBuilder(
-                              builder: (context, c) {
-                                final maxCardW = (c.maxWidth - 8) / 2;
-
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: maxCardW,
-                                      child: _handCardCentered(
-                                        'Left Hand',
-                                        submittedClient.leftHand,
-                                        nfc: submittedClient.nfc.left,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    SizedBox(
-                                      width: maxCardW,
-                                      child: _handCardCentered(
-                                        'Right Hand',
-                                        submittedClient.rightHand,
-                                        nfc: submittedClient.nfc.right,
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _softBoxCompact(
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Shape',
-                                          style: TextStyle(
-                                            color: AppColors.blackCat
-                                                .withValues(alpha: 0.78),
-                                            fontWeight: FontWeight.w400,
-                                            fontSize: 14.5,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          submittedClient.nailShape
-                                                  .trim()
-                                                  .isEmpty
-                                              ? '-'
-                                              : submittedClient.nailShape,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 14.5,
-                                            color: AppColors.blackCat,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _softBoxCompact(
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Length',
-                                          style: TextStyle(
-                                            color: AppColors.blackCat
-                                                .withValues(alpha: 0.78),
-                                            fontWeight: FontWeight.w400,
-                                            fontSize: 14.5,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          submittedClient.nailLength
-                                                  .trim()
-                                                  .isEmpty
-                                              ? '-'
-                                              : _prettyLength(
-                                                  submittedClient.nailLength,
-                                                ),
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 14.5,
-                                            color: AppColors.blackCat,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                        return _softBox(
+                          _nailDimensionsPanel(
+                            leftHand: submittedClient.leftHand,
+                            rightHand: submittedClient.rightHand,
+                            nailShape: submittedClient.nailShape,
+                            nailLength: submittedClient.nailLength,
+                            leftNfc: submittedClient.nfc.left,
+                            rightNfc: submittedClient.nfc.right,
+                          ),
                         );
                       },
                     ),
@@ -8885,57 +8809,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  static Widget _handCardCentered(
-    String title,
-    dynamic d, {
-    Map<String, bool> nfc = const <String, bool>{},
-  }) {
-    return _softBox(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 14.5,
-                color: AppColors.blackCat,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _dimRow(
-            'Thumb',
-            _dimensionText(d, 'thumb'),
-            nfcRequested: nfc['thumb'] == true,
-          ),
-          _dimRow(
-            'Index',
-            _dimensionText(d, 'index'),
-            nfcRequested: nfc['index'] == true,
-          ),
-          _dimRow(
-            'Middle',
-            _dimensionText(d, 'middle'),
-            nfcRequested: nfc['middle'] == true,
-          ),
-          _dimRow(
-            'Ring',
-            _dimensionText(d, 'ring'),
-            nfcRequested: nfc['ring'] == true,
-          ),
-          _dimRow(
-            'Pinky',
-            _dimensionText(d, 'pinky'),
-            nfcRequested: nfc['pinky'] == true,
-          ),
-        ],
-      ),
-    );
-  }
-
   static String _dimensionText(dynamic source, String key) {
     String clean(Object? value) {
       final text = (value ?? '').toString().trim();
@@ -8994,18 +8867,6 @@ class InReviewDetailsSheet extends StatelessWidget {
   static Widget _softBox(Widget child) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: child,
-    );
-  }
-
-  static Widget _softBoxCompact(Widget child) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
@@ -9161,41 +9022,40 @@ class InReviewDetailsSheet extends StatelessWidget {
   }) {
     final formatted = _formatDimensionMm(value);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 48,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.82),
-                fontWeight: FontWeight.w400,
-                fontSize: 13.5,
-              ),
+          Expanded(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.fade,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.82),
+                      fontWeight: FontWeight.w400,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+                if (nfcRequested) ...[
+                  const SizedBox(width: 6),
+                  _nfcDimensionChip(),
+                ],
+              ],
             ),
           ),
-          SizedBox(
-            width: 34,
-            child: nfcRequested
-                ? Center(child: _nfcDimensionChip())
-                : const SizedBox.shrink(),
-          ),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                formatted,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13.5,
-                  color: AppColors.blackCat,
-                ),
-              ),
+          const SizedBox(width: 10),
+          Text(
+            formatted,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 13.5,
+              color: AppColors.blackCat,
             ),
           ),
         ],
@@ -9293,58 +9153,6 @@ class InReviewDetailsSheet extends StatelessWidget {
       return 'Extra Long';
     }
     return v[0].toUpperCase() + v.substring(1);
-  }
-
-  static Widget _dimRow(String k, String v, {bool nfcRequested = false}) {
-    final value = _formatDimensionMm(v);
-    final showNfcChip = nfcRequested;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 40,
-            child: Text(
-              k,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.82),
-                fontWeight: FontWeight.w400,
-                fontSize: 13.5,
-              ),
-            ),
-          ),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (showNfcChip) ...[
-                    _nfcDimensionChip(),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    value,
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 13.5,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   static String _formatDimensionMm(String raw) {
@@ -9459,7 +9267,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.blackCat),
-                    color: AppColors.snow,
+                    color: AppColors.balletSlippers,
                   ),
                   child: Text(
                     'Brand Request',
@@ -9690,37 +9498,63 @@ class InReviewDetailsSheet extends StatelessWidget {
             display?.isGroupOrder ??
             (request.orderType == RequestOrderTypeV2.group);
         final s = _reqScale(context);
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: _requestTypePill(
-                context: context,
-                text: isDirect ? 'Direct Request' : 'Standard Request',
-                icon: isDirect
-                    ? Icons.arrow_outward_rounded
-                    : Icons.arrow_forward_rounded,
-                alignEnd: true,
-              ),
-            ),
-            SizedBox(width: 12 * s),
-            Container(
-              width: 1,
-              height: 18 * s,
-              color: AppColors.blackCatBorderLight,
-            ),
-            SizedBox(width: 12 * s),
-            Flexible(
-              child: _requestTypePill(
-                context: context,
-                text: isGroup ? 'Group Order' : 'Single Order',
-                icon: isGroup
-                    ? Icons.groups_2_outlined
-                    : Icons.person_outline_rounded,
-                alignEnd: false,
-              ),
-            ),
-          ],
+        return FutureBuilder<_RequestNfcDetails>(
+          future: _loadRequestedNfcDetails(),
+          builder: (context, nfcSnapshot) {
+            final nfc = nfcSnapshot.data ?? _RequestNfcDetails.empty();
+            final requiresNfc =
+                nfc.main.left['thumb'] == true ||
+                nfc.main.right['thumb'] == true;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: _requestTypePill(
+                    context: context,
+                    text: isDirect ? 'Direct Request' : 'Standard Request',
+                    icon: isDirect
+                        ? Icons.arrow_outward_rounded
+                        : Icons.arrow_forward_rounded,
+                    alignEnd: true,
+                  ),
+                ),
+                SizedBox(width: 12 * s),
+                Container(
+                  width: 1,
+                  height: 18 * s,
+                  color: AppColors.blackCatBorderLight,
+                ),
+                SizedBox(width: 12 * s),
+                Flexible(
+                  child: _requestTypePill(
+                    context: context,
+                    text: isGroup ? 'Group Order' : 'Single Order',
+                    icon: isGroup
+                        ? Icons.groups_2_outlined
+                        : Icons.person_outline_rounded,
+                    alignEnd: requiresNfc,
+                  ),
+                ),
+                if (requiresNfc) ...[
+                  SizedBox(width: 12 * s),
+                  Container(
+                    width: 1,
+                    height: 18 * s,
+                    color: AppColors.blackCatBorderLight,
+                  ),
+                  SizedBox(width: 12 * s),
+                  Flexible(
+                    child: _requestTypePill(
+                      context: context,
+                      text: 'NFC',
+                      icon: Icons.nfc_rounded,
+                      alignEnd: false,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         );
       },
     );

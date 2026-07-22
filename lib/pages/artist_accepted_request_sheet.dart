@@ -2878,11 +2878,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   }
 
   Widget _acceptedClientDetailsSection(ClientRequestV2 request) {
+    // Do not fall back to request.clientName here -- for brand-sourced
+    // requests that field holds the brand/company name, not the client's,
+    // whenever no accepted-client snapshot was captured.
     final name = request.acceptedClientName.trim().isNotEmpty
         ? request.acceptedClientName.trim()
-        : (request.clientName.trim().isNotEmpty
-              ? request.clientName.trim()
-              : 'Client');
+        : 'Client';
     final avatarPath = _safeAcceptedClientAvatarPath(request);
     final avatarLetter = name[0].toUpperCase();
 

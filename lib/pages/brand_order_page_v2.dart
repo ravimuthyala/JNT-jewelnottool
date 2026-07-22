@@ -54,6 +54,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   OrdersFilter _filter = OrdersFilter.all;
   RealtimeChannel? _submittedRequestsChannel;
   List<ClientOrder> _submittedOrders = const [];
+  bool _loadingOrders = true;
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -287,11 +288,16 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           ),
         );
       if (!mounted) return;
-      setState(() => _submittedOrders = orders);
+      setState(() {
+        _submittedOrders = orders;
+        _loadingOrders = false;
+      });
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[BrandOrderPage] failed to load company requests: $e');
       }
+      if (!mounted) return;
+      setState(() => _loadingOrders = false);
     }
   }
 
@@ -638,6 +644,9 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           : req.selectedArtist,
       selectedClientName: req.selectedClientName,
       selectedClientEmail: req.selectedClientEmail,
+      acceptedByClientEmail: req.acceptedByClientEmail,
+      acceptedClientName: req.acceptedClientName,
+      clientResponseStatus: req.clientResponseStatus,
       selectedArtistName: selectedArtistName,
       artistProfileImage: req.artistProfileImage,
       createdAt: submittedAt,
@@ -1043,7 +1052,12 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
             ),
           ],
 
-          if (_pending.isEmpty && _past.isEmpty) ...[
+          if (_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
+            const SizedBox(height: 60),
+            const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ],
+
+          if (!_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
             const SizedBox(height: 28),
             _Card(
               child: Column(
@@ -1756,13 +1770,13 @@ class _NfcRequestTag extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: AppColors.blackCat,
+          color: AppColors.balletSlippers,
           borderRadius: BorderRadius.zero,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.nfc_rounded, size: 12, color: AppColors.snow),
+            Icon(Icons.nfc_rounded, size: 12, color: AppColors.blackCat),
             const SizedBox(width: 4),
             ExcludeSemantics(
               child: Text(
@@ -1770,7 +1784,7 @@ class _NfcRequestTag extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 10,
-                  color: AppColors.snow,
+                  color: AppColors.blackCat,
                   fontFamily: 'Arial',
                 ),
               ),
@@ -1947,6 +1961,9 @@ class ClientOrder {
   final String artistName;
   final String selectedClientName;
   final String selectedClientEmail;
+  final String acceptedByClientEmail;
+  final String acceptedClientName;
+  final String clientResponseStatus;
   final String selectedArtistName;
   final String artistProfileImage;
   final DateTime? cancelledAt;
@@ -2013,6 +2030,9 @@ class ClientOrder {
     this.artistName = '',
     this.selectedClientName = '',
     this.selectedClientEmail = '',
+    this.acceptedByClientEmail = '',
+    this.acceptedClientName = '',
+    this.clientResponseStatus = '',
     this.selectedArtistName = '',
     this.artistProfileImage = '',
     this.cancelledAt,

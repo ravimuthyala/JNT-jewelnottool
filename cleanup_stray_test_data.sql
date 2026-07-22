@@ -67,3 +67,11 @@ WHERE id IN (
 -- app-level client rows (their auth accounts will otherwise remain, unusable
 -- but harmless, since nothing references them once the client row is gone).
 -- DELETE FROM auth.users WHERE email LIKE 'claude-%@example.com';
+
+-- NOTE: the block above was already run (confirmed empty as of 2026-07-22).
+-- One more stray row was added afterward while visually verifying the NFC UI
+-- fixes (client_campaign_details_page.dart / order_details_pages.dart) on the
+-- simulator -- a single throwaway NFC-eligible request, company_email
+-- cleanup-audit2-*@example.com.
+DELETE FROM public.company_custom_requests
+WHERE id = 'a1b2c3d4-0000-4000-8000-000000000001';

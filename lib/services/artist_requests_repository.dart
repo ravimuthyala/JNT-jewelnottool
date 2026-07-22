@@ -1289,6 +1289,81 @@ class ArtistRequestsRepository {
       return s.toLowerCase().contains('mm') ? s : '$s mm';
     }
 
+    // Brand-sourced (open client pool) requests often never snapshot the
+    // accepting client's own name, photo, or finger measurements onto the
+    // request row -- those all stay empty/null there even after
+    // acceptance. Fall back to a live lookup of the accepted client's own
+    // saved profile for whichever of those pieces are still missing.
+    var effectiveDims = dims;
+    var effectiveNailShape = nailPrefs['shape'];
+    var effectiveNailLength = nailPrefs['length'];
+    // Only look at the actual finger keys -- this map can also carry
+    // sibling flags like nfcRequested/requiresNfcEligibleClient, which
+    // must not be mistaken for a real measurement being present.
+    const fingerKeys = <String>[
+      'lThumb',
+      'lIndex',
+      'lMiddle',
+      'lRing',
+      'lPinky',
+      'rThumb',
+      'rIndex',
+      'rMiddle',
+      'rRing',
+      'rPinky',
+    ];
+    final hasOwnDims = fingerKeys.any(
+      (key) => (dims[key] ?? '').toString().trim().isNotEmpty,
+    );
+    if (acceptedByClientEmail.isNotEmpty &&
+        (!hasOwnDims ||
+            acceptedClientNameRaw.trim().isEmpty ||
+            acceptedClientProfileImage.trim().isEmpty)) {
+      try {
+        final clientRow =
+            await _supabase
+                .from('client')
+                .select('nail_preferences,basic,profile')
+                .ilike('email', acceptedByClientEmail)
+                .maybeSingle() ??
+            const <String, dynamic>{};
+        if (!hasOwnDims) {
+          final clientNailPrefs = _asMap(clientRow['nail_preferences']);
+          final clientDims = _asMap(clientNailPrefs['dimensions']);
+          if (clientDims.values.any(
+            (v) => (v ?? '').toString().trim().isNotEmpty,
+          )) {
+            effectiveDims = clientDims;
+            effectiveNailShape ??= clientNailPrefs['shape'];
+            effectiveNailLength ??= clientNailPrefs['length'];
+          }
+        }
+        final clientBasic = _asMap(clientRow['basic']);
+        final clientProfile = _asMap(clientRow['profile']);
+        if (acceptedClientNameRaw.trim().isEmpty) {
+          acceptedClientNameRaw = _firstNonEmptyString(
+            clientBasic['name'],
+            clientProfile['name'],
+          );
+        }
+        if (acceptedClientProfileImage.trim().isEmpty) {
+          final livePhoto = _firstNonEmptyString(
+            clientBasic['profileImageUrl'],
+            clientBasic['avatarUrl'],
+            clientBasic['photoUrl'],
+            clientProfile['profileImageUrl'],
+            clientProfile['avatarUrl'],
+            clientProfile['photoUrl'],
+          );
+          if (livePhoto.isNotEmpty) {
+            acceptedClientProfileImage = (await _resolvePhotoRef(
+              livePhoto,
+            )).trim();
+          }
+        }
+      } catch (_) {}
+    }
+
     final groupClients = await _parseGroupClients(
       groupOrder,
       dim,
@@ -1379,21 +1454,24 @@ class ArtistRequestsRepository {
         data['descriptionPreview'],
         data['description'],
       ),
-      nailShape: _firstNonEmptyString(nailPrefs['shape'], data['nailShape']),
-      nailLength: _firstNonEmptyString(nailPrefs['length'], data['nailLength']),
+      nailShape: _firstNonEmptyString(effectiveNailShape, data['nailShape']),
+      nailLength: _firstNonEmptyString(
+        effectiveNailLength,
+        data['nailLength'],
+      ),
       leftHand: NailDimensionsV2(
-        thumb: dim(dims['lThumb']),
-        index: dim(dims['lIndex']),
-        middle: dim(dims['lMiddle']),
-        ring: dim(dims['lRing']),
-        pinky: dim(dims['lPinky']),
+        thumb: dim(effectiveDims['lThumb']),
+        index: dim(effectiveDims['lIndex']),
+        middle: dim(effectiveDims['lMiddle']),
+        ring: dim(effectiveDims['lRing']),
+        pinky: dim(effectiveDims['lPinky']),
       ),
       rightHand: NailDimensionsV2(
-        thumb: dim(dims['rThumb']),
-        index: dim(dims['rIndex']),
-        middle: dim(dims['rMiddle']),
-        ring: dim(dims['rRing']),
-        pinky: dim(dims['rPinky']),
+        thumb: dim(effectiveDims['rThumb']),
+        index: dim(effectiveDims['rIndex']),
+        middle: dim(effectiveDims['rMiddle']),
+        ring: dim(effectiveDims['rRing']),
+        pinky: dim(effectiveDims['rPinky']),
       ),
       clientImages: safeClientPhotos,
       groupClients: groupClients,

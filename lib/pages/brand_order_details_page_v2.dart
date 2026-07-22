@@ -43,6 +43,9 @@ class _OrderSafe {
   final String paymentLink;
   final bool openToClientPool;
   final String selectedClientName;
+  final String acceptedByClientEmail;
+  final String acceptedClientName;
+  final String clientResponseStatus;
   final String selectedArtistName;
   final DateTime? paidAt;
   final List<String> artistCompletedPhotos;
@@ -98,6 +101,9 @@ class _OrderSafe {
     required this.paymentLink,
     required this.openToClientPool,
     required this.selectedClientName,
+    this.acceptedByClientEmail = '',
+    this.acceptedClientName = '',
+    this.clientResponseStatus = '',
     required this.selectedArtistName,
     required this.paidAt,
     required this.artistCompletedPhotos,
@@ -356,6 +362,24 @@ class _OrderSafe {
             payloadMap?['selectedClient'] ??
             orderMap?['selectedClientName'] ??
             orderMap?['selectedClient'],
+        '',
+      ),
+      acceptedByClientEmail: s(
+        tryRead(() => (o as dynamic).acceptedByClientEmail) ??
+            payloadMap?['acceptedByClientEmail'] ??
+            orderMap?['acceptedByClientEmail'],
+        '',
+      ),
+      acceptedClientName: s(
+        tryRead(() => (o as dynamic).acceptedClientName) ??
+            payloadMap?['acceptedClientName'] ??
+            orderMap?['acceptedClientName'],
+        '',
+      ),
+      clientResponseStatus: s(
+        tryRead(() => (o as dynamic).clientResponseStatus) ??
+            payloadMap?['clientResponseStatus'] ??
+            orderMap?['clientResponseStatus'],
         '',
       ),
       selectedArtistName: s(
@@ -716,13 +740,13 @@ class _NfcRequestTag extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: AppColors.blackCat,
+          color: AppColors.balletSlippers,
           borderRadius: BorderRadius.zero,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.nfc_rounded, size: 12, color: AppColors.snow),
+            Icon(Icons.nfc_rounded, size: 12, color: AppColors.blackCat),
             const SizedBox(width: 4),
             ExcludeSemantics(
               child: Text(
@@ -730,7 +754,7 @@ class _NfcRequestTag extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 10,
-                  color: AppColors.snow,
+                  color: AppColors.blackCat,
                   fontFamily: 'Arial',
                 ),
               ),
@@ -1186,6 +1210,13 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
             ],
           ),
+          if (order.nfcRequested) ...[
+            const SizedBox(height: 8),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: _NfcRequestTag(),
+            ),
+          ],
 
           const SizedBox(height: 12),
 
@@ -2553,16 +2584,9 @@ class _BaseOrderDetails extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Order Details',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
-              ),
-              if (order.nfcRequested) const _NfcRequestTag(),
-            ],
+          const Text(
+            'Order Details',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
           const SizedBox(height: 10),
           _bullet('Campaign Name', _valueOrDash(order.title)),
@@ -2757,12 +2781,22 @@ class _BaseOrderDetails extends StatelessWidget {
       return '-';
     }
 
-    // Single/direct client (or open pool claimed by one client): show that
-    // client once they've actually accepted, independent of whether an
-    // artist has accepted yet.
+    // Single/direct client: show the brand's selected client once they've
+    // actually accepted, independent of whether an artist has accepted yet.
     if (order.directClientStatus.trim().toLowerCase() == 'accepted') {
       final name = order.selectedClientName.trim();
       if (name.isNotEmpty) return name;
+    }
+
+    // Open client pool claimed by a client: the request has no pre-selected
+    // client, so the accepted client only shows up via acceptance fields.
+    if (order.clientResponseStatus.trim().toLowerCase() == 'accepted' ||
+        order.acceptedByClientEmail.trim().isNotEmpty) {
+      final name = order.acceptedClientName.trim();
+      if (name.isNotEmpty) return name;
+      if (order.acceptedByClientEmail.trim().isNotEmpty) {
+        return order.acceptedByClientEmail.trim();
+      }
     }
     return '-';
   }

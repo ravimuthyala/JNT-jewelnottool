@@ -840,6 +840,7 @@ class SubmittedClientRequestSummary {
     required this.shippedAt,
     required this.deliveredAt,
     this.nfcRequested = false,
+    this.acceptedClientName = '',
   });
 
   final String id;
@@ -887,6 +888,7 @@ class SubmittedClientRequestSummary {
   final String clientEmail;
   final String acceptedByArtistEmail;
   final String acceptedByClientEmail;
+  final String acceptedClientName;
   final String clientResponseStatus;
   final String selectedClientName;
   final String selectedClientEmail;
@@ -1949,6 +1951,16 @@ class SubmittedClientRequestSummary {
       (detailData['acceptance']
           as Map<String, dynamic>?)?['acceptedByClientEmail'],
     ]).toLowerCase();
+    final acceptedClientName = firstNonEmpty([
+      data['accepted_client_name'],
+      data['acceptedClientName'],
+      (detailData['acceptance']
+          as Map<String, dynamic>?)?['acceptedClientName'],
+      ((_asMap(detailData['clientProfileSnapshot'])['basic'])
+          as Map<String, dynamic>?)?['name'],
+      ((_asMap(payloadData['clientProfileSnapshot'])['basic'])
+          as Map<String, dynamic>?)?['name'],
+    ]);
     final declinedByClientEmails = <String>{
       ...((data['declined_by_client_emails'] as List<dynamic>?) ??
               (data['declinedByClientEmails'] as List<dynamic>?) ??
@@ -2200,6 +2212,7 @@ class SubmittedClientRequestSummary {
       ]).toLowerCase(),
       acceptedByArtistEmail: acceptedByArtistEmail,
       acceptedByClientEmail: acceptedByClientEmail,
+      acceptedClientName: acceptedClientName,
       clientResponseStatus: firstNonEmpty([
         data['client_response_status'],
         data['clientResponseStatus'],

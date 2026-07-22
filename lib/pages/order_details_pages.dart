@@ -3612,10 +3612,47 @@ class _BaseOrderDetails extends StatelessWidget {
           : asMap(rootDetails['payload']).isNotEmpty
           ? asMap(rootDetails['payload'])
           : details;
-      return _RequestNfcDetails.fromMaps(
-        root: <String, dynamic>{...root, ...rootDetails},
+      final mergedRoot = <String, dynamic>{...root, ...rootDetails};
+      final parsed = _RequestNfcDetails.fromMaps(
+        root: mergedRoot,
         details: payload,
       );
+      if (parsed.main.anySelected) return parsed;
+
+      // Brand-sourced (open client pool) requests often never snapshot the
+      // accepting client's own finger measurements onto the request row --
+      // nailPreferences.dimensions stays null there even after acceptance.
+      // Fall back to the accepted client's own saved profile measurements.
+      final acceptedClientEmail = _firstNonEmpty(<Object?>[
+        mergedRoot['acceptedByClientEmail'],
+        mergedRoot['accepted_by_client_email'],
+        asMap(mergedRoot['acceptance'])['acceptedByClientEmail'],
+        asMap(payload['acceptance'])['acceptedByClientEmail'],
+      ]).toLowerCase();
+      if (acceptedClientEmail.isEmpty) return parsed;
+
+      try {
+        final clientRow =
+            await Supabase.instance.client
+                .from('client')
+                .select('nail_preferences')
+                .ilike('email', acceptedClientEmail)
+                .maybeSingle() ??
+            const <String, dynamic>{};
+        final clientNailPrefs = asMap(clientRow['nail_preferences']);
+        final clientDims = asMap(clientNailPrefs['dimensions']);
+        if (clientDims.isEmpty) return parsed;
+        final fallbackMain = _FingerNfcSelection.fromEligibleDimensions(
+          clientDims,
+        );
+        if (!fallbackMain.anySelected) return parsed;
+        return _RequestNfcDetails(
+          main: fallbackMain,
+          groupBySlotIndex: parsed.groupBySlotIndex,
+        );
+      } catch (_) {
+        return parsed;
+      }
     } catch (_) {
       return _RequestNfcDetails.empty();
     }
@@ -3624,8 +3661,8 @@ class _BaseOrderDetails extends StatelessWidget {
   Widget _orderDetailsWithRightNailDimensions({
     bool showPaymentAmount = true,
     bool showUploadedInspiration = true,
-    bool showSingleMeasurementOuterBorder = true,
-    bool showGroupMeasurementOuterBorder = true,
+    bool showSingleMeasurementOuterBorder = false,
+    bool showGroupMeasurementOuterBorder = false,
   }) {
     final isGroupOrder =
         order.orderType.trim().toLowerCase() == 'group' ||
@@ -3845,7 +3882,7 @@ class _BaseOrderDetails extends StatelessWidget {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: showOuterBorder ? const EdgeInsets.all(12) : EdgeInsets.zero,
       decoration: showOuterBorder
           ? BoxDecoration(
               border: Border.all(color: AppColors.blackCatBorderLight),
@@ -3978,54 +4015,48 @@ class _BaseOrderDetails extends StatelessWidget {
       return nfc[key] == true;
     }
 
-    Widget row(String label, String key, {bool showDivider = true}) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.fade,
-                          style: TextStyle(
-                            color: AppColors.blackCat,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Arial',
-                          ),
-                        ),
+    Widget row(String label, String key) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.fade,
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Arial',
                       ),
-                      if (showNfc(key)) ...[
-                        const SizedBox(width: 6),
-                        _nfcDimensionChip(),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  value(key),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'ArialBold',
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ],
+                  if (showNfc(key)) ...[
+                    const SizedBox(width: 6),
+                    _nfcDimensionChip(),
+                  ],
+                ],
+              ),
             ),
-          ),
-          if (showDivider)
-            Container(height: 1, color: AppColors.blackCatBorderLight),
-        ],
+            const SizedBox(width: 10),
+            Text(
+              value(key),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'ArialBold',
+                color: AppColors.blackCat,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -4048,7 +4079,7 @@ class _BaseOrderDetails extends StatelessWidget {
         row('Index', 'index'),
         row('Middle', 'middle'),
         row('Ring', 'ring'),
-        row('Pinky', 'pinky', showDivider: false),
+        row('Pinky', 'pinky'),
       ],
     );
   }
@@ -4058,7 +4089,7 @@ class _BaseOrderDetails extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: const Text(
@@ -4845,7 +4876,7 @@ class _LocalMeasurementsBody extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: const Text(

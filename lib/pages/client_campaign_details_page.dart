@@ -119,10 +119,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       ),
                       const SizedBox(height: 14),
                       _overviewCard(vm),
-                      if (vm.requiresNfc) ...[
-                        const SizedBox(height: 10),
-                        _nfcRequiredNotice(),
-                      ],
                       const SizedBox(height: 16),
                       _sectionContainer(
                         child: _plainSection(
@@ -417,56 +413,45 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       return parsed != null && parsed >= 8;
     }
 
-    Widget row(
-      String label,
-      String raw, {
-      bool showNfc = false,
-      bool showDivider = true,
-    }) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.fade,
-                          style: const TextStyle(
-                            color: AppColors.blackCat,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Arial',
-                          ),
-                        ),
+    Widget row(String label, String raw, {bool showNfc = false}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.fade,
+                      style: const TextStyle(
+                        color: AppColors.blackCat,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Arial',
                       ),
-                      if (showNfc) ...[const SizedBox(width: 6), _nfcChip()],
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  value(raw),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'ArialBold',
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ],
+                  if (showNfc) ...[const SizedBox(width: 6), _nfcChip()],
+                ],
+              ),
             ),
-          ),
-          if (showDivider)
-            Container(height: 1, color: AppColors.blackCatBorderLight),
-        ],
+            const SizedBox(width: 10),
+            Text(
+              value(raw),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'ArialBold',
+                color: AppColors.blackCat,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -495,36 +480,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         row('Index', hand.index),
         row('Middle', hand.middle),
         row('Ring', hand.ring),
-        row('Pinky', hand.pinky, showDivider: false),
+        row('Pinky', hand.pinky),
       ],
-    );
-  }
-
-  Widget _nfcRequiredNotice() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.nfc_rounded, size: 18, color: AppColors.blackCat),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'NFC Smart Nail Required',
-              style: TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'ArialBold',
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -533,7 +490,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: const Text(
@@ -722,7 +679,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         const SizedBox(width: 6),
         const Flexible(
           child: Text(
-            'NFC Request',
+            'NFC',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

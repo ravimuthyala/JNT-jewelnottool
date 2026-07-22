@@ -3415,7 +3415,7 @@ class _NfcChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: const Text(
