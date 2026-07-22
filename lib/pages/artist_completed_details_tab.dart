@@ -19,23 +19,7 @@ extension _CompletedRequestDetailsTab on _CompletedRequestSheetState {
         const SizedBox(height: 12),
         _completedTabsBar(),
         const SizedBox(height: 12),
-        completedSoftBox(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              completedSectionTitle('Description'),
-              const SizedBox(height: 8),
-              Text(
-                widget.request.bio.isEmpty ? '—' : widget.request.bio,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  height: 1.2,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
+        _descriptionAndCompanyBioSection(),
         const SizedBox(height: 12),
         if (_isBrandRequest(widget.request)) ...[
           _acceptedClientDetailsSection(widget.request),

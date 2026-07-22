@@ -209,21 +209,25 @@ class CompanyClientRequestCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: const BoxDecoration(
-          color: AppColors.blackCat,
+          color: AppColors.balletSlippers,
           borderRadius: BorderRadius.zero,
         ),
         child: ExcludeSemantics(
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.nfc_rounded, size: 11 * scale, color: AppColors.snow),
+              Icon(
+                Icons.nfc_rounded,
+                size: 11 * scale,
+                color: AppColors.blackCat,
+              ),
               SizedBox(width: 3 * scale),
               Text(
                 'NFC request',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 10 * scale,
-                  color: AppColors.snow,
+                  color: AppColors.blackCat,
                   height: 1.05,
                 ),
               ),

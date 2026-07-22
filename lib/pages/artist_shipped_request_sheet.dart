@@ -12,6 +12,7 @@ import '../theme/app_colors.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import '../utils/request_nfc_details_loader.dart';
+import '../utils/company_bio_loader.dart';
 
 Future<void> showShippedRequestSheet({
   required BuildContext context,
@@ -524,6 +525,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                     ),
 
                     const SizedBox(height: 12),
+                    _descriptionAndCompanyBioSection(widget.request),
+                    const SizedBox(height: 12),
                     if (_isBrandRequest(widget.request)) ...[
                       _acceptedClientDetailsSection(widget.request),
                       const SizedBox(height: 12),
@@ -914,16 +917,83 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
       request.orderNumber.trim().toUpperCase().startsWith('BE-') ||
       request.orderNumber.trim().toUpperCase().startsWith('BR-');
 
+  Widget _descriptionAndCompanyBioSection(ClientRequestV2 r) {
+    if (!_isBrandRequest(r)) {
+      return _softBox(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionTitle('Description'),
+            const SizedBox(height: 8),
+            Text(
+              r.bio.trim().isEmpty ? '-' : r.bio.trim(),
+              style: const TextStyle(
+                fontWeight: FontWeight.w400,
+                height: 1.25,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return FutureBuilder<String>(
+      future: fetchCompanyBio(
+        sourceCollection: r.sourceCollection,
+        requestId: r.id,
+        requestOrderNumber: r.orderNumber,
+      ),
+      builder: (context, snapshot) {
+        final bio = (snapshot.data ?? '').trim();
+        return _softBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle('Description'),
+              const SizedBox(height: 8),
+              Text(
+                r.bio.trim().isEmpty ? '-' : r.bio.trim(),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  height: 1.25,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(height: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(height: 12),
+              _sectionTitle('Company Bio'),
+              const SizedBox(height: 8),
+              Text(
+                bio.isEmpty ? 'No company bio available' : bio,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  height: 1.25,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _outlinedChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF9FC0E8)),
+        border: Border.all(color: AppColors.blackCat),
+        color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+        ),
       ),
     );
   }
@@ -1000,46 +1070,94 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
     final requestType = r.isDirectRequest
-        ? 'Direct Request'
-        : 'Standard Request';
+        ? 'Direct'
+        : 'Standard';
     final orderType = r.orderType == RequestOrderTypeV2.group
-        ? 'Group Order'
-        : 'Single Order';
-    return _summaryPairRow(
-      left: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            r.isDirectRequest
-                ? Icons.arrow_outward_rounded
-                : Icons.arrow_forward_rounded,
-            size: 15,
-            color: AppColors.blackCat,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            requestType,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-          ),
-        ],
+        ? 'Group'
+        : 'Single';
+
+    Widget requestTypeContent() => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          r.isDirectRequest
+              ? Icons.arrow_outward_rounded
+              : Icons.arrow_forward_rounded,
+          size: 15,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          requestType,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+        ),
+      ],
+    );
+
+    Widget orderTypeContent() => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          r.orderType == RequestOrderTypeV2.group
+              ? Icons.groups_2_outlined
+              : Icons.person_outline_rounded,
+          size: 15,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          orderType,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+        ),
+      ],
+    );
+
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: r.sourceCollection,
+        requestId: r.id,
+        requestOrderNumber: r.orderNumber,
       ),
-      right: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            r.orderType == RequestOrderTypeV2.group
-                ? Icons.groups_2_outlined
-                : Icons.person_outline_rounded,
-            size: 15,
-            color: AppColors.blackCat,
+      builder: (context, snapshot) {
+        final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
+        final requiresNfc =
+            nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
+        if (!requiresNfc) {
+          return _summaryPairRow(
+            left: requestTypeContent(),
+            right: orderTypeContent(),
+          );
+        }
+        return Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              requestTypeContent(),
+              const SizedBox(width: 10),
+              Container(
+                width: 1,
+                height: 18,
+                color: AppColors.blackCatBorderLight,
+              ),
+              const SizedBox(width: 10),
+              orderTypeContent(),
+              const SizedBox(width: 10),
+              Container(
+                width: 1,
+                height: 18,
+                color: AppColors.blackCatBorderLight,
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.nfc_rounded, size: 15, color: AppColors.blackCat),
+              const SizedBox(width: 5),
+              const Text(
+                'NFC',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+              ),
+            ],
           ),
-          const SizedBox(width: 5),
-          Text(
-            orderType,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

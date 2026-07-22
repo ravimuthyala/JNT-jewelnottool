@@ -10,6 +10,7 @@ import '../services/artist_requests_repository.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 import '../utils/request_nfc_details_loader.dart';
+import '../utils/company_bio_loader.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 
 Future<void> showDeliveredRequestSheet({
@@ -411,54 +412,102 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
   Widget _requestTypeRow() {
     final requestLabel = request.isDirectRequest
-        ? 'Direct Request'
-        : 'Standard Request';
+        ? 'Direct'
+        : 'Standard';
     final orderLabel = request.orderType == RequestOrderTypeV2.group
-        ? 'Group Order'
-        : 'Single Order';
-    return _summaryPairRow(
-      left: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            request.isDirectRequest
-                ? Icons.arrow_outward_rounded
-                : Icons.arrow_forward_rounded,
-            size: 15,
+        ? 'Group'
+        : 'Single';
+
+    Widget requestTypeContent() => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          request.isDirectRequest
+              ? Icons.arrow_outward_rounded
+              : Icons.arrow_forward_rounded,
+          size: 15,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          requestLabel,
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
             color: AppColors.blackCat,
           ),
-          const SizedBox(width: 5),
-          Text(
-            requestLabel,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ],
-      ),
-      right: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            request.orderType == RequestOrderTypeV2.group
-                ? Icons.groups_2_outlined
-                : Icons.person_outline_rounded,
-            size: 15,
+        ),
+      ],
+    );
+
+    Widget orderTypeContent() => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          request.orderType == RequestOrderTypeV2.group
+              ? Icons.groups_2_outlined
+              : Icons.person_outline_rounded,
+          size: 15,
+          color: AppColors.blackCat,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          orderLabel,
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
             color: AppColors.blackCat,
           ),
-          const SizedBox(width: 5),
-          Text(
-            orderLabel,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ],
+        ),
+      ],
+    );
+
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: request.sourceCollection,
+        requestId: request.id,
+        requestOrderNumber: request.orderNumber,
       ),
+      builder: (context, snapshot) {
+        final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
+        final requiresNfc =
+            nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
+        if (!requiresNfc) {
+          return _summaryPairRow(
+            left: requestTypeContent(),
+            right: orderTypeContent(),
+          );
+        }
+        return Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              requestTypeContent(),
+              const SizedBox(width: 10),
+              Container(
+                width: 1,
+                height: 18,
+                color: AppColors.blackCatBorderLight,
+              ),
+              const SizedBox(width: 10),
+              orderTypeContent(),
+              const SizedBox(width: 10),
+              Container(
+                width: 1,
+                height: 18,
+                color: AppColors.blackCatBorderLight,
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.nfc_rounded, size: 15, color: AppColors.blackCat),
+              const SizedBox(width: 5),
+              const Text(
+                'NFC',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -548,6 +597,89 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       request.sourceCollection == 'Company_Custom_Requests' ||
       request.orderNumber.trim().toUpperCase().startsWith('BE-') ||
       request.orderNumber.trim().toUpperCase().startsWith('BR-');
+
+  Widget _descriptionAndCompanyBioSection(ClientRequestV2 r) {
+    if (!_isBrandRequest(r)) {
+      return _borderBox(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Description',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.blackCat,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              r.bio.trim().isEmpty ? '-' : r.bio.trim(),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return FutureBuilder<String>(
+      future: fetchCompanyBio(
+        sourceCollection: r.sourceCollection,
+        requestId: r.id,
+        requestOrderNumber: r.orderNumber,
+      ),
+      builder: (context, snapshot) {
+        final bio = (snapshot.data ?? '').trim();
+        return _borderBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Description',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                r.bio.trim().isEmpty ? '-' : r.bio.trim(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(height: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(height: 12),
+              const Text(
+                'Company Bio',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                bio.isEmpty ? 'No company bio available' : bio,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Widget _infoChips() {
     final courier = (request.shippedByCourier ?? '').trim().isEmpty
@@ -657,6 +789,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _descriptionAndCompanyBioSection(request),
+        const SizedBox(height: 14),
         if (_isBrandRequest(request)) ...[
           _acceptedClientDetailsSection(request),
           const SizedBox(height: 14),
@@ -780,12 +914,6 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          _detailRow(
-            'Description',
-            request.bio.trim().isEmpty ? '-' : request.bio.trim(),
-            valueWeight: FontWeight.w400,
-          ),
-          const SizedBox(height: 10),
           _detailRow('Need by', _needByLabel(request.neededBy)),
           const SizedBox(height: 14),
           const Text(

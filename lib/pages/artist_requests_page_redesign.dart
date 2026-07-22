@@ -5467,8 +5467,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                       Expanded(
                         child: Text(
                           r.orderType == RequestOrderTypeV2.group
-                              ? 'Group Order'
-                              : 'Single Order',
+                              ? 'Group'
+                              : 'Single',
                           style: _t(
                             11.5,
                             w: FontWeight.w700,
@@ -6716,33 +6716,62 @@ class InReviewDetailsSheet extends StatelessWidget {
     return '-';
   }
 
-  Widget _companyBioBlock() {
-    if (request.sourceCollection != 'Company_Custom_Requests') {
-      return const SizedBox.shrink();
+  Widget _descriptionAndCompanyBioSection() {
+    final isBrandRequest = request.sourceCollection == 'Company_Custom_Requests';
+    if (!isBrandRequest) {
+      return _softBox(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionTitle('Description'),
+            const SizedBox(height: 8),
+            Text(
+              _requestDescriptionText(),
+              style: TextStyle(
+                fontWeight: FontWeight.w400,
+                fontSize: 14.5,
+                height: 1.35,
+                color: AppColors.blackCat.withValues(alpha: 0.90),
+              ),
+            ),
+          ],
+        ),
+      );
     }
     return FutureBuilder<_ArtistRequestDisplayContext>(
       future: _cachedDisplayContext(),
       builder: (context, snapshot) {
         final bio = (snapshot.data?.companyBio ?? '').trim();
-        return Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: _softBox(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionTitle('Company Bio'),
-                const SizedBox(height: 8),
-                Text(
-                  bio.isEmpty ? 'No company bio available' : bio,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 14.5,
-                    height: 1.35,
-                    color: AppColors.blackCat.withValues(alpha: 0.90),
-                  ),
+        return _softBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle('Description'),
+              const SizedBox(height: 8),
+              Text(
+                _requestDescriptionText(),
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14.5,
+                  height: 1.35,
+                  color: AppColors.blackCat.withValues(alpha: 0.90),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              Container(height: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(height: 12),
+              _sectionTitle('Company Bio'),
+              const SizedBox(height: 8),
+              Text(
+                bio.isEmpty ? 'No company bio available' : bio,
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14.5,
+                  height: 1.35,
+                  color: AppColors.blackCat.withValues(alpha: 0.90),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -8590,25 +8619,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 children: [
                   _topHero(context),
                   const SizedBox(height: 10),
-                  _softBox(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _sectionTitle('Description'),
-                        const SizedBox(height: 8),
-                        Text(
-                          _requestDescriptionText(),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14.5,
-                            height: 1.35,
-                            color: AppColors.blackCat.withValues(alpha: 0.90),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _companyBioBlock(),
+                  _descriptionAndCompanyBioSection(),
                   const SizedBox(height: 10),
                   if (isGroupOrder) ...[
                     _softBox(
@@ -8645,8 +8656,10 @@ class InReviewDetailsSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                   ] else ...[
-                    if (request.sourceCollection == 'Company_Custom_Requests')
+                    if (request.sourceCollection == 'Company_Custom_Requests') ...[
                       _brandClientDetailsBlock(),
+                      const SizedBox(height: 12),
+                    ],
                     FutureBuilder<_RequestNfcDetails>(
                       future: _loadRequestedNfcDetails(),
                       builder: (context, snapshot) {
@@ -9511,7 +9524,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 Flexible(
                   child: _requestTypePill(
                     context: context,
-                    text: isDirect ? 'Direct Request' : 'Standard Request',
+                    text: isDirect ? 'Direct' : 'Standard',
                     icon: isDirect
                         ? Icons.arrow_outward_rounded
                         : Icons.arrow_forward_rounded,
@@ -9528,7 +9541,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                 Flexible(
                   child: _requestTypePill(
                     context: context,
-                    text: isGroup ? 'Group Order' : 'Single Order',
+                    text: isGroup ? 'Group' : 'Single',
                     icon: isGroup
                         ? Icons.groups_2_outlined
                         : Icons.person_outline_rounded,

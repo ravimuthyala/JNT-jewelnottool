@@ -14,6 +14,7 @@ import '../utils/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import '../utils/request_nfc_details_loader.dart';
+import '../utils/company_bio_loader.dart';
 import 'request_chat_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -617,26 +618,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                     const SizedBox(height: 10),
                   ],
 
-                  _softBox(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _sectionTitle('Description'),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.request.bio.trim().isEmpty
-                              ? '�'
-                              : widget.request.bio.trim(),
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.75),
-                            fontWeight: FontWeight.w400,
-                            height: 1.25,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _descriptionAndCompanyBioSection(widget.request),
                   const SizedBox(height: 12),
                   if (_isBrandRequest(widget.request)) ...[
                     _acceptedClientDetailsSection(widget.request),
@@ -2863,16 +2845,86 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       request.orderNumber.trim().toUpperCase().startsWith('BE-') ||
       request.orderNumber.trim().toUpperCase().startsWith('BR-');
 
+  Widget _descriptionAndCompanyBioSection(ClientRequestV2 r) {
+    if (!_isBrandRequest(r)) {
+      return _softBox(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionTitle('Description'),
+            const SizedBox(height: 8),
+            Text(
+              r.bio.trim().isEmpty ? '-' : r.bio.trim(),
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.75),
+                fontWeight: FontWeight.w400,
+                height: 1.25,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return FutureBuilder<String>(
+      future: fetchCompanyBio(
+        sourceCollection: r.sourceCollection,
+        requestId: r.id,
+        requestOrderNumber: r.orderNumber,
+      ),
+      builder: (context, snapshot) {
+        final bio = (snapshot.data ?? '').trim();
+        return _softBox(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionTitle('Description'),
+              const SizedBox(height: 8),
+              Text(
+                r.bio.trim().isEmpty ? '-' : r.bio.trim(),
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.75),
+                  fontWeight: FontWeight.w400,
+                  height: 1.25,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(height: 1, color: AppColors.blackCatBorderLight),
+              const SizedBox(height: 12),
+              _sectionTitle('Company Bio'),
+              const SizedBox(height: 8),
+              Text(
+                bio.isEmpty ? 'No company bio available' : bio,
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.75),
+                  fontWeight: FontWeight.w400,
+                  height: 1.25,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _outlinedChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF9FC0E8)),
+        border: Border.all(color: AppColors.blackCat),
+        color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+        ),
       ),
     );
   }
@@ -2949,39 +3001,72 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
     final requestType = r.isDirectRequest
-        ? 'Direct Request'
-        : 'Standard Request';
+        ? 'Direct'
+        : 'Standard';
     final orderType = r.orderType == RequestOrderTypeV2.group
-        ? 'Group Order'
-        : 'Single Order';
-    return Row(
-      children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: _chipInfo(
-              icon: r.isDirectRequest
-                  ? Icons.arrow_outward_rounded
-                  : Icons.arrow_forward_rounded,
-              text: requestType,
+        ? 'Group'
+        : 'Single';
+    return FutureBuilder<RequestNfcDetails>(
+      future: loadRequestNfcDetails(
+        sourceCollection: r.sourceCollection,
+        requestId: r.id,
+        requestOrderNumber: r.orderNumber,
+      ),
+      builder: (context, snapshot) {
+        final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
+        final requiresNfc =
+            nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
+        return Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _chipInfo(
+                  icon: r.isDirectRequest
+                      ? Icons.arrow_outward_rounded
+                      : Icons.arrow_forward_rounded,
+                  text: requestType,
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(width: 1, height: 18, color: AppColors.blackCatBorderLight),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _chipInfo(
-              icon: r.orderType == RequestOrderTypeV2.group
-                  ? Icons.groups_2_outlined
-                  : Icons.person_outline_rounded,
-              text: orderType,
+            const SizedBox(width: 8),
+            Container(
+              width: 1,
+              height: 18,
+              color: AppColors.blackCatBorderLight,
             ),
-          ),
-        ),
-      ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: Align(
+                alignment: requiresNfc
+                    ? Alignment.center
+                    : Alignment.centerLeft,
+                child: _chipInfo(
+                  icon: r.orderType == RequestOrderTypeV2.group
+                      ? Icons.groups_2_outlined
+                      : Icons.person_outline_rounded,
+                  text: orderType,
+                ),
+              ),
+            ),
+            if (requiresNfc) ...[
+              const SizedBox(width: 8),
+              Container(
+                width: 1,
+                height: 18,
+                color: AppColors.blackCatBorderLight,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _chipInfo(icon: Icons.nfc_rounded, text: 'NFC'),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
   static Widget _chipInfo({required IconData icon, required String text}) {
