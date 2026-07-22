@@ -755,6 +755,11 @@ class _ClientArtistRegistrationPageState
       }
     }
 
+    // Uploads (attempted or not) are done — the raw bytes are no longer
+    // needed and would otherwise stay resident in memory for the rest of
+    // this State's life.
+    _portfolioImages.clear();
+
     return uploaded;
   }
 
@@ -791,6 +796,9 @@ class _ClientArtistRegistrationPageState
     } catch (e) {
       debugPrint('CLIENT ARTIST PROFILE UPLOAD FAILED: $e');
       return '';
+    } finally {
+      // Attempted (success or fail) — raw bytes are no longer needed.
+      _profileBytes = null;
     }
   }
 
@@ -820,6 +828,9 @@ class _ClientArtistRegistrationPageState
         );
       }
     }
+
+    // Uploads (attempted or not) are done — release the raw camera bytes.
+    _guidedMeasurementPhotos.clear();
 
     return uploaded;
   }
@@ -1945,7 +1956,13 @@ class _ClientArtistRegistrationPageState
       imageQuality: 80,
     );
     if (img == null) return;
-    final bytes = await img.readAsBytes();
+    final raw = await img.readAsBytes();
+    final bytes = _optimizePortfolioBytes(
+          raw,
+          maxEdge: 900,
+          maxBytes: 650 * 1024,
+        ) ??
+        raw;
     if (!mounted) return;
     setState(() => _profileBytes = bytes);
   }
@@ -1967,10 +1984,10 @@ class _ClientArtistRegistrationPageState
     final selectedFiles = files.take(remainingSlots).toList(growable: false);
     final bytesList = <Uint8List>[];
     for (final file in selectedFiles) {
-      final bytes = await file.readAsBytes();
-      if (bytes.isNotEmpty) {
-        bytesList.add(bytes);
-      }
+      final raw = await file.readAsBytes();
+      if (raw.isEmpty) continue;
+      final optimized = _optimizePortfolioBytes(raw);
+      bytesList.add(optimized != null && optimized.isNotEmpty ? optimized : raw);
     }
 
     if (!mounted || bytesList.isEmpty) return;
@@ -5407,7 +5424,19 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink();
+    return Text.rich(
+      TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.blackCat,
+        ),
+        children: requiredField
+            ? const [TextSpan(text: ' *', style: TextStyle(color: Colors.red))]
+            : null,
+      ),
+    );
   }
 }
 

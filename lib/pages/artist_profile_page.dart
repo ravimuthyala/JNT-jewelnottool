@@ -692,13 +692,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
     addFromAny(portfolio['items']);
     addFromAny(portfolio['images']);
-    addFromAny(data['portfolioItems']);
     addFromAny(data['portfolio_items']);
-    addFromAny(data['portfolioImages']);
     addFromAny(data['portfolio_images']);
-    addFromAny(data['panel_portfolioImages']);
     addFromAny(data['panel_portfolio_images']);
-    addFromAny(data['panel_artist_portfolioImages']);
     addFromAny(data['panel_artist_portfolio_images']);
     addFromAny(artistPortfolio['items']);
     addFromAny(artistPortfolio['images']);
@@ -2719,11 +2715,8 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           .select(
             'portfolio,'
             'portfolio_items,portfolio_images,'
-            'portfolioItems,portfolioImages,'
-            'panel_portfolio_items,panel_portfolio_images,'
-            'panel_portfolioItems,panel_portfolioImages,'
-            'panel_artist_portfolio_items,panel_artist_portfolio_images,'
-            'panel_artist_portfolioItems,panel_artist_portfolioImages,'
+            'panel_portfolio_images,'
+            'panel_artist_portfolio_images,'
             'artist',
           )
           .eq('id', widget.supabaseId)
@@ -2814,17 +2807,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
 
     addFromAny(portfolio['items']);
     addFromAny(portfolio['images']);
-    addFromAny(row['portfolioItems']);
     addFromAny(row['portfolio_items']);
-    addFromAny(row['portfolioImages']);
     addFromAny(row['portfolio_images']);
-    addFromAny(row['panel_portfolioItems']);
-    addFromAny(row['panel_portfolio_items']);
-    addFromAny(row['panel_portfolioImages']);
     addFromAny(row['panel_portfolio_images']);
-    addFromAny(row['panel_artist_portfolioItems']);
-    addFromAny(row['panel_artist_portfolio_items']);
-    addFromAny(row['panel_artist_portfolioImages']);
     addFromAny(row['panel_artist_portfolio_images']);
     addFromAny(artist['portfolioItems']);
     addFromAny(artist['portfolio_items']);

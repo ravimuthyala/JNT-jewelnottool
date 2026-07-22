@@ -856,35 +856,21 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     Map<String, dynamic> data,
   ) async {
     final nowIso = DateTime.now().toIso8601String();
-    final existingRows = await Supabase.instance.client
-        .from('client_custom_requests_details')
-        .select('id, updated_at')
-        .eq('request_id', requestId)
-        .eq('detail_key', 'payload')
-        .order('updated_at', ascending: false)
-        .limit(1);
-
-    final existing = existingRows.isNotEmpty
-        ? Map<String, dynamic>.from(existingRows.first)
-        : null;
-
     final cleanData = _supabaseJsonMap(data);
 
-    if (existing is Map<String, dynamic> && existing['id'] != null) {
-      await Supabase.instance.client
-          .from('client_custom_requests_details')
-          .update({'data': cleanData, 'updated_at': nowIso})
-          .eq('id', existing['id']);
-      return;
-    }
-
-    await Supabase.instance.client.from('client_custom_requests_details').insert({
-      'request_id': requestId,
-      'detail_key': 'payload',
-      'data': cleanData,
-      'created_at': nowIso,
-      'updated_at': nowIso,
-    });
+    // Atomic upsert on the (request_id, detail_key) unique constraint —
+    // replaces the old select-then-insert/update round trip.
+    await Supabase.instance.client
+        .from('client_custom_requests_details')
+        .upsert(
+          {
+            'request_id': requestId,
+            'detail_key': 'payload',
+            'data': cleanData,
+            'updated_at': nowIso,
+          },
+          onConflict: 'request_id,detail_key',
+        );
   }
 
   Future<void> _updateSupabaseClientCustomRequest(

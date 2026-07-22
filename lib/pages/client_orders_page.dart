@@ -762,7 +762,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   OrdersFilter _filter = OrdersFilter.all;
   StreamSubscription<List<SubmittedClientRequestSummary>>?
   _submittedRequestsSub;
-  StreamSubscription<dynamic>? _brandPartnerStatusSub;
   List<ClientOrder> _submittedOrders = const [];
   DateTime? _lastExpirySyncAt;
   final FocusNode _notificationsFocusNode = FocusNode(
@@ -773,7 +772,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   @override
   void initState() {
     super.initState();
-    unawaited(_listenBrandPartnerStatus());
     _subscribeSubmittedOrders();
     _scheduleInitialA11yFocus();
   }
@@ -796,7 +794,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   @override
   void dispose() {
     _submittedRequestsSub?.cancel();
-    _brandPartnerStatusSub?.cancel();
     _notificationsFocusNode.dispose();
     super.dispose();
   }
@@ -830,41 +827,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       _focusRequestQueued = false;
       _notificationsFocusNode.requestFocus();
     });
-  }
-
-  Future<void> _listenBrandPartnerStatus() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final uid = user?.id;
-    final email = (user?.email ?? widget.profile.basic.email).trim().toLowerCase();
-    if ((uid == null || uid.isEmpty) && email.isEmpty) return;
-
-    try {
-      Map<String, dynamic>? row;
-      if (uid != null && uid.isNotEmpty) {
-        row = await Supabase.instance.client
-            .from('client')
-            .select()
-            .eq('id', uid)
-            .maybeSingle();
-        row ??= await Supabase.instance.client
-            .from('client_artist')
-            .select()
-            .eq('id', uid)
-            .maybeSingle();
-      }
-      if (row == null && email.isNotEmpty) {
-        row = await Supabase.instance.client
-            .from('client')
-            .select()
-            .ilike('email', email)
-            .maybeSingle();
-        row ??= await Supabase.instance.client
-            .from('client_artist')
-            .select()
-            .ilike('email', email)
-            .maybeSingle();
-      }
-    } catch (_) {}
   }
 
   void _subscribeSubmittedOrders() {
@@ -1030,7 +992,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         final collection = req.sourceCollection.trim().isNotEmpty
             ? req.sourceCollection.trim()
             : 'Client_Custom_Requests';
-        final table = _SupabaseOrderService.tableForCollection(collection);
         final current = await _SupabaseOrderService.getRequest(collection, req.id);
         String firstNonEmpty(List<Object?> values, {String fallback = ''}) {
           for (final value in values) {
@@ -1065,31 +1026,35 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           continue;
         }
         final nowIso = DateTime.now().toIso8601String();
-        final updatePayload = <String, dynamic>{
-          'status': isBrandRequest ? 'cancelled' : 'expired',
-          if (isBrandRequest) 'cancel_reason': cancellationReason,
-          if (isBrandRequest) 'cancelled_at': nowIso,
-          if (!isBrandRequest) 'expired_at': nowIso,
-          'expired_notified_client': true,
-          if (isBrandRequest) 'expired_notified_brand_admin': true,
-          if (isBrandRequest && acceptedClientEmail.isNotEmpty)
-            'expired_notified_accepted_client': true,
-          'updated_at': nowIso,
-        };
-        final details = _SupabaseOrderService.asMap(current['details']);
-        final payload = _SupabaseOrderService.asMap(current['payload']);
-        details.addAll(<String, dynamic>{
+        final detailsPatch = <String, dynamic>{
           'status': isBrandRequest ? 'cancelled' : 'expired',
           if (isBrandRequest) 'cancelReason': cancellationReason,
           if (isBrandRequest) 'cancelledAt': nowIso,
           if (!isBrandRequest)
             'expiredReason':
                 'Request was not accepted by artist, and it is past due.',
-        });
-        payload.addAll(details);
-        updatePayload['details'] = details;
-        updatePayload['payload'] = payload;
-        await Supabase.instance.client.from(table).update(updatePayload).eq('id', req.id);
+        };
+        if (isBrandRequest) {
+          await Supabase.instance.client.rpc(
+            'expire_company_custom_request',
+            params: <String, dynamic>{
+              'p_id': req.id,
+              'p_cancel_reason': cancellationReason,
+              'p_details_patch': detailsPatch,
+              'p_updated_at': nowIso,
+              'p_mark_accepted_client': acceptedClientEmail.isNotEmpty,
+            },
+          );
+        } else {
+          await Supabase.instance.client.rpc(
+            'expire_client_custom_request',
+            params: <String, dynamic>{
+              'p_id': req.id,
+              'p_details_patch': detailsPatch,
+              'p_updated_at': nowIso,
+            },
+          );
+        }
 
         if (!isBrandRequest && (req.clientEmail).trim().isNotEmpty) {
           await NotificationsService.createUserNotification(

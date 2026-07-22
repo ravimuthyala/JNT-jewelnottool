@@ -422,55 +422,42 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
   ) async {
     final table = _tableNameForCollection(collection);
     final nowIso = DateTime.now().toIso8601String();
-    final existingRows = await _supabase
-        .from(table)
-        .select()
-        .eq('id', requestId)
-        .limit(1);
-    final root = existingRows.isEmpty
-        ? const <String, dynamic>{}
-        : _asMap(existingRows.first);
-    final existingDetails = _asMap(root['details']);
     final mergedDetails = _deepMergeMaps(
-      existingDetails,
-      _deepMergeMaps(
-        detailsPayload,
-        <String, dynamic>{
-          'status': summaryPayload['status'] ?? detailsPayload['status'],
-          'acceptedByClientEmail': summaryPayload['acceptedByClientEmail'],
-          'acceptedByClientAt': summaryPayload['acceptedByClientAt'],
-          'declinedByClientEmails': summaryPayload['declinedByClientEmails'],
-          'acceptedGroupClientEmails': summaryPayload['acceptedGroupClientEmails'],
-          'groupClientsAllResponded': summaryPayload['groupClientsAllResponded'],
-          'brandStatus': summaryPayload['brandStatus'],
-          'clientStatus': summaryPayload['clientStatus'],
-          'artistStatus': summaryPayload['artistStatus'],
-          'directArtistStatus': summaryPayload['directArtistStatus'],
-          'clientResponseStatus': summaryPayload['clientResponseStatus'],
-          'openToClientPool': summaryPayload['openToClientPool'],
-        }..removeWhere((_, value) => value == null),
-      ),
+      detailsPayload,
+      <String, dynamic>{
+        'status': summaryPayload['status'] ?? detailsPayload['status'],
+        'acceptedByClientEmail': summaryPayload['acceptedByClientEmail'],
+        'acceptedByClientAt': summaryPayload['acceptedByClientAt'],
+        'declinedByClientEmails': summaryPayload['declinedByClientEmails'],
+        'acceptedGroupClientEmails': summaryPayload['acceptedGroupClientEmails'],
+        'groupClientsAllResponded': summaryPayload['groupClientsAllResponded'],
+        'brandStatus': summaryPayload['brandStatus'],
+        'clientStatus': summaryPayload['clientStatus'],
+        'artistStatus': summaryPayload['artistStatus'],
+        'directArtistStatus': summaryPayload['directArtistStatus'],
+        'clientResponseStatus': summaryPayload['clientResponseStatus'],
+        'openToClientPool': summaryPayload['openToClientPool'],
+      }..removeWhere((_, value) => value == null),
     );
-
-    final update = <String, dynamic>{
-      'id': requestId,
-      'status': summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
-      'details': mergedDetails,
-      'updated_at': nowIso,
-      'accepted_by_client_email': summaryPayload['acceptedByClientEmail'],
-      'declined_by_client_emails': summaryPayload['declinedByClientEmails'],
-      'open_to_client_pool': summaryPayload['openToClientPool'],
-      'client_response_status': summaryPayload['clientResponseStatus'],
-      'artist_status': summaryPayload['artistStatus'],
-      'brand_status': summaryPayload['brandStatus'],
-      'client_status': summaryPayload['clientStatus'],
-    }..removeWhere((_, value) => value == null);
-
-    final columns = await _tableColumns(table);
-    update.removeWhere((key, _) => !columns.contains(key));
-
-    update.remove('id');
-    await _supabase.from(table).update(update).eq('id', requestId);
+    final status = summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending';
+    final rpcParams = <String, dynamic>{
+      'p_id': requestId,
+      'p_status': status,
+      'p_details_patch': mergedDetails,
+      'p_accepted_by_client_email': summaryPayload['acceptedByClientEmail'],
+      'p_declined_by_client_emails': summaryPayload['declinedByClientEmails'],
+      'p_open_to_client_pool': summaryPayload['openToClientPool'],
+      'p_artist_status': summaryPayload['artistStatus'],
+      'p_brand_status': summaryPayload['brandStatus'],
+      'p_client_status': summaryPayload['clientStatus'],
+      'p_updated_at': nowIso,
+    };
+    if (table == 'company_custom_requests') {
+      await _supabase.rpc('upsert_company_custom_request_payload', params: rpcParams);
+    } else {
+      rpcParams['p_client_response_status'] = summaryPayload['clientResponseStatus'];
+      await _supabase.rpc('upsert_client_custom_request_payload', params: rpcParams);
+    }
 
     // Keep the optional details table in sync only when it exists and accepts
     // these columns. The root details JSON is the source of truth.
