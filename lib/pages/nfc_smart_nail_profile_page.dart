@@ -359,38 +359,47 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
               _SectionTitle('Social Links'),
               _IconTextField(
                 controller: _controllers['instagram']!,
+                icon: _BrandIcon.instagram,
                 hint: 'Instagram username or link',
               ),
               _IconTextField(
                 controller: _controllers['tiktok']!,
+                icon: _BrandIcon.tiktok,
                 hint: 'TikTok username or link',
               ),
               _IconTextField(
                 controller: _controllers['snapchat']!,
+                icon: _BrandIcon.snapchat,
                 hint: 'Snapchat username or link',
               ),
               _IconTextField(
                 controller: _controllers['facebook']!,
+                icon: _BrandIcon.facebook,
                 hint: 'Facebook username or link',
               ),
               _IconTextField(
                 controller: _controllers['linkedin']!,
+                icon: _BrandIcon.linkedin,
                 hint: 'LinkedIn username or link',
               ),
               _IconTextField(
                 controller: _controllers['youtube']!,
+                icon: _BrandIcon.youtube,
                 hint: 'YouTube username or link',
               ),
               _IconTextField(
                 controller: _controllers['pinterest']!,
+                icon: _BrandIcon.pinterest,
                 hint: 'Pinterest username or link',
               ),
               _IconTextField(
                 controller: _controllers['xTwitter']!,
+                icon: _BrandIcon.xTwitter,
                 hint: 'X username or link',
               ),
               _IconTextField(
                 controller: _controllers['threads']!,
+                icon: _BrandIcon.threads,
                 hint: 'Threads username or link',
               ),
 
@@ -398,30 +407,36 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
               _SectionTitle('Contact Information'),
               _IconTextField(
                 controller: _controllers['contactName']!,
+                materialIcon: Icons.person_outline,
                 hint: 'Name',
               ),
               _IconTextField(
                 controller: _controllers['contactPhone']!,
+                materialIcon: Icons.phone_outlined,
                 hint: 'Phone',
                 keyboardType: TextInputType.phone,
               ),
               _IconTextField(
                 controller: _controllers['contactEmail']!,
+                materialIcon: Icons.email_outlined,
                 hint: 'Email',
                 keyboardType: TextInputType.emailAddress,
               ),
               _IconTextField(
                 controller: _controllers['contactWebsite']!,
+                materialIcon: Icons.language_rounded,
                 hint: 'Website',
                 keyboardType: TextInputType.url,
               ),
               const SizedBox(height: 8),
               _IconTextField(
                 controller: _controllers['emergencyContactName']!,
+                materialIcon: Icons.health_and_safety_outlined,
                 hint: 'Emergency contact name',
               ),
               _IconTextField(
                 controller: _controllers['emergencyContactPhone']!,
+                materialIcon: Icons.phone_outlined,
                 hint: 'Emergency contact phone',
                 keyboardType: TextInputType.phone,
               ),
@@ -430,16 +445,19 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
               _SectionTitle('Website'),
               _IconTextField(
                 controller: _controllers['website']!,
+                materialIcon: Icons.language_rounded,
                 hint: 'Website URL',
                 keyboardType: TextInputType.url,
               ),
               _IconTextField(
                 controller: _controllers['website2']!,
+                materialIcon: Icons.language_rounded,
                 hint: 'Website URL 2',
                 keyboardType: TextInputType.url,
               ),
               _IconTextField(
                 controller: _controllers['website3']!,
+                materialIcon: Icons.language_rounded,
                 hint: 'Website URL 3',
                 keyboardType: TextInputType.url,
               ),
@@ -448,41 +466,50 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
               _SectionTitle('Payment Links'),
               _IconTextField(
                 controller: _controllers['cashApp']!,
+                icon: _BrandIcon.cashApp,
                 hint: 'CashApp cashtag',
               ),
               _IconTextField(
                 controller: _controllers['venmo']!,
+                icon: _BrandIcon.venmo,
                 hint: 'Venmo username',
               ),
               _IconTextField(
                 controller: _controllers['paypal']!,
+                icon: _BrandIcon.paypal,
                 hint: 'PayPal link or email',
               ),
               _IconTextField(
                 controller: _controllers['applePay']!,
+                icon: _BrandIcon.applePay,
                 hint: 'Apple Pay phone or email',
               ),
               _IconTextField(
                 controller: _controllers['zelle']!,
+                icon: _BrandIcon.zelle,
                 hint: 'Zelle phone or email',
               ),
 
               const SizedBox(height: 16),
-              _SectionTitle('Music'),
+              _SectionTitle('Music (Optional)'),
               _IconTextField(
                 controller: _controllers['spotify']!,
+                icon: _BrandIcon.spotify,
                 hint: 'Spotify playlist or artist link',
               ),
               _IconTextField(
                 controller: _controllers['appleMusic']!,
+                icon: _BrandIcon.appleMusic,
                 hint: 'Apple Music link',
               ),
               _IconTextField(
                 controller: _controllers['amazonMusic']!,
+                icon: _BrandIcon.amazonMusic,
                 hint: 'Amazon Music link',
               ),
               _IconTextField(
                 controller: _controllers['soundCloud']!,
+                icon: _BrandIcon.soundCloud,
                 hint: 'SoundCloud link',
               ),
 
@@ -1291,10 +1318,19 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      _isActivated ? Icons.check_rounded : Icons.nfc_rounded,
-                      color: AppColors.blackCat,
-                      size: 36,
+                    Container(
+                      width: 72,
+                      height: 72,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.balletSlippers.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: Icon(
+                        _isActivated ? Icons.check_rounded : Icons.nfc_rounded,
+                        color: AppColors.blackCat,
+                        size: 36,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Text(
@@ -1802,11 +1838,15 @@ class _IconTextField extends StatelessWidget {
   const _IconTextField({
     required this.controller,
     required this.hint,
+    this.icon,
+    this.materialIcon,
     this.keyboardType,
   });
 
   final TextEditingController controller;
   final String hint;
+  final _BrandIcon? icon;
+  final IconData? materialIcon;
   final TextInputType? keyboardType;
 
   @override
@@ -1816,6 +1856,14 @@ class _IconTextField extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          SizedBox(
+            width: 38,
+            height: 38,
+            child: Center(
+              child: _BrandIconView(icon: icon, materialIcon: materialIcon),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: SizedBox(
               height: 42,
@@ -1866,3 +1914,107 @@ class _IconTextField extends StatelessWidget {
   }
 }
 
+enum _BrandIcon {
+  instagram,
+  tiktok,
+  snapchat,
+  facebook,
+  linkedin,
+  youtube,
+  pinterest,
+  xTwitter,
+  threads,
+  cashApp,
+  venmo,
+  paypal,
+  applePay,
+  zelle,
+  spotify,
+  appleMusic,
+  amazonMusic,
+  soundCloud,
+}
+
+class _BrandIconView extends StatelessWidget {
+  const _BrandIconView({this.icon, this.materialIcon});
+  final _BrandIcon? icon;
+  final IconData? materialIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    if (materialIcon != null) {
+      return Icon(materialIcon, color: AppColors.blackCat, size: 22);
+    }
+
+    // Invariant: every _IconTextField call site supplies either icon or
+    // materialIcon; materialIcon == null here guarantees icon is set.
+    final spec = _spec(icon!);
+    return Container(
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: spec.background,
+        borderRadius: BorderRadius.zero,
+      ),
+      child: Text(
+        spec.label,
+        style: TextStyle(
+          color: spec.foreground,
+          fontSize: spec.fontSize,
+          fontWeight: FontWeight.w900,
+          fontFamily: 'Arialbold',
+        ),
+      ),
+    );
+  }
+
+  _IconSpec _spec(_BrandIcon icon) {
+    switch (icon) {
+      case _BrandIcon.instagram:
+        return const _IconSpec('IG', Color(0xFFE4405F), Colors.white, 9);
+      case _BrandIcon.tiktok:
+        return const _IconSpec('♪', Colors.black, Colors.white, 18);
+      case _BrandIcon.snapchat:
+        return const _IconSpec('S', Color(0xFFFFFC00), Colors.black, 14);
+      case _BrandIcon.facebook:
+        return const _IconSpec('f', Color(0xFF1877F2), Colors.white, 20);
+      case _BrandIcon.linkedin:
+        return const _IconSpec('in', Color(0xFF0A66C2), Colors.white, 13);
+      case _BrandIcon.youtube:
+        return const _IconSpec('▶', Color(0xFFFF0000), Colors.white, 13);
+      case _BrandIcon.pinterest:
+        return const _IconSpec('P', Color(0xFFE60023), Colors.white, 15);
+      case _BrandIcon.xTwitter:
+        return const _IconSpec('X', Colors.white, Colors.black, 15);
+      case _BrandIcon.threads:
+        return const _IconSpec('@', Colors.white, Colors.black, 16);
+      case _BrandIcon.cashApp:
+        return const _IconSpec(r'$', Color(0xFF00D632), Colors.white, 18);
+      case _BrandIcon.venmo:
+        return const _IconSpec('V', Color(0xFF3D95CE), Colors.white, 15);
+      case _BrandIcon.paypal:
+        return const _IconSpec('P', Color(0xFF003087), Colors.white, 15);
+      case _BrandIcon.applePay:
+        return const _IconSpec('Pay', Colors.black, Colors.white, 9);
+      case _BrandIcon.zelle:
+        return const _IconSpec('Z', Color(0xFF6D1ED4), Colors.white, 15);
+      case _BrandIcon.spotify:
+        return const _IconSpec('♬', Color(0xFF1DB954), Colors.white, 17);
+      case _BrandIcon.appleMusic:
+        return const _IconSpec('♪', Color(0xFFFA2D48), Colors.white, 17);
+      case _BrandIcon.amazonMusic:
+        return const _IconSpec('am', Color(0xFF3216A8), Colors.white, 10);
+      case _BrandIcon.soundCloud:
+        return const _IconSpec('☁', Color(0xFFFF7700), Colors.white, 16);
+    }
+  }
+}
+
+class _IconSpec {
+  const _IconSpec(this.label, this.background, this.foreground, this.fontSize);
+  final String label;
+  final Color background;
+  final Color foreground;
+  final double fontSize;
+}
