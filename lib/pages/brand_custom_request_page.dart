@@ -219,6 +219,56 @@ bool isArtistNfcAccepting(Map<String, dynamic> data) {
   return false;
 }
 
+/// Whether an artist currently accepts being directly addressed (as
+/// opposed to only appearing in the open artist pool). Mirrors the read
+/// order used by the artist's own profile toggle (_setDirectRequestsEnabled
+/// in artist_profile_page.dart writes profile.directRequestsEnabled) --
+/// that camelCase field is the live, artist-controlled value. Unlike NFC
+/// acceptance, this defaults to true (accepting) when unset, matching the
+/// artist profile page's own default state for artists who have never
+/// touched this toggle.
+bool isArtistAcceptingDirectRequests(Map<String, dynamic> data) {
+  bool? maybeBool(Object? raw) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final value = (raw ?? '').toString().trim().toLowerCase();
+    if (value == 'true' || value == '1' || value == 'yes') return true;
+    if (value == 'false' || value == '0' || value == 'no') return false;
+    return null;
+  }
+
+  Map<String, dynamic> asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return const <String, dynamic>{};
+  }
+
+  final profile = asMap(data['profile']);
+  final availability = asMap(data['availability']);
+  final artist = asMap(data['artist']);
+  final artistAvailability = asMap(artist['availability']);
+  for (final raw in <Object?>[
+    data['panel_directRequestsEnabled'],
+    data['panel_direct_requests_enabled'],
+    data['directRequestsEnabled'],
+    data['direct_requests_enabled'],
+    availability['directRequestsEnabled'],
+    availability['direct_requests_enabled'],
+    profile['directRequestsEnabled'],
+    profile['direct_requests_enabled'],
+    artist['directRequestsEnabled'],
+    artist['direct_requests_enabled'],
+    artistAvailability['directRequestsEnabled'],
+    artistAvailability['direct_requests_enabled'],
+  ]) {
+    final value = maybeBool(raw);
+    if (value != null) return value;
+  }
+  return true;
+}
+
 bool isBrandPartnerClient(Map<String, dynamic> data) {
   String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
   String normalizedStatus(Object? value) =>
@@ -1203,6 +1253,11 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         // Brand requests can only go to eligible artists: Goldsmith or Crowned.
         // This applies to both Artist Pool and Specific Artist selection.
         if (!isEligibleBrandRequestArtist(data)) continue;
+        // The specific-artist dropdown additionally requires the artist to
+        // currently accept being directly addressed (as opposed to only
+        // appearing in the open pool) -- this list feeds that dropdown
+        // exclusively, so this filter doesn't affect pool eligibility.
+        if (!isArtistAcceptingDirectRequests(data)) continue;
         final name = _artistDisplayName(data).trim();
         if (name.isEmpty) continue;
         artistNames.add(name);
