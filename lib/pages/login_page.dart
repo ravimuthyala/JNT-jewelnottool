@@ -16,6 +16,80 @@ class LoginDialog extends StatefulWidget {
 
   static String? pendingVerifiedRole;
 
+  /// Resolves the correct signed-in home from Supabase's restored session.
+  ///
+  /// A null result means there is no authenticated session. Lookup failures
+  /// deliberately throw without signing the user out so a temporary network
+  /// problem never clears a persisted login.
+  static Future<Widget?> restoredSessionHome() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    final uid = (user?.id ?? '').trim();
+    if (uid.isEmpty) return null;
+
+    final accountDoc = await _LoginDialogState._loadAccountDocWithRetry(uid);
+    if (accountDoc == null) {
+      throw StateError('Unable to load the account linked to this session.');
+    }
+
+    final data = accountDoc.data;
+    final sourceCollection = accountDoc.collection;
+    final roles = (data['roles'] as Map<String, dynamic>?) ?? const {};
+    final hasExplicitRoles = roles.isNotEmpty;
+    final roleClient = roles['client'] == true;
+    final roleArtist = roles['artist'] == true;
+    final roleCompany = roles['company'] == true;
+    final accountType = (data['account_type'] ?? data['accountType'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final isClient = hasExplicitRoles
+        ? roleClient
+        : sourceCollection == _LoginDialogState._collectionClientArtist ||
+              sourceCollection == _LoginDialogState._collectionClient ||
+              accountType == 'client' ||
+              accountType == 'client_artist' ||
+              accountType == 'client+artist';
+    final isArtist = hasExplicitRoles
+        ? roleArtist
+        : sourceCollection == _LoginDialogState._collectionClientArtist ||
+              sourceCollection == _LoginDialogState._collectionArtist ||
+              accountType == 'artist' ||
+              accountType == 'client_artist' ||
+              accountType == 'client+artist';
+    final isCompany = hasExplicitRoles
+        ? roleCompany
+        : sourceCollection == _LoginDialogState._collectionCompany ||
+              accountType == 'company';
+
+    if (isClient && isArtist) {
+      return ClientArtistHomePage(
+        profile: _LoginDialogState._draftFromSupabase(data),
+        showContinueProfileCard: false,
+        enableAllTabs: true,
+      );
+    }
+    if (isArtist) return const ArtistShellPage();
+    if (isClient) {
+      return ClientShellPage(
+        profile: _LoginDialogState._draftFromSupabase(data),
+        forceEnableAllTabs: true,
+      );
+    }
+    if (isCompany) {
+      final company = (data['company'] as Map<String, dynamic>?) ?? const {};
+      final panelName = (data['panel_companyName'] ?? '').toString().trim();
+      final companyName = panelName.isNotEmpty
+          ? panelName
+          : (company['name'] ?? '').toString().trim();
+      return BrandingCompanyShellPage(
+        companyDisplayName: companyName.isEmpty ? 'Brand' : companyName,
+      );
+    }
+
+    throw StateError('No role is mapped to this account.');
+  }
+
   @override
   State<LoginDialog> createState() => _LoginDialogState();
 }
@@ -212,7 +286,9 @@ class _LoginDialogState extends State<LoginDialog> {
       _authLog('loading account doc for uid=$uid');
       final accountDoc = await _loadAccountDocWithRetry(uid);
       final data = accountDoc?.data;
-      final pendingRole = _normalizePendingRole(LoginDialog.pendingVerifiedRole);
+      final pendingRole = _normalizePendingRole(
+        LoginDialog.pendingVerifiedRole,
+      );
 
       _authLog(
         'account doc loaded collection=${accountDoc?.collection ?? 'none'} '
@@ -238,23 +314,23 @@ class _LoginDialogState extends State<LoginDialog> {
         final isClient = hasExplicitRoles
             ? roleClient
             : sourceCollection == _collectionClientArtist ||
-                sourceCollection == _collectionClient ||
-                accountType == 'client' ||
-                accountType == 'client_artist' ||
-                accountType == 'client+artist';
+                  sourceCollection == _collectionClient ||
+                  accountType == 'client' ||
+                  accountType == 'client_artist' ||
+                  accountType == 'client+artist';
 
         final isArtist = hasExplicitRoles
             ? roleArtist
             : sourceCollection == _collectionClientArtist ||
-                sourceCollection == _collectionArtist ||
-                accountType == 'artist' ||
-                accountType == 'client_artist' ||
-                accountType == 'client+artist';
+                  sourceCollection == _collectionArtist ||
+                  accountType == 'artist' ||
+                  accountType == 'client_artist' ||
+                  accountType == 'client+artist';
 
         final isCompany = hasExplicitRoles
             ? roleCompany
             : sourceCollection == _collectionCompany ||
-                accountType == 'company';
+                  accountType == 'company';
 
         if ((isArtist && isClient) || pendingRole == 'client+artist') {
           _authLog('routing to ClientArtistHomePage');
@@ -288,9 +364,7 @@ class _LoginDialogState extends State<LoginDialog> {
         if (isCompany || pendingRole == 'company') {
           _authLog('routing to BrandingCompanyShellPage');
           final companyMap = (data['company'] as Map<String, dynamic>?) ?? {};
-          final panelName = (data['panel_companyName'] ?? '')
-              .toString()
-              .trim();
+          final panelName = (data['panel_companyName'] ?? '').toString().trim();
 
           final companyName = panelName.isNotEmpty
               ? panelName
@@ -357,7 +431,7 @@ class _LoginDialogState extends State<LoginDialog> {
     return 'Login failed. Please try again.';
   }
 
-  Future<_AccountDoc?> _loadAccountDoc(String uid) async {
+  static Future<_AccountDoc?> _loadAccountDoc(String uid) async {
     final supabase = Supabase.instance.client;
 
     const collections = <String>[
@@ -395,7 +469,7 @@ class _LoginDialogState extends State<LoginDialog> {
     return null;
   }
 
-  Future<_AccountDoc?> _loadAccountDocWithRetry(String uid) async {
+  static Future<_AccountDoc?> _loadAccountDocWithRetry(String uid) async {
     const int maxAttempts = 3;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -411,7 +485,7 @@ class _LoginDialogState extends State<LoginDialog> {
     return null;
   }
 
-  ClientProfileDraft _draftFromSupabase(Map<String, dynamic> data) {
+  static ClientProfileDraft _draftFromSupabase(Map<String, dynamic> data) {
     final profile = (data['profile'] as Map<String, dynamic>?) ?? {};
     final address = (data['address'] as Map<String, dynamic>?) ?? {};
     final client = (data['client'] as Map<String, dynamic>?) ?? {};
@@ -436,7 +510,7 @@ class _LoginDialogState extends State<LoginDialog> {
         (data['nailPreferences'] as Map<String, dynamic>?)?.isNotEmpty == true
         ? data['nailPreferences'] as Map<String, dynamic>
         : (data['nail_preferences'] as Map<String, dynamic>?)?.isNotEmpty ==
-            true
+              true
         ? data['nail_preferences'] as Map<String, dynamic>
         : nailFromClient;
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:app_links/app_links.dart';
@@ -40,14 +42,11 @@ Future<void> main() async {
     return;
   }
 
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = _sentryDsn;
-      options.environment = Environment.name;
-      options.tracesSampleRate = 0.2;
-    },
-    appRunner: _startApp,
-  );
+  await SentryFlutter.init((options) {
+    options.dsn = _sentryDsn;
+    options.environment = Environment.name;
+    options.tracesSampleRate = 0.2;
+  }, appRunner: _startApp);
 }
 
 Future<void> _startApp() async {
@@ -115,6 +114,144 @@ class _BootSplash extends StatelessWidget {
   }
 }
 
+/// Restores Supabase's persisted session and sends every supported account
+/// role directly to its signed-in shell. The public landing page is only
+/// shown when there is no session (normally after an explicit logout).
+class _SessionHomeGate extends StatefulWidget {
+  const _SessionHomeGate();
+
+  @override
+  State<_SessionHomeGate> createState() => _SessionHomeGateState();
+}
+
+class _SessionHomeGateState extends State<_SessionHomeGate> {
+  late Future<Widget> _home;
+
+  @override
+  void initState() {
+    super.initState();
+    _home = _resolveHome();
+  }
+
+  Future<Widget> _resolveHome() async {
+    final auth = Supabase.instance.client.auth;
+    await _waitForSessionRestoration(auth);
+
+    if (auth.currentSession == null) {
+      return const HomePage();
+    }
+    return await LoginDialog.restoredSessionHome() ?? const HomePage();
+  }
+
+  Future<void> _waitForSessionRestoration(GoTrueClient auth) async {
+    if (auth.currentSession != null) return;
+
+    final restored = Completer<void>();
+    late final StreamSubscription<AuthState> subscription;
+    subscription = auth.onAuthStateChange.listen((state) {
+      final isInitialAuthEvent =
+          state.event == AuthChangeEvent.initialSession ||
+          state.event == AuthChangeEvent.signedIn ||
+          state.event == AuthChangeEvent.tokenRefreshed;
+      if (isInitialAuthEvent && !restored.isCompleted) {
+        restored.complete();
+      }
+    });
+
+    try {
+      // Supabase.initialize creates the client before its persisted-session
+      // recovery operation completes. Re-check after subscribing so the
+      // session cannot be missed in between those two operations.
+      if (auth.currentSession == null) {
+        await restored.future.timeout(const Duration(seconds: 8));
+      }
+    } catch (_) {
+      // A logged-out user may have no delayed event to wait for. Re-check
+      // currentSession in _resolveHome and show public home if still null.
+    } finally {
+      await subscription.cancel();
+    }
+  }
+
+  void _retry() {
+    setState(() => _home = _resolveHome());
+  }
+
+  Future<void> _logout() async {
+    await Supabase.instance.client.auth.signOut();
+    if (!mounted) return;
+    setState(() => _home = Future<Widget>.value(const HomePage()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _home,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            backgroundColor: AppColors.blackCat,
+            body: Center(
+              child: CircularProgressIndicator(color: AppColors.snow),
+            ),
+          );
+        }
+        if (snapshot.hasData) return snapshot.data!;
+
+        return Scaffold(
+          backgroundColor: AppColors.blackCat,
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.cloud_off_rounded,
+                      size: 48,
+                      color: AppColors.snow,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Unable to restore your account',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.snow,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your login is still saved. Check your connection and '
+                      'try again.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.snow.withValues(alpha: 0.75),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: _retry,
+                      child: const Text('Retry'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _logout,
+                      child: const Text('Log out'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Shown only when Supabase fails to initialize at startup (e.g. no network,
 /// bad config). Lets the user retry instead of the app silently proceeding
 /// into a broken state with no working backend client.
@@ -124,8 +261,7 @@ class _SupabaseInitFailedApp extends StatefulWidget {
   final String? error;
 
   @override
-  State<_SupabaseInitFailedApp> createState() =>
-      _SupabaseInitFailedAppState();
+  State<_SupabaseInitFailedApp> createState() => _SupabaseInitFailedAppState();
 }
 
 class _SupabaseInitFailedAppState extends State<_SupabaseInitFailedApp> {
@@ -185,7 +321,9 @@ class _SupabaseInitFailedAppState extends State<_SupabaseInitFailedApp> {
                     'We could not reach our servers. Please check your '
                     'connection and try again.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 8),
@@ -245,9 +383,7 @@ class JntApp extends StatelessWidget {
           GlobalCupertinoLocalizations.delegate,
         ],
 
-        supportedLocales: const [
-          Locale('en'),
-        ],
+        supportedLocales: const [Locale('en')],
 
         theme: ThemeData(
           useMaterial3: true,
@@ -265,9 +401,7 @@ class JntApp extends StatelessWidget {
           ),
           iconTheme: const IconThemeData(color: AppColors.blackCat),
           iconButtonTheme: IconButtonThemeData(
-            style: IconButton.styleFrom(
-              foregroundColor: AppColors.blackCat,
-            ),
+            style: IconButton.styleFrom(foregroundColor: AppColors.blackCat),
           ),
           textTheme: ThemeData.light().textTheme
               .apply(
@@ -287,17 +421,20 @@ class JntApp extends StatelessWidget {
                     ?.copyWith(color: AppColors.blackCat),
                 headlineSmall: ThemeData.light().textTheme.headlineSmall
                     ?.copyWith(color: AppColors.blackCat),
-                titleLarge: ThemeData.light().textTheme.titleLarge
-                    ?.copyWith(color: AppColors.blackCat),
-                titleMedium: ThemeData.light().textTheme.titleMedium
-                    ?.copyWith(color: AppColors.blackCat),
-                titleSmall: ThemeData.light().textTheme.titleSmall
-                    ?.copyWith(color: AppColors.blackCat),
+                titleLarge: ThemeData.light().textTheme.titleLarge?.copyWith(
+                  color: AppColors.blackCat,
+                ),
+                titleMedium: ThemeData.light().textTheme.titleMedium?.copyWith(
+                  color: AppColors.blackCat,
+                ),
+                titleSmall: ThemeData.light().textTheme.titleSmall?.copyWith(
+                  color: AppColors.blackCat,
+                ),
               ),
           primaryTextTheme: ThemeData.light().primaryTextTheme.apply(
-                bodyColor: AppColors.blackCat,
-                displayColor: AppColors.blackCat,
-              ),
+            bodyColor: AppColors.blackCat,
+            displayColor: AppColors.blackCat,
+          ),
           appBarTheme: const AppBarTheme(
             titleTextStyle: TextStyle(
               color: AppColors.blackCat,
@@ -312,18 +449,12 @@ class JntApp extends StatelessWidget {
             labelStyle: TextStyle(
               color: AppColors.blackCat.withValues(alpha: 0.82),
             ),
-            floatingLabelStyle: const TextStyle(
-              color: AppColors.blackCat,
-            ),
+            floatingLabelStyle: const TextStyle(color: AppColors.blackCat),
             helperStyle: TextStyle(
               color: AppColors.blackCat.withValues(alpha: 0.72),
             ),
-            prefixStyle: const TextStyle(
-              color: AppColors.blackCat,
-            ),
-            suffixStyle: const TextStyle(
-              color: AppColors.blackCat,
-            ),
+            prefixStyle: const TextStyle(color: AppColors.blackCat),
+            suffixStyle: const TextStyle(color: AppColors.blackCat),
             counterStyle: TextStyle(
               color: AppColors.blackCat.withValues(alpha: 0.72),
             ),
@@ -336,10 +467,7 @@ class JntApp extends StatelessWidget {
             ),
             focusedBorder: const OutlineInputBorder(
               borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat,
-                width: 1.2,
-              ),
+              borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.zero,
@@ -357,17 +485,11 @@ class JntApp extends StatelessWidget {
             ),
             errorBorder: const OutlineInputBorder(
               borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat,
-                width: 1,
-              ),
+              borderSide: BorderSide(color: AppColors.blackCat, width: 1),
             ),
             focusedErrorBorder: const OutlineInputBorder(
               borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat,
-                width: 1.2,
-              ),
+              borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
             ),
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
@@ -379,9 +501,7 @@ class JntApp extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               minimumSize: Size.zero,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -436,9 +556,7 @@ class JntApp extends StatelessWidget {
               data: baseTheme.copyWith(
                 scaffoldBackgroundColor: const Color(0xFF292222),
                 canvasColor: const Color(0xFF292222),
-                textTheme: baseTheme.textTheme.apply(
-                  fontSizeFactor: scale,
-                ),
+                textTheme: baseTheme.textTheme.apply(fontSizeFactor: scale),
               ),
               child: MediaQuery(
                 data: mediaQuery.copyWith(
@@ -463,15 +581,14 @@ class JntApp extends StatelessWidget {
           );
         },
 
-        home: const HomePage(),
+        home: const _SessionHomeGate(),
 
         routes: {
           '/login': (_) => const LoginDialog(),
           '/register': (_) => const RegisterPage(),
           '/client-register': (_) => const ClientRegistrationPage(),
-          '/client-shell': (_) => ClientShellPage(
-                profile: ClientProfileDraft.mock(),
-              ),
+          '/client-shell': (_) =>
+              ClientShellPage(profile: ClientProfileDraft.mock()),
           '/artist-login': (_) => const ArtistLoginPage(),
           '/artist-register-v2': (_) => const ArtistRegistrationFlow(),
           '/reset-password-success': (_) => const ResetPasswordSuccessPage(),
@@ -482,9 +599,7 @@ class JntApp extends StatelessWidget {
 }
 
 class _DeepLinkBootstrap extends StatefulWidget {
-  const _DeepLinkBootstrap({
-    required this.child,
-  });
+  const _DeepLinkBootstrap({required this.child});
 
   final Widget child;
 
@@ -515,11 +630,9 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
         await _handleDeepLink(initialUri);
       }
 
-      _appLinks.uriLinkStream.listen(
-        (Uri uri) async {
-          await _handleDeepLink(uri);
-        },
-      );
+      _appLinks.uriLinkStream.listen((Uri uri) async {
+        await _handleDeepLink(uri);
+      });
     } catch (e) {
       debugPrint('Deep link error: $e');
     }
@@ -551,7 +664,8 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
       navigator.push(
         MaterialPageRoute(
           builder: (_) => ResetPasswordPage(
-            oobCode: extractedUri.queryParameters['code'] ??
+            oobCode:
+                extractedUri.queryParameters['code'] ??
                 extractedUri.queryParameters['token_hash'] ??
                 oobCode ??
                 '',
@@ -569,10 +683,7 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
 
       navigator.push(
         MaterialPageRoute(
-          builder: (_) => ResetPasswordPage(
-            oobCode: oobCode,
-            email: email,
-          ),
+          builder: (_) => ResetPasswordPage(oobCode: oobCode, email: email),
         ),
       );
 
@@ -584,18 +695,14 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
     final artistId = extractedUri.queryParameters['artistId'];
     final tipPercentRaw = extractedUri.queryParameters['tipPercent'];
 
-    if (path.contains('review-order') &&
-        orderId != null &&
-        artistId != null) {
+    if (path.contains('review-order') && orderId != null && artistId != null) {
       final navigator = JntApp.navigatorKey.currentState;
       if (navigator == null) return;
 
       navigator.push(
         MaterialPageRoute(
-          builder: (_) => ReviewArtistPage(
-            orderId: orderId,
-            artistId: artistId,
-          ),
+          builder: (_) =>
+              ReviewArtistPage(orderId: orderId, artistId: artistId),
         ),
       );
 
@@ -626,10 +733,7 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
     if (type == 'account-verified') {
       final navigator = JntApp.navigatorKey.currentState;
       if (navigator == null) return;
-      navigator.pushNamedAndRemoveUntil(
-        '/login',
-        (route) => false,
-      );
+      navigator.pushNamedAndRemoveUntil('/login', (route) => false);
       return;
     }
 
@@ -637,11 +741,7 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
   }
 
   Uri _extractDeepLink(Uri uri) {
-    for (final key in [
-      'link',
-      'continueUrl',
-      'deep_link_id',
-    ]) {
+    for (final key in ['link', 'continueUrl', 'deep_link_id']) {
       final value = uri.queryParameters[key];
 
       if (value != null && value.isNotEmpty) {
