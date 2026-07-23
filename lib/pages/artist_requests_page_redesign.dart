@@ -1621,7 +1621,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         )) {
       return false;
     }
+    // Brand-eligibility (Ascension/sponsorship tier) gates participation in
+    // the open brand-request pool. It must not hide a request that was
+    // already directly addressed to this specific artist by name/email --
+    // that visibility is governed by shouldShowScenario41ToDirectArtist
+    // above, not by pool eligibility.
     if (isCompanyRequest &&
+        !request.isDirectRequest &&
         request.status == RequestStatusV2.inReview &&
         !_currentArtistBrandEligible) {
       return false;
@@ -1630,14 +1636,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final ownedBy = request.acceptedByArtistEmail.trim().toLowerCase();
     final isOwnedByCurrentArtist =
         artistEmail.isNotEmpty && ownedBy == artistEmail;
-    if (request.nfcRequested &&
-        !_currentArtistAcceptsNfc &&
-        !isOwnedByCurrentArtist) {
-      return false;
-    }
-    final declinedByCurrentArtist =
-        artistEmail.isNotEmpty &&
-        request.declinedByArtistEmails.contains(artistEmail);
 
     bool matchesSelectedArtistName() {
       final selected = request.selectedArtist.trim().toLowerCase();
@@ -1656,6 +1654,24 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       }
       return matchesSelectedArtistName();
     }
+
+    // The NFC opt-in preference gates whether an artist sees NFC-requiring
+    // jobs browsed from the open pool. It must not hide a request that was
+    // directly addressed to this specific artist by name/email -- she was
+    // explicitly chosen and should be able to see (and decide on) it
+    // regardless of her general pool preference, same as the brand-
+    // eligibility exemption above.
+    final isDirectTargetForNfcCheck =
+        request.isDirectRequest && isCurrentArtistDirectTarget();
+    if (request.nfcRequested &&
+        !_currentArtistAcceptsNfc &&
+        !isOwnedByCurrentArtist &&
+        !isDirectTargetForNfcCheck) {
+      return false;
+    }
+    final declinedByCurrentArtist =
+        artistEmail.isNotEmpty &&
+        request.declinedByArtistEmails.contains(artistEmail);
 
     switch (request.status) {
       case RequestStatusV2.inReview:

@@ -1985,13 +1985,13 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   String _generateBrandOrderNumber(String docId) {
     final digits = docId.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length >= 5) {
-      return 'BE-${digits.substring(digits.length - 5)}';
+      return 'BR-${digits.substring(digits.length - 5)}';
     }
     final hash = docId.codeUnits.fold<int>(
       0,
       (acc, ch) => (acc * 31 + ch) % 100000,
     );
-    return 'BE-${hash.toString().padLeft(5, '0')}';
+    return 'BR-${hash.toString().padLeft(5, '0')}';
   }
 
   Future<List<String>> _uploadInspirationPhotos({
