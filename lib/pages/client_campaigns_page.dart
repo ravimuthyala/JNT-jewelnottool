@@ -664,7 +664,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
       // Most recently submitted first, not soonest deadline.
       int byNewest(ClientRequestV2 a, ClientRequestV2 b) =>
-          (b.submittedAt ?? b.neededBy).compareTo(a.submittedAt ?? a.neededBy);
+          (b.submittedAt ?? b.neededBy).compareTo(
+            a.submittedAt ?? a.neededBy,
+          );
       brandVisible.sort(byNewest);
       clientVisible.sort(byNewest);
 
