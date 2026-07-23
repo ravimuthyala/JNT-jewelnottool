@@ -137,6 +137,12 @@ bool _requestHasNfc(Map<String, dynamic> source) {
 
   final summary = asMap(source['summary']);
   final nfc = asMap(source['nfc']);
+  // The flat nfc_requested/nfcRequested column can go stale relative to the
+  // payload/details JSONB blobs -- e.g. an "open pool" brand request whose
+  // flat column reads false while payload.nfcRequested/details.nfcRequested
+  // are true. Check those blobs too so this never under-reports.
+  final payload = asMap(source['payload']);
+  final details = asMap(source['details']);
   return _truthy(source['nfcRequested']) ||
       _truthy(source['nfcSelected']) ||
       _truthy(source['hasNfc']) ||
@@ -149,6 +155,16 @@ bool _requestHasNfc(Map<String, dynamic> source) {
       _truthy(summary['nfc_requested']) ||
       _truthy(summary['nfc_selected']) ||
       _truthy(summary['has_nfc']) ||
+      _truthy(payload['nfcRequested']) ||
+      _truthy(payload['nfcSelected']) ||
+      _truthy(payload['hasNfc']) ||
+      _truthy(payload['nfc_requested']) ||
+      _truthy(payload['requiresNfcEligibleClient']) ||
+      _truthy(details['nfcRequested']) ||
+      _truthy(details['nfcSelected']) ||
+      _truthy(details['hasNfc']) ||
+      _truthy(details['nfc_requested']) ||
+      _truthy(details['requiresNfcEligibleClient']) ||
       _truthy(nfc['requested']) ||
       _truthy(nfc['selected']) ||
       _truthy(nfc['hasNfc']) ||
@@ -471,6 +487,8 @@ RequestNfcDetails _parseRequestNfc({
   bool requestHasNfc(Map<String, dynamic> source) {
     final summary = asMap(source['summary']);
     final nfc = asMap(source['nfc']);
+    final payload = asMap(source['payload']);
+    final details = asMap(source['details']);
     return truthy(source['nfcRequested']) ||
         truthy(source['nfcSelected']) ||
         truthy(source['hasNfc']) ||
@@ -483,6 +501,16 @@ RequestNfcDetails _parseRequestNfc({
         truthy(summary['nfc_requested']) ||
         truthy(summary['nfc_selected']) ||
         truthy(summary['has_nfc']) ||
+        truthy(payload['nfcRequested']) ||
+        truthy(payload['nfcSelected']) ||
+        truthy(payload['hasNfc']) ||
+        truthy(payload['nfc_requested']) ||
+        truthy(payload['requiresNfcEligibleClient']) ||
+        truthy(details['nfcRequested']) ||
+        truthy(details['nfcSelected']) ||
+        truthy(details['hasNfc']) ||
+        truthy(details['nfc_requested']) ||
+        truthy(details['requiresNfcEligibleClient']) ||
         truthy(nfc['requested']) ||
         truthy(nfc['selected']) ||
         truthy(nfc['hasNfc']) ||
