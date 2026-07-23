@@ -84,8 +84,8 @@ class ArtistRequestsRepository {
 
   static String _columnsForTable(String tableName) =>
       tableName == 'company_custom_requests'
-          ? _companyRequestColumns
-          : _clientRequestColumns;
+      ? _companyRequestColumns
+      : _clientRequestColumns;
 
   static SupabaseClient get _supabase => Supabase.instance.client;
 
@@ -1523,10 +1523,7 @@ class ArtistRequestsRepository {
         data['description'],
       ),
       nailShape: _firstNonEmptyString(effectiveNailShape, data['nailShape']),
-      nailLength: _firstNonEmptyString(
-        effectiveNailLength,
-        data['nailLength'],
-      ),
+      nailLength: _firstNonEmptyString(effectiveNailLength, data['nailLength']),
       leftHand: NailDimensionsV2(
         thumb: dim(effectiveDims['lThumb']),
         index: dim(effectiveDims['lIndex']),
@@ -2141,6 +2138,45 @@ class ArtistRequestsRepository {
     return false;
   }
 
+  // Matches a legacy placeholder path that some brand-profile screens used
+  // to synthesize when their (camelCase-only) column lookup failed to find
+  // the company's real logo -- this exact path was never actually uploaded
+  // to any bucket, so resolve it via a live company-table lookup instead of
+  // guessing a (wrong) bucket for it.
+  static final RegExp _companyAvatarPlaceholderPattern = RegExp(
+    r'^company/([^/]+)/profile/avatar\.jpg$',
+  );
+  static final Map<String, String> _companyLogoCache = <String, String>{};
+
+  static Future<String> _fetchCompanyLogoUrl(String companyUid) async {
+    final cached = _companyLogoCache[companyUid];
+    if (cached != null) return cached;
+    try {
+      final row =
+          await _supabase
+              .from('company')
+              .select('panel_logo_url,panel_profile_image_url,profile,basic')
+              .eq('id', companyUid)
+              .maybeSingle() ??
+          const <String, dynamic>{};
+      final profile = _asMap(row['profile']);
+      final basic = _asMap(row['basic']);
+      final logoUrl = _firstNonEmptyString(
+        row['panel_logo_url'],
+        row['panel_profile_image_url'],
+        profile['profileImageUrl'],
+        profile['logoUrl'],
+        basic['profileImageUrl'],
+        basic['logoUrl'],
+      );
+      _companyLogoCache[companyUid] = logoUrl;
+      return logoUrl;
+    } catch (_) {
+      _companyLogoCache[companyUid] = '';
+      return '';
+    }
+  }
+
   static Future<String> _resolvePhotoRef(String value) async {
     final v = _decodeUriSafelyRepeatedly(value).trim();
     if (v.isEmpty) return '';
@@ -2152,6 +2188,13 @@ class ArtistRequestsRepository {
     if (inflight != null) return inflight;
 
     final future = () async {
+      final placeholderMatch = _companyAvatarPlaceholderPattern.firstMatch(v);
+      if (placeholderMatch != null) {
+        final logoUrl = await _fetchCompanyLogoUrl(placeholderMatch.group(1)!);
+        _resolvedPhotoRefCache[v] = logoUrl;
+        return logoUrl;
+      }
+
       if (v.startsWith('profile-pictures/')) {
         final resolved = _supabase.storage
             .from('profile-pictures')

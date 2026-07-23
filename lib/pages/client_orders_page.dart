@@ -446,6 +446,68 @@ class _SupabaseOrderService {
         }..removeWhere((e) => e.isEmpty);
         if (names.contains(name)) return true;
       }
+
+      // Group orders: the viewer may be one of several invited clients, not
+      // the row's own "clientEmail" (that's the brand's contact email for a
+      // Company_Custom_Requests row) -- check group-client membership too,
+      // both the flat invited/accepted/declined email arrays and each
+      // per-client entry's own email, so every invited client's copy of a
+      // group order is included in their list.
+      final detailsOrder2 = asMap(details['order']);
+      final payloadOrder2 = asMap(payload['order']);
+      final detailsGroupOrder = asMap(details['groupOrder']);
+      final payloadGroupOrder = asMap(payload['groupOrder']);
+      final requestGroupOrder = asMap(requestDetails['groupOrder']);
+      final groupEmails = <String>{};
+      for (final list in [
+        row['selected_group_client_emails'],
+        row['accepted_group_client_emails'],
+        row['declined_group_client_emails'],
+        summary['selectedGroupClientEmails'],
+        summary['acceptedGroupClientEmails'],
+        details['selectedGroupClientEmails'],
+        details['acceptedGroupClientEmails'],
+        payload['selectedGroupClientEmails'],
+        payload['acceptedGroupClientEmails'],
+        detailsOrder2['selectedGroupClientEmails'],
+        payloadOrder2['selectedGroupClientEmails'],
+      ]) {
+        if (list is List) {
+          groupEmails.addAll(
+            list.map((e) => (e ?? '').toString().trim().toLowerCase()),
+          );
+        }
+      }
+      List<dynamic>? groupClientEntries;
+      for (final candidate in [
+        row['group_clients'],
+        summary['groupClients'],
+        details['groupClients'],
+        payload['groupClients'],
+        detailsGroupOrder['clients'],
+        payloadGroupOrder['clients'],
+        requestGroupOrder['clients'],
+      ]) {
+        if (candidate is List && candidate.isNotEmpty) {
+          groupClientEntries = candidate;
+          break;
+        }
+      }
+      if (groupClientEntries != null) {
+        for (final entry in groupClientEntries) {
+          final m = asMap(entry);
+          groupEmails.add(
+            pickText([
+              m['clientEmail'],
+              m['client_email'],
+              m['email'],
+            ]).toLowerCase(),
+          );
+        }
+      }
+      groupEmails.removeWhere((e) => e.isEmpty);
+      if (emails.intersection(groupEmails).isNotEmpty) return true;
+
       return false;
     }
 

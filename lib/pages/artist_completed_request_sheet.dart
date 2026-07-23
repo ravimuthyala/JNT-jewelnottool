@@ -560,7 +560,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         : request.clientName;
     final headerSubtitle = isBrandRequest ? request.title.trim() : '';
     final avatarPath = request.clientProfileImage.trim();
-    final avatarLetter = headerName.isEmpty ? '' : headerName[0].toUpperCase();
+    final avatarLetter = headerName.isEmpty
+        ? (isBrandRequest ? 'B' : 'C')
+        : headerName[0].toUpperCase();
 
     return Stack(
       children: [

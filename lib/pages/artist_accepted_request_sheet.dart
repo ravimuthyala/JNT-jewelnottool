@@ -2705,7 +2705,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         : r.clientName;
     final headerSubtitle = isBrandRequest ? r.title.trim() : '';
     final avatarPath = _heroPhotoSource(r);
-    final avatarLetter = headerName.isEmpty ? '' : headerName[0].toUpperCase();
+    final avatarLetter = headerName.isEmpty
+        ? (isBrandRequest ? 'B' : 'C')
+        : headerName[0].toUpperCase();
 
     Widget avatarFallback() => Container(
       height: 78,

@@ -652,9 +652,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
       // Most recently submitted first, not soonest deadline.
       int byNewest(ClientRequestV2 a, ClientRequestV2 b) =>
-          (b.submittedAt ?? b.neededBy).compareTo(
-            a.submittedAt ?? a.neededBy,
-          );
+          (b.submittedAt ?? b.neededBy).compareTo(a.submittedAt ?? a.neededBy);
       brandVisible.sort(byNewest);
       clientVisible.sort(byNewest);
 
@@ -1498,8 +1496,13 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           'clientProfileImage': clientProfileImage,
         if (clientProfileImage.isNotEmpty)
           'clientProfilePic': clientProfileImage,
-        if (nailShape.isNotEmpty) 'nailShape': nailShape,
-        if (nailLength.isNotEmpty) 'nailLength': nailLength,
+        // For a group order the client's own shape/length belong only in
+        // their own groupOrder.clients[] slot (written below) -- writing
+        // them here too would overwrite the shared/top-level fields with
+        // whichever client happens to accept most recently, contaminating
+        // what every OTHER client (and the "submitting" tab) sees.
+        if (!isGroupOrder && nailShape.isNotEmpty) 'nailShape': nailShape,
+        if (!isGroupOrder && nailLength.isNotEmpty) 'nailLength': nailLength,
       },
       detailsExtra: <String, dynamic>{
         'acceptance': <String, dynamic>{
@@ -1522,11 +1525,12 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             if (clientProfileImage.isNotEmpty) 'avatarUrl': clientProfileImage,
           },
         },
-        'nailPreferences': <String, dynamic>{
-          if (nailShape.isNotEmpty) 'shape': nailShape,
-          if (nailLength.isNotEmpty) 'length': nailLength,
-          'dimensions': nailDimensions,
-        },
+        if (!isGroupOrder)
+          'nailPreferences': <String, dynamic>{
+            if (nailShape.isNotEmpty) 'shape': nailShape,
+            if (nailLength.isNotEmpty) 'length': nailLength,
+            'dimensions': nailDimensions,
+          },
         'roleStatuses': <String, dynamic>{
           'brand': 'pending',
           'client': 'pending',
