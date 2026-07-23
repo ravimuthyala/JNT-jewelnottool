@@ -3741,6 +3741,7 @@ class _BaseOrderDetails extends StatelessWidget {
       future: _loadRequestNfcDetails(),
       builder: (context, snapshot) {
         final nfc = snapshot.data ?? _RequestNfcDetails.empty();
+        final tabsData = _groupClientTabsData(nfc);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -3749,11 +3750,20 @@ class _BaseOrderDetails extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
             ),
             const SizedBox(height: 8),
-            _LocalGroupClientMeasurementsTabs(
-              clients: _groupClientTabsData(nfc),
-              currentViewerEmail: AppAuth.instance.currentUser?.email ?? '',
-              showOuterBorder: showOuterBorder,
-            ),
+            if (tabsData.isEmpty)
+              Text(
+                'Your measurements aren\'t available on this order yet.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.blackCat.withValues(alpha: 0.65),
+                ),
+              )
+            else
+              _LocalGroupClientMeasurementsTabs(
+                clients: tabsData,
+                currentViewerEmail: AppAuth.instance.currentUser?.email ?? '',
+                showOuterBorder: showOuterBorder,
+              ),
           ],
         );
       },
@@ -3836,7 +3846,12 @@ class _BaseOrderDetails extends StatelessWidget {
       if (viewerTabs.isNotEmpty) {
         return viewerTabs;
       }
-      return tabs.take(1).toList(growable: false);
+      // The viewer isn't among the invited clients we could match (data gap,
+      // not a real result) -- returning tabs.take(1) here used to show the
+      // brand's own placeholder "submitting" tab mislabeled as the client's
+      // own measurements. Show nothing instead; the caller renders an
+      // explicit "not available" message for an empty list.
+      return const <_ClientMeasurementTabData>[];
     }
 
     return tabs;

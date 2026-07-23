@@ -805,7 +805,9 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
         ? request.brandName.trim()
         : request.clientName;
     final headerSubtitle = isBrandRequest ? request.title.trim() : '';
-    final avatarLetter = headerName.isEmpty ? '' : headerName[0].toUpperCase();
+    final avatarLetter = headerName.isEmpty
+        ? (isBrandRequest ? 'B' : 'C')
+        : headerName[0].toUpperCase();
 
     return Stack(
       children: [

@@ -354,7 +354,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         : request.clientName;
     final avatarPath = _headerAvatarPath();
     final avatarLetter = headerName.trim().isEmpty
-        ? ''
+        ? (isBrandRequest ? 'B' : 'C')
         : headerName.trim()[0].toUpperCase();
 
     return Padding(

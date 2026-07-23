@@ -1510,6 +1510,10 @@ class _BaseOrderDetails extends StatelessWidget {
                 _Card(child: _paymentSection(context)),
               if (statusPillText == 'Delivered' || statusPillText == 'Shipped')
                 const SizedBox(height: 14),
+              if (statusPillText == 'Pending') ...[
+                const SizedBox(height: 14),
+                _Card(child: _finalAcceptedAmountSection()),
+              ],
               if (statusPillText == 'In Progress') ...[
                 _Card(child: _finalAcceptedAmountSection()),
                 const SizedBox(height: 12),
@@ -2028,44 +2032,79 @@ class _BaseOrderDetails extends StatelessWidget {
     );
   }
 
-  Widget _finalAcceptedAmountSection() {
-    final amount = order.artistAcceptedAmount;
-    final text = amount == null ? '-' : '\$$amount';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _finalAmountRow(String label, String value) {
+    return Row(
       children: [
-        const Text(
-          'Final Amount',
+        Text(
+          label,
           style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
             color: AppColors.blackCat,
-            fontFamily: 'ArialBold',
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Text(
-              'Accepted by artist:',
-              style: TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              text,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
-              ),
-            ),
-          ],
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.blackCat,
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _finalAcceptedAmountSection() {
+    final acceptedAmount = order.artistAcceptedAmount;
+    final acceptedText = acceptedAmount == null ? '-' : '\$$acceptedAmount';
+
+    return FutureBuilder<Map<String, int?>>(
+      future: _loadClientAndArtistBudgetMax(),
+      builder: (_, snap) {
+        final clientBudgetMax = snap.data?['client'];
+        final clientBudgetText = clientBudgetMax == null
+            ? '-'
+            : '\$$clientBudgetMax';
+        final sum = (clientBudgetMax ?? 0) + (acceptedAmount ?? 0);
+        final sumText = (clientBudgetMax == null && acceptedAmount == null)
+            ? '-'
+            : '\$$sum';
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Final Amount',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: AppColors.blackCat,
+                    fontFamily: 'ArialBold',
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  sumText,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: AppColors.blackCat,
+                    fontFamily: 'ArialBold',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _finalAmountRow('Client Budget:', clientBudgetText),
+            const SizedBox(height: 6),
+            _finalAmountRow('Accepted by artist:', acceptedText),
+          ],
+        );
+      },
     );
   }
 
@@ -2643,18 +2682,54 @@ class _BaseOrderDetails extends StatelessWidget {
     );
   }
 
+  static int? _asIntValue(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.round();
+    return int.tryParse((v ?? '').toString().trim());
+  }
+
+  Future<Map<String, int?>> _loadClientAndArtistBudgetMax() async {
+    try {
+      final row = await _supabaseFetchOrderRow(
+        order.id,
+        orderNumber: order.orderNumber,
+      );
+      final root = row ?? const <String, dynamic>{};
+      final payload = _asMap(root['payload']);
+      final detail = _asMap(root['details']);
+      final clientBudget = _asMap(root['client_budget'])
+        ..addAll(_asMap(root['clientBudget']))
+        ..addAll(_asMap(payload['clientBudget']))
+        ..addAll(_asMap(detail['clientBudget']));
+      final artistBudget = _asMap(root['artist_budget'])
+        ..addAll(_asMap(root['artistBudget']))
+        ..addAll(_asMap(payload['artistBudget']))
+        ..addAll(_asMap(detail['artistBudget']))
+        ..addAll(_asMap(payload['budget']))
+        ..addAll(_asMap(detail['budget']));
+
+      final clientMax =
+          _asIntValue(clientBudget['max']) ??
+          _asIntValue(root['client_budget_max']) ??
+          _asIntValue(root['clientBudgetMax']);
+      final artistMax =
+          _asIntValue(artistBudget['max']) ??
+          _asIntValue(root['artist_budget_max']) ??
+          _asIntValue(root['artistBudgetMax']) ??
+          _asIntValue(root['budgetMax']) ??
+          order.budgetMax;
+      return <String, int?>{'client': clientMax, 'artist': artistMax};
+    } catch (_) {
+      return <String, int?>{'client': null, 'artist': order.budgetMax};
+    }
+  }
+
   Future<Map<String, String>> _loadBudgetRanges() async {
     String formatRange(int? min, int? max) {
       if (min != null && max != null) return '\$$min - \$$max';
       if (min != null) return '\$$min';
       if (max != null) return '\$$max';
       return '';
-    }
-
-    int? asInt(dynamic v) {
-      if (v is int) return v;
-      if (v is num) return v.round();
-      return int.tryParse((v ?? '').toString().trim());
     }
 
     final fallback = formatRange(order.budgetMin, order.budgetMax);
@@ -2678,24 +2753,24 @@ class _BaseOrderDetails extends StatelessWidget {
         ..addAll(_asMap(detail['budget']));
 
       final clientMin =
-          asInt(clientBudget['min']) ??
-          asInt(root['client_budget_min']) ??
-          asInt(root['clientBudgetMin']);
+          _asIntValue(clientBudget['min']) ??
+          _asIntValue(root['client_budget_min']) ??
+          _asIntValue(root['clientBudgetMin']);
       final clientMax =
-          asInt(clientBudget['max']) ??
-          asInt(root['client_budget_max']) ??
-          asInt(root['clientBudgetMax']);
+          _asIntValue(clientBudget['max']) ??
+          _asIntValue(root['client_budget_max']) ??
+          _asIntValue(root['clientBudgetMax']);
       final artistMin =
-          asInt(artistBudget['min']) ??
-          asInt(root['artist_budget_min']) ??
-          asInt(root['artistBudgetMin']) ??
-          asInt(root['budgetMin']) ??
+          _asIntValue(artistBudget['min']) ??
+          _asIntValue(root['artist_budget_min']) ??
+          _asIntValue(root['artistBudgetMin']) ??
+          _asIntValue(root['budgetMin']) ??
           order.budgetMin;
       final artistMax =
-          asInt(artistBudget['max']) ??
-          asInt(root['artist_budget_max']) ??
-          asInt(root['artistBudgetMax']) ??
-          asInt(root['budgetMax']) ??
+          _asIntValue(artistBudget['max']) ??
+          _asIntValue(root['artist_budget_max']) ??
+          _asIntValue(root['artistBudgetMax']) ??
+          _asIntValue(root['budgetMax']) ??
           order.budgetMax;
 
       final client = formatRange(clientMin, clientMax);

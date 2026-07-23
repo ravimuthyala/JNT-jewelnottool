@@ -278,7 +278,8 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
         return FutureBuilder<List<Map<String, dynamic>>>(
           future: _loadCompanyRequestsFromSupabase(data),
           builder: (context, requestsSnap) {
-            final requests = requestsSnap.data ?? const <Map<String, dynamic>>[];
+            final requests =
+                requestsSnap.data ?? const <Map<String, dynamic>>[];
             return _buildShell(data: data, requests: requests);
           },
         );
@@ -455,19 +456,20 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
       namesRoute: true,
       label: 'Company',
       child: Scaffold(
-      backgroundColor: const Color(0xFFF7F7FB),
-      body: IndexedStack(index: _index, children: pages),
-      bottomNavigationBar: CompanyBottomNav(
-        currentIndex: _index,
-        onTap: (i) {
-          _onNavTap(
-            i,
-            profile: profileForDesign,
-            companyName: data.companyName,
-          );
-        },
+        backgroundColor: const Color(0xFFF7F7FB),
+        body: IndexedStack(index: _index, children: pages),
+        bottomNavigationBar: CompanyBottomNav(
+          currentIndex: _index,
+          onTap: (i) {
+            _onNavTap(
+              i,
+              profile: profileForDesign,
+              companyName: data.companyName,
+            );
+          },
+        ),
       ),
-    ));
+    );
   }
 
   bool _matchesCompanyRequest(
@@ -702,27 +704,54 @@ class _CompanyUiData {
     final location = city.isEmpty && state.isEmpty
         ? ''
         : (city.isEmpty ? state : (state.isEmpty ? city : '$city, $state'));
-    final avatarUrlRaw = first(
+    String firstFromList(List<Object?> candidates) {
+      for (final candidate in candidates) {
+        final value = (candidate ?? '').toString().trim();
+        if (value.isNotEmpty) return value;
+      }
+      return '';
+    }
+
+    final avatarUrlRaw = firstFromList(<Object?>[
       source['panel_logoUrl'],
+      source['panel_logo_url'],
       source['companyLogoUrl'],
+      source['company_logo_url'],
       source['brandLogoUrl'],
+      source['brand_logo_url'],
       source['logoUrl'],
+      source['logo_url'],
       source['panel_profileImageUrl'],
+      source['panel_profile_image_url'],
       source['profileImageUrl'],
+      source['profile_image_url'],
       source['photoUrl'],
+      source['photo_url'],
       source['avatarUrl'],
+      source['avatar_url'],
       profile['logoUrl'],
+      profile['logo_url'],
       profile['profileImageUrl'],
+      profile['profile_image_url'],
       profile['photoUrl'],
+      profile['photo_url'],
       profile['avatarUrl'],
+      profile['avatar_url'],
       basic['profileImageUrl'],
+      basic['profile_image_url'],
       basic['photoUrl'],
+      basic['photo_url'],
       basic['avatarUrl'],
+      basic['avatar_url'],
       company['logoUrl'],
+      company['logo_url'],
       company['profileImageUrl'],
+      company['profile_image_url'],
       company['photoUrl'],
+      company['photo_url'],
       company['avatarUrl'],
-    );
+      company['avatar_url'],
+    ]);
     final avatarUrl = avatarUrlRaw.isNotEmpty
         ? avatarUrlRaw
         : 'company/$uid/profile/avatar.jpg';

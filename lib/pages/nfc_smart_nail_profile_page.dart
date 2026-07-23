@@ -69,6 +69,133 @@ Future<void> _saveNfcProfileForUser({
   }, onConflict: 'id');
 }
 
+// Public resolver domain written to every chip's NDEF record. Keep this as
+// the single place the domain is referenced -- see supabase/functions/
+// nfc-resolve/index.ts for the server-side lookup this URL hits at tap time.
+const String kNfcResolverBaseUrl = 'https://www.jntnails.com/n/';
+
+/// A single physical NFC chip an owner has activated. An owner can have
+/// several of these at once (e.g. one per finger), each independently
+/// switchable without ever needing to rewrite the physical chip -- only
+/// `activeItemKey`/`activeItemType`/`activeItemValue` change on "Change",
+/// and only `status` changes on "Report lost/damaged".
+class NfcChip {
+  const NfcChip({
+    required this.id,
+    required this.ownerId,
+    required this.ownerTable,
+    required this.label,
+    required this.status,
+    required this.activeItemKey,
+    required this.activeItemType,
+    required this.activeItemValue,
+  });
+
+  final String id;
+  final String ownerId;
+  final String ownerTable;
+  final String? label;
+  final String status;
+  final String? activeItemKey;
+  final String? activeItemType;
+  final String? activeItemValue;
+
+  bool get isActive => status == 'active';
+
+  String get resolverUrl => '$kNfcResolverBaseUrl$id';
+
+  factory NfcChip.fromRow(Map<String, dynamic> row) {
+    String? text(dynamic v) => v == null ? null : v.toString();
+    return NfcChip(
+      id: (row['id'] ?? '').toString(),
+      ownerId: (row['owner_id'] ?? '').toString(),
+      ownerTable: (row['owner_table'] ?? '').toString(),
+      label: text(row['label']),
+      status: (row['status'] ?? 'active').toString(),
+      activeItemKey: text(row['active_item_key']),
+      activeItemType: text(row['active_item_type']),
+      activeItemValue: text(row['active_item_value']),
+    );
+  }
+}
+
+Future<List<NfcChip>> _fetchChips(String uid) async {
+  final rows = await _supabase
+      .from('nfc_chips')
+      .select()
+      .eq('owner_id', uid)
+      .order('created_at', ascending: false);
+  return (rows as List)
+      .map((row) => NfcChip.fromRow(Map<String, dynamic>.from(row as Map)))
+      .toList();
+}
+
+Future<NfcChip> _createChipRow({
+  required String uid,
+  required String ownerTable,
+  required String itemKey,
+  required String itemType,
+  required String itemValue,
+  String? label,
+}) async {
+  final nowIso = DateTime.now().toIso8601String();
+  final row = await _supabase
+      .from('nfc_chips')
+      .insert({
+        'owner_id': uid,
+        'owner_table': ownerTable,
+        'label': label,
+        'status': 'active',
+        'active_item_key': itemKey,
+        'active_item_type': itemType,
+        'active_item_value': itemValue,
+        'activated_at': nowIso,
+      })
+      .select()
+      .single();
+  return NfcChip.fromRow(Map<String, dynamic>.from(row));
+}
+
+Future<void> _deleteChipRow(String chipId) async {
+  await _supabase.from('nfc_chips').delete().eq('id', chipId);
+}
+
+Future<void> _updateChipActiveItem({
+  required String chipId,
+  required String itemKey,
+  required String itemType,
+  required String itemValue,
+}) async {
+  await _supabase
+      .from('nfc_chips')
+      .update({
+        'active_item_key': itemKey,
+        'active_item_type': itemType,
+        'active_item_value': itemValue,
+        'updated_at': DateTime.now().toIso8601String(),
+      })
+      .eq('id', chipId);
+}
+
+Future<void> _deactivateChip({
+  required String chipId,
+  required String reason,
+}) async {
+  final nowIso = DateTime.now().toIso8601String();
+  await _supabase
+      .from('nfc_chips')
+      .update({
+        'status': reason == 'damaged'
+            ? 'deactivated_damaged'
+            : 'deactivated_lost',
+        'deactivated_at': nowIso,
+        'deactivated_reason': reason,
+        'deactivated_by': 'self',
+        'updated_at': nowIso,
+      })
+      .eq('id', chipId);
+}
+
 class NfcSmartNailProfilePage extends StatefulWidget {
   const NfcSmartNailProfilePage({super.key});
 
@@ -138,7 +265,9 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
         entry.value.text = (data[entry.key] ?? '').toString();
       }
     } catch (e) {
-      debugPrint('NfcSmartNailProfilePage: failed to load existing profile: $e');
+      debugPrint(
+        'NfcSmartNailProfilePage: failed to load existing profile: $e',
+      );
     }
   }
 
@@ -196,241 +325,241 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
       namesRoute: true,
       label: 'NFC nail profile',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'NFC SMART NAIL',
-          style: TextStyle(
+        backgroundColor: AppColors.snow,
+        appBar: AppBar(
+          backgroundColor: AppColors.alabaster,
+          surfaceTintColor: AppColors.alabaster,
+          elevation: 0,
+          centerTitle: true,
+          title: const Text(
+            'NFC SMART NAIL',
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              fontSize: 16,
+              letterSpacing: 0.4,
+            ),
+          ),
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             color: AppColors.blackCat,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            fontSize: 16,
-            letterSpacing: 0.4,
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          color: AppColors.blackCat,
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Form(
-        key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
-          children: [
-            _StatusCard(isActivated: false),
-            const SizedBox(height: 20),
-            _SectionTitle('Social Links'),
-            _IconTextField(
-              controller: _controllers['instagram']!,
-              icon: _BrandIcon.instagram,
-              hint: 'Instagram username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['tiktok']!,
-              icon: _BrandIcon.tiktok,
-              hint: 'TikTok username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['snapchat']!,
-              icon: _BrandIcon.snapchat,
-              hint: 'Snapchat username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['facebook']!,
-              icon: _BrandIcon.facebook,
-              hint: 'Facebook username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['linkedin']!,
-              icon: _BrandIcon.linkedin,
-              hint: 'LinkedIn username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['youtube']!,
-              icon: _BrandIcon.youtube,
-              hint: 'YouTube username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['pinterest']!,
-              icon: _BrandIcon.pinterest,
-              hint: 'Pinterest username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['xTwitter']!,
-              icon: _BrandIcon.xTwitter,
-              hint: 'X username or link',
-            ),
-            _IconTextField(
-              controller: _controllers['threads']!,
-              icon: _BrandIcon.threads,
-              hint: 'Threads username or link',
-            ),
+        body: Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
+            children: [
+              _StatusCard(isActivated: false),
+              const SizedBox(height: 20),
+              _SectionTitle('Social Links'),
+              _IconTextField(
+                controller: _controllers['instagram']!,
+                icon: _BrandIcon.instagram,
+                hint: 'Instagram username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['tiktok']!,
+                icon: _BrandIcon.tiktok,
+                hint: 'TikTok username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['snapchat']!,
+                icon: _BrandIcon.snapchat,
+                hint: 'Snapchat username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['facebook']!,
+                icon: _BrandIcon.facebook,
+                hint: 'Facebook username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['linkedin']!,
+                icon: _BrandIcon.linkedin,
+                hint: 'LinkedIn username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['youtube']!,
+                icon: _BrandIcon.youtube,
+                hint: 'YouTube username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['pinterest']!,
+                icon: _BrandIcon.pinterest,
+                hint: 'Pinterest username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['xTwitter']!,
+                icon: _BrandIcon.xTwitter,
+                hint: 'X username or link',
+              ),
+              _IconTextField(
+                controller: _controllers['threads']!,
+                icon: _BrandIcon.threads,
+                hint: 'Threads username or link',
+              ),
 
-            const SizedBox(height: 16),
-            _SectionTitle('Contact Information'),
-            _IconTextField(
-              controller: _controllers['contactName']!,
-              materialIcon: Icons.person_outline,
-              hint: 'Name',
-            ),
-            _IconTextField(
-              controller: _controllers['contactPhone']!,
-              materialIcon: Icons.phone_outlined,
-              hint: 'Phone',
-              keyboardType: TextInputType.phone,
-            ),
-            _IconTextField(
-              controller: _controllers['contactEmail']!,
-              materialIcon: Icons.email_outlined,
-              hint: 'Email',
-              keyboardType: TextInputType.emailAddress,
-            ),
-            _IconTextField(
-              controller: _controllers['contactWebsite']!,
-              materialIcon: Icons.language_rounded,
-              hint: 'Website',
-              keyboardType: TextInputType.url,
-            ),
-            const SizedBox(height: 8),
-            _IconTextField(
-              controller: _controllers['emergencyContactName']!,
-              materialIcon: Icons.health_and_safety_outlined,
-              hint: 'Emergency contact name',
-            ),
-            _IconTextField(
-              controller: _controllers['emergencyContactPhone']!,
-              materialIcon: Icons.phone_outlined,
-              hint: 'Emergency contact phone',
-              keyboardType: TextInputType.phone,
-            ),
+              const SizedBox(height: 16),
+              _SectionTitle('Contact Information'),
+              _IconTextField(
+                controller: _controllers['contactName']!,
+                materialIcon: Icons.person_outline,
+                hint: 'Name',
+              ),
+              _IconTextField(
+                controller: _controllers['contactPhone']!,
+                materialIcon: Icons.phone_outlined,
+                hint: 'Phone',
+                keyboardType: TextInputType.phone,
+              ),
+              _IconTextField(
+                controller: _controllers['contactEmail']!,
+                materialIcon: Icons.email_outlined,
+                hint: 'Email',
+                keyboardType: TextInputType.emailAddress,
+              ),
+              _IconTextField(
+                controller: _controllers['contactWebsite']!,
+                materialIcon: Icons.language_rounded,
+                hint: 'Website',
+                keyboardType: TextInputType.url,
+              ),
+              const SizedBox(height: 8),
+              _IconTextField(
+                controller: _controllers['emergencyContactName']!,
+                materialIcon: Icons.health_and_safety_outlined,
+                hint: 'Emergency contact name',
+              ),
+              _IconTextField(
+                controller: _controllers['emergencyContactPhone']!,
+                materialIcon: Icons.phone_outlined,
+                hint: 'Emergency contact phone',
+                keyboardType: TextInputType.phone,
+              ),
 
-            const SizedBox(height: 16),
-            _SectionTitle('Website'),
-            _IconTextField(
-              controller: _controllers['website']!,
-              materialIcon: Icons.language_rounded,
-              hint: 'Website URL',
-              keyboardType: TextInputType.url,
-            ),
-            _IconTextField(
-              controller: _controllers['website2']!,
-              materialIcon: Icons.language_rounded,
-              hint: 'Website URL 2',
-              keyboardType: TextInputType.url,
-            ),
-            _IconTextField(
-              controller: _controllers['website3']!,
-              materialIcon: Icons.language_rounded,
-              hint: 'Website URL 3',
-              keyboardType: TextInputType.url,
-            ),
+              const SizedBox(height: 16),
+              _SectionTitle('Website'),
+              _IconTextField(
+                controller: _controllers['website']!,
+                materialIcon: Icons.language_rounded,
+                hint: 'Website URL',
+                keyboardType: TextInputType.url,
+              ),
+              _IconTextField(
+                controller: _controllers['website2']!,
+                materialIcon: Icons.language_rounded,
+                hint: 'Website URL 2',
+                keyboardType: TextInputType.url,
+              ),
+              _IconTextField(
+                controller: _controllers['website3']!,
+                materialIcon: Icons.language_rounded,
+                hint: 'Website URL 3',
+                keyboardType: TextInputType.url,
+              ),
 
-            const SizedBox(height: 16),
-            _SectionTitle('Payment Links'),
-            _IconTextField(
-              controller: _controllers['cashApp']!,
-              icon: _BrandIcon.cashApp,
-              hint: 'CashApp cashtag',
-            ),
-            _IconTextField(
-              controller: _controllers['venmo']!,
-              icon: _BrandIcon.venmo,
-              hint: 'Venmo username',
-            ),
-            _IconTextField(
-              controller: _controllers['paypal']!,
-              icon: _BrandIcon.paypal,
-              hint: 'PayPal link or email',
-            ),
-            _IconTextField(
-              controller: _controllers['applePay']!,
-              icon: _BrandIcon.applePay,
-              hint: 'Apple Pay phone or email',
-            ),
-            _IconTextField(
-              controller: _controllers['zelle']!,
-              icon: _BrandIcon.zelle,
-              hint: 'Zelle phone or email',
-            ),
+              const SizedBox(height: 16),
+              _SectionTitle('Payment Links'),
+              _IconTextField(
+                controller: _controllers['cashApp']!,
+                icon: _BrandIcon.cashApp,
+                hint: 'CashApp cashtag',
+              ),
+              _IconTextField(
+                controller: _controllers['venmo']!,
+                icon: _BrandIcon.venmo,
+                hint: 'Venmo username',
+              ),
+              _IconTextField(
+                controller: _controllers['paypal']!,
+                icon: _BrandIcon.paypal,
+                hint: 'PayPal link or email',
+              ),
+              _IconTextField(
+                controller: _controllers['applePay']!,
+                icon: _BrandIcon.applePay,
+                hint: 'Apple Pay phone or email',
+              ),
+              _IconTextField(
+                controller: _controllers['zelle']!,
+                icon: _BrandIcon.zelle,
+                hint: 'Zelle phone or email',
+              ),
 
-            const SizedBox(height: 16),
-            _SectionTitle('Music (Optional)'),
-            _IconTextField(
-              controller: _controllers['spotify']!,
-              icon: _BrandIcon.spotify,
-              hint: 'Spotify playlist or artist link',
-            ),
-            _IconTextField(
-              controller: _controllers['appleMusic']!,
-              icon: _BrandIcon.appleMusic,
-              hint: 'Apple Music link',
-            ),
-            _IconTextField(
-              controller: _controllers['amazonMusic']!,
-              icon: _BrandIcon.amazonMusic,
-              hint: 'Amazon Music link',
-            ),
-            _IconTextField(
-              controller: _controllers['soundCloud']!,
-              icon: _BrandIcon.soundCloud,
-              hint: 'SoundCloud link',
-            ),
+              const SizedBox(height: 16),
+              _SectionTitle('Music (Optional)'),
+              _IconTextField(
+                controller: _controllers['spotify']!,
+                icon: _BrandIcon.spotify,
+                hint: 'Spotify playlist or artist link',
+              ),
+              _IconTextField(
+                controller: _controllers['appleMusic']!,
+                icon: _BrandIcon.appleMusic,
+                hint: 'Apple Music link',
+              ),
+              _IconTextField(
+                controller: _controllers['amazonMusic']!,
+                icon: _BrandIcon.amazonMusic,
+                hint: 'Amazon Music link',
+              ),
+              _IconTextField(
+                controller: _controllers['soundCloud']!,
+                icon: _BrandIcon.soundCloud,
+                hint: 'SoundCloud link',
+              ),
 
-            const SizedBox(height: 22),
-            SizedBox(
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: _saving ? null : _saveProfile,
-                icon: _saving
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.snow,
-                        ),
-                      )
-                    : const Icon(Icons.save_outlined, size: 20),
-                label: Text(_saving ? 'Saving...' : 'Save Profile'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withValues(
-                    alpha: 0.55,
-                  ),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Arial',
+              const SizedBox(height: 22),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _saving ? null : _saveProfile,
+                  icon: _saving
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.snow,
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined, size: 20),
+                  label: Text(_saving ? 'Saving...' : 'Save Profile'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    disabledBackgroundColor: AppColors.blackCat.withValues(
+                      alpha: 0.55,
+                    ),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Your information is private and secure. Only the activated item will be shared when someone taps your nail.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.65),
-                fontSize: 12.5,
-                height: 1.35,
-                fontWeight: FontWeight.w500,
+              const SizedBox(height: 14),
+              Text(
+                'Your information is private and secure. Only the activated item will be shared when someone taps your nail.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.65),
+                  fontSize: 12.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -448,6 +577,168 @@ class NfcSavedItemsPage extends StatefulWidget {
 class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
   _SavedNfcItem? _selectedItem;
   final bool _activating = false;
+  List<NfcChip> _chips = const [];
+  bool _loadingChips = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChips();
+  }
+
+  Future<void> _loadChips() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) {
+      setState(() => _loadingChips = false);
+      return;
+    }
+    try {
+      final chips = await _fetchChips(uid);
+      if (!mounted) return;
+      setState(() {
+        _chips = chips;
+        _loadingChips = false;
+      });
+    } catch (e) {
+      debugPrint('NfcSavedItemsPage: failed to load chips: $e');
+      if (!mounted) return;
+      setState(() => _loadingChips = false);
+    }
+  }
+
+  _SavedNfcItem? _findSavedItem(String key) {
+    for (final section in _sections) {
+      for (final item in section.items) {
+        if (item.key == key) return item;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _changeActiveItem(NfcChip chip) async {
+    final picked = await showModalBottomSheet<_SavedNfcItem>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.snow,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            children: [
+              const Text(
+                'Choose what this chip shares',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+              ),
+              const SizedBox(height: 12),
+              for (final section in _sections) ...[
+                _SectionTitle(section.title),
+                ...section.items.map(
+                  (item) => _SavedItemTile(
+                    item: item,
+                    selected: chip.activeItemKey == item.key,
+                    onTap: () => Navigator.pop(sheetContext, item),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    try {
+      await _updateChipActiveItem(
+        chipId: chip.id,
+        itemKey: picked.key,
+        itemType: picked.title,
+        itemValue: picked.value,
+      );
+      await _loadChips();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${picked.title} is now active on this chip.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update chip: $e')));
+    }
+  }
+
+  Future<void> _reportLostOrDamaged(NfcChip chip) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Report this chip'),
+          content: const Text(
+            'This will deactivate the chip so it no longer shares your information. '
+            'You can activate a new chip afterward.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'lost'),
+              child: const Text('Lost'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'damaged'),
+              child: const Text('Damaged'),
+            ),
+          ],
+        );
+      },
+    );
+    if (reason == null || !mounted) return;
+    try {
+      await _deactivateChip(chipId: chip.id, reason: reason);
+      await _loadChips();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Chip deactivated.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to deactivate chip: $e')));
+    }
+  }
+
+  Widget _myChipsSection() {
+    if (_loadingChips) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    if (_chips.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('My Chips'),
+          for (final chip in _chips)
+            _MyChipTile(
+              chip: chip,
+              activeItemTitle: chip.activeItemKey == null
+                  ? null
+                  : (_findSavedItem(chip.activeItemKey!)?.title ??
+                        chip.activeItemType),
+              onChange: chip.isActive ? () => _changeActiveItem(chip) : null,
+              onReport: chip.isActive ? () => _reportLostOrDamaged(chip) : null,
+            ),
+        ],
+      ),
+    );
+  }
 
   List<_SavedNfcSection> get _sections {
     String value(String key) => (widget.profile[key] ?? '').trim();
@@ -674,7 +965,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
     );
   }
 
-  void _activateSelectedItem() {
+  Future<void> _activateSelectedItem() async {
     final selected = _selectedItem;
     if (selected == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -685,12 +976,18 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
       return;
     }
 
-    Navigator.push(
+    final activated = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => NfcScanActivationPage(selectedItem: selected),
+        builder: (_) => NfcScanActivationPage(
+          selectedItem: selected,
+          chipLabel: _chips.isEmpty ? null : 'Chip ${_chips.length + 1}',
+        ),
       ),
     );
+    if (activated == true) {
+      await _loadChips();
+    }
   }
 
   @override
@@ -703,118 +1000,126 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
       namesRoute: true,
       label: 'NFC saved items',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'ACTIVATE NFC NAIL',
-          style: TextStyle(
+        backgroundColor: AppColors.snow,
+        appBar: AppBar(
+          backgroundColor: AppColors.alabaster,
+          surfaceTintColor: AppColors.alabaster,
+          elevation: 0,
+          centerTitle: true,
+          title: const Text(
+            'ACTIVATE NFC NAIL',
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              fontSize: 16,
+            ),
+          ),
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             color: AppColors.blackCat,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            fontSize: 16,
+            onPressed: () => Navigator.pop(context),
           ),
         ),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          color: AppColors.blackCat,
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: sections.isEmpty
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No saved NFC items found. Go back and enter at least one field before activation.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.blackCat,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+        body: sections.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'No saved NFC items found. Go back and enter at least one field before activation.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.blackCat,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-                    children: [
-                      _ActivationIntroCard(selectedItem: _selectedItem),
-                      const SizedBox(height: 18),
-                      for (final section in sections) ...[
-                        _SectionTitle(section.title),
-                        ...section.items.map(
-                          (item) => _SavedItemTile(
-                            item: item,
-                            selected: _selectedItem?.key == item.key,
-                            onTap: () => setState(() => _selectedItem = item),
+              )
+            : Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+                      children: [
+                        _myChipsSection(),
+                        _ActivationIntroCard(selectedItem: _selectedItem),
+                        const SizedBox(height: 18),
+                        for (final section in sections) ...[
+                          _SectionTitle(section.title),
+                          ...section.items.map(
+                            (item) => _SavedItemTile(
+                              item: item,
+                              selected: _selectedItem?.key == item.key,
+                              onTap: () => setState(() => _selectedItem = item),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: SizedBox(
-                      height: 52,
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _activating ? null : _activateSelectedItem,
-                        icon: _activating
-                            ? const SizedBox(
-                                height: 16,
-                                width: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.snow,
-                                ),
-                              )
-                            : const Icon(Icons.nfc_rounded, size: 20),
-                        label: Text(
-                          _activating
-                              ? 'Opening Scanner...'
-                              : 'Activate NFC Nail',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat,
-                          foregroundColor: AppColors.snow,
-                          disabledBackgroundColor: AppColors.blackCat
-                              .withValues(alpha: 0.55),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: SizedBox(
+                        height: 52,
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _activating ? null : _activateSelectedItem,
+                          icon: _activating
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.snow,
+                                  ),
+                                )
+                              : const Icon(Icons.nfc_rounded, size: 20),
+                          label: Text(
+                            _activating
+                                ? 'Opening Scanner...'
+                                : (_chips.isEmpty
+                                      ? 'Activate NFC Nail'
+                                      : 'Activate Another Chip'),
                           ),
-                          textStyle: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'Arial',
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            disabledBackgroundColor: AppColors.blackCat
+                                .withValues(alpha: 0.55),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
       ),
     );
   }
 }
 
 class NfcScanActivationPage extends StatefulWidget {
-  const NfcScanActivationPage({super.key, required this.selectedItem});
+  const NfcScanActivationPage({
+    super.key,
+    required this.selectedItem,
+    this.chipLabel,
+  });
 
   final _SavedNfcItem selectedItem;
+  final String? chipLabel;
 
   @override
   State<NfcScanActivationPage> createState() => _NfcScanActivationPageState();
@@ -827,6 +1132,14 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
 
   Future<void> _startNfcScanAndActivate() async {
     if (_isScanning || _isActivated) return;
+
+    final uid = _supabase.auth.currentUser?.id;
+    if (uid == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Missing signed-in user.')));
+      return;
+    }
 
     final isAvailable = await NfcManager.instance.isAvailable();
     if (!isAvailable) {
@@ -842,6 +1155,30 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
       _statusMessage = 'Hold your NFC nail near your phone.';
     });
 
+    // Create the chip row up front so its id can be embedded in the stable
+    // resolver URL written to the physical chip. Rolled back (deleted) below
+    // if the physical write itself fails, so a failed activation never
+    // leaves behind a phantom "active" chip.
+    final NfcChip createdChip;
+    try {
+      final target = await _findNfcProfileTarget(uid);
+      createdChip = await _createChipRow(
+        uid: uid,
+        ownerTable: target?.table ?? 'client_artist',
+        itemKey: widget.selectedItem.key,
+        itemType: widget.selectedItem.title,
+        itemValue: widget.selectedItem.value,
+        label: widget.chipLabel,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isScanning = false;
+        _statusMessage = 'Failed to prepare chip: $e';
+      });
+      return;
+    }
+
     await NfcManager.instance.startSession(
       pollingOptions: const {
         NfcPollingOption.iso14443,
@@ -855,6 +1192,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
             await NfcManager.instance.stopSession(
               errorMessage: 'This NFC tag does not support NDEF.',
             );
+            await _deleteChipRow(createdChip.id);
             if (mounted) {
               setState(() {
                 _isScanning = false;
@@ -868,6 +1206,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
             await NfcManager.instance.stopSession(
               errorMessage: 'This NFC tag is not writable.',
             );
+            await _deleteChipRow(createdChip.id);
             if (mounted) {
               setState(() {
                 _isScanning = false;
@@ -877,11 +1216,13 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
             return;
           }
 
-          final payload = _buildNfcPayload(widget.selectedItem);
-          final message = NdefMessage([_buildNdefRecord(payload)]);
+          // Write the stable resolver URL, not the destination itself --
+          // changing what's active later is a DB update, never a re-tap.
+          final message = NdefMessage([
+            NdefRecord.createUri(Uri.parse(createdChip.resolverUrl)),
+          ]);
 
           await ndef.write(message);
-          await _persistActivation(payload: payload);
 
           await NfcManager.instance.stopSession(
             alertMessage: 'NFC nail activated successfully.',
@@ -905,6 +1246,9 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           await NfcManager.instance.stopSession(
             errorMessage: 'Failed to activate NFC nail.',
           );
+          try {
+            await _deleteChipRow(createdChip.id);
+          } catch (_) {}
           if (!mounted) return;
           setState(() {
             _isScanning = false;
@@ -913,119 +1257,6 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
         }
       },
     );
-  }
-
-  NdefRecord _buildNdefRecord(String payload) {
-    final uri = Uri.tryParse(payload);
-    if (uri != null && uri.hasScheme) {
-      return NdefRecord.createUri(uri);
-    }
-    return NdefRecord.createText(payload);
-  }
-
-  String _buildNfcPayload(_SavedNfcItem item) {
-    final rawValue = item.value.trim();
-    final normalized = rawValue.replaceAll('\n', ' ').trim();
-
-    switch (item.key) {
-      case 'instagram':
-        return _socialUrl('https://instagram.com/', normalized);
-      case 'tiktok':
-        return _socialUrl('https://www.tiktok.com/@', normalized);
-      case 'snapchat':
-        return _socialUrl('https://www.snapchat.com/add/', normalized);
-      case 'facebook':
-        return _urlOrFallback(
-          normalized,
-          'https://www.facebook.com/$normalized',
-        );
-      case 'linkedin':
-        return _urlOrFallback(
-          normalized,
-          'https://www.linkedin.com/in/$normalized',
-        );
-      case 'youtube':
-        return _urlOrFallback(
-          normalized,
-          'https://www.youtube.com/@$normalized',
-        );
-      case 'pinterest':
-        return _urlOrFallback(
-          normalized,
-          'https://www.pinterest.com/$normalized',
-        );
-      case 'xTwitter':
-        return _socialUrl('https://x.com/', normalized);
-      case 'threads':
-        return _socialUrl('https://www.threads.net/@', normalized);
-      case 'website':
-      case 'website2':
-      case 'website3':
-      case 'spotify':
-      case 'appleMusic':
-      case 'amazonMusic':
-      case 'soundCloud':
-      case 'paypal':
-        return _ensureUrl(normalized);
-      case 'contactCard':
-        return _buildContactText('Contact Card', rawValue);
-      case 'emergencyContact':
-        return _buildContactText('Emergency Contact', rawValue);
-      default:
-        return normalized;
-    }
-  }
-
-  String _socialUrl(String base, String value) {
-    return _urlOrFallback(value, '$base${_stripAt(value)}');
-  }
-
-  String _urlOrFallback(String value, String fallback) {
-    final uri = Uri.tryParse(value);
-    if (uri != null && uri.hasScheme) return value;
-    return fallback;
-  }
-
-  String _ensureUrl(String value) {
-    final uri = Uri.tryParse(value);
-    if (uri != null && uri.hasScheme) return value;
-    if (value.contains('.') && !value.contains(' ')) return 'https://$value';
-    return value;
-  }
-
-  String _stripAt(String value) {
-    var clean = value.trim();
-    while (clean.startsWith('@')) {
-      clean = clean.substring(1);
-    }
-    return Uri.encodeComponent(clean);
-  }
-
-  String _buildContactText(String title, String value) {
-    return '$title\n$value';
-  }
-
-  Future<void> _persistActivation({required String payload}) async {
-    final uid = _supabase.auth.currentUser?.id;
-    if (uid == null) {
-      throw Exception('Missing signed-in user.');
-    }
-
-    final existing =
-        (await _findNfcProfileTarget(uid))?.profile ??
-        const <String, dynamic>{};
-    final activationPayload = <String, dynamic>{
-      ...existing,
-      'isActivated': true,
-      'activeItemKey': widget.selectedItem.key,
-      'activeItemType': widget.selectedItem.title,
-      'activeItemSection': widget.selectedItem.section,
-      'activeItemValue': widget.selectedItem.value,
-      'nfcWrittenPayload': payload,
-      'activatedAt': DateTime.now().toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-    await _saveNfcProfileForUser(uid: uid, profile: activationPayload);
   }
 
   @override
@@ -1042,139 +1273,141 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
       namesRoute: true,
       label: 'NFC scan activation',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: AppBar(
-        backgroundColor: AppColors.alabaster,
-        surfaceTintColor: AppColors.alabaster,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'SCAN NFC NAIL',
-          style: TextStyle(
+        backgroundColor: AppColors.snow,
+        appBar: AppBar(
+          backgroundColor: AppColors.alabaster,
+          surfaceTintColor: AppColors.alabaster,
+          elevation: 0,
+          centerTitle: true,
+          title: const Text(
+            'SCAN NFC NAIL',
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              fontSize: 16,
+            ),
+          ),
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             color: AppColors.blackCat,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            fontSize: 16,
+            onPressed: () async {
+              if (_isScanning) {
+                await NfcManager.instance.stopSession(
+                  errorMessage: 'Cancelled',
+                );
+              }
+              if (context.mounted) Navigator.pop(context);
+            },
           ),
         ),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          color: AppColors.blackCat,
-          onPressed: () async {
-            if (_isScanning) {
-              await NfcManager.instance.stopSession(errorMessage: 'Cancelled');
-            }
-            if (context.mounted) Navigator.pop(context);
-          },
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(
-                  color: AppColors.blackCat.withValues(alpha: 0.18),
+        body: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(
+                    color: AppColors.blackCat.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.balletSlippers.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: Icon(
+                        _isActivated ? Icons.check_rounded : Icons.nfc_rounded,
+                        color: AppColors.blackCat,
+                        size: 36,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      _isActivated
+                          ? 'Activated Successfully'
+                          : (_isScanning ? 'Scanning...' : 'Ready to Scan'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.blackCat,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Arialbold',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      statusText,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.70),
+                        fontSize: 13,
+                        height: 1.35,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.balletSlippers.withValues(alpha: 0.45),
+              const SizedBox(height: 18),
+              _SelectedScanItemCard(item: widget.selectedItem),
+              const Spacer(),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _isActivated
+                      ? () => Navigator.pop(context, true)
+                      : _startNfcScanAndActivate,
+                  icon: _isScanning
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.snow,
+                          ),
+                        )
+                      : Icon(
+                          _isActivated
+                              ? Icons.done_rounded
+                              : Icons.sensors_rounded,
+                          size: 20,
+                        ),
+                  label: Text(
+                    _isActivated
+                        ? 'Done'
+                        : (_isScanning ? 'Scanning...' : 'Start NFC Scan'),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    disabledBackgroundColor: AppColors.blackCat.withValues(
+                      alpha: 0.55,
+                    ),
+                    shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
                     ),
-                    child: Icon(
-                      _isActivated ? Icons.check_rounded : Icons.nfc_rounded,
-                      color: AppColors.blackCat,
-                      size: 36,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    _isActivated
-                        ? 'Activated Successfully'
-                        : (_isScanning ? 'Scanning...' : 'Ready to Scan'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.blackCat,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: 'Arialbold',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    statusText,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.70),
-                      fontSize: 13,
-                      height: 1.35,
+                    textStyle: const TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            _SelectedScanItemCard(item: widget.selectedItem),
-            const Spacer(),
-            SizedBox(
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: _isActivated
-                    ? () => Navigator.pop(context)
-                    : _startNfcScanAndActivate,
-                icon: _isScanning
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.snow,
-                        ),
-                      )
-                    : Icon(
-                        _isActivated
-                            ? Icons.done_rounded
-                            : Icons.sensors_rounded,
-                        size: 20,
-                      ),
-                label: Text(
-                  _isActivated
-                      ? 'Done'
-                      : (_isScanning ? 'Scanning...' : 'Start NFC Scan'),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  disabledBackgroundColor: AppColors.blackCat.withValues(
-                    alpha: 0.55,
-                  ),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Arial',
-                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1266,6 +1499,105 @@ class _ActivationIntroCard extends StatelessWidget {
   }
 }
 
+class _MyChipTile extends StatelessWidget {
+  const _MyChipTile({
+    required this.chip,
+    required this.activeItemTitle,
+    required this.onChange,
+    required this.onReport,
+  });
+
+  final NfcChip chip;
+  final String? activeItemTitle;
+  final VoidCallback? onChange;
+  final VoidCallback? onReport;
+
+  String get _statusLabel {
+    switch (chip.status) {
+      case 'deactivated_lost':
+        return 'Lost';
+      case 'deactivated_damaged':
+        return 'Damaged';
+      case 'replaced':
+        return 'Replaced';
+      default:
+        return 'Active';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = chip.label?.trim().isNotEmpty == true
+        ? chip.label!.trim()
+        : 'NFC Chip';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: chip.isActive
+                      ? AppColors.balletSlippers.withValues(alpha: 0.6)
+                      : AppColors.blackCat.withValues(alpha: 0.10),
+                ),
+                child: Text(
+                  _statusLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            activeItemTitle == null
+                ? 'Nothing shared yet'
+                : 'Sharing: $activeItemTitle',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.blackCat.withValues(alpha: 0.70),
+            ),
+          ),
+          if (onChange != null || onReport != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (onChange != null)
+                  TextButton(onPressed: onChange, child: const Text('Change')),
+                if (onReport != null)
+                  TextButton(
+                    onPressed: onReport,
+                    child: const Text('Report Lost/Damaged'),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _SavedItemTile extends StatelessWidget {
   const _SavedItemTile({
     required this.item,
@@ -1287,64 +1619,64 @@ class _SavedItemTile extends StatelessWidget {
         label: item.title,
         child: ExcludeSemantics(
           child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.zero,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
-          decoration: BoxDecoration(
-            color: AppColors.snow,
+            onTap: onTap,
             borderRadius: BorderRadius.zero,
-            border: Border.all(
-              color: selected
-                  ? AppColors.blackCat
-                  : AppColors.blackCat.withValues(alpha: 0.18),
-              width: selected ? 1.4 : 1,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: selected
+                      ? AppColors.blackCat
+                      : AppColors.blackCat.withValues(alpha: 0.18),
+                  width: selected ? 1.4 : 1,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(item.icon, color: AppColors.blackCat, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            color: AppColors.blackCat,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Arialbold',
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.value,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.70),
+                            fontSize: 12.5,
+                            height: 1.25,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  RadioGroup<String>(
+                    groupValue: selected ? item.key : null,
+                    onChanged: (_) => onTap(),
+                    child: Radio<String>(
+                      value: item.key,
+                      activeColor: AppColors.blackCat,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(item.icon, color: AppColors.blackCat, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: const TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Arialbold',
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.value,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.70),
-                        fontSize: 12.5,
-                        height: 1.25,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              RadioGroup<String>(
-                groupValue: selected ? item.key : null,
-                onChanged: (_) => onTap(),
-                child: Radio<String>(
-                  value: item.key,
-                  activeColor: AppColors.blackCat,
-                ),
-              ),
-            ],
-          ),
-        ),
           ),
         ),
       ),

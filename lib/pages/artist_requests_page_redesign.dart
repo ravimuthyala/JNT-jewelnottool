@@ -3951,40 +3951,52 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final normalizedOrderNumber = request.orderNumber.trim().isNotEmpty
         ? request.orderNumber.trim()
         : request.id;
-    for (final brandCompanyEmail in brandRecipientEmails) {
-      await NotificationsService.createUserNotification(
-        receiverEmail: brandCompanyEmail,
-        title: 'Brand Request Accepted',
-        body:
-            '$acceptedClientName has accepted your $campaignName brand request $normalizedOrderNumber',
-        type: 'brand_request_accepted_by_client',
-        orderId: request.id,
-        orderNumber: request.orderNumber,
-        sourceCollection: request.sourceCollection,
-      );
-    }
 
-    await NotificationsService.notifyAdmins(
-      title: 'Brand Request Accepted',
-      body:
-          '$acceptedClientName has accepted the $brandName $campaignName brand request $normalizedOrderNumber',
-      type: 'admin_brand_request_accepted_by_client',
-      orderId: request.id,
-      orderNumber: request.orderNumber,
-      sourceCollection: request.sourceCollection,
-    );
+    // The status write above is the only part the caller needs to wait on to
+    // safely dismiss the sheet -- these notification sends are side effects
+    // and were previously awaited in-line, making "Accept" block on a whole
+    // chain of network round trips (one per brand recipient, plus admins and
+    // artists) before the UI could respond.
+    unawaited(() async {
+      try {
+        for (final brandCompanyEmail in brandRecipientEmails) {
+          await NotificationsService.createUserNotification(
+            receiverEmail: brandCompanyEmail,
+            title: 'Brand Request Accepted',
+            body:
+                '$acceptedClientName has accepted your $campaignName brand request $normalizedOrderNumber',
+            type: 'brand_request_accepted_by_client',
+            orderId: request.id,
+            orderNumber: request.orderNumber,
+            sourceCollection: request.sourceCollection,
+          );
+        }
 
-    await NotificationsService.notifyArtistsForBrandClientAcceptedRequest(
-      clientName: acceptedClientName,
-      brandName: brandName,
-      campaignName: campaignName,
-      isDirectRequest: request.isDirectRequest,
-      selectedArtistEmail: request.selectedArtistEmail.trim().toLowerCase(),
-      orderId: request.id,
-      sourceCollection: request.sourceCollection,
-      orderNumber: request.orderNumber,
-      allowNonLicensed: request.allowNonLicensed,
-    );
+        await NotificationsService.notifyAdmins(
+          title: 'Brand Request Accepted',
+          body:
+              '$acceptedClientName has accepted the $brandName $campaignName brand request $normalizedOrderNumber',
+          type: 'admin_brand_request_accepted_by_client',
+          orderId: request.id,
+          orderNumber: request.orderNumber,
+          sourceCollection: request.sourceCollection,
+        );
+
+        await NotificationsService.notifyArtistsForBrandClientAcceptedRequest(
+          clientName: acceptedClientName,
+          brandName: brandName,
+          campaignName: campaignName,
+          isDirectRequest: request.isDirectRequest,
+          selectedArtistEmail: request.selectedArtistEmail.trim().toLowerCase(),
+          orderId: request.id,
+          sourceCollection: request.sourceCollection,
+          orderNumber: request.orderNumber,
+          allowNonLicensed: request.allowNonLicensed,
+        );
+      } catch (e) {
+        debugPrint('Brand request acceptance notifications failed: $e');
+      }
+    }());
   }
 
   Future<Map<String, dynamic>> _loadAcceptingClientData(String email) async {
@@ -5625,7 +5637,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final photo = r.clientProfileImage.trim();
 
     Widget initialFallback() {
-      final letter = r.clientName.isEmpty ? 'C' : r.clientName[0].toUpperCase();
+      final isBrandRequest = r.sourceCollection == 'Company_Custom_Requests';
+      final displayName = isBrandRequest && r.brandName.trim().isNotEmpty
+          ? r.brandName.trim()
+          : r.clientName;
+      final letter = displayName.trim().isEmpty
+          ? (isBrandRequest ? 'B' : 'C')
+          : displayName.trim()[0].toUpperCase();
       return Container(
         width: double.infinity,
         height: double.infinity,
@@ -6986,8 +7004,12 @@ class InReviewDetailsSheet extends StatelessWidget {
   }
 
   String _initialLetter() {
-    final name = request.clientName.trim();
-    if (name.isEmpty) return 'C';
+    final isBrandRequest =
+        request.sourceCollection == 'Company_Custom_Requests';
+    final name = isBrandRequest && request.brandName.trim().isNotEmpty
+        ? request.brandName.trim()
+        : request.clientName.trim();
+    if (name.isEmpty) return isBrandRequest ? 'B' : 'C';
     return name[0].toUpperCase();
   }
 
@@ -9802,7 +9824,7 @@ class InReviewDetailsSheet extends StatelessWidget {
 
     Widget initialFallback() => Center(
       child: Text(
-        request.clientName.isEmpty ? 'C' : request.clientName[0].toUpperCase(),
+        _initialLetter(),
         style: TextStyle(fontWeight: FontWeight.w400, fontSize: 16 * s),
       ),
     );
@@ -10889,8 +10911,7 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
   @override
   void initState() {
     super.initState();
-    final mid = ((widget.budgetMin + widget.budgetMax) / 2).round();
-    _yourPriceCtrl = TextEditingController(text: mid.toStringAsFixed(0));
+    _yourPriceCtrl = TextEditingController();
     _shippingCtrl = TextEditingController(text: '10');
   }
 
@@ -10908,6 +10929,7 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
     final media = MediaQuery.of(context);
     final isNarrow = media.size.width < 360;
     final range = '\$${widget.budgetMin} - \$${widget.budgetMax}';
+    final yourPriceEntered = _toNum(_yourPriceCtrl.text) > 0;
     final total = _toNum(_yourPriceCtrl.text) + _toNum(_shippingCtrl.text);
     final exceedsBudget = total > widget.budgetMax;
     final bottomInset = media.viewInsets.bottom;
@@ -11012,7 +11034,7 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
                             elevation: 0,
                             padding: EdgeInsets.zero,
                           ),
-                          onPressed: exceedsBudget
+                          onPressed: (!yourPriceEntered || exceedsBudget)
                               ? null
                               : () {
                                   Navigator.pop(
