@@ -424,49 +424,34 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         ? 'Group'
         : 'Single';
 
-    Widget requestTypeContent() => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          request.isDirectRequest
-              ? Icons.arrow_outward_rounded
-              : Icons.arrow_forward_rounded,
-          size: 15,
-          color: AppColors.blackCat,
+    Widget segment({
+      required IconData icon,
+      required String text,
+      required Alignment alignment,
+    }) {
+      return Align(
+        alignment: alignment,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: AppColors.blackCat),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 5),
-        Text(
-          requestLabel,
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
-        ),
-      ],
-    );
-
-    Widget orderTypeContent() => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          request.orderType == RequestOrderTypeV2.group
-              ? Icons.groups_2_outlined
-              : Icons.person_outline_rounded,
-          size: 15,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 5),
-        Text(
-          orderLabel,
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
-        ),
-      ],
-    );
+      );
+    }
 
     return FutureBuilder<RequestNfcDetails>(
       future: loadRequestNfcDetails(
@@ -478,17 +463,41 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         final nfc = snapshot.data ?? RequestNfcDetails.emptyConst;
         final requiresNfc =
             nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
-        if (!requiresNfc) {
-          return _summaryPairRow(
-            left: requestTypeContent(),
-            right: orderTypeContent(),
-          );
-        }
-        return Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              requestTypeContent(),
+        return Row(
+          children: [
+            // Request type values ("Direct to Artist"/"Direct to Client")
+            // run noticeably longer than order-type/NFC values ("Single",
+            // "Group", "NFC"), so give this segment more of the row instead
+            // of splitting evenly -- otherwise it clips even with wrapping.
+            Expanded(
+              flex: 2,
+              child: segment(
+                icon: request.isDirectRequest
+                    ? Icons.arrow_outward_rounded
+                    : Icons.arrow_forward_rounded,
+                text: requestLabel,
+                alignment: Alignment.centerRight,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              width: 1,
+              height: 18,
+              color: AppColors.blackCatBorderLight,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: segment(
+                icon: request.orderType == RequestOrderTypeV2.group
+                    ? Icons.groups_2_outlined
+                    : Icons.person_outline_rounded,
+                text: orderLabel,
+                alignment: requiresNfc
+                    ? Alignment.center
+                    : Alignment.centerLeft,
+              ),
+            ),
+            if (requiresNfc) ...[
               const SizedBox(width: 10),
               Container(
                 width: 1,
@@ -496,26 +505,15 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                 color: AppColors.blackCatBorderLight,
               ),
               const SizedBox(width: 10),
-              orderTypeContent(),
-              const SizedBox(width: 10),
-              Container(
-                width: 1,
-                height: 18,
-                color: AppColors.blackCatBorderLight,
-              ),
-              const SizedBox(width: 10),
-              const Icon(
-                Icons.nfc_rounded,
-                size: 15,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 5),
-              const Text(
-                'NFC',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+              Expanded(
+                child: segment(
+                  icon: Icons.nfc_rounded,
+                  text: 'NFC',
+                  alignment: Alignment.centerLeft,
+                ),
               ),
             ],
-          ),
+          ],
         );
       },
     );

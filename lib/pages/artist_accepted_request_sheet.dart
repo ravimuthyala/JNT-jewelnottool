@@ -3028,7 +3028,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
         return Row(
           children: [
+            // Request type values ("Direct to Artist"/"Direct to Client")
+            // run noticeably longer than order-type/NFC values ("Single",
+            // "Group", "NFC"), so give this segment more of the row instead
+            // of splitting evenly -- otherwise it clips even with wrapping.
             Expanded(
+              flex: 2,
               child: Align(
                 alignment: Alignment.centerRight,
                 child: _chipInfo(

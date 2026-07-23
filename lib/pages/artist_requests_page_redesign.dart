@@ -9540,7 +9540,12 @@ class InReviewDetailsSheet extends StatelessWidget {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Request type values ("Direct to Artist"/"Direct to
+                // Client") run noticeably longer than order-type/NFC values
+                // ("Single", "Group", "NFC"), so give this segment more of
+                // the row instead of splitting evenly.
                 Flexible(
+                  flex: 2,
                   child: _requestTypePill(
                     context: context,
                     // requestTypeLabel is frozen at submission and must
@@ -9616,7 +9621,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         Flexible(
           child: Text(
             text,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontWeight: FontWeight.w700,
