@@ -170,6 +170,55 @@ bool isEligibleBrandRequestArtist(Map<String, dynamic> data) {
   return values.any(eligibleTier);
 }
 
+/// Whether an artist has opted in to receiving NFC-requiring jobs. Mirrors
+/// the read order used by the artist-side visibility check and by the
+/// artist's own profile toggle (_setNfcRequestsEnabled in
+/// artist_profile_page.dart writes profile.nfcRequestEnabled) -- that
+/// camelCase field is the live, artist-controlled value and must be checked
+/// before any snake_case variant, which may hold a stale value from an
+/// older registration/migration path.
+bool isArtistNfcAccepting(Map<String, dynamic> data) {
+  bool? maybeBool(Object? raw) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final value = (raw ?? '').toString().trim().toLowerCase();
+    if (value == 'true' || value == '1' || value == 'yes') return true;
+    if (value == 'false' || value == '0' || value == 'no') return false;
+    return null;
+  }
+
+  Map<String, dynamic> asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return const <String, dynamic>{};
+  }
+
+  final profile = asMap(data['profile']);
+  final availability = asMap(data['availability']);
+  final artist = asMap(data['artist']);
+  final artistAvailability = asMap(artist['availability']);
+  for (final raw in <Object?>[
+    data['panel_nfcRequestEnabled'],
+    data['panel_nfc_request_enabled'],
+    data['nfcRequestEnabled'],
+    data['nfc_request_enabled'],
+    availability['nfcRequestEnabled'],
+    availability['nfc_request_enabled'],
+    profile['nfcRequestEnabled'],
+    profile['nfc_request_enabled'],
+    artist['nfcRequestEnabled'],
+    artist['nfc_request_enabled'],
+    artistAvailability['nfcRequestEnabled'],
+    artistAvailability['nfc_request_enabled'],
+  ]) {
+    final value = maybeBool(raw);
+    if (value != null) return value;
+  }
+  return false;
+}
+
 bool isBrandPartnerClient(Map<String, dynamic> data) {
   String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
   String normalizedStatus(Object? value) =>
@@ -281,6 +330,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   List<String> _directRequestArtists = <String>[];
   final Map<String, String> _clientEmailByNameLower = <String, String>{};
   final Map<String, bool> _clientNfcEligibleByNameLower = <String, bool>{};
+  final Map<String, bool> _artistAcceptsNfcByNameLower = <String, bool>{};
   bool _nfcRequest = false;
   String _groupClientToAdd = '';
   // Bumped whenever _groupClientToAdd is cleared programmatically (add,
@@ -964,6 +1014,22 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         .toList(growable: false);
   }
 
+  bool _isArtistNameNfcAccepting(String name) {
+    return _artistAcceptsNfcByNameLower[name.trim().toLowerCase()] == true;
+  }
+
+  // Artists are always filtered to Goldsmith/Crowned eligibility
+  // (_directRequestArtists already only contains eligible artists). When
+  // the NFC checkbox is selected, further restrict to artists who have
+  // opted in to NFC-requiring jobs -- otherwise a client/brand could
+  // directly address an NFC request to an artist who doesn't accept them.
+  List<String> get _nfcFilteredDirectRequestArtists {
+    if (!_nfcRequest) return _directRequestArtists;
+    return _directRequestArtists
+        .where(_isArtistNameNfcAccepting)
+        .toList(growable: false);
+  }
+
   void _setNfcRequest(bool value) {
     setState(() {
       _nfcRequest = value;
@@ -982,6 +1048,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             !allowed.contains(_groupClientToAdd.trim().toLowerCase())) {
           _groupClientToAdd = '';
           _groupClientFieldResetTick++;
+        }
+        if ((_requestedArtist ?? '').trim().isNotEmpty &&
+            !_isArtistNameNfcAccepting(_requestedArtist!)) {
+          _requestedArtist = null;
         }
       }
     });
@@ -1124,6 +1194,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       }
 
       final artistNames = <String>{};
+      final artistAcceptsNfcByName = <String, bool>{};
       final artistRows = <Map<String, dynamic>>[];
       for (final table in const <String>['artist', 'client_artist']) {
         artistRows.addAll(await _fetchTableRows(table));
@@ -1135,6 +1206,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         final name = _artistDisplayName(data).trim();
         if (name.isEmpty) continue;
         artistNames.add(name);
+        artistAcceptsNfcByName[name.toLowerCase()] = isArtistNfcAccepting(
+          data,
+        );
       }
       if (artistNames.isEmpty) {
         final artists = await ArtistDirectoryService.fetchAllArtists(
@@ -1183,10 +1257,18 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         _clientNfcEligibleByNameLower
           ..clear()
           ..addAll(nfcEligibleByName);
+        _artistAcceptsNfcByNameLower
+          ..clear()
+          ..addAll(artistAcceptsNfcByName);
         _directRequestArtists =
             (artistNames.isEmpty ? _artistOptions.toSet() : artistNames)
                 .toList()
               ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+        if (_nfcRequest &&
+            (_requestedArtist ?? '').trim().isNotEmpty &&
+            !_isArtistNameNfcAccepting(_requestedArtist!)) {
+          _requestedArtist = null;
+        }
       });
     } catch (e) {
       debugPrint('_loadSelectionSources failed: $e');
@@ -1200,6 +1282,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         _groupSelectedClients.clear();
         _clientEmailByNameLower.clear();
         _clientNfcEligibleByNameLower.clear();
+        _artistAcceptsNfcByNameLower.clear();
         _directRequestArtists = _artistOptions;
       });
     }
@@ -3072,7 +3155,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                           _SearchableSelectField(
                             value: _requestedArtist ?? '',
                             hint: 'Select Artist',
-                            items: _directRequestArtists,
+                            items: _nfcFilteredDirectRequestArtists,
                             focusNode: _requestedArtistFocusNode,
                             onChanged: (v) => setState(
                               () => _requestedArtist = v.trim().isEmpty
