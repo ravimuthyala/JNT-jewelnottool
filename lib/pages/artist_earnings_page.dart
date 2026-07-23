@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/jnt_ascension_engine.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
@@ -109,7 +110,11 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     for (final table in const ['client_artist', 'artist']) {
       try {
         if (uid.isNotEmpty) {
-          final row = await supabase.from(table).select().eq('id', uid).maybeSingle();
+          final row = await supabase
+              .from(table)
+              .select()
+              .eq('id', uid)
+              .maybeSingle();
           if (row != null) return Map<String, dynamic>.from(row);
         }
       } catch (_) {}
@@ -117,7 +122,11 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     for (final table in const ['client_artist', 'artist']) {
       try {
         if (email.isNotEmpty) {
-          final row = await supabase.from(table).select().eq('email', email).maybeSingle();
+          final row = await supabase
+              .from(table)
+              .select()
+              .eq('email', email)
+              .maybeSingle();
           if (row != null) return Map<String, dynamic>.from(row);
         }
       } catch (_) {}
@@ -150,7 +159,9 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   Future<void> _reload() async {
     try {
       final currentArtistEmail =
-          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
+          (Supabase.instance.client.auth.currentUser?.email ?? '')
+              .trim()
+              .toLowerCase();
       final currentArtistId =
           (Supabase.instance.client.auth.currentUser?.id ?? '').trim();
       final all = await ArtistRequestsRepository.fetchAllRequests();
@@ -278,7 +289,9 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         .fold<double>(0, (sum, r) => sum + _amount(r));
 
     final deliveredPaid = inRange
-        .where((r) => r.status == RequestStatusV2.delivered || r.deliveredAt != null)
+        .where(
+          (r) => r.status == RequestStatusV2.delivered || r.deliveredAt != null,
+        )
         .length;
     final avg = paid.isEmpty ? 0.0 : totalPaid / paid.length;
 
@@ -308,42 +321,9 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     return '${_formatDate(first)} - ${_formatDate(last)}';
   }
 
-  String _formatDate(DateTime d) {
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
-  }
+  String _formatDate(DateTime d) => formatDateMdy(d);
 
-  String _formatShortDate(DateTime d) {
-    const week = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${week[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  String _formatShortDate(DateTime d) => formatDateMdy(d);
 
   String _money(double v) => '\$${v.toStringAsFixed(2)}';
 
@@ -435,8 +415,9 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     final completed = requests
         .where(_isAscensionCompletedOrder)
         .toList(growable: false);
-    final completedSorted = List<ClientRequestV2>.from(completed)
-      ..sort((a, b) => _ascensionOrderDate(a).compareTo(_ascensionOrderDate(b)));
+    final completedSorted = List<ClientRequestV2>.from(
+      completed,
+    )..sort((a, b) => _ascensionOrderDate(a).compareTo(_ascensionOrderDate(b)));
 
     final seenClients = <String>{};
     final repeatClientRequestIds = <String>{};
@@ -456,7 +437,11 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         .where((request) => repeatClientRequestIds.contains(request.id))
         .toList(growable: false);
     final delivered = completed
-        .where((request) => request.status == RequestStatusV2.delivered || request.deliveredAt != null)
+        .where(
+          (request) =>
+              request.status == RequestStatusV2.delivered ||
+              request.deliveredAt != null,
+        )
         .toList(growable: false);
     final artistGmv = completed.fold<double>(0, (sum, r) => sum + _amount(r));
 
@@ -479,7 +464,9 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         if (!r.shippedAt!.isBefore(monthStart))
           JntAscensionEngine.pointsOnTimeDelivery.toDouble(),
       for (final r in fiveStar)
-        if (!(r.clientReviewSubmittedAt ?? _ascensionOrderDate(r)).isBefore(monthStart))
+        if (!(r.clientReviewSubmittedAt ?? _ascensionOrderDate(r)).isBefore(
+          monthStart,
+        ))
           JntAscensionEngine.pointsFiveStarReview.toDouble(),
       for (final r in repeat)
         if (!_ascensionOrderDate(r).isBefore(monthStart))
@@ -622,199 +609,199 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
       namesRoute: true,
       label: 'Artist earnings',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntStandardAppBar(
-        onNotifications:
-            widget.onOpenNotifications ??
-            () {
-              NotificationsPage.showAsModal(context);
-            },
-        trailing: _AvatarMenu(
-          onManageProfile: widget.onManageProfile,
-          onOpenHistory: widget.onOpenHistory,
-          onOpenCalendar: widget.onOpenCalendar,
-          onOpenArtist: widget.onOpenArtist,
-          onOpenReviews: widget.onOpenReviews,
-          clientArtistMenuStyle: widget.clientArtistMenuStyle,
-          onSignOut:
-              widget.onSignOut ??
+        backgroundColor: AppColors.snow,
+        appBar: JntStandardAppBar(
+          onNotifications:
+              widget.onOpenNotifications ??
               () {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/', (route) => false);
+                NotificationsPage.showAsModal(context);
               },
+          trailing: _AvatarMenu(
+            onManageProfile: widget.onManageProfile,
+            onOpenHistory: widget.onOpenHistory,
+            onOpenCalendar: widget.onOpenCalendar,
+            onOpenArtist: widget.onOpenArtist,
+            onOpenReviews: widget.onOpenReviews,
+            clientArtistMenuStyle: widget.clientArtistMenuStyle,
+            onSignOut:
+                widget.onSignOut ??
+                () {
+                  Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil('/', (route) => false);
+                },
+          ),
         ),
-      ),
-      bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigationBar(
-              backgroundColor: AppColors.balletSlippers,
-              currentIndex: widget.bottomNavCurrentIndex,
-              onTap: widget.onBottomNavTap,
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: Colors.black.withValues(alpha: 0.55),
-              items: [
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.add_circle_outline),
-                  activeIcon: Icon(Icons.add_circle),
-                  label: 'Design',
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.inbox_outlined),
-                  activeIcon: Icon(Icons.inbox),
-                  label: 'Requests',
-                ),
-                if (widget.showCampaignsTab)
+        bottomNavigationBar: widget.showBottomNav
+            ? BottomNavigationBar(
+                backgroundColor: AppColors.balletSlippers,
+                currentIndex: widget.bottomNavCurrentIndex,
+                onTap: widget.onBottomNavTap,
+                type: BottomNavigationBarType.fixed,
+                selectedItemColor: AppColors.blackCat,
+                unselectedItemColor: Colors.black.withValues(alpha: 0.55),
+                items: [
                   const BottomNavigationBarItem(
-                    icon: Icon(Icons.campaign_outlined),
-                    activeIcon: Icon(Icons.campaign),
-                    label: 'Campaigns',
+                    icon: Icon(Icons.home_outlined),
+                    activeIcon: Icon(Icons.home),
+                    label: 'Home',
                   ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  activeIcon: Icon(Icons.receipt_long),
-                  label: 'Orders',
-                ),
-                if (!widget.showCampaignsTab)
                   const BottomNavigationBarItem(
-                    icon: Icon(Icons.attach_money_outlined),
-                    activeIcon: Icon(Icons.attach_money),
-                    label: 'Earnings',
+                    icon: Icon(Icons.add_circle_outline),
+                    activeIcon: Icon(Icons.add_circle),
+                    label: 'Design',
                   ),
-              ],
-            )
-          : null,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          : ScrollConfiguration(
-              behavior: const _NoGlowScrollBehavior(),
-              child: ListView(
-                physics: const ClampingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-                children: [
-                  _TotalEarningsCard(
-                    total: summary.totalEarnings,
-                    deltaLabel: '${_money(summary.monthEarnings)} this month',
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.inbox_outlined),
+                    activeIcon: Icon(Icons.inbox),
+                    label: 'Requests',
                   ),
-                  const SizedBox(height: 12),
-                  _AscensionSummaryCard(
-                    tier: (_ascensionData['tier'] ?? 'maker').toString(),
-                    points: _asDoubleSafe(_ascensionData['points']),
-                    pointsToNextTier: _asDoubleSafe(
-                      _ascensionData['pointsToNextTier'],
-                      fallback: 1000,
+                  if (widget.showCampaignsTab)
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.campaign_outlined),
+                      activeIcon: Icon(Icons.campaign),
+                      label: 'Campaigns',
                     ),
-                    nextTierLabel:
-                        (_ascensionData['nextTierLabel'] ?? 'Goldsmith')
-                            .toString(),
-                    onViewAscension: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const JntAscensionPage(),
-                        ),
-                      );
-                    },
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    activeIcon: Icon(Icons.receipt_long),
+                    label: 'Orders',
                   ),
-                  const SizedBox(height: 12),
-                  _AscensionStagesCard(summary: _stageSummary),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          summary.rangeLabel,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.blackCat.withValues(alpha: 0.70),
-                          ),
-                        ),
-                      ),
-                      _RangeDropdown(
-                        value: _range,
-                        onChanged: (v) => setState(() => _range = v),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const _SectionLabel(title: 'Money in'),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Paid Earning',
-                          value: _money(summary.totalEarnings),
-                          subtitle: '${summary.paidOrders} paid orders',
-                          icon: Icons.attach_money_rounded,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Pending Earning',
-                          value: _money(summary.pendingAmount),
-                          subtitle: 'Awaiting payment',
-                          icon: Icons.schedule_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const _SectionLabel(title: 'Performance'),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Average order',
-                          value: _money(summary.averageOrder),
-                          subtitle: 'Paid order average',
-                          icon: Icons.analytics_outlined,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Orders delivered',
-                          value: '${summary.deliveredPaidOrders}',
-                          subtitle: 'Delivered successfully',
-                          icon: Icons.check_circle_outline_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _PerformanceTrendCard(points: _lastSixMonthPaidTrend()),
-                  const SizedBox(height: 12),
-                  _BreakdownCard(
-                    paidAmount: summary.paidAmountInRange,
-                    unpaidAmount: summary.unpaidAmountInRange,
-                  ),
-                  const SizedBox(height: 12),
-                  _RecentPayoutsCard(
-                    items: summary.recentPaidOrders
-                        .map(
-                          (r) => _PayoutItem(
-                            amount: _amount(r),
-                            dateLabel: _formatShortDate(_earningDate(r)),
-                            note: r.orderNumber.trim().isEmpty
-                                ? r.id
-                                : r.orderNumber.trim(),
-                            statusLabel: r.status.label,
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
+                  if (!widget.showCampaignsTab)
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.attach_money_outlined),
+                      activeIcon: Icon(Icons.attach_money),
+                      label: 'Earnings',
+                    ),
                 ],
+              )
+            : null,
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            : ScrollConfiguration(
+                behavior: const _NoGlowScrollBehavior(),
+                child: ListView(
+                  physics: const ClampingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+                  children: [
+                    _TotalEarningsCard(
+                      total: summary.totalEarnings,
+                      deltaLabel: '${_money(summary.monthEarnings)} this month',
+                    ),
+                    const SizedBox(height: 12),
+                    _AscensionSummaryCard(
+                      tier: (_ascensionData['tier'] ?? 'maker').toString(),
+                      points: _asDoubleSafe(_ascensionData['points']),
+                      pointsToNextTier: _asDoubleSafe(
+                        _ascensionData['pointsToNextTier'],
+                        fallback: 1000,
+                      ),
+                      nextTierLabel:
+                          (_ascensionData['nextTierLabel'] ?? 'Goldsmith')
+                              .toString(),
+                      onViewAscension: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const JntAscensionPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _AscensionStagesCard(summary: _stageSummary),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            summary.rangeLabel,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.blackCat.withValues(alpha: 0.70),
+                            ),
+                          ),
+                        ),
+                        _RangeDropdown(
+                          value: _range,
+                          onChanged: (v) => setState(() => _range = v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const _SectionLabel(title: 'Money in'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Paid Earning',
+                            value: _money(summary.totalEarnings),
+                            subtitle: '${summary.paidOrders} paid orders',
+                            icon: Icons.attach_money_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Pending Earning',
+                            value: _money(summary.pendingAmount),
+                            subtitle: 'Awaiting payment',
+                            icon: Icons.schedule_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const _SectionLabel(title: 'Performance'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Average order',
+                            value: _money(summary.averageOrder),
+                            subtitle: 'Paid order average',
+                            icon: Icons.analytics_outlined,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Orders delivered',
+                            value: '${summary.deliveredPaidOrders}',
+                            subtitle: 'Delivered successfully',
+                            icon: Icons.check_circle_outline_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _PerformanceTrendCard(points: _lastSixMonthPaidTrend()),
+                    const SizedBox(height: 12),
+                    _BreakdownCard(
+                      paidAmount: summary.paidAmountInRange,
+                      unpaidAmount: summary.unpaidAmountInRange,
+                    ),
+                    const SizedBox(height: 12),
+                    _RecentPayoutsCard(
+                      items: summary.recentPaidOrders
+                          .map(
+                            (r) => _PayoutItem(
+                              amount: _amount(r),
+                              dateLabel: _formatShortDate(_earningDate(r)),
+                              note: r.orderNumber.trim().isEmpty
+                                  ? r.id
+                                  : r.orderNumber.trim(),
+                              statusLabel: r.status.label,
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  ],
+                ),
               ),
-            ),
-    ),
+      ),
     );
   }
 }
@@ -906,7 +893,9 @@ class _PerformanceTrendCard extends StatelessWidget {
                               p.label,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.blackCat.withValues(alpha: 0.65),
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.65,
+                                ),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -985,7 +974,9 @@ class _AvatarMenu extends StatelessWidget {
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
+          child: const ArtistProfileAvatarIcon(
+            size: JntHeaderMetrics.avatarSize,
+          ),
         ),
       ),
       itemBuilder: (_) => [
@@ -1118,7 +1109,6 @@ class _TotalEarningsCard extends StatelessWidget {
   }
 }
 
-
 class _AscensionStageSummary {
   const _AscensionStageSummary({
     required this.result,
@@ -1139,53 +1129,53 @@ class _AscensionStageSummary {
   });
 
   const _AscensionStageSummary.empty()
-      : result = const JntAscensionResult(
-          tier: 'maker',
-          tierLabel: 'Maker',
-          points: 0,
-          completedOrders: 0,
-          onTimeDeliveries: 0,
-          fiveStarReviews: 0,
-          repeatClientOrders: 0,
-          portfolioUploads: 0,
-          artistGmv: 0,
-          jntRevenue: 0,
-          completedOrderPoints: 0,
-          onTimeDeliveryPoints: 0,
-          fiveStarReviewPoints: 0,
-          repeatClientOrderPoints: 0,
-          portfolioUploadPoints: 0,
-          crownedPointsQualified: false,
-          crownedRevenueQualified: false,
-          jntRevenueToCrowned: 5000,
-          prioritySearch: false,
-          sponsorshipEligible: false,
-          insuranceEligible: false,
-          pointsToNextTier: 1000,
-          nextTier: 'goldsmith',
-          nextTierLabel: 'Goldsmith',
-          generatedTags: <String>['Maker'],
-          unlockedPerks: <String>[
-            'Welcome gift',
-            'Group orders',
-            'Learning & development',
-          ],
-          crownedPointsOnlyMessage: '',
-        ),
-        completedOrders = 0,
-        completedOrderPoints = 0,
-        onTimeDeliveries = 0,
-        onTimeDeliveryPoints = 0,
-        fiveStarReviews = 0,
-        fiveStarReviewPoints = 0,
-        repeatClientOrders = 0,
-        repeatClientOrderPoints = 0,
-        portfolioUploads = 0,
-        portfolioUploadPoints = 0,
-        deliveredOrders = 0,
-        artistGmv = 0,
-        jntRevenue = 0,
-        thisMonthPoints = 0;
+    : result = const JntAscensionResult(
+        tier: 'maker',
+        tierLabel: 'Maker',
+        points: 0,
+        completedOrders: 0,
+        onTimeDeliveries: 0,
+        fiveStarReviews: 0,
+        repeatClientOrders: 0,
+        portfolioUploads: 0,
+        artistGmv: 0,
+        jntRevenue: 0,
+        completedOrderPoints: 0,
+        onTimeDeliveryPoints: 0,
+        fiveStarReviewPoints: 0,
+        repeatClientOrderPoints: 0,
+        portfolioUploadPoints: 0,
+        crownedPointsQualified: false,
+        crownedRevenueQualified: false,
+        jntRevenueToCrowned: 5000,
+        prioritySearch: false,
+        sponsorshipEligible: false,
+        insuranceEligible: false,
+        pointsToNextTier: 1000,
+        nextTier: 'goldsmith',
+        nextTierLabel: 'Goldsmith',
+        generatedTags: <String>['Maker'],
+        unlockedPerks: <String>[
+          'Welcome gift',
+          'Group orders',
+          'Learning & development',
+        ],
+        crownedPointsOnlyMessage: '',
+      ),
+      completedOrders = 0,
+      completedOrderPoints = 0,
+      onTimeDeliveries = 0,
+      onTimeDeliveryPoints = 0,
+      fiveStarReviews = 0,
+      fiveStarReviewPoints = 0,
+      repeatClientOrders = 0,
+      repeatClientOrderPoints = 0,
+      portfolioUploads = 0,
+      portfolioUploadPoints = 0,
+      deliveredOrders = 0,
+      artistGmv = 0,
+      jntRevenue = 0,
+      thisMonthPoints = 0;
 
   final JntAscensionResult result;
   final int completedOrders;
@@ -1275,7 +1265,6 @@ class _AscensionStagesCard extends StatelessWidget {
             points: summary.portfolioUploadPoints,
             isLast: true,
           ),
-
         ],
       ),
     );
@@ -1507,7 +1496,11 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(icon, size: 16, color: AppColors.blackCat.withValues(alpha: 0.55)),
+              Icon(
+                icon,
+                size: 16,
+                color: AppColors.blackCat.withValues(alpha: 0.55),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

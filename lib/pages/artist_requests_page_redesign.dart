@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import 'artist_designing_request_sheet.dart';
 import '../models/client_request_v2.dart';
@@ -1997,86 +1998,87 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       namesRoute: true,
       label: 'Artist requests',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
+        backgroundColor: AppColors.snow,
 
-      // HEADER (same style as your other pages)
-      appBar: JntStandardAppBar(
-        onNotifications: _openNotifications,
-        trailing: _avatarMenu(),
-      ),
+        // HEADER (same style as your other pages)
+        appBar: JntStandardAppBar(
+          onNotifications: _openNotifications,
+          trailing: _avatarMenu(),
+        ),
 
-      body: Column(
-        children: [
-          // Top controls area
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: Column(
-              children: [
-                if (!widget.showOnlyCompanyRequests) _searchWithFilterButton(),
-                if (!widget.showOnlyCompanyRequests) ...[
-                  const SizedBox(height: 12),
-                  // Status tabs
-                  _statusTabs(),
+        body: Column(
+          children: [
+            // Top controls area
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+              child: Column(
+                children: [
+                  if (!widget.showOnlyCompanyRequests)
+                    _searchWithFilterButton(),
+                  if (!widget.showOnlyCompanyRequests) ...[
+                    const SizedBox(height: 12),
+                    // Status tabs
+                    _statusTabs(),
+                  ],
                 ],
-              ],
-            ),
-          ),
-
-          if (widget.showOnlyCompanyRequests)
-            Expanded(child: _tabList(0))
-          else
-            Expanded(
-              child: TabBarView(
-                controller: _tabCtrl,
-                // OLD
-                // children: List.generate(8, (i) => _tabList(i)),
-
-                // NEW
-                children: List.generate(5, (i) => _tabList(i)),
               ),
             ),
-        ],
+
+            if (widget.showOnlyCompanyRequests)
+              Expanded(child: _tabList(0))
+            else
+              Expanded(
+                child: TabBarView(
+                  controller: _tabCtrl,
+                  // OLD
+                  // children: List.generate(8, (i) => _tabList(i)),
+
+                  // NEW
+                  children: List.generate(5, (i) => _tabList(i)),
+                ),
+              ),
+          ],
+        ),
+        bottomNavigationBar: widget.showBottomNav
+            ? BottomNavigationBar(
+                currentIndex: widget.bottomNavIndex,
+                selectedItemColor: AppColors.blackCat,
+                unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
+                type: BottomNavigationBarType.fixed,
+                onTap: (i) {
+                  if (widget.onNavTap != null) {
+                    widget.onNavTap!(i);
+                    return;
+                  }
+                  if (i != widget.bottomNavIndex) {
+                    Navigator.pop(context);
+                  }
+                },
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.home_filled),
+                    label: 'Home',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.add_circle_outline),
+                    label: 'Design',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.inbox_outlined),
+                    label: 'Requests',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    label: 'Calendar',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.history),
+                    label: 'History',
+                  ),
+                ],
+              )
+            : null,
       ),
-      bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigationBar(
-              currentIndex: widget.bottomNavIndex,
-              selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
-              type: BottomNavigationBarType.fixed,
-              onTap: (i) {
-                if (widget.onNavTap != null) {
-                  widget.onNavTap!(i);
-                  return;
-                }
-                if (i != widget.bottomNavIndex) {
-                  Navigator.pop(context);
-                }
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_filled),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.add_circle_outline),
-                  label: 'Design',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.inbox_outlined),
-                  label: 'Requests',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  label: 'Calendar',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.history),
-                  label: 'History',
-                ),
-              ],
-            )
-          : null,
-    ),
     );
   }
 
@@ -2138,49 +2140,49 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           onTap: _openFiltersModal,
           child: ExcludeSemantics(
             child: InkWell(
-          borderRadius: BorderRadius.zero,
-          onTap: _openFiltersModal,
-          child: Container(
-            height: 44,
-            width: 44,
-            decoration: BoxDecoration(
-              color: _hasActiveFilters
-                  ? AppColors.alabaster.withValues(alpha: 0.75)
-                  : AppColors.snow,
               borderRadius: BorderRadius.zero,
-              border: Border.all(color: AppColors.blackCatBorderLight),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.blackCat.withValues(alpha: 0.03),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.filter_alt_outlined,
-                  size: 20,
-                  color: AppColors.blackCat.withValues(alpha: 0.75),
-                ),
-                if (_hasActiveFilters)
-                  Positioned(
-                    top: 9,
-                    right: 9,
-                    child: Container(
-                      height: 7,
-                      width: 7,
-                      decoration: const BoxDecoration(
-                        color: AppColors.blackCat,
-                        shape: BoxShape.circle,
-                      ),
+              onTap: _openFiltersModal,
+              child: Container(
+                height: 44,
+                width: 44,
+                decoration: BoxDecoration(
+                  color: _hasActiveFilters
+                      ? AppColors.alabaster.withValues(alpha: 0.75)
+                      : AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(color: AppColors.blackCatBorderLight),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.blackCat.withValues(alpha: 0.03),
+                      blurRadius: 14,
+                      offset: const Offset(0, 8),
                     ),
-                  ),
-              ],
-            ),
-          ),
+                  ],
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(
+                      Icons.filter_alt_outlined,
+                      size: 20,
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
+                    ),
+                    if (_hasActiveFilters)
+                      Positioned(
+                        top: 9,
+                        right: 9,
+                        child: Container(
+                          height: 7,
+                          width: 7,
+                          decoration: const BoxDecoration(
+                            color: AppColors.blackCat,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -2542,42 +2544,42 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       button: true,
       selected: selected,
       child: ExcludeSemantics(
-      child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.alabaster.withValues(alpha: 0.7)
-              : AppColors.snow,
+        child: InkWell(
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatBorderLight),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withValues(alpha: 0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 6),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.alabaster.withValues(alpha: 0.7)
+                  : AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatBorderLight),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.blackCat.withValues(alpha: 0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: AppColors.blackCat),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: AppColors.blackCat),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -4599,137 +4601,138 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             _replaceById(r.id, updated);
             try {
               await _persistStatusUpdate(
-              request: r,
-              status: 'shipped',
-              summaryExtra: {
-                'shippedByCourier': courier,
-                'trackingNumber': tracking,
-                'shippedAt': SupabaseDbTime.fromDate(shippedDate),
-              },
-              detailsExtra: {
-                'shipment': {
-                  'courier': courier,
+                request: r,
+                status: 'shipped',
+                summaryExtra: {
+                  'shippedByCourier': courier,
                   'trackingNumber': tracking,
                   'shippedAt': SupabaseDbTime.fromDate(shippedDate),
                 },
-              },
-            );
-            final clientEmail = r.clientEmail.trim().toLowerCase();
-            final orderRef = r.orderNumber.trim().isNotEmpty
-                ? r.orderNumber.trim()
-                : r.id;
-            final isBrandRequest =
-                r.sourceCollection == 'Company_Custom_Requests' ||
-                orderRef.toUpperCase().startsWith('BE-') ||
-                orderRef.toUpperCase().startsWith('BR-');
-            final brandCtx = isBrandRequest
-                ? await _loadBrandNotificationContext(r)
-                : const <String, String>{};
-            final campaignName =
-                (brandCtx['campaignName'] ?? '').trim().isNotEmpty
-                ? brandCtx['campaignName']!
-                : (r.title.trim().isEmpty ? 'Campaign' : r.title.trim());
-            final acceptedClientName =
-                (brandCtx['acceptedClientName'] ?? '').trim().isNotEmpty
-                ? brandCtx['acceptedClientName']!
-                : (r.acceptedClientName.trim().isEmpty
-                      ? (r.clientName.trim().isEmpty
-                            ? 'Client'
-                            : r.clientName.trim())
-                      : r.acceptedClientName.trim());
-            final brandCompanyName =
-                (brandCtx['brandName'] ?? '').trim().isNotEmpty
-                ? brandCtx['brandName']!
-                : (r.brandName.trim().isEmpty ? 'Brand' : r.brandName.trim());
-            final brandEmail = (brandCtx['brandEmail'] ?? '')
-                .trim()
-                .toLowerCase();
-            final brandEmails = (brandCtx['brandEmailsCsv'] ?? '')
-                .split(',')
-                .map((e) => e.trim().toLowerCase())
-                .where((e) => e.isNotEmpty && e.contains('@'))
-                .toSet();
-            if (brandEmail.isNotEmpty) {
-              brandEmails.add(brandEmail);
-            }
-            final acceptedClientEmail = (brandCtx['acceptedClientEmail'] ?? '')
-                .trim()
-                .toLowerCase();
-            final artistName =
-                (Supabase.instance.client.auth.currentUser?.displayName ?? '')
-                    .trim()
-                    .isNotEmpty
-                ? (Supabase.instance.client.auth.currentUser?.displayName ?? '')
-                      .trim()
-                : (Supabase.instance.client.auth.currentUser?.email ?? 'Artist')
-                      .split('@')
-                      .first;
-            final shippedOnText =
-                '${shippedDate.month.toString().padLeft(2, '0')}/${shippedDate.day.toString().padLeft(2, '0')}/${shippedDate.year}';
-            final shippedMessage =
-                '$artistName has shipped your $campaignName on $shippedOnText';
-            if (isBrandRequest) {
-              for (final receiver in brandEmails) {
-                await NotificationsService.createUserNotification(
-                  receiverEmail: receiver,
-                  title: 'Brand Request Shipped',
-                  body: shippedMessage,
-                  type: 'brand_request_shipped_brand',
-                  orderId: r.id,
-                  orderNumber: r.orderNumber,
-                  sourceCollection: r.sourceCollection,
-                );
-              }
-              if (acceptedClientEmail.isNotEmpty) {
-                await NotificationsService.createUserNotification(
-                  receiverEmail: acceptedClientEmail,
-                  title: 'Brand Request Shipped',
-                  body: shippedMessage,
-                  type: 'brand_request_shipped_client',
-                  orderId: r.id,
-                  orderNumber: r.orderNumber,
-                  sourceCollection: r.sourceCollection,
-                );
-              }
-              await NotificationsService.notifyAdmins(
-                title: 'Brand Request Shipped',
-                body:
-                    '$artistName has shipped $brandCompanyName $campaignName brand request $orderRef to $acceptedClientName',
-                type: 'brand_request_shipped_admin',
-                orderId: r.id,
-                orderNumber: r.orderNumber,
-                sourceCollection: r.sourceCollection,
-              );
-              return;
-            }
-            if (clientEmail.isNotEmpty) {
-              final trackingUrl =
-                  'https://jnt-app-c3097.web.app/open-app?type=track-order&orderId=${Uri.encodeComponent(r.id)}';
-              await NotificationsService.createUserNotification(
-                receiverEmail: clientEmail,
-                title: 'Order Shipped',
-                body: shippedMessage,
-                type: 'order_shipped',
-                orderId: r.id,
-                orderNumber: r.orderNumber,
-                sourceCollection: r.sourceCollection,
-              );
-              await NotificationsService.queueTemplatedEmail(
-                to: clientEmail,
-                templateName: 'client_order_shipped',
-                data: <String, dynamic>{
-                  'clientName': r.clientName.trim().isEmpty
-                      ? 'Client'
-                      : r.clientName.trim(),
-                  'orderId': orderRef,
-                  'orderNumber': orderRef,
-                  'carrierName': courier,
-                  'trackingNumber': tracking,
-                  'estimatedDelivery': '',
-                  'trackingUrl': trackingUrl,
+                detailsExtra: {
+                  'shipment': {
+                    'courier': courier,
+                    'trackingNumber': tracking,
+                    'shippedAt': SupabaseDbTime.fromDate(shippedDate),
+                  },
                 },
               );
-            }
+              final clientEmail = r.clientEmail.trim().toLowerCase();
+              final orderRef = r.orderNumber.trim().isNotEmpty
+                  ? r.orderNumber.trim()
+                  : r.id;
+              final isBrandRequest =
+                  r.sourceCollection == 'Company_Custom_Requests' ||
+                  orderRef.toUpperCase().startsWith('BE-') ||
+                  orderRef.toUpperCase().startsWith('BR-');
+              final brandCtx = isBrandRequest
+                  ? await _loadBrandNotificationContext(r)
+                  : const <String, String>{};
+              final campaignName =
+                  (brandCtx['campaignName'] ?? '').trim().isNotEmpty
+                  ? brandCtx['campaignName']!
+                  : (r.title.trim().isEmpty ? 'Campaign' : r.title.trim());
+              final acceptedClientName =
+                  (brandCtx['acceptedClientName'] ?? '').trim().isNotEmpty
+                  ? brandCtx['acceptedClientName']!
+                  : (r.acceptedClientName.trim().isEmpty
+                        ? (r.clientName.trim().isEmpty
+                              ? 'Client'
+                              : r.clientName.trim())
+                        : r.acceptedClientName.trim());
+              final brandCompanyName =
+                  (brandCtx['brandName'] ?? '').trim().isNotEmpty
+                  ? brandCtx['brandName']!
+                  : (r.brandName.trim().isEmpty ? 'Brand' : r.brandName.trim());
+              final brandEmail = (brandCtx['brandEmail'] ?? '')
+                  .trim()
+                  .toLowerCase();
+              final brandEmails = (brandCtx['brandEmailsCsv'] ?? '')
+                  .split(',')
+                  .map((e) => e.trim().toLowerCase())
+                  .where((e) => e.isNotEmpty && e.contains('@'))
+                  .toSet();
+              if (brandEmail.isNotEmpty) {
+                brandEmails.add(brandEmail);
+              }
+              final acceptedClientEmail =
+                  (brandCtx['acceptedClientEmail'] ?? '').trim().toLowerCase();
+              final artistName =
+                  (Supabase.instance.client.auth.currentUser?.displayName ?? '')
+                      .trim()
+                      .isNotEmpty
+                  ? (Supabase.instance.client.auth.currentUser?.displayName ??
+                            '')
+                        .trim()
+                  : (Supabase.instance.client.auth.currentUser?.email ??
+                            'Artist')
+                        .split('@')
+                        .first;
+              final shippedOnText =
+                  '${shippedDate.month.toString().padLeft(2, '0')}/${shippedDate.day.toString().padLeft(2, '0')}/${shippedDate.year}';
+              final shippedMessage =
+                  '$artistName has shipped your $campaignName on $shippedOnText';
+              if (isBrandRequest) {
+                for (final receiver in brandEmails) {
+                  await NotificationsService.createUserNotification(
+                    receiverEmail: receiver,
+                    title: 'Brand Request Shipped',
+                    body: shippedMessage,
+                    type: 'brand_request_shipped_brand',
+                    orderId: r.id,
+                    orderNumber: r.orderNumber,
+                    sourceCollection: r.sourceCollection,
+                  );
+                }
+                if (acceptedClientEmail.isNotEmpty) {
+                  await NotificationsService.createUserNotification(
+                    receiverEmail: acceptedClientEmail,
+                    title: 'Brand Request Shipped',
+                    body: shippedMessage,
+                    type: 'brand_request_shipped_client',
+                    orderId: r.id,
+                    orderNumber: r.orderNumber,
+                    sourceCollection: r.sourceCollection,
+                  );
+                }
+                await NotificationsService.notifyAdmins(
+                  title: 'Brand Request Shipped',
+                  body:
+                      '$artistName has shipped $brandCompanyName $campaignName brand request $orderRef to $acceptedClientName',
+                  type: 'brand_request_shipped_admin',
+                  orderId: r.id,
+                  orderNumber: r.orderNumber,
+                  sourceCollection: r.sourceCollection,
+                );
+                return;
+              }
+              if (clientEmail.isNotEmpty) {
+                final trackingUrl =
+                    'https://jnt-app-c3097.web.app/open-app?type=track-order&orderId=${Uri.encodeComponent(r.id)}';
+                await NotificationsService.createUserNotification(
+                  receiverEmail: clientEmail,
+                  title: 'Order Shipped',
+                  body: shippedMessage,
+                  type: 'order_shipped',
+                  orderId: r.id,
+                  orderNumber: r.orderNumber,
+                  sourceCollection: r.sourceCollection,
+                );
+                await NotificationsService.queueTemplatedEmail(
+                  to: clientEmail,
+                  templateName: 'client_order_shipped',
+                  data: <String, dynamic>{
+                    'clientName': r.clientName.trim().isEmpty
+                        ? 'Client'
+                        : r.clientName.trim(),
+                    'orderId': orderRef,
+                    'orderNumber': orderRef,
+                    'carrierName': courier,
+                    'trackingNumber': tracking,
+                    'estimatedDelivery': '',
+                    'trackingUrl': trackingUrl,
+                  },
+                );
+              }
             } catch (e) {
               debugPrint('[Artist Mark Shipped] failed: $e');
               if (!mounted) return;
@@ -4756,159 +4759,162 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         );
         _replaceById(r.id, updated);
         try {
-        await _persistStatusUpdate(
-          request: r,
-          status: 'delivered',
-          summaryExtra: {'deliveredAt': SupabaseServerValue.serverNow()},
-        );
-        await _persistDeliveredRootStatus(r);
-        final clientEmail = r.clientEmail.trim().toLowerCase();
-        final orderRef = r.orderNumber.trim().isNotEmpty
-            ? r.orderNumber.trim()
-            : r.id;
-        final isBrandRequest =
-            r.sourceCollection == 'Company_Custom_Requests' ||
-            orderRef.toUpperCase().startsWith('BE-') ||
-            orderRef.toUpperCase().startsWith('BR-');
-        final brandCtx = isBrandRequest
-            ? await _loadBrandNotificationContext(r)
-            : const <String, String>{};
-        final campaignName = (brandCtx['campaignName'] ?? '').trim().isNotEmpty
-            ? brandCtx['campaignName']!
-            : (r.title.trim().isEmpty ? 'Campaign' : r.title.trim());
-        final acceptedClientName =
-            (brandCtx['acceptedClientName'] ?? '').trim().isNotEmpty
-            ? brandCtx['acceptedClientName']!
-            : (r.acceptedClientName.trim().isEmpty
-                  ? (r.clientName.trim().isEmpty
-                        ? 'Client'
-                        : r.clientName.trim())
-                  : r.acceptedClientName.trim());
-        final brandEmail = (brandCtx['brandEmail'] ?? '').trim().toLowerCase();
-        final brandEmails = (brandCtx['brandEmailsCsv'] ?? '')
-            .split(',')
-            .map((e) => e.trim().toLowerCase())
-            .where((e) => e.isNotEmpty && e.contains('@'))
-            .toSet();
-        if (brandEmail.isNotEmpty) {
-          brandEmails.add(brandEmail);
-        }
-        final acceptedClientEmail = (brandCtx['acceptedClientEmail'] ?? '')
-            .trim()
-            .toLowerCase();
-        final artistEmail =
-            (Supabase.instance.client.auth.currentUser?.email ?? '')
-                .trim()
-                .toLowerCase();
-        brandEmails.remove(acceptedClientEmail);
-        if (isBrandRequest) {
-          for (final receiver in brandEmails) {
-            await NotificationsService.createUserNotification(
-              receiverEmail: receiver,
+          await _persistStatusUpdate(
+            request: r,
+            status: 'delivered',
+            summaryExtra: {'deliveredAt': SupabaseServerValue.serverNow()},
+          );
+          await _persistDeliveredRootStatus(r);
+          final clientEmail = r.clientEmail.trim().toLowerCase();
+          final orderRef = r.orderNumber.trim().isNotEmpty
+              ? r.orderNumber.trim()
+              : r.id;
+          final isBrandRequest =
+              r.sourceCollection == 'Company_Custom_Requests' ||
+              orderRef.toUpperCase().startsWith('BE-') ||
+              orderRef.toUpperCase().startsWith('BR-');
+          final brandCtx = isBrandRequest
+              ? await _loadBrandNotificationContext(r)
+              : const <String, String>{};
+          final campaignName =
+              (brandCtx['campaignName'] ?? '').trim().isNotEmpty
+              ? brandCtx['campaignName']!
+              : (r.title.trim().isEmpty ? 'Campaign' : r.title.trim());
+          final acceptedClientName =
+              (brandCtx['acceptedClientName'] ?? '').trim().isNotEmpty
+              ? brandCtx['acceptedClientName']!
+              : (r.acceptedClientName.trim().isEmpty
+                    ? (r.clientName.trim().isEmpty
+                          ? 'Client'
+                          : r.clientName.trim())
+                    : r.acceptedClientName.trim());
+          final brandEmail = (brandCtx['brandEmail'] ?? '')
+              .trim()
+              .toLowerCase();
+          final brandEmails = (brandCtx['brandEmailsCsv'] ?? '')
+              .split(',')
+              .map((e) => e.trim().toLowerCase())
+              .where((e) => e.isNotEmpty && e.contains('@'))
+              .toSet();
+          if (brandEmail.isNotEmpty) {
+            brandEmails.add(brandEmail);
+          }
+          final acceptedClientEmail = (brandCtx['acceptedClientEmail'] ?? '')
+              .trim()
+              .toLowerCase();
+          final artistEmail =
+              (Supabase.instance.client.auth.currentUser?.email ?? '')
+                  .trim()
+                  .toLowerCase();
+          brandEmails.remove(acceptedClientEmail);
+          if (isBrandRequest) {
+            for (final receiver in brandEmails) {
+              await NotificationsService.createUserNotification(
+                receiverEmail: receiver,
+                title: 'Brand Request Delivered',
+                body:
+                    'Delivered: $campaignName brand request $orderRef to $acceptedClientName',
+                type: 'brand_request_delivered_brand',
+                orderId: r.id,
+                orderNumber: r.orderNumber,
+                sourceCollection: r.sourceCollection,
+              );
+            }
+            if (artistEmail.isNotEmpty) {
+              await NotificationsService.createUserNotification(
+                receiverEmail: artistEmail,
+                title: 'Brand Request Delivered',
+                body:
+                    'You marked $campaignName brand request $orderRef as delivered to $acceptedClientName',
+                type: 'brand_request_delivered_artist',
+                orderId: r.id,
+                orderNumber: r.orderNumber,
+                sourceCollection: r.sourceCollection,
+              );
+            }
+            if (acceptedClientEmail.isNotEmpty) {
+              await NotificationsService.createUserNotification(
+                receiverEmail: acceptedClientEmail,
+                title: 'Brand Request Delivered',
+                body:
+                    'Your $campaignName Brand request $orderRef has been delivered',
+                type: 'brand_request_delivered_client',
+                orderId: r.id,
+                orderNumber: r.orderNumber,
+                sourceCollection: r.sourceCollection,
+              );
+            }
+            await NotificationsService.notifyArtistPoolBrandDelivered(
+              clientName: acceptedClientName,
+              campaignName: campaignName,
+              orderId: r.id,
+              sourceCollection: r.sourceCollection,
+              orderNumber: r.orderNumber,
+              excludeArtistEmails: artistEmail.isEmpty
+                  ? const <String>[]
+                  : <String>[artistEmail],
+            );
+            await NotificationsService.notifyAdmins(
               title: 'Brand Request Delivered',
               body:
                   'Delivered: $campaignName brand request $orderRef to $acceptedClientName',
-              type: 'brand_request_delivered_brand',
+              type: 'brand_request_delivered_admin',
               orderId: r.id,
               orderNumber: r.orderNumber,
               sourceCollection: r.sourceCollection,
             );
+            return;
           }
-          if (artistEmail.isNotEmpty) {
+          if (clientEmail.isNotEmpty) {
+            final artistName = r.selectedArtist.trim().isNotEmpty
+                ? r.selectedArtist.trim()
+                : (r.acceptedByArtistEmail.trim().isNotEmpty
+                      ? r.acceptedByArtistEmail.trim().split('@').first
+                      : 'Your artist');
+            final deliveredDate = DateTime.now().toIso8601String();
+            final tracking = r.trackingNumber?.trim().isNotEmpty == true
+                ? r.trackingNumber!.trim()
+                : (r.shippingLabelTrackingNumber.trim().isNotEmpty
+                      ? r.shippingLabelTrackingNumber.trim()
+                      : '');
+            final reviewUrl =
+                'https://jnt-app-c3097.web.app/open-app?type=review-order&orderId=${Uri.encodeComponent(r.id)}';
+            final appLink =
+                'https://jnt-app-c3097.web.app/open-app?type=order-details&orderId=${Uri.encodeComponent(r.id)}';
+            final deepLink = reviewUrl;
             await NotificationsService.createUserNotification(
-              receiverEmail: artistEmail,
-              title: 'Brand Request Delivered',
+              receiverEmail: clientEmail,
+              title: 'Order Delivered: Review & Tip',
               body:
-                  'You marked $campaignName brand request $orderRef as delivered to $acceptedClientName',
-              type: 'brand_request_delivered_artist',
+                  'Your order has been delivered. Open the app to leave a rating, comments, and tip your artist.',
+              type: 'delivered_review_prompt',
               orderId: r.id,
               orderNumber: r.orderNumber,
               sourceCollection: r.sourceCollection,
+              extra: <String, dynamic>{
+                'deepLink': deepLink,
+                'action': 'review_tip',
+              },
+            );
+            await NotificationsService.queueTemplatedEmail(
+              to: clientEmail,
+              templateName: 'client_order_delivered_review_tip',
+              data: <String, dynamic>{
+                'clientName': r.clientName.trim().isEmpty
+                    ? 'Client'
+                    : r.clientName.trim(),
+                'orderId': orderRef,
+                'artistName': artistName,
+                'deliveredDate': deliveredDate,
+                'trackingNumber': tracking,
+                'reviewUrl': reviewUrl,
+                'tip10Url': '$reviewUrl&tip=10',
+                'tip15Url': '$reviewUrl&tip=15',
+                'tip20Url': '$reviewUrl&tip=20',
+                'appLink': appLink,
+              },
             );
           }
-          if (acceptedClientEmail.isNotEmpty) {
-            await NotificationsService.createUserNotification(
-              receiverEmail: acceptedClientEmail,
-              title: 'Brand Request Delivered',
-              body:
-                  'Your $campaignName Brand request $orderRef has been delivered',
-              type: 'brand_request_delivered_client',
-              orderId: r.id,
-              orderNumber: r.orderNumber,
-              sourceCollection: r.sourceCollection,
-            );
-          }
-          await NotificationsService.notifyArtistPoolBrandDelivered(
-            clientName: acceptedClientName,
-            campaignName: campaignName,
-            orderId: r.id,
-            sourceCollection: r.sourceCollection,
-            orderNumber: r.orderNumber,
-            excludeArtistEmails: artistEmail.isEmpty
-                ? const <String>[]
-                : <String>[artistEmail],
-          );
-          await NotificationsService.notifyAdmins(
-            title: 'Brand Request Delivered',
-            body:
-                'Delivered: $campaignName brand request $orderRef to $acceptedClientName',
-            type: 'brand_request_delivered_admin',
-            orderId: r.id,
-            orderNumber: r.orderNumber,
-            sourceCollection: r.sourceCollection,
-          );
-          return;
-        }
-        if (clientEmail.isNotEmpty) {
-          final artistName = r.selectedArtist.trim().isNotEmpty
-              ? r.selectedArtist.trim()
-              : (r.acceptedByArtistEmail.trim().isNotEmpty
-                    ? r.acceptedByArtistEmail.trim().split('@').first
-                    : 'Your artist');
-          final deliveredDate = DateTime.now().toIso8601String();
-          final tracking = r.trackingNumber?.trim().isNotEmpty == true
-              ? r.trackingNumber!.trim()
-              : (r.shippingLabelTrackingNumber.trim().isNotEmpty
-                    ? r.shippingLabelTrackingNumber.trim()
-                    : '');
-          final reviewUrl =
-              'https://jnt-app-c3097.web.app/open-app?type=review-order&orderId=${Uri.encodeComponent(r.id)}';
-          final appLink =
-              'https://jnt-app-c3097.web.app/open-app?type=order-details&orderId=${Uri.encodeComponent(r.id)}';
-          final deepLink = reviewUrl;
-          await NotificationsService.createUserNotification(
-            receiverEmail: clientEmail,
-            title: 'Order Delivered: Review & Tip',
-            body:
-                'Your order has been delivered. Open the app to leave a rating, comments, and tip your artist.',
-            type: 'delivered_review_prompt',
-            orderId: r.id,
-            orderNumber: r.orderNumber,
-            sourceCollection: r.sourceCollection,
-            extra: <String, dynamic>{
-              'deepLink': deepLink,
-              'action': 'review_tip',
-            },
-          );
-          await NotificationsService.queueTemplatedEmail(
-            to: clientEmail,
-            templateName: 'client_order_delivered_review_tip',
-            data: <String, dynamic>{
-              'clientName': r.clientName.trim().isEmpty
-                  ? 'Client'
-                  : r.clientName.trim(),
-              'orderId': orderRef,
-              'artistName': artistName,
-              'deliveredDate': deliveredDate,
-              'trackingNumber': tracking,
-              'reviewUrl': reviewUrl,
-              'tip10Url': '$reviewUrl&tip=10',
-              'tip15Url': '$reviewUrl&tip=15',
-              'tip20Url': '$reviewUrl&tip=20',
-              'appLink': appLink,
-            },
-          );
-        }
         } catch (e) {
           debugPrint('[Artist Mark Delivered] failed: $e');
           if (!mounted) return;
@@ -5298,24 +5304,24 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       child: Semantics(
         button: true,
         child: ExcludeSemantics(
-        child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: () {
-        if (r.status == RequestStatusV2.inReview) {
-          _openInReviewDetails(r);
-        } else if (r.status == RequestStatusV2.accepted ||
-            r.status == RequestStatusV2.designing) {
-          _openDesigningDetails(r);
-        } else if (r.status == RequestStatusV2.completed) {
-          _openCompletedDetails(r);
-        } else if (r.status == RequestStatusV2.shipped) {
-          _openShippedDetails(r);
-        }
+          child: InkWell(
+            borderRadius: BorderRadius.zero,
+            onTap: () {
+              if (r.status == RequestStatusV2.inReview) {
+                _openInReviewDetails(r);
+              } else if (r.status == RequestStatusV2.accepted ||
+                  r.status == RequestStatusV2.designing) {
+                _openDesigningDetails(r);
+              } else if (r.status == RequestStatusV2.completed) {
+                _openCompletedDetails(r);
+              } else if (r.status == RequestStatusV2.shipped) {
+                _openShippedDetails(r);
+              }
 
-        // -------------------------------------------------
-        // KEEP THESE BUT COMMENTED (per your request)
-        // -------------------------------------------------
-        /*
+              // -------------------------------------------------
+              // KEEP THESE BUT COMMENTED (per your request)
+              // -------------------------------------------------
+              /*
         else if (r.status == RequestStatusV2.delivered) {
           showDeliveredRequestSheet(context: context, request: r);
         } else if (r.status == RequestStatusV2.cancelled) {
@@ -5326,223 +5332,230 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           _openExpiredDetails(r);
         }
         */
-      },
+            },
 
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatBorderLight),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ Avatar stacked above name (left column)
-            SizedBox(width: 62, child: Column(children: [_clientAvatar(r, s)])),
-
-            const SizedBox(width: 12),
-
-            // Middle content
-            Expanded(
-              child: Column(
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(color: AppColors.blackCatBorderLight),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.blackCat.withValues(alpha: 0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // title row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          r.sourceCollection == 'Company_Custom_Requests' &&
-                                  r.brandName.trim().isNotEmpty
-                              ? r.brandName.trim()
-                              : r.clientName,
+                  // ✅ Avatar stacked above name (left column)
+                  SizedBox(
+                    width: 62,
+                    child: Column(children: [_clientAvatar(r, s)]),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Middle content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // title row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                r.sourceCollection ==
+                                            'Company_Custom_Requests' &&
+                                        r.brandName.trim().isNotEmpty
+                                    ? r.brandName.trim()
+                                    : r.clientName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14 * s,
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (r.sourceCollection ==
+                            'Company_Custom_Requests') ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            r.title.trim().isEmpty
+                                ? 'Campaign'
+                                : r.title.trim(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.blackCat.withValues(alpha: 0.72),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12.5 * s,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: AppColors.blackCat),
+                              color: AppColors.balletSlippers,
+                            ),
+                            child: Text(
+                              'Brand Request',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 10.5 * s,
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          'Order # ${r.orderNumber.trim().isNotEmpty ? r.orderNumber.trim() : r.id}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14 * s,
-                            color: AppColors.blackCat,
+                            color: AppColors.blackCat.withValues(alpha: 0.72),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.5 * s,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  if (r.sourceCollection == 'Company_Custom_Requests') ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      r.title.trim().isEmpty ? 'Campaign' : r.title.trim(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.72),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12.5 * s,
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Need by ${_formatNeedBy(r.neededBy)}',
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.72),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.5 * s,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.attach_money_rounded,
+                              size: 16,
+                              color: AppColors.blackCat,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '\$${r.budgetMin} - \$${r.budgetMax}',
+                                style: _t(
+                                  11.5,
+                                  w: FontWeight.w700,
+                                  c: AppColors.blackCat.withValues(alpha: 0.85),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.verified_user_outlined,
+                              size: 16,
+                              color: AppColors.blackCat,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                r.isDirectRequest ? 'Direct' : 'Standard',
+                                style: _t(
+                                  11.5,
+                                  w: FontWeight.w700,
+                                  c: AppColors.blackCat.withValues(alpha: 0.85),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.groups_2_outlined,
+                              size: 16,
+                              color: AppColors.blackCat,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                r.orderType == RequestOrderTypeV2.group
+                                    ? 'Group'
+                                    : 'Single',
+                                style: _t(
+                                  11.5,
+                                  w: FontWeight.w700,
+                                  c: AppColors.blackCat.withValues(alpha: 0.85),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.blackCat),
-                        color: AppColors.balletSlippers,
-                      ),
-                      child: Text(
-                        'Brand Request',
+                  ),
+
+                  const SizedBox(width: 10),
+
+                  // Right preview image + status text
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        r.status.label,
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          fontSize: 10.5 * s,
-                          color: AppColors.blackCat,
+                          color: AppColors.blackCat.withValues(alpha: 0.85),
+                          fontSize: 14 * s,
                         ),
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 4),
-                  Text(
-                    'Order # ${r.orderNumber.trim().isNotEmpty ? r.orderNumber.trim() : r.id}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.72),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12.5 * s,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Need by ${_formatNeedBy(r.neededBy)}',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.72),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14.5 * s,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.attach_money_rounded,
-                        size: 16,
-                        color: AppColors.blackCat,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '\$${r.budgetMin} - \$${r.budgetMax}',
-                          style: _t(
-                            11.5,
-                            w: FontWeight.w700,
-                            c: AppColors.blackCat.withValues(alpha: 0.85),
-                          ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.zero,
+                        child: Container(
+                          height: 64,
+                          width: 84,
+                          color: AppColors.blackCat.withValues(alpha: 0.05),
+                          child: _requestPreviewImage(r),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.verified_user_outlined,
-                        size: 16,
-                        color: AppColors.blackCat,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          r.isDirectRequest ? 'Direct' : 'Standard',
-                          style: _t(
-                            11.5,
-                            w: FontWeight.w700,
-                            c: AppColors.blackCat.withValues(alpha: 0.85),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.groups_2_outlined,
-                        size: 16,
-                        color: AppColors.blackCat,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          r.orderType == RequestOrderTypeV2.group
-                              ? 'Group'
-                              : 'Single',
-                          style: _t(
-                            11.5,
-                            w: FontWeight.w700,
-                            c: AppColors.blackCat.withValues(alpha: 0.85),
-                          ),
-                        ),
+                      FutureBuilder<bool>(
+                        future: _requestHasNfc(r),
+                        builder: (context, snapshot) {
+                          if (snapshot.data != true) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: _nfcChip(context),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(width: 10),
-
-            // Right preview image + status text
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  r.status.label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat.withValues(alpha: 0.85),
-                    fontSize: 14 * s,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: Container(
-                    height: 64,
-                    width: 84,
-                    color: AppColors.blackCat.withValues(alpha: 0.05),
-                    child: _requestPreviewImage(r),
-                  ),
-                ),
-                FutureBuilder<bool>(
-                  future: _requestHasNfc(r),
-                  builder: (context, snapshot) {
-                    if (snapshot.data != true) {
-                      return const SizedBox.shrink();
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: _nfcChip(context),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }
@@ -5947,42 +5960,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
   }
 
-  String _formatNeedBy(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d.weekday - 1];
-    return '$wd, ${months[d.month - 1]} ${d.day}';
-  }
+  String _formatNeedBy(DateTime d) => formatDateMdy(d);
 
-  String _shortDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
-  }
+  String _shortDate(DateTime d) => formatDateMdy(d);
 
   String _companyRequestStatus(ClientRequestV2 r) {
     if (r.status == RequestStatusV2.inReview &&
@@ -6048,7 +6028,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     final path = _heroPhotoSource().trim();
     return path.isNotEmpty;
   }
-
 
   String _heroPhotoSource() {
     final profile = request.clientProfileImage.trim();
@@ -6732,7 +6711,8 @@ class InReviewDetailsSheet extends StatelessWidget {
   }
 
   Widget _descriptionAndCompanyBioSection() {
-    final isBrandRequest = request.sourceCollection == 'Company_Custom_Requests';
+    final isBrandRequest =
+        request.sourceCollection == 'Company_Custom_Requests';
     if (!isBrandRequest) {
       return _softBox(
         Column(
@@ -6982,8 +6962,8 @@ class InReviewDetailsSheet extends StatelessWidget {
     return name[0].toUpperCase();
   }
 
-  static final Map<String, Future<_RequestNfcDetails>>
-  _nfcDetailsFutureCache = <String, Future<_RequestNfcDetails>>{};
+  static final Map<String, Future<_RequestNfcDetails>> _nfcDetailsFutureCache =
+      <String, Future<_RequestNfcDetails>>{};
 
   Future<_RequestNfcDetails> _loadRequestedNfcDetails() {
     return _nfcDetailsFutureCache.putIfAbsent(
@@ -8671,7 +8651,8 @@ class InReviewDetailsSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                   ] else ...[
-                    if (request.sourceCollection == 'Company_Custom_Requests') ...[
+                    if (request.sourceCollection ==
+                        'Company_Custom_Requests') ...[
                       _brandClientDetailsBlock(),
                       const SizedBox(height: 12),
                     ],
@@ -9399,16 +9380,16 @@ class InReviewDetailsSheet extends StatelessWidget {
             onTap: () => Navigator.pop(context),
             child: ExcludeSemantics(
               child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () => Navigator.pop(context),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Icon(
-                Icons.close_rounded,
-                size: 18 * s,
-                color: AppColors.blackCat,
-              ),
-            ),
+                borderRadius: BorderRadius.zero,
+                onTap: () => Navigator.pop(context),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 18 * s,
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
           ),
@@ -10071,12 +10052,12 @@ class InReviewDetailsSheet extends StatelessWidget {
               onTap: () => _openImagePreview(context, path),
               child: ExcludeSemantics(
                 child: InkWell(
-              borderRadius: BorderRadius.zero,
-              onTap: () => _openImagePreview(context, path),
-              child: ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: SizedBox.expand(child: imageFor(path)),
-              ),
+                  borderRadius: BorderRadius.zero,
+                  onTap: () => _openImagePreview(context, path),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: SizedBox.expand(child: imageFor(path)),
+                  ),
                 ),
               ),
             );
@@ -10116,19 +10097,19 @@ class InReviewDetailsSheet extends StatelessWidget {
     final dataBytes = _decodeDataImageBytes(path);
 
     Widget broken() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.05),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-          ),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: AppColors.blackCat.withValues(alpha: 0.35),
+      ),
+    );
 
     Widget loading() => Container(
-          color: AppColors.blackCat.withValues(alpha: 0.05),
-          alignment: Alignment.center,
-          child: const CircularProgressIndicator(strokeWidth: 2),
-        );
+      color: AppColors.blackCat.withValues(alpha: 0.05),
+      alignment: Alignment.center,
+      child: const CircularProgressIndicator(strokeWidth: 2),
+    );
 
     if (dataBytes != null) {
       return Image.memory(
@@ -10212,24 +10193,7 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  static String _needByLabel(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _needByLabel(DateTime d) => formatDateMdy(d);
 }
 
 String _decodeUriSafelyRepeatedly(String value) {
@@ -10780,7 +10744,6 @@ class _FingerNfcSelection {
       rPinky: eligible('rPinky'),
     );
   }
-
 
   final bool lThumb;
   final bool lIndex;

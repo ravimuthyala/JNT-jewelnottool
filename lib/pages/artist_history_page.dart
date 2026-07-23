@@ -11,6 +11,7 @@ import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import 'artist_delivered_request_sheet.dart';
 import 'artist_profile_page.dart';
 import 'artist_reviews_page.dart';
@@ -99,11 +100,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         });
   }
 
-
-  bool _rowWasDeclinedByArtist(
-    Map<String, dynamic> row,
-    String artistEmail,
-  ) {
+  bool _rowWasDeclinedByArtist(Map<String, dynamic> row, String artistEmail) {
     final email = artistEmail.trim().toLowerCase();
     if (email.isEmpty) return false;
 
@@ -153,15 +150,18 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     final acceptedBy = text(row['accepted_by_artist_email']);
     final selectedArtist = text(row['selected_artist_email']);
     final selectedArtistData = text(data['selectedArtistEmail']);
-    final assignedToCurrent = acceptedBy == email ||
+    final assignedToCurrent =
+        acceptedBy == email ||
         selectedArtist == email ||
         selectedArtistData == email;
 
-    final rootStatusDeclined = text(row['status']) == 'declined' ||
+    final rootStatusDeclined =
+        text(row['status']) == 'declined' ||
         text(row['artist_status']) == 'declined' ||
         text(row['direct_artist_status']) == 'declined' ||
         text(row['artist_pool_status']) == 'declined';
-    final dataStatusDeclined = text(data['status']) == 'declined' ||
+    final dataStatusDeclined =
+        text(data['status']) == 'declined' ||
         text(data['artistStatus']) == 'declined' ||
         text(data['artist_status']) == 'declined' ||
         text(data['directArtistStatus']) == 'declined' ||
@@ -170,7 +170,6 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
     return assignedToCurrent && (rootStatusDeclined || dataStatusDeclined);
   }
-
 
   RequestStatusV2? _statusFromDbRow(Map<String, dynamic> row) {
     String norm(Object? value) =>
@@ -267,7 +266,8 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     await scan('company_custom_requests');
 
     Map<String, dynamic> asMap(dynamic value) {
-      if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+      if (value is Map<String, dynamic>)
+        return Map<String, dynamic>.from(value);
       if (value is Map) {
         return value.map((key, value) => MapEntry(key.toString(), value));
       }
@@ -289,7 +289,9 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         if (value == null) return;
         if (value is String) {
           final text = value.trim();
-          if (text.isNotEmpty && text.toLowerCase() != 'null' && seen.add(text)) {
+          if (text.isNotEmpty &&
+              text.toLowerCase() != 'null' &&
+              seen.add(text)) {
             out.add(text);
           }
           return;
@@ -328,291 +330,307 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
       return out;
     }
 
-    return requests.map((request) {
-      final info = byId[request.id] ?? byOrder[request.orderNumber];
-      if (info == null) return request;
-      final status = info['status'] as RequestStatusV2?;
-      if (status == null) return request;
-      final row =
-          (info['row'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-      final payload = asMap(row['payload']);
-      final details = asMap(row['details']);
-      final requestDetails = asMap(
-        payload['requestDetails'] ?? row['requestDetails'] ?? row['request_details'],
-      );
-      final orderData = asMap(payload['order'] ?? payload['orderData'] ?? row['order']);
-      final snapshot = asMap(details['clientProfileSnapshot'] ?? payload['clientProfileSnapshot']);
-      final snapshotBasic = asMap(snapshot['basic']);
-      final snapshotProfile = asMap(snapshot['profile']);
-      final acceptedClient = asMap(
-        row['acceptedClient'] ??
-            details['acceptedClient'] ??
-            payload['acceptedClient'] ??
-            orderData['acceptedClient'],
-      );
-      final deliveredAt = _dateFromDbValue(
-            row['delivered_at'] ??
-                row['order_delivered_at'] ??
-                row['deliveredAt'] ??
-                row['orderDeliveredAt'],
-          ) ??
-          request.deliveredAt;
-      final shippedAt = _dateFromDbValue(
-            row['shipped_at'] ??
-                row['artist_shipped_at'] ??
-                row['order_shipped_at'] ??
-                row['shippedAt'],
-          ) ??
-          request.shippedAt;
-      final clientProfileImage = firstText([
-        row['clientProfileImage'],
-        row['clientProfilePic'],
-        row['clientProfilePhoto'],
-        row['clientAvatar'],
-        row['clientAvatarUrl'],
-        row['companyProfileImage'],
-        row['brandProfileImage'],
-        row['companyLogoUrl'],
-        row['brandLogoUrl'],
-        row['client_profile_image'],
-        row['profileImageUrl'],
-        row['profile_image_url'],
-        row['profile_picture_url'],
-        row['photoUrl'],
-        row['photo_url'],
-        row['avatarUrl'],
-        row['avatar_url'],
-        payload['clientProfileImage'],
-        payload['clientProfilePic'],
-        payload['clientProfilePhoto'],
-        payload['clientAvatar'],
-        payload['clientAvatarUrl'],
-        payload['client_profile_image'],
-        payload['profileImageUrl'],
-        payload['profile_image_url'],
-        payload['profile_picture_url'],
-        payload['photoUrl'],
-        payload['photo_url'],
-        payload['avatarUrl'],
-        payload['avatar_url'],
-        details['clientProfileImage'],
-        details['clientProfilePic'],
-        details['clientProfilePhoto'],
-        details['clientAvatar'],
-        details['clientAvatarUrl'],
-        details['client_profile_image'],
-        details['profileImageUrl'],
-        details['profile_image_url'],
-        details['profile_picture_url'],
-        details['photoUrl'],
-        details['photo_url'],
-        details['avatarUrl'],
-        details['avatar_url'],
-        snapshot['profileImageUrl'],
-        snapshot['profile_image_url'],
-        snapshot['profile_picture_url'],
-        snapshot['photoUrl'],
-        snapshot['photo_url'],
-        snapshot['avatarUrl'],
-        snapshot['avatar_url'],
-        snapshotBasic['profileImagePath'],
-        snapshotBasic['profileImageUrl'],
-        snapshotBasic['profile_image_url'],
-        snapshotBasic['profile_picture_url'],
-        snapshotBasic['photoUrl'],
-        snapshotBasic['photo_url'],
-        snapshotBasic['avatarUrl'],
-        snapshotBasic['avatar_url'],
-        snapshotProfile['profileImageUrl'],
-        snapshotProfile['profile_image_url'],
-        snapshotProfile['profile_picture_url'],
-        snapshotProfile['photoUrl'],
-        snapshotProfile['photo_url'],
-        snapshotProfile['avatarUrl'],
-        snapshotProfile['avatar_url'],
-        requestDetails['clientProfileImage'],
-        requestDetails['clientProfilePic'],
-        requestDetails['clientAvatarUrl'],
-        requestDetails['profileImageUrl'],
-        requestDetails['profileImagePath'],
-      ]);
-      final acceptedClientProfileImage = firstText([
-        row['acceptedClientProfileImage'],
-        row['accepted_client_profile_image'],
-        details['acceptedClientProfileImage'],
-        payload['acceptedClientProfileImage'],
-        acceptedClient['profileImageUrl'],
-        acceptedClient['profile_image_url'],
-        acceptedClient['avatarUrl'],
-        acceptedClient['avatar_url'],
-      ]);
-      final clientImages = collectPhotos([
-        row['clientImages'],
-        row['client_images'],
-        row['photos'],
-        row['images'],
-        row['uploadedPhotos'],
-        row['uploaded_photos'],
-        row['inspirationPhotos'],
-        row['inspiration_photos'],
-        row['brandInspirationPhotos'],
-        row['brand_inspiration_photos'],
-        row['previewImage'],
-        row['preview_image'],
-        row['previewImageAsset'],
-        row['preview_image_asset'],
-        payload['clientImages'],
-        payload['client_images'],
-        payload['photos'],
-        payload['images'],
-        payload['uploadedPhotos'],
-        payload['uploaded_photos'],
-        payload['inspirationPhotos'],
-        payload['inspiration_photos'],
-        payload['brandInspirationPhotos'],
-        payload['brand_inspiration_photos'],
-        payload['previewImage'],
-        payload['preview_image'],
-        payload['previewImageAsset'],
-        payload['preview_image_asset'],
-        details['clientImages'],
-        details['client_images'],
-        details['photos'],
-        details['images'],
-        details['uploadedPhotos'],
-        details['uploaded_photos'],
-        details['inspirationPhotos'],
-        details['inspiration_photos'],
-        details['brandInspirationPhotos'],
-        details['brand_inspiration_photos'],
-        details['previewImage'],
-        details['preview_image'],
-        details['previewImageAsset'],
-        details['preview_image_asset'],
-        requestDetails['clientImages'],
-        requestDetails['client_images'],
-        requestDetails['photos'],
-        requestDetails['images'],
-        requestDetails['uploadedPhotos'],
-        requestDetails['uploaded_photos'],
-        requestDetails['inspirationPhotos'],
-        requestDetails['inspiration_photos'],
-        requestDetails['brandInspirationPhotos'],
-        requestDetails['brand_inspiration_photos'],
-        requestDetails['previewImage'],
-        requestDetails['preview_image'],
-        requestDetails['previewImageAsset'],
-        requestDetails['preview_image_asset'],
-        orderData['clientImages'],
-        orderData['client_images'],
-        orderData['photos'],
-        orderData['images'],
-        orderData['uploadedPhotos'],
-        orderData['uploaded_photos'],
-        orderData['inspirationPhotos'],
-        orderData['inspiration_photos'],
-        orderData['brandInspirationPhotos'],
-        orderData['brand_inspiration_photos'],
-        orderData['previewImage'],
-        orderData['preview_image'],
-        orderData['previewImageAsset'],
-        orderData['preview_image_asset'],
-      ]);
-      final artistImages = collectPhotos([
-        row['artistImages'],
-        row['artist_images'],
-        row['completedPhotos'],
-        row['completed_photos'],
-        row['artistCompletedPhotos'],
-        row['artist_completed_photos'],
-        row['designPreviewPhotos'],
-        row['design_preview_photos'],
-        row['uploadedPhotosArtist'],
-        row['uploaded_photos_artist'],
-        payload['artistImages'],
-        payload['artist_images'],
-        payload['completedPhotos'],
-        payload['artistCompletedPhotos'],
-        payload['designPreviewPhotos'],
-        payload['design_preview_photos'],
-        payload['uploadedPhotosArtist'],
-        payload['uploaded_photos_artist'],
-        details['artistImages'],
-        details['artist_images'],
-        details['completedPhotos'],
-        details['artistCompletedPhotos'],
-        details['designPreviewPhotos'],
-        details['design_preview_photos'],
-        details['uploadedPhotosArtist'],
-        details['uploaded_photos_artist'],
-        orderData['artistImages'],
-        orderData['artist_images'],
-        orderData['completedPhotos'],
-        orderData['artistCompletedPhotos'],
-        orderData['designPreviewPhotos'],
-        orderData['design_preview_photos'],
-        orderData['uploadedPhotosArtist'],
-        orderData['uploaded_photos_artist'],
-      ]);
-      final deliveredBio = firstText([
-        row['bio'],
-        row['description'],
-        details['bio'],
-        details['description'],
-        payload['bio'],
-        payload['description'],
-        requestDetails['bio'],
-        requestDetails['description'],
-      ]);
-      final shippedByCourier = firstText([
-        row['shipped_by_courier'],
-        row['shippedByCourier'],
-        row['shipping_label_carrier'],
-        row['shippingLabelCarrier'],
-        details['shippedByCourier'],
-        details['shippingLabelCarrier'],
-        payload['shippedByCourier'],
-        payload['shippingLabelCarrier'],
-      ]);
-      final trackingNumber = firstText([
-        row['tracking_number'],
-        row['trackingNumber'],
-        row['shipping_label_tracking_number'],
-        row['shippingLabelTrackingNumber'],
-        details['trackingNumber'],
-        details['shippingLabelTrackingNumber'],
-        payload['trackingNumber'],
-        payload['shippingLabelTrackingNumber'],
-      ]);
-      final brandName = firstText([
-        row['brandName'],
-        row['brand_name'],
-        details['brandName'],
-        payload['brandName'],
-        orderData['brandName'],
-      ]);
-      return request.copyWith(
-        status: status,
-        deliveredAt: deliveredAt,
-        shippedAt: shippedAt,
-        clientProfileImage: clientProfileImage.isNotEmpty
-            ? clientProfileImage
-            : request.clientProfileImage,
-        acceptedClientProfileImage: acceptedClientProfileImage.isNotEmpty
-            ? acceptedClientProfileImage
-            : request.acceptedClientProfileImage,
-        clientImages: clientImages.isNotEmpty ? clientImages : request.clientImages,
-        artistImages: artistImages.isNotEmpty ? artistImages : request.artistImages,
-        bio: deliveredBio.isNotEmpty ? deliveredBio : request.bio,
-        shippedByCourier: shippedByCourier.isNotEmpty
-            ? shippedByCourier
-            : request.shippedByCourier,
-        trackingNumber: trackingNumber.isNotEmpty
-            ? trackingNumber
-            : request.trackingNumber,
-        brandName: brandName.isNotEmpty ? brandName : request.brandName,
-      );
-    }).toList(growable: false);
+    return requests
+        .map((request) {
+          final info = byId[request.id] ?? byOrder[request.orderNumber];
+          if (info == null) return request;
+          final status = info['status'] as RequestStatusV2?;
+          if (status == null) return request;
+          final row =
+              (info['row'] as Map<String, dynamic>?) ??
+              const <String, dynamic>{};
+          final payload = asMap(row['payload']);
+          final details = asMap(row['details']);
+          final requestDetails = asMap(
+            payload['requestDetails'] ??
+                row['requestDetails'] ??
+                row['request_details'],
+          );
+          final orderData = asMap(
+            payload['order'] ?? payload['orderData'] ?? row['order'],
+          );
+          final snapshot = asMap(
+            details['clientProfileSnapshot'] ??
+                payload['clientProfileSnapshot'],
+          );
+          final snapshotBasic = asMap(snapshot['basic']);
+          final snapshotProfile = asMap(snapshot['profile']);
+          final acceptedClient = asMap(
+            row['acceptedClient'] ??
+                details['acceptedClient'] ??
+                payload['acceptedClient'] ??
+                orderData['acceptedClient'],
+          );
+          final deliveredAt =
+              _dateFromDbValue(
+                row['delivered_at'] ??
+                    row['order_delivered_at'] ??
+                    row['deliveredAt'] ??
+                    row['orderDeliveredAt'],
+              ) ??
+              request.deliveredAt;
+          final shippedAt =
+              _dateFromDbValue(
+                row['shipped_at'] ??
+                    row['artist_shipped_at'] ??
+                    row['order_shipped_at'] ??
+                    row['shippedAt'],
+              ) ??
+              request.shippedAt;
+          final clientProfileImage = firstText([
+            row['clientProfileImage'],
+            row['clientProfilePic'],
+            row['clientProfilePhoto'],
+            row['clientAvatar'],
+            row['clientAvatarUrl'],
+            row['companyProfileImage'],
+            row['brandProfileImage'],
+            row['companyLogoUrl'],
+            row['brandLogoUrl'],
+            row['client_profile_image'],
+            row['profileImageUrl'],
+            row['profile_image_url'],
+            row['profile_picture_url'],
+            row['photoUrl'],
+            row['photo_url'],
+            row['avatarUrl'],
+            row['avatar_url'],
+            payload['clientProfileImage'],
+            payload['clientProfilePic'],
+            payload['clientProfilePhoto'],
+            payload['clientAvatar'],
+            payload['clientAvatarUrl'],
+            payload['client_profile_image'],
+            payload['profileImageUrl'],
+            payload['profile_image_url'],
+            payload['profile_picture_url'],
+            payload['photoUrl'],
+            payload['photo_url'],
+            payload['avatarUrl'],
+            payload['avatar_url'],
+            details['clientProfileImage'],
+            details['clientProfilePic'],
+            details['clientProfilePhoto'],
+            details['clientAvatar'],
+            details['clientAvatarUrl'],
+            details['client_profile_image'],
+            details['profileImageUrl'],
+            details['profile_image_url'],
+            details['profile_picture_url'],
+            details['photoUrl'],
+            details['photo_url'],
+            details['avatarUrl'],
+            details['avatar_url'],
+            snapshot['profileImageUrl'],
+            snapshot['profile_image_url'],
+            snapshot['profile_picture_url'],
+            snapshot['photoUrl'],
+            snapshot['photo_url'],
+            snapshot['avatarUrl'],
+            snapshot['avatar_url'],
+            snapshotBasic['profileImagePath'],
+            snapshotBasic['profileImageUrl'],
+            snapshotBasic['profile_image_url'],
+            snapshotBasic['profile_picture_url'],
+            snapshotBasic['photoUrl'],
+            snapshotBasic['photo_url'],
+            snapshotBasic['avatarUrl'],
+            snapshotBasic['avatar_url'],
+            snapshotProfile['profileImageUrl'],
+            snapshotProfile['profile_image_url'],
+            snapshotProfile['profile_picture_url'],
+            snapshotProfile['photoUrl'],
+            snapshotProfile['photo_url'],
+            snapshotProfile['avatarUrl'],
+            snapshotProfile['avatar_url'],
+            requestDetails['clientProfileImage'],
+            requestDetails['clientProfilePic'],
+            requestDetails['clientAvatarUrl'],
+            requestDetails['profileImageUrl'],
+            requestDetails['profileImagePath'],
+          ]);
+          final acceptedClientProfileImage = firstText([
+            row['acceptedClientProfileImage'],
+            row['accepted_client_profile_image'],
+            details['acceptedClientProfileImage'],
+            payload['acceptedClientProfileImage'],
+            acceptedClient['profileImageUrl'],
+            acceptedClient['profile_image_url'],
+            acceptedClient['avatarUrl'],
+            acceptedClient['avatar_url'],
+          ]);
+          final clientImages = collectPhotos([
+            row['clientImages'],
+            row['client_images'],
+            row['photos'],
+            row['images'],
+            row['uploadedPhotos'],
+            row['uploaded_photos'],
+            row['inspirationPhotos'],
+            row['inspiration_photos'],
+            row['brandInspirationPhotos'],
+            row['brand_inspiration_photos'],
+            row['previewImage'],
+            row['preview_image'],
+            row['previewImageAsset'],
+            row['preview_image_asset'],
+            payload['clientImages'],
+            payload['client_images'],
+            payload['photos'],
+            payload['images'],
+            payload['uploadedPhotos'],
+            payload['uploaded_photos'],
+            payload['inspirationPhotos'],
+            payload['inspiration_photos'],
+            payload['brandInspirationPhotos'],
+            payload['brand_inspiration_photos'],
+            payload['previewImage'],
+            payload['preview_image'],
+            payload['previewImageAsset'],
+            payload['preview_image_asset'],
+            details['clientImages'],
+            details['client_images'],
+            details['photos'],
+            details['images'],
+            details['uploadedPhotos'],
+            details['uploaded_photos'],
+            details['inspirationPhotos'],
+            details['inspiration_photos'],
+            details['brandInspirationPhotos'],
+            details['brand_inspiration_photos'],
+            details['previewImage'],
+            details['preview_image'],
+            details['previewImageAsset'],
+            details['preview_image_asset'],
+            requestDetails['clientImages'],
+            requestDetails['client_images'],
+            requestDetails['photos'],
+            requestDetails['images'],
+            requestDetails['uploadedPhotos'],
+            requestDetails['uploaded_photos'],
+            requestDetails['inspirationPhotos'],
+            requestDetails['inspiration_photos'],
+            requestDetails['brandInspirationPhotos'],
+            requestDetails['brand_inspiration_photos'],
+            requestDetails['previewImage'],
+            requestDetails['preview_image'],
+            requestDetails['previewImageAsset'],
+            requestDetails['preview_image_asset'],
+            orderData['clientImages'],
+            orderData['client_images'],
+            orderData['photos'],
+            orderData['images'],
+            orderData['uploadedPhotos'],
+            orderData['uploaded_photos'],
+            orderData['inspirationPhotos'],
+            orderData['inspiration_photos'],
+            orderData['brandInspirationPhotos'],
+            orderData['brand_inspiration_photos'],
+            orderData['previewImage'],
+            orderData['preview_image'],
+            orderData['previewImageAsset'],
+            orderData['preview_image_asset'],
+          ]);
+          final artistImages = collectPhotos([
+            row['artistImages'],
+            row['artist_images'],
+            row['completedPhotos'],
+            row['completed_photos'],
+            row['artistCompletedPhotos'],
+            row['artist_completed_photos'],
+            row['designPreviewPhotos'],
+            row['design_preview_photos'],
+            row['uploadedPhotosArtist'],
+            row['uploaded_photos_artist'],
+            payload['artistImages'],
+            payload['artist_images'],
+            payload['completedPhotos'],
+            payload['artistCompletedPhotos'],
+            payload['designPreviewPhotos'],
+            payload['design_preview_photos'],
+            payload['uploadedPhotosArtist'],
+            payload['uploaded_photos_artist'],
+            details['artistImages'],
+            details['artist_images'],
+            details['completedPhotos'],
+            details['artistCompletedPhotos'],
+            details['designPreviewPhotos'],
+            details['design_preview_photos'],
+            details['uploadedPhotosArtist'],
+            details['uploaded_photos_artist'],
+            orderData['artistImages'],
+            orderData['artist_images'],
+            orderData['completedPhotos'],
+            orderData['artistCompletedPhotos'],
+            orderData['designPreviewPhotos'],
+            orderData['design_preview_photos'],
+            orderData['uploadedPhotosArtist'],
+            orderData['uploaded_photos_artist'],
+          ]);
+          final deliveredBio = firstText([
+            row['bio'],
+            row['description'],
+            details['bio'],
+            details['description'],
+            payload['bio'],
+            payload['description'],
+            requestDetails['bio'],
+            requestDetails['description'],
+          ]);
+          final shippedByCourier = firstText([
+            row['shipped_by_courier'],
+            row['shippedByCourier'],
+            row['shipping_label_carrier'],
+            row['shippingLabelCarrier'],
+            details['shippedByCourier'],
+            details['shippingLabelCarrier'],
+            payload['shippedByCourier'],
+            payload['shippingLabelCarrier'],
+          ]);
+          final trackingNumber = firstText([
+            row['tracking_number'],
+            row['trackingNumber'],
+            row['shipping_label_tracking_number'],
+            row['shippingLabelTrackingNumber'],
+            details['trackingNumber'],
+            details['shippingLabelTrackingNumber'],
+            payload['trackingNumber'],
+            payload['shippingLabelTrackingNumber'],
+          ]);
+          final brandName = firstText([
+            row['brandName'],
+            row['brand_name'],
+            details['brandName'],
+            payload['brandName'],
+            orderData['brandName'],
+          ]);
+          return request.copyWith(
+            status: status,
+            deliveredAt: deliveredAt,
+            shippedAt: shippedAt,
+            clientProfileImage: clientProfileImage.isNotEmpty
+                ? clientProfileImage
+                : request.clientProfileImage,
+            acceptedClientProfileImage: acceptedClientProfileImage.isNotEmpty
+                ? acceptedClientProfileImage
+                : request.acceptedClientProfileImage,
+            clientImages: clientImages.isNotEmpty
+                ? clientImages
+                : request.clientImages,
+            artistImages: artistImages.isNotEmpty
+                ? artistImages
+                : request.artistImages,
+            bio: deliveredBio.isNotEmpty ? deliveredBio : request.bio,
+            shippedByCourier: shippedByCourier.isNotEmpty
+                ? shippedByCourier
+                : request.shippedByCourier,
+            trackingNumber: trackingNumber.isNotEmpty
+                ? trackingNumber
+                : request.trackingNumber,
+            brandName: brandName.isNotEmpty ? brandName : request.brandName,
+          );
+        })
+        .toList(growable: false);
   }
 
   Future<Set<String>> _fetchPersistedArtistDeclinedRequestIds(
@@ -626,7 +644,9 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
       try {
         final rows = await Supabase.instance.client
             .from(table)
-            .select('id,status,artist_status,direct_artist_status,artist_pool_status,accepted_by_artist_email,selected_artist_email,declined_by_artist_email,declined_by_artist_emails,data,updated_at')
+            .select(
+              'id,status,artist_status,direct_artist_status,artist_pool_status,accepted_by_artist_email,selected_artist_email,declined_by_artist_email,declined_by_artist_emails,data,updated_at',
+            )
             .order('updated_at', ascending: false)
             .limit(1000);
         for (final raw in rows.whereType<Map>()) {
@@ -639,7 +659,9 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         try {
           final rows = await Supabase.instance.client
               .from(table)
-              .select('id,status,artist_status,accepted_by_artist_email,selected_artist_email,data,updated_at')
+              .select(
+                'id,status,artist_status,accepted_by_artist_email,selected_artist_email,data,updated_at',
+              )
               .order('updated_at', ascending: false)
               .limit(1000);
           for (final raw in rows.whereType<Map>()) {
@@ -660,12 +682,15 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   Future<void> _loadHistoryFromDb() async {
     try {
       final fetchedRequests = await ArtistRequestsRepository.fetchAllRequests();
-      final allRequests = await _applyRootHistoryStatusOverrides(fetchedRequests);
-      final currentArtistEmail =
-          (Supabase.instance.client.auth.currentUser?.email ?? '').trim().toLowerCase();
-      final persistedDeclinedIds = await _fetchPersistedArtistDeclinedRequestIds(
-        currentArtistEmail,
+      final allRequests = await _applyRootHistoryStatusOverrides(
+        fetchedRequests,
       );
+      final currentArtistEmail =
+          (Supabase.instance.client.auth.currentUser?.email ?? '')
+              .trim()
+              .toLowerCase();
+      final persistedDeclinedIds =
+          await _fetchPersistedArtistDeclinedRequestIds(currentArtistEmail);
       unawaited(
         _syncArtistRatingFromReviews(
           allRequests,
@@ -725,8 +750,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
     final supabase = Supabase.instance.client;
     final uid = (supabase.auth.currentUser?.id ?? '').trim();
-    final email =
-        (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+    final email = (supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
     if (uid.isEmpty && email.isEmpty) return;
 
     Map<String, dynamic>? artistRow;
@@ -866,21 +890,22 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
 
   String _statusTextForHistory(ClientRequestV2 r) {
     final d = _historyDateForStatus(r);
-    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentArtistEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     if (_isArtistDeclinedForHistory(r, currentArtistEmail)) {
-      return 'Declined ${_monthShort(d.month)} ${d.day}';
+      return 'Declined ${formatDateMdy(d)}';
     }
     switch (r.status) {
       case RequestStatusV2.delivered:
-        return 'Delivered ${_monthShort(d.month)} ${d.day}';
+        return 'Delivered ${formatDateMdy(d)}';
       case RequestStatusV2.declined:
-        return 'Declined ${_monthShort(d.month)} ${d.day}';
+        return 'Declined ${formatDateMdy(d)}';
       case RequestStatusV2.expired:
-        return 'Expired ${_monthShort(d.month)} ${d.day}';
+        return 'Expired ${formatDateMdy(d)}';
       case RequestStatusV2.cancelled:
-        return 'Cancelled ${_monthShort(d.month)} ${d.day}';
+        return 'Cancelled ${formatDateMdy(d)}';
       default:
         return r.status.label;
     }
@@ -901,9 +926,10 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   ArtistOrderLiteStatus _historyLiteStatus(ClientRequestV2 r) {
-    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentArtistEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     if (_isArtistDeclinedForHistory(r, currentArtistEmail)) {
       return ArtistOrderLiteStatus.declined;
     }
@@ -929,9 +955,10 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   String _historyReasonForStatus(ClientRequestV2 r) {
-    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentArtistEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     if (_isArtistDeclinedForHistory(r, currentArtistEmail)) {
       final reason = r.declineReason.trim().isNotEmpty
           ? r.declineReason.trim()
@@ -1022,9 +1049,10 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   int _countForFilter(ArtistHistoryFilter filter) {
-    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentArtistEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     switch (filter) {
       case ArtistHistoryFilter.all:
         return _all.length;
@@ -1049,9 +1077,10 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     BuildContext context,
     ClientRequestV2 request,
   ) async {
-    final currentArtistEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
-        .trim()
-        .toLowerCase();
+    final currentArtistEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     if (_isArtistDeclinedForHistory(request, currentArtistEmail)) {
       await showSimpleStatusRequestSheet(
         context: context,
@@ -1177,7 +1206,9 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
+          child: const ArtistProfileAvatarIcon(
+            size: JntHeaderMetrics.avatarSize,
+          ),
         ),
       ),
       itemBuilder: (_) {
@@ -1244,24 +1275,6 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     );
   }
 
-  String _monthShort(int m) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return months[(m - 1).clamp(0, 11)];
-  }
-
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredRequests;
@@ -1282,114 +1295,120 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
       namesRoute: true,
       label: 'Artist history',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntStandardAppBar(
-        onNotifications: _openNotifications,
-        trailing: _avatarMenu(),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
-        children: [
-          _HistoryTabs(
-            selected: _filter,
-            onChanged: (f) => setState(() => _filter = f),
-            allCount: _countForFilter(ArtistHistoryFilter.all),
-            deliveredCount: _countForFilter(ArtistHistoryFilter.delivered),
-            declinedCount: _countForFilter(ArtistHistoryFilter.declined),
-            expiredCount: _countForFilter(ArtistHistoryFilter.expired),
-            cancelledCount: _countForFilter(ArtistHistoryFilter.cancelled),
-          ),
-          const SizedBox(height: 16),
-          if (_isLoadingDb && filtered.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (filtered.isEmpty)
-            _Card(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.history_rounded,
-                    size: 46,
-                    color: AppColors.blackCat.withValues(alpha: 0.35),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'No history found',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Only real-time delivered, declined, expired, and cancelled orders appear here.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
+        backgroundColor: AppColors.snow,
+        appBar: JntStandardAppBar(
+          onNotifications: _openNotifications,
+          trailing: _avatarMenu(),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+          children: [
+            _HistoryTabs(
+              selected: _filter,
+              onChanged: (f) => setState(() => _filter = f),
+              allCount: _countForFilter(ArtistHistoryFilter.all),
+              deliveredCount: _countForFilter(ArtistHistoryFilter.delivered),
+              declinedCount: _countForFilter(ArtistHistoryFilter.declined),
+              expiredCount: _countForFilter(ArtistHistoryFilter.expired),
+              cancelledCount: _countForFilter(ArtistHistoryFilter.cancelled),
+            ),
+            const SizedBox(height: 16),
+            if (_isLoadingDb && filtered.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (filtered.isEmpty)
+              _Card(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 46,
+                      color: AppColors.blackCat.withValues(alpha: 0.35),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    const Text(
+                      'No history found',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Only real-time delivered, declined, expired, and cancelled orders appear here.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              _HistorySection(
+                title: 'Brand Requests',
+                requests: brandRequests,
+                byId: byId,
+                onTap: (r) => _openHistoryPopup(context, r),
               ),
-            )
-          else ...[
-            _HistorySection(
-              title: 'Brand Requests',
-              requests: brandRequests,
-              byId: byId,
-              onTap: (r) => _openHistoryPopup(context, r),
-            ),
-            const SizedBox(height: 14),
-            _HistorySection(
-              title: 'Client Requests',
-              requests: clientRequests,
-              byId: byId,
-              onTap: (r) => _openHistoryPopup(context, r),
-            ),
+              const SizedBox(height: 14),
+              _HistorySection(
+                title: 'Client Requests',
+                requests: clientRequests,
+                byId: byId,
+                onTap: (r) => _openHistoryPopup(context, r),
+              ),
+            ],
           ],
-        ],
+        ),
+        bottomNavigationBar:
+            widget.bottomNavigationBar ??
+            (widget.showBottomNav
+                ? BottomNavigationBar(
+                    currentIndex: widget.bottomNavIndex,
+                    selectedItemColor: AppColors.blackCat,
+                    unselectedItemColor: AppColors.blackCat.withValues(
+                      alpha: 0.35,
+                    ),
+                    type: BottomNavigationBarType.fixed,
+                    onTap: (i) {
+                      if (widget.onNavTap != null) {
+                        widget.onNavTap!(i);
+                        return;
+                      }
+                      if (i != widget.bottomNavIndex) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    items: const [
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.home_filled),
+                        label: 'Home',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.add_circle_outline),
+                        label: 'Design',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.inbox_outlined),
+                        label: 'Requests',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.calendar_month_outlined),
+                        label: 'Calendar',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.history),
+                        label: 'History',
+                      ),
+                    ],
+                  )
+                : null),
       ),
-      bottomNavigationBar: widget.bottomNavigationBar ??
-          (widget.showBottomNav
-          ? BottomNavigationBar(
-              currentIndex: widget.bottomNavIndex,
-              selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
-              type: BottomNavigationBarType.fixed,
-              onTap: (i) {
-                if (widget.onNavTap != null) {
-                  widget.onNavTap!(i);
-                  return;
-                }
-                if (i != widget.bottomNavIndex) {
-                  Navigator.pop(context);
-                }
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_filled),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.add_circle_outline),
-                  label: 'Design',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.inbox_outlined),
-                  label: 'Requests',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  label: 'Calendar',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.history),
-                  label: 'History',
-                ),
-              ],
-            )
-          : null),
-    ),
     );
   }
 }
@@ -1439,38 +1458,38 @@ class _HistoryTabs extends StatelessWidget {
       button: true,
       selected: isSelected,
       child: ExcludeSemantics(
-      child: InkWell(
-      onTap: () => onChanged(value),
-      borderRadius: BorderRadius.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text(
-              '$label $count',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: isSelected
-                    ? AppColors.blackCat
-                    : AppColors.blackCat.withValues(alpha: 0.55),
-              ),
+        child: InkWell(
+          onTap: () => onChanged(value),
+          borderRadius: BorderRadius.zero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '$label $count',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected
+                        ? AppColors.blackCat
+                        : AppColors.blackCat.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 2.5,
+                  width: isSelected ? 24 : 0,
+                  decoration: BoxDecoration(
+                    color: AppColors.blackCat,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 2.5,
-              width: isSelected ? 24 : 0,
-              decoration: BoxDecoration(
-                color: AppColors.blackCat,
-                borderRadius: BorderRadius.zero,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1489,72 +1508,72 @@ class _HistoryCard extends StatelessWidget {
           button: true,
           onTap: onTap,
           child: ExcludeSemantics(
-          child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.zero,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Thumb(
-              imageAsset: order.imageAsset,
-              clientEmail: order.clientEmail,
-              clientName: order.clientName,
-              fallbackLetter: order.clientName.trim().isEmpty
-                  ? 'C'
-                  : order.clientName.trim()[0].toUpperCase(),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.zero,
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          order.clientName,
+                  _Thumb(
+                    imageAsset: order.imageAsset,
+                    clientEmail: order.clientEmail,
+                    clientName: order.clientName,
+                    fallbackLetter: order.clientName.trim().isEmpty
+                        ? 'C'
+                        : order.clientName.trim()[0].toUpperCase(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                order.clientName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _HistoryStatusChip(status: order.status),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          order.subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                          style: TextStyle(
                             color: AppColors.blackCat,
+                            fontWeight: FontWeight.w400,
+                            fontSize: 13.5,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      _HistoryStatusChip(status: order.status),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    order.subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w400,
-                      fontSize: 13.5,
+                        const SizedBox(height: 10),
+                        Text(
+                          order.statusText,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.72),
+                            fontWeight: FontWeight.w400,
+                            fontSize: 13.5,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.statusText,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.72),
-                      fontWeight: FontWeight.w400,
-                      fontSize: 13.5,
-                    ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }
@@ -1614,10 +1633,7 @@ class _Thumb extends StatelessWidget {
 
     if (p.isEmpty) {
       return FutureBuilder<String>(
-        future: _lookupClientProfileImage(
-          email: clientEmail,
-          name: clientName,
-        ),
+        future: _lookupClientProfileImage(email: clientEmail, name: clientName),
         builder: (_, snap) {
           final resolved = _normalizeImagePath((snap.data ?? '').trim());
           if (resolved.isEmpty) return _fallback();
@@ -1630,7 +1646,6 @@ class _Thumb extends StatelessWidget {
   }
 
   Widget _buildImage(String p) {
-
     final isNetwork = p.startsWith('http://') || p.startsWith('https://');
     final isAsset = p.startsWith('assets/');
     final isFileUri = p.startsWith('file://');
@@ -1714,22 +1729,22 @@ class _Thumb extends StatelessWidget {
   }
 
   Widget _fallback() => Container(
-      height: _thumbSize,
-      width: _thumbSize,
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
+    height: _thumbSize,
+    width: _thumbSize,
+    decoration: BoxDecoration(
+      color: AppColors.balletSlippers,
+      borderRadius: BorderRadius.zero,
+    ),
+    alignment: Alignment.center,
+    child: Text(
+      fallbackLetter.trim().isEmpty ? 'C' : fallbackLetter.trim(),
+      style: const TextStyle(
+        fontWeight: FontWeight.w700,
+        fontSize: 20,
+        color: AppColors.blackCat,
       ),
-      alignment: Alignment.center,
-      child: Text(
-        fallbackLetter.trim().isEmpty ? 'C' : fallbackLetter.trim(),
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 20,
-          color: AppColors.blackCat,
-        ),
-      ),
-    );
+    ),
+  );
 
   Uint8List? _decodeDataImageBytes(String value) {
     final src = value.trim();
@@ -1840,7 +1855,11 @@ class _Thumb extends StatelessWidget {
     if (email.trim().isNotEmpty) {
       for (final table in const ['client', 'clients', 'client_artist']) {
         for (final column in const ['email', 'client_email']) {
-          final found = await lookupBy(table, column, email.trim().toLowerCase());
+          final found = await lookupBy(
+            table,
+            column,
+            email.trim().toLowerCase(),
+          );
           if (found.isNotEmpty) return found;
         }
       }

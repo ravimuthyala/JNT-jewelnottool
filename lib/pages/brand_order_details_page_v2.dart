@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/jnt_modal_app_bar.dart';
@@ -1154,669 +1155,684 @@ class _BaseOrderDetails extends StatelessWidget {
       namesRoute: true,
       label: 'Brand order details',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntModalAppBar(
-        onClose: () => Navigator.pop(context),
-        closeTooltip: 'Close brand order details',
-        closeIcon: const Icon(Icons.close_rounded, size: 26),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
-        children: [
-          if (isCancelledStatus) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 16,
-                  color: AppColors.blackCat,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Cancelled: This order has been cancelled. If you were charged, refund will be processed.',
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.25,
+        backgroundColor: AppColors.snow,
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.pop(context),
+          closeTooltip: 'Close brand order details',
+          closeIcon: const Icon(Icons.close_rounded, size: 26),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+          children: [
+            if (isCancelledStatus) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: AppColors.blackCat,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cancelled: This order has been cancelled. If you were charged, refund will be processed.',
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1.25,
+                      ),
                     ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            Row(
+              children: [
+                Text(
+                  'Placed on: ${_placedOnText()}',
+                  style: TextStyle(
+                    color: AppColors.blackCat,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                    fontFamily: 'ArialBold',
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  statusPillText,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    color: AppColors.blackCat,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-          ],
-          Row(
-            children: [
-              Text(
-                'Placed on: ${_placedOnText()}',
-                style: TextStyle(
-                  color: AppColors.blackCat,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
-                  fontFamily: 'ArialBold',
-                ),
-              ),
-              const Spacer(),
-              Text(
-                statusPillText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                  color: AppColors.blackCat,
-                ),
+            if (order.nfcRequested) ...[
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: _NfcRequestTag(),
               ),
             ],
-          ),
-          if (order.nfcRequested) ...[
-            const SizedBox(height: 8),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: _NfcRequestTag(),
-            ),
-          ],
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          if (isSubmittedStatus)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 18,
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Artist is not assigned yet. Once your submitted request is accepted, artist details and messaging will appear here.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.25,
+            if (isSubmittedStatus)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Artist is not assigned yet. Once your submitted request is accepted, artist details and messaging will appear here.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1.25,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            )
-          else
-            const SizedBox.shrink(),
+                ],
+              )
+            else
+              const SizedBox.shrink(),
 
-          if (isSubmittedStatus && _showDirectClientDeclinedBanner) ...[
-            const SizedBox(height: 12),
-            _directClientDeclinedBanner(),
-          ] else if (isSubmittedStatus && _showDirectArtistDeclinedBanner) ...[
-            const SizedBox(height: 12),
-            _directArtistDeclinedBanner(),
-          ] else if (!isSubmittedStatus && !isClosedHistoryStatus)
-            _Card(
-              child: FutureBuilder<_AcceptedArtistMeta>(
-                future: acceptedArtistMetaFuture,
-                builder: (context, snapshot) {
-                  final meta =
-                      snapshot.data ??
-                      _AcceptedArtistMeta(
-                        name: order.artistName.trim(),
-                        profileImage: order.artistProfileImage.trim(),
-                      );
-                  final displayName = meta.name.trim().isEmpty
-                      ? 'Artist'
-                      : meta.name.trim();
-                  final rating = meta.rating;
-                  final location = [
-                    meta.city.trim(),
-                    meta.state.trim(),
-                  ].where((e) => e.isNotEmpty).join(', ');
+            if (isSubmittedStatus && _showDirectClientDeclinedBanner) ...[
+              const SizedBox(height: 12),
+              _directClientDeclinedBanner(),
+            ] else if (isSubmittedStatus &&
+                _showDirectArtistDeclinedBanner) ...[
+              const SizedBox(height: 12),
+              _directArtistDeclinedBanner(),
+            ] else if (!isSubmittedStatus && !isClosedHistoryStatus)
+              _Card(
+                child: FutureBuilder<_AcceptedArtistMeta>(
+                  future: acceptedArtistMetaFuture,
+                  builder: (context, snapshot) {
+                    final meta =
+                        snapshot.data ??
+                        _AcceptedArtistMeta(
+                          name: order.artistName.trim(),
+                          profileImage: order.artistProfileImage.trim(),
+                        );
+                    final displayName = meta.name.trim().isEmpty
+                        ? 'Artist'
+                        : meta.name.trim();
+                    final rating = meta.rating;
+                    final location = [
+                      meta.city.trim(),
+                      meta.state.trim(),
+                    ].where((e) => e.isNotEmpty).join(', ');
 
-                  return Row(
-                    children: [
-                      Container(
-                        height: 48,
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: AppColors.blackCat.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.zero,
+                    return Row(
+                      children: [
+                        Container(
+                          height: 48,
+                          width: 48,
+                          decoration: BoxDecoration(
+                            color: AppColors.blackCat.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: _artistAvatarWithFallback(
+                            name: displayName,
+                            raw: meta.profileImage,
+                          ),
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _artistAvatarWithFallback(
-                          name: displayName,
-                          raw: meta.profileImage,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              displayName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
                               ),
-                            ),
-                            if (rating != null || location.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  if (rating != null) ...[
-                                    const Icon(
-                                      Icons.star_rounded,
-                                      size: 18,
-                                      color: AppColors.alabaster,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      rating.toStringAsFixed(1),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w400,
-                                        color: AppColors.blackCat.withValues(
-                                          alpha: 0.85,
-                                        ),
+                              if (rating != null || location.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    if (rating != null) ...[
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        size: 18,
+                                        color: AppColors.alabaster,
                                       ),
-                                    ),
-                                  ],
-                                  if (rating != null &&
-                                      location.isNotEmpty) ...[
-                                    const SizedBox(width: 10),
-                                  ],
-                                  if (location.isNotEmpty)
-                                    Flexible(
-                                      child: Text(
-                                        location,
-                                        overflow: TextOverflow.ellipsis,
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        rating.toStringAsFixed(1),
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
                                           color: AppColors.blackCat.withValues(
-                                            alpha: 0.55,
+                                            alpha: 0.85,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
+                                    ],
+                                    if (rating != null &&
+                                        location.isNotEmpty) ...[
+                                      const SizedBox(width: 10),
+                                    ],
+                                    if (location.isNotEmpty)
+                                      Flexible(
+                                        child: Text(
+                                          location,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w400,
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.55),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 6),
+                              Text(
+                                'Artist assigned to your request',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.blackCat,
+                                ),
                               ),
                             ],
-                            const SizedBox(height: 6),
-                            Text(
-                              'Artist assigned to your request',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.blackCat,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
 
-          if (!isSubmittedStatus &&
-              !isClosedHistoryStatus &&
-              statusPillText != 'In Progress' &&
-              statusPillText != 'Shipped' &&
-              statusPillText != 'Delivered' &&
-              order.artistName.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _Card(child: _artistWorkingInfoCard()),
-          ],
+            if (!isSubmittedStatus &&
+                !isClosedHistoryStatus &&
+                statusPillText != 'In Progress' &&
+                statusPillText != 'Shipped' &&
+                statusPillText != 'Delivered' &&
+                order.artistName.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _Card(child: _artistWorkingInfoCard()),
+            ],
 
-          if (!isClosedHistoryStatus) const SizedBox(height: 14),
+            if (!isClosedHistoryStatus) const SizedBox(height: 14),
 
-          if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reason for Cancellation',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.cancelReason.trim().isNotEmpty
-                        ? order.cancelReason.trim()
-                        : 'No reason provided.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ] else if (isExpiredStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reason for Expiration',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.cancelReason.trim().isNotEmpty
-                        ? order.cancelReason.trim()
-                        : 'This request expired before an artist could complete acceptance and confirmation in time.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Common reasons:',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '1. No artist accepted the request before the need-by timeline.\n'
-                    '2. The request was not confirmed in time.\n'
-                    '3. Required details needed to proceed were incomplete.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ] else if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _orderDetailsWithRightNailDimensions(),
-                  const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
-                  const SizedBox(height: 5),
-                  _paymentSection(context),
-                ],
-              ),
-            ),
-          ] else ...[
-            if (statusPillText == 'Completed' ||
-                statusPillText == 'Shipped' ||
-                statusPillText == 'Delivered') ...[
+            if (isCancelledStatus) ...[
               _Card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Artist Completed Art',
+                      'Reason for Cancellation',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
-                        fontFamily: 'ArialBold',
-                        color: AppColors.blackCat,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    SizedBox(
-                      height: 120,
-                      child: _SubmittedPhotosStrip(
-                        paths: order.artistCompletedPhotos,
-                        fallbackOrderId: order.id,
-                        fallbackOrderNumber: order.orderNumber,
-                        sourceCollection: order.sourceCollection,
-                        enableFirestoreFallback: true,
+                    Text(
+                      order.cancelReason.trim().isNotEmpty
+                          ? order.cancelReason.trim()
+                          : 'No reason provided.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.25,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-            ],
-
-            _Card(child: _orderDetailsWithRightNailDimensions()),
-
-            const SizedBox(height: 14),
-            if (statusPillText == 'Shipped' ||
-                statusPillText == 'Delivered') ...[
-              _Card(child: _shippingInformationSection(context)),
-              const SizedBox(height: 14),
-            ],
-            if (statusPillText != 'In Progress' && statusPillText != 'Shipped')
-              _Card(child: _paymentSection(context)),
-            if (statusPillText == 'Delivered' || statusPillText == 'Shipped')
-              const SizedBox(height: 14),
-            if (statusPillText == 'In Progress') ...[
-              _Card(child: _finalAcceptedAmountSection()),
               const SizedBox(height: 12),
-              SizedBox(
-                height: 46,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat.withValues(alpha: 0.78),
-                    foregroundColor: AppColors.snow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+            ] else if (isExpiredStatus) ...[
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Reason for Expiration',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
-                    elevation: 0,
-                  ),
-                  onPressed: () {
-                    // Brand-submitted requests always talk to the JNT AI
-                    // Assistant, never directly with the accepted artist.
-                    _openAiSupportChat(context);
-                  },
-                  child: const Text(
-                    'Chat',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Arial',
+                    const SizedBox(height: 10),
+                    Text(
+                      order.cancelReason.trim().isNotEmpty
+                          ? order.cancelReason.trim()
+                          : 'This request expired before an artist could complete acceptance and confirmation in time.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.25,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Common reasons:',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '1. No artist accepted the request before the need-by timeline.\n'
+                      '2. The request was not confirmed in time.\n'
+                      '3. Required details needed to proceed were incomplete.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-            if (statusPillText == 'Shipped') ...[
-              _Card(child: _finalAcceptedAmountSection()),
-            ],
-            if (statusPillText == 'Delivered') ...[
-              _Card(child: _finalAcceptedAmountSection()),
               const SizedBox(height: 12),
-              _Card(child: rightPanel),
-            ],
-          ],
-          if (isClosedHistoryStatus) ...[
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat.withValues(
-                          alpha: 0.78,
-                        ),
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        side: const BorderSide(color: AppColors.blackCat),
-                      ),
-                      onPressed: () {
-                        if (isCancelledStatus) {
-                          (onCancelledChat ?? () => _openAiSupportChat(context))
-                              .call();
-                          return;
-                        }
-                        (onExpiredChat ??
-                                onCancelledChat ??
-                                () => _openAiSupportChat(context))
-                            .call();
-                      },
-                      child: const Text(
-                        'Chat',
+            ] else if (isCancelledStatus) ...[
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _orderDetailsWithRightNailDimensions(),
+                    const SizedBox(height: 14),
+                    Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
+                    const SizedBox(height: 5),
+                    _paymentSection(context),
+                  ],
+                ),
+              ),
+            ] else ...[
+              if (statusPillText == 'Completed' ||
+                  statusPillText == 'Shipped' ||
+                  statusPillText == 'Delivered') ...[
+                _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Artist Completed Art',
                         style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          fontFamily: 'Arial',
-                          color: AppColors.snow,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          fontFamily: 'ArialBold',
+                          color: AppColors.blackCat,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 120,
+                        child: _SubmittedPhotosStrip(
+                          paths: order.artistCompletedPhotos,
+                          fallbackOrderId: order.id,
+                          fallbackOrderNumber: order.orderNumber,
+                          sourceCollection: order.sourceCollection,
+                          enableFirestoreFallback: true,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        elevation: 0,
+                const SizedBox(height: 14),
+              ],
+
+              _Card(child: _orderDetailsWithRightNailDimensions()),
+
+              const SizedBox(height: 14),
+              if (statusPillText == 'Shipped' ||
+                  statusPillText == 'Delivered') ...[
+                _Card(child: _shippingInformationSection(context)),
+                const SizedBox(height: 14),
+              ],
+              if (statusPillText != 'In Progress' &&
+                  statusPillText != 'Shipped')
+                _Card(child: _paymentSection(context)),
+              if (statusPillText == 'Delivered' || statusPillText == 'Shipped')
+                const SizedBox(height: 14),
+              if (statusPillText == 'In Progress') ...[
+                _Card(child: _finalAcceptedAmountSection()),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 46,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat.withValues(
+                        alpha: 0.78,
                       ),
-                      onPressed: isCancelledStatus
-                          ? ((onCancelledResubmit ?? onExpiredResubmit) == null
-                                ? null
-                                : () =>
-                                      (onCancelledResubmit ??
-                                              onExpiredResubmit)!
-                                          .call())
-                          : ((onExpiredResubmit ?? onCancelledResubmit) == null
-                                ? null
-                                : () =>
-                                      (onExpiredResubmit ??
-                                              onCancelledResubmit)!
-                                          .call()),
-                      child: const Text(
-                        'Resubmit',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12.5,
-                        ),
+                      foregroundColor: AppColors.snow,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      // Brand-submitted requests always talk to the JNT AI
+                      // Assistant, never directly with the accepted artist.
+                      _openAiSupportChat(context);
+                    },
+                    child: const Text(
+                      'Chat',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Arial',
                       ),
                     ),
                   ),
                 ),
               ],
-            ),
-          ],
-          if (canCancelBeforeArtistAccept) ...[
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
+              if (statusPillText == 'Shipped') ...[
+                _Card(child: _finalAcceptedAmountSection()),
+              ],
+              if (statusPillText == 'Delivered') ...[
+                _Card(child: _finalAcceptedAmountSection()),
+                const SizedBox(height: 12),
+                _Card(child: rightPanel),
+              ],
+            ],
+            if (isClosedHistoryStatus) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat.withValues(
+                            alpha: 0.78,
+                          ),
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          side: const BorderSide(color: AppColors.blackCat),
                         ),
-                        side: const BorderSide(color: AppColors.blackCat),
-                      ),
-                      onPressed: () async {
-                        final result = await showDialog<_CancelOrderResult>(
-                          context: context,
-                          barrierDismissible: true,
-                          builder: (_) => const _CancelOrderDialog(),
-                        );
-
-                        if (!context.mounted || result == null) return;
-
-                        if (!result.confirm) {
-                          Navigator.of(context).pop();
-                          return;
-                        }
-
-                        try {
-                          final row = await _supabaseFetchOrderRow(
-                            order.id,
-                            orderNumber: order.orderNumber,
-                          );
-                          final rootData = row ?? const <String, dynamic>{};
-                          final detailsData = _asMap(rootData['details']);
-
-                          final typedReason = result.reason.trim();
-                          final selectedReason = typedReason.isNotEmpty
-                              ? typedReason
-                              : 'Change in plans';
-                          if (selectedReason.isEmpty) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Cancellation reason is required.',
-                                ),
-                              ),
-                            );
+                        onPressed: () {
+                          if (isCancelledStatus) {
+                            (onCancelledChat ??
+                                    () => _openAiSupportChat(context))
+                                .call();
                             return;
                           }
-                          final cancelReason = selectedReason;
-                          final cancelledAt = DateTime.now();
-                          List<dynamic> cancelGroupClients(dynamic value) {
-                            if (value is! List) return const <dynamic>[];
-                            return value
-                                .map((entry) {
-                                  if (entry is! Map) return entry;
-                                  final item = Map<String, dynamic>.from(entry);
-                                  item['responseStatus'] = 'cancelled';
-                                  item['clientResponseStatus'] = 'cancelled';
-                                  item['status'] = 'cancelled';
-                                  item['cancelReason'] = cancelReason;
-                                  item['cancelledAt'] = cancelledAt;
-                                  item['updatedAt'] = cancelledAt;
-                                  return item;
-                                })
-                                .toList(growable: false);
-                          }
-
-                          final updatedGroupClients = cancelGroupClients(
-                            rootData['groupClients'],
-                          );
-                          final updatedGroupOrder =
-                              (detailsData['groupOrder']
-                                  as Map<String, dynamic>?) ??
-                              const <String, dynamic>{};
-                          final updatedGroupOrderClients = cancelGroupClients(
-                            updatedGroupOrder['clients'],
-                          );
-
-                          final nowIso = cancelledAt.toIso8601String();
-                          final updatedRoot = <String, dynamic>{
-                            'status': 'cancelled',
-                            'brand_status': 'cancelled',
-                            'client_status': 'cancelled',
-                            'artist_status': 'cancelled',
-                            'direct_client_status': 'cancelled',
-                            'direct_artist_status': 'cancelled',
-                            if (updatedGroupClients.isNotEmpty)
-                              'group_clients': updatedGroupClients,
-                            'groupClients': updatedGroupClients,
-                            'updated_at': nowIso,
-                            'updatedAt': nowIso,
-                            'cancelled_at': nowIso,
-                            'cancelledAt': nowIso,
-                            'cancel_reason': cancelReason,
-                            'cancelReason': cancelReason,
-                            'cancellation_reason': cancelReason,
-                            'cancellationReason': cancelReason,
-                            'payload': {
-                              ..._asMap(rootData['payload']),
-                              'status': 'cancelled',
-                              'roleStatuses': {
-                                'brand': 'cancelled',
-                                'client': 'cancelled',
-                                'artist': 'cancelled',
-                              },
-                              'routing': {
-                                'directClientStatus': 'cancelled',
-                                'directArtistStatus': 'cancelled',
-                              },
-                              if (updatedGroupOrderClients.isNotEmpty)
-                                'groupOrder': {
-                                  ...updatedGroupOrder,
-                                  'clients': updatedGroupOrderClients,
-                                },
-                              'cancellation': {
-                                'reason': cancelReason,
-                                'cancelledAt': nowIso,
-                                'cancelledBy': 'brand',
-                              },
-                              'updatedAt': nowIso,
-                            },
-                            'details': {
-                              ...detailsData,
-                              'status': 'cancelled',
-                              'roleStatuses': {
-                                'brand': 'cancelled',
-                                'client': 'cancelled',
-                                'artist': 'cancelled',
-                              },
-                              'routing': {
-                                'directClientStatus': 'cancelled',
-                                'directArtistStatus': 'cancelled',
-                              },
-                              if (updatedGroupOrderClients.isNotEmpty)
-                                'groupOrder': {
-                                  ...updatedGroupOrder,
-                                  'clients': updatedGroupOrderClients,
-                                },
-                              'cancellation': {
-                                'reason': cancelReason,
-                                'cancelledAt': nowIso,
-                                'cancelledBy': 'brand',
-                              },
-                              'updatedAt': nowIso,
-                            },
-                          };
-                          await _client
-                              .from('company_custom_requests')
-                              .update(updatedRoot)
-                              .eq('id', order.id);
-
-                          await _notifyOnBrandCancellation(
-                            reason: cancelReason,
-                            rootData: rootData,
-                            detailsData: detailsData,
-                          );
-
-                          if (!context.mounted) return;
-                          Navigator.of(context).pop();
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to cancel order: $e'),
-                            ),
-                          );
-                        }
-                      },
-                      child: const Text(
-                        'Cancel Order',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12.5,
-                          fontFamily: 'Arial',
-                          color: AppColors.snow,
+                          (onExpiredChat ??
+                                  onCancelledChat ??
+                                  () => _openAiSupportChat(context))
+                              .call();
+                        },
+                        child: const Text(
+                          'Chat',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                            color: AppColors.snow,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat,
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: isCancelledStatus
+                            ? ((onCancelledResubmit ?? onExpiredResubmit) ==
+                                      null
+                                  ? null
+                                  : () =>
+                                        (onCancelledResubmit ??
+                                                onExpiredResubmit)!
+                                            .call())
+                            : ((onExpiredResubmit ?? onCancelledResubmit) ==
+                                      null
+                                  ? null
+                                  : () =>
+                                        (onExpiredResubmit ??
+                                                onCancelledResubmit)!
+                                            .call()),
+                        child: const Text(
+                          'Resubmit',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (canCancelBeforeArtistAccept) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat,
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          side: const BorderSide(color: AppColors.blackCat),
+                        ),
+                        onPressed: () async {
+                          final result = await showDialog<_CancelOrderResult>(
+                            context: context,
+                            barrierDismissible: true,
+                            builder: (_) => const _CancelOrderDialog(),
+                          );
+
+                          if (!context.mounted || result == null) return;
+
+                          if (!result.confirm) {
+                            Navigator.of(context).pop();
+                            return;
+                          }
+
+                          try {
+                            final row = await _supabaseFetchOrderRow(
+                              order.id,
+                              orderNumber: order.orderNumber,
+                            );
+                            final rootData = row ?? const <String, dynamic>{};
+                            final detailsData = _asMap(rootData['details']);
+
+                            final typedReason = result.reason.trim();
+                            final selectedReason = typedReason.isNotEmpty
+                                ? typedReason
+                                : 'Change in plans';
+                            if (selectedReason.isEmpty) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Cancellation reason is required.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            final cancelReason = selectedReason;
+                            final cancelledAt = DateTime.now();
+                            List<dynamic> cancelGroupClients(dynamic value) {
+                              if (value is! List) return const <dynamic>[];
+                              return value
+                                  .map((entry) {
+                                    if (entry is! Map) return entry;
+                                    final item = Map<String, dynamic>.from(
+                                      entry,
+                                    );
+                                    item['responseStatus'] = 'cancelled';
+                                    item['clientResponseStatus'] = 'cancelled';
+                                    item['status'] = 'cancelled';
+                                    item['cancelReason'] = cancelReason;
+                                    item['cancelledAt'] = cancelledAt;
+                                    item['updatedAt'] = cancelledAt;
+                                    return item;
+                                  })
+                                  .toList(growable: false);
+                            }
+
+                            final updatedGroupClients = cancelGroupClients(
+                              rootData['groupClients'],
+                            );
+                            final updatedGroupOrder =
+                                (detailsData['groupOrder']
+                                    as Map<String, dynamic>?) ??
+                                const <String, dynamic>{};
+                            final updatedGroupOrderClients = cancelGroupClients(
+                              updatedGroupOrder['clients'],
+                            );
+
+                            final nowIso = cancelledAt.toIso8601String();
+                            final updatedRoot = <String, dynamic>{
+                              'status': 'cancelled',
+                              'brand_status': 'cancelled',
+                              'client_status': 'cancelled',
+                              'artist_status': 'cancelled',
+                              'direct_client_status': 'cancelled',
+                              'direct_artist_status': 'cancelled',
+                              if (updatedGroupClients.isNotEmpty)
+                                'group_clients': updatedGroupClients,
+                              'groupClients': updatedGroupClients,
+                              'updated_at': nowIso,
+                              'updatedAt': nowIso,
+                              'cancelled_at': nowIso,
+                              'cancelledAt': nowIso,
+                              'cancel_reason': cancelReason,
+                              'cancelReason': cancelReason,
+                              'cancellation_reason': cancelReason,
+                              'cancellationReason': cancelReason,
+                              'payload': {
+                                ..._asMap(rootData['payload']),
+                                'status': 'cancelled',
+                                'roleStatuses': {
+                                  'brand': 'cancelled',
+                                  'client': 'cancelled',
+                                  'artist': 'cancelled',
+                                },
+                                'routing': {
+                                  'directClientStatus': 'cancelled',
+                                  'directArtistStatus': 'cancelled',
+                                },
+                                if (updatedGroupOrderClients.isNotEmpty)
+                                  'groupOrder': {
+                                    ...updatedGroupOrder,
+                                    'clients': updatedGroupOrderClients,
+                                  },
+                                'cancellation': {
+                                  'reason': cancelReason,
+                                  'cancelledAt': nowIso,
+                                  'cancelledBy': 'brand',
+                                },
+                                'updatedAt': nowIso,
+                              },
+                              'details': {
+                                ...detailsData,
+                                'status': 'cancelled',
+                                'roleStatuses': {
+                                  'brand': 'cancelled',
+                                  'client': 'cancelled',
+                                  'artist': 'cancelled',
+                                },
+                                'routing': {
+                                  'directClientStatus': 'cancelled',
+                                  'directArtistStatus': 'cancelled',
+                                },
+                                if (updatedGroupOrderClients.isNotEmpty)
+                                  'groupOrder': {
+                                    ...updatedGroupOrder,
+                                    'clients': updatedGroupOrderClients,
+                                  },
+                                'cancellation': {
+                                  'reason': cancelReason,
+                                  'cancelledAt': nowIso,
+                                  'cancelledBy': 'brand',
+                                },
+                                'updatedAt': nowIso,
+                              },
+                            };
+                            await _client
+                                .from('company_custom_requests')
+                                .update(updatedRoot)
+                                .eq('id', order.id);
+
+                            await _notifyOnBrandCancellation(
+                              reason: cancelReason,
+                              rootData: rootData,
+                              detailsData: detailsData,
+                            );
+
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop();
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to cancel order: $e'),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text(
+                          'Cancel Order',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                            fontFamily: 'Arial',
+                            color: AppColors.snow,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ));
+    );
   }
 
   Widget _paymentSection(BuildContext context) {
@@ -2576,7 +2592,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
   String? _dateText(DateTime? date) {
     if (date == null) return null;
-    return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    return formatDateMdy(date);
   }
 
   Widget _orderDetailsWithRightNailDimensions() {
@@ -2810,26 +2826,7 @@ class _BaseOrderDetails extends StatelessWidget {
     return '\$${max!}';
   }
 
-  String _placedOnText() {
-    final dt = order.createdAt;
-    if (dt == null) return '-';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-  }
+  String _placedOnText() => formatDateMdyOrDash(order.createdAt);
 }
 
 class _ProgressCard extends StatelessWidget {
@@ -3040,37 +3037,37 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                 label: 'Decline reason',
                 textField: true,
                 child: TextField(
-                controller: _reasonCtrl,
-                minLines: 1,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'Enter your reason...',
-                  isDense: true,
-                  filled: true,
-                  fillColor: AppColors.snow,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 36,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.blackCat.withValues(alpha: 20),
+                  controller: _reasonCtrl,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Enter your reason...',
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.snow,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 36,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.blackCat.withValues(alpha: 20),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.blackCat.withValues(alpha: 20),
+                      ),
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.blackCat.withValues(alpha: 20),
-                    ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    fontFamily: 'Arial',
                   ),
                 ),
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.3,
-                  fontFamily: 'Arial',
-                ),
-              ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -4063,24 +4060,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return channels.join(', ');
   }
 
-  String _formatDeliveryDate(DateTime? value) {
-    if (value == null) return '-';
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[value.month - 1]} ${value.day}, ${value.year}';
-  }
+  String _formatDeliveryDate(DateTime? value) => formatDateMdyOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();
@@ -4393,25 +4373,25 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       selected: selected,
       child: ExcludeSemantics(
         child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.blackCat : AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatLight),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? AppColors.snow : AppColors.blackCat,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.blackCat : AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatLight),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.snow : AppColors.blackCat,
+              ),
+            ),
           ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -4432,17 +4412,22 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                 label: '$index ${index == 1 ? 'star' : 'stars'}',
                 child: ExcludeSemantics(
                   child: IconButton(
-                onPressed: () {
-                  setState(() => _rating = index.toDouble());
-                  modalSetState(() {});
-                },
-                icon: Icon(
-                  selected ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: selected ? const Color(0xFFFFB000) : Colors.black54,
-                  size: 26,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: () {
+                      setState(() => _rating = index.toDouble());
+                      modalSetState(() {});
+                    },
+                    icon: Icon(
+                      selected ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: selected
+                          ? const Color(0xFFFFB000)
+                          : Colors.black54,
+                      size: 26,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ),
               );
@@ -4510,39 +4495,39 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                           label: 'Review comment',
                           textField: true,
                           child: TextField(
-                          controller: _commentCtrl,
-                          minLines: 3,
-                          maxLines: 4,
-                          decoration: InputDecoration(
-                            hintText: 'Write a quick review (optional)',
-                            isDense: true,
-                            filled: true,
-                            fillColor: AppColors.snow,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
+                            controller: _commentCtrl,
+                            minLines: 3,
+                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: 'Write a quick review (optional)',
+                              isDense: true,
+                              filled: true,
+                              fillColor: AppColors.snow,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.08,
+                                  ),
                                 ),
                               ),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat,
-                                width: 1.4,
+                              focusedBorder: const OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat,
+                                  width: 1.4,
+                                ),
                               ),
                             ),
                           ),
-                        ),
                         ),
                         const SizedBox(height: 12),
                         const Text(

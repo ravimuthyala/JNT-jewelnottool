@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../models/client_request_v2.dart';
 import '../services/notifications_service.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../utils/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
@@ -3091,24 +3092,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  static String _needByLabel(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _needByLabel(DateTime d) => formatDateMdy(d);
 
   Widget _clientPhotosGrid(List<String> images) {
     final renderable = images
@@ -3271,25 +3255,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  String? _dateText(DateTime? date) {
-    if (date == null) return null;
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
+  String? _dateText(DateTime? date) =>
+      date == null ? null : formatDateMdy(date);
 
   String _normalizeImagePath(String raw) {
     var p = raw.trim();

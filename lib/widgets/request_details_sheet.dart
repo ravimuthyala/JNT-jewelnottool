@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../services/storage_url_resolver.dart';
+import '../utils/date_format_utils.dart';
 
 /// ==============================
 /// Enums
@@ -288,7 +289,6 @@ ImageProvider _sheetProviderForResolved(String path) {
   }
   return FileImage(File(p));
 }
-
 
 class _ImageViewerDialog extends StatelessWidget {
   const _ImageViewerDialog({required this.image});
@@ -716,24 +716,7 @@ class _DeliveredHistorySheet extends StatelessWidget {
     );
   }
 
-  static String _fmt(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d.weekday - 1];
-    return '$wd, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _fmt(DateTime d) => formatDateMdy(d);
 }
 
 /// ==============================
@@ -852,7 +835,9 @@ class _SimpleHistoryStatusSheet extends StatelessWidget {
                                   Text(
                                     'Reason: Client canceled request',
                                     style: TextStyle(
-                                      color: Colors.black.withValues(alpha: 0.60),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.60,
+                                      ),
                                       fontWeight: FontWeight.w700,
                                       fontSize: 12.5, // ✅ smaller
                                     ),

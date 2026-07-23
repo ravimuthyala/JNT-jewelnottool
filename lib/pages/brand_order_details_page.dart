@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/jnt_modal_app_bar.dart';
@@ -206,7 +207,8 @@ class _OrderSafe {
         if (value == null) return;
         if (value is String) {
           final s = value.trim();
-          if (_SubmittedPhotosStrip._isUsablePhotoRef(s) && seen.add(s)) out.add(s);
+          if (_SubmittedPhotosStrip._isUsablePhotoRef(s) && seen.add(s))
+            out.add(s);
           return;
         }
         if (value is Iterable) {
@@ -1386,7 +1388,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
           ] else if (isCancelledStatus) ...[
             _Card(
               child: Column(
@@ -2520,7 +2522,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
   String? _dateText(DateTime? date) {
     if (date == null) return null;
-    return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    return formatDateMdy(date);
   }
 
   Widget _orderDetailsWithRightNailDimensions() {
@@ -2728,26 +2730,7 @@ class _BaseOrderDetails extends StatelessWidget {
     return '\$${max!}';
   }
 
-  String _placedOnText() {
-    final dt = order.createdAt;
-    if (dt == null) return '-';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-  }
+  String _placedOnText() => formatDateMdyOrDash(order.createdAt);
 }
 
 class _ProgressCard extends StatelessWidget {
@@ -2828,9 +2811,7 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.snow,
         borderRadius: BorderRadius.zero,
-        border: Border.all(
-          color: AppColors.blackCat.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
       ),
       child: child,
     );
@@ -3565,7 +3546,10 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
     return text;
   }
 
-  Future<List<String>> _validDisplayPaths(BuildContext context, List<String> rawPaths) async {
+  Future<List<String>> _validDisplayPaths(
+    BuildContext context,
+    List<String> rawPaths,
+  ) async {
     final seen = <String>{};
     final valid = <String>[];
     final limit = widget.maxItems;
@@ -3716,13 +3700,7 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
                 spacing: 8,
                 runSpacing: 8,
                 children: displayPaths
-                    .map(
-                      (path) => _buildTile(
-                        context,
-                        path,
-                        size: tileSize,
-                      ),
-                    )
+                    .map((path) => _buildTile(context, path, size: tileSize))
                     .toList(growable: false),
               );
             }
@@ -3733,11 +3711,8 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
                 scrollDirection: Axis.horizontal,
                 itemCount: displayPaths.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (_, i) => _buildTile(
-                  context,
-                  displayPaths[i],
-                  size: tileSize,
-                ),
+                itemBuilder: (_, i) =>
+                    _buildTile(context, displayPaths[i], size: tileSize),
               ),
             );
           },
@@ -4093,24 +4068,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return channels.join(', ');
   }
 
-  String _formatDeliveryDate(DateTime? value) {
-    if (value == null) return '-';
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[value.month - 1]} ${value.day}, ${value.year}';
-  }
+  String _formatDeliveryDate(DateTime? value) => formatDateMdyOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();

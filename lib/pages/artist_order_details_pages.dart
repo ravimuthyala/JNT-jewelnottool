@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
@@ -118,7 +119,6 @@ class ArtistOrder {
   }
 }
 
-
 class NewArtistOrderDetailsPage extends StatelessWidget {
   const NewArtistOrderDetailsPage({
     super.key,
@@ -137,79 +137,81 @@ class NewArtistOrderDetailsPage extends StatelessWidget {
       namesRoute: true,
       label: 'New order details',
       child: _OrderDetailsShell(
-      title: 'New Order',
-      order: order,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TopSummary(order: order),
-          const SizedBox(height: 12),
-          _Card(child: _NotesBlock(order: order)),
-          const SizedBox(height: 12),
+        title: 'New Order',
+        order: order,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TopSummary(order: order),
+            const SizedBox(height: 12),
+            _Card(child: _NotesBlock(order: order)),
+            const SizedBox(height: 12),
 
-          Row(
-            children: [
-              Flexible(
-                fit: FlexFit.loose,
-                child: SizedBox(
-                  height: 52,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.15)),
-                    ),
-                    onPressed: () {
-                      onUpdate(
-                        order.copyWith(
-                          status: ArtistOrderStatus.declined,
-                          statusText: 'Declined',
+            Row(
+              children: [
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SizedBox(
+                    height: 52,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
                         ),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: const Text(
-                      'Decline',
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                        side: BorderSide(
+                          color: AppColors.blackCat.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      onPressed: () {
+                        onUpdate(
+                          order.copyWith(
+                            status: ArtistOrderStatus.declined,
+                            statusText: 'Declined',
+                          ),
+                        );
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Decline',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                fit: FlexFit.loose,
-                child: SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.deepPlum,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                    onPressed: () {
-                      onUpdate(
-                        order.copyWith(
-                          status: ArtistOrderStatus.accepted,
-                          statusText: 'Accepted',
+                const SizedBox(width: 12),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.deepPlum,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
                         ),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: const Text(
-                      'Accept',
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      onPressed: () {
+                        onUpdate(
+                          order.copyWith(
+                            status: ArtistOrderStatus.accepted,
+                            statusText: 'Accepted',
+                          ),
+                        );
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Accept',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -233,97 +235,102 @@ class InReviewArtistOrderDetailsPage extends StatelessWidget {
       namesRoute: true,
       label: 'In review order details',
       child: _OrderDetailsShell(
-      title: 'In Review',
-      order: order,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TopSummary(order: order),
-          const SizedBox(height: 12),
-          _Card(child: _NotesBlock(order: order)),
-          const SizedBox(height: 12),
-          _Card(
-            child: Row(
+        title: 'In Review',
+        order: order,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TopSummary(order: order),
+            const SizedBox(height: 12),
+            _Card(child: _NotesBlock(order: order)),
+            const SizedBox(height: 12),
+            _Card(
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Review the client’s details. Accept when you’re ready.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
               children: [
-                Icon(Icons.info_outline, color: AppColors.blackCat.withValues(alpha: 0.55)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Review the client’s details. Accept when you’re ready.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontWeight: FontWeight.w600,
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SizedBox(
+                    height: 52,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        side: BorderSide(
+                          color: AppColors.blackCat.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      onPressed: () {
+                        onUpdate(
+                          order.copyWith(
+                            status: ArtistOrderStatus.cancelled,
+                            statusText: 'Cancelled',
+                          ),
+                        );
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Decline',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.blackCat,
+                        foregroundColor: AppColors.snow,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                      onPressed: () {
+                        onUpdate(
+                          order.copyWith(
+                            status: ArtistOrderStatus.accepted,
+                            statusText: 'Accepted',
+                          ),
+                        );
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Accept',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Flexible(
-                fit: FlexFit.loose,
-                child: SizedBox(
-                  height: 52,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      side: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.15)),
-                    ),
-                    onPressed: () {
-                      onUpdate(
-                        order.copyWith(
-                          status: ArtistOrderStatus.cancelled,
-                          statusText: 'Cancelled',
-                        ),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: const Text(
-                      'Decline',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                fit: FlexFit.loose,
-                child: SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.blackCat,
-                      foregroundColor: AppColors.snow,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                    onPressed: () {
-                      onUpdate(
-                        order.copyWith(
-                          status: ArtistOrderStatus.accepted,
-                          statusText: 'Accepted',
-                        ),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: const Text(
-                      'Accept',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -347,41 +354,43 @@ class AcceptedArtistOrderDetailsPage extends StatelessWidget {
       namesRoute: true,
       label: 'Accepted order details',
       child: _OrderDetailsShell(
-      title: 'Accepted',
-      order: order,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TopSummary(order: order),
-          const SizedBox(height: 12),
-          _Card(child: _NotesBlock(order: order)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2F6FED),
-                foregroundColor: AppColors.snow,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              ),
-              onPressed: () {
-                onUpdate(
-                  order.copyWith(
-                    status: ArtistOrderStatus.inProgress,
-                    statusText: 'In Progress',
-                    progress: 0.15,
+        title: 'Accepted',
+        order: order,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TopSummary(order: order),
+            const SizedBox(height: 12),
+            _Card(child: _NotesBlock(order: order)),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2F6FED),
+                  foregroundColor: AppColors.snow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
                   ),
-                );
-                Navigator.pop(context);
-              },
-              child: const Text(
-                'Start Order (Mark In Progress)',
-                style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                onPressed: () {
+                  onUpdate(
+                    order.copyWith(
+                      status: ArtistOrderStatus.inProgress,
+                      statusText: 'In Progress',
+                      progress: 0.15,
+                    ),
+                  );
+                  Navigator.pop(context);
+                },
+                child: const Text(
+                  'Start Order (Mark In Progress)',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -1519,20 +1528,20 @@ class _PhotoGrid extends StatelessWidget {
                       onTap: () => onDelete!(i),
                       child: ExcludeSemantics(
                         child: InkWell(
-                      onTap: () => onDelete!(i),
-                      borderRadius: BorderRadius.zero,
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.blackCat.withValues(alpha: 0.55),
+                          onTap: () => onDelete!(i),
                           borderRadius: BorderRadius.zero,
-                        ),
-                        child: const Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: AppColors.snow,
-                        ),
-                      ),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            child: const Icon(
+                              Icons.delete_outline,
+                              size: 16,
+                              color: AppColors.snow,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1578,8 +1587,14 @@ InputDecoration _dec(String label, String hint) {
   return InputDecoration(
     labelText: label,
     hintText: hint,
-    hintStyle: TextStyle(fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.35)),
-    labelStyle: TextStyle(fontSize: 13, color: AppColors.blackCat.withValues(alpha: 0.7)),
+    hintStyle: TextStyle(
+      fontSize: 12,
+      color: AppColors.blackCat.withValues(alpha: 0.35),
+    ),
+    labelStyle: TextStyle(
+      fontSize: 13,
+      color: AppColors.blackCat.withValues(alpha: 0.7),
+    ),
     filled: true,
     fillColor: AppColors.snow,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -1621,20 +1636,4 @@ Widget _kv(String k, String v) {
   );
 }
 
-String _fmtDate(DateTime d) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${months[d.month - 1]} ${d.day}, ${d.year}';
-}
+String _fmtDate(DateTime d) => formatDateMdy(d);

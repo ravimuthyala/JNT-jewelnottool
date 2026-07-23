@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 // for ClientRequestV2 + NailDimensionsV2 (or move models to a shared file)
 import '../models/client_request_v2.dart';
@@ -2082,24 +2083,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     await showSimpleQrPrintDialog(context, qr);
   }
 
-  static String _needByLabel(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _needByLabel(DateTime d) => formatDateMdy(d);
 
   static String _lengthLabel(String len) {
     final v = len.trim().toLowerCase();

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/client_custom_request_repository.dart';
+import '../utils/date_format_utils.dart';
 import '../services/notifications_service.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -208,9 +209,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       }
       final authEmail = _currentEmail;
       final profileEmail = widget.profile.basic.email.trim().toLowerCase();
-      final effectiveEmail = profileEmail.isNotEmpty
-          ? profileEmail
-          : authEmail;
+      final effectiveEmail = profileEmail.isNotEmpty ? profileEmail : authEmail;
       final profileName = widget.profile.basic.name.trim();
       final effectiveName = profileName.isNotEmpty
           ? profileName
@@ -570,7 +569,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     final submittedAt = req.clientSubmittedAt;
     final submittedText = submittedAt == null
         ? 'Submitted'
-        : 'Submitted ${_monthShort(submittedAt.month)} ${submittedAt.day}';
+        : 'Submitted ${formatDateMdy(submittedAt)}';
     final campaignName = req.campaignName.trim().isNotEmpty
         ? req.campaignName.trim()
         : 'Campaign';
@@ -738,7 +737,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     if (status == OrderStatus.expired) {
       final due = req.needBy;
       if (due != null) {
-        return 'Expired ${_monthShort(due.month)} ${due.day}, ${due.year}';
+        return 'Expired ${formatDateMdy(due)}';
       }
       return 'Expired';
     }
@@ -747,7 +746,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       final cancelledAt = req.cancelledAt;
       final when = cancelledAt == null
           ? 'Cancelled'
-          : 'Cancelled ${_monthShort(cancelledAt.month)} ${cancelledAt.day}, ${cancelledAt.year}';
+          : 'Cancelled ${formatDateMdy(cancelledAt)}';
       final reason = req.cancelReason.trim();
       if (reason.isNotEmpty) {
         return '$when • Reason: $reason';
@@ -823,24 +822,6 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       default:
         return OrderStatus.newOrder;
     }
-  }
-
-  String _monthShort(int m) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return months[(m - 1).clamp(0, 11)];
   }
 
   List<ClientOrder> get _orders {
@@ -943,162 +924,163 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       namesRoute: true,
       label: 'Brand orders',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
+        backgroundColor: AppColors.snow,
 
-      // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
-      appBar: widget.showCompanyChrome
-          ? CompanyHeader(
-              companyName: widget.companyName,
-              imageUrl: widget.profile.basic.profileImageUrl,
-              onOpenProfile: widget.onOpenProfile,
-              onLogout: widget.onLogout,
-              autoFocusNotifications: true,
-            )
-          : JntStandardAppBar(
-              onNotifications: () {
-                NotificationsPage.showAsModal(context);
+        // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
+        appBar: widget.showCompanyChrome
+            ? CompanyHeader(
+                companyName: widget.companyName,
+                imageUrl: widget.profile.basic.profileImageUrl,
+                onOpenProfile: widget.onOpenProfile,
+                onLogout: widget.onLogout,
+                autoFocusNotifications: true,
+              )
+            : JntStandardAppBar(
+                onNotifications: () {
+                  NotificationsPage.showAsModal(context);
+                },
+                trailing: _AvatarMenu(
+                  onSelected: _onAvatarMenuSelected,
+                  avatarUrl: widget.profile.basic.profileImageUrl,
+                  displayName: widget.profile.basic.name,
+                  showProfile: widget.showProfileMenu,
+                  showHistory: widget.showExtendedAvatarMenu,
+                  showCalendar: widget.showExtendedAvatarMenu,
+                  showArtist: widget.showExtendedAvatarMenu,
+                ),
+              ),
+
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+          children: [
+            _FilterTabs(
+              selected: _filter,
+              counts: <OrdersFilter, int>{
+                OrdersFilter.all: _orders.length,
+                OrdersFilter.pending: _orders
+                    .where(
+                      (o) =>
+                          o.status == OrderStatus.newOrder ||
+                          o.status == OrderStatus.inReview,
+                    )
+                    .length,
+                OrdersFilter.inProgress: _orders
+                    .where((o) => o.status == OrderStatus.inProgress)
+                    .length,
+                OrdersFilter.shipped: _orders
+                    .where((o) => o.status == OrderStatus.shipped)
+                    .length,
+                OrdersFilter.delivered: _orders
+                    .where((o) => o.status == OrderStatus.delivered)
+                    .length,
+                OrdersFilter.cancelledExpired: _orders
+                    .where(
+                      (o) =>
+                          o.status == OrderStatus.cancelled ||
+                          o.status == OrderStatus.expired,
+                    )
+                    .length,
+                OrdersFilter.declined: _orders
+                    .where((o) => o.status == OrderStatus.declined)
+                    .length,
               },
-              trailing: _AvatarMenu(
-                onSelected: _onAvatarMenuSelected,
-                avatarUrl: widget.profile.basic.profileImageUrl,
-                displayName: widget.profile.basic.name,
-                showProfile: widget.showProfileMenu,
-                showHistory: widget.showExtendedAvatarMenu,
-                showCalendar: widget.showExtendedAvatarMenu,
-                showArtist: widget.showExtendedAvatarMenu,
-              ),
+              onChanged: (f) => setState(() => _filter = f),
             ),
+            const SizedBox(height: 16),
 
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
-        children: [
-          _FilterTabs(
-            selected: _filter,
-            counts: <OrdersFilter, int>{
-              OrdersFilter.all: _orders.length,
-              OrdersFilter.pending: _orders
-                  .where(
-                    (o) =>
-                        o.status == OrderStatus.newOrder ||
-                        o.status == OrderStatus.inReview,
-                  )
-                  .length,
-              OrdersFilter.inProgress: _orders
-                  .where((o) => o.status == OrderStatus.inProgress)
-                  .length,
-              OrdersFilter.shipped: _orders
-                  .where((o) => o.status == OrderStatus.shipped)
-                  .length,
-              OrdersFilter.delivered: _orders
-                  .where((o) => o.status == OrderStatus.delivered)
-                  .length,
-              OrdersFilter.cancelledExpired: _orders
-                  .where(
-                    (o) =>
-                        o.status == OrderStatus.cancelled ||
-                        o.status == OrderStatus.expired,
-                  )
-                  .length,
-              OrdersFilter.declined: _orders
-                  .where((o) => o.status == OrderStatus.declined)
-                  .length,
-            },
-            onChanged: (f) => setState(() => _filter = f),
-          ),
-          const SizedBox(height: 16),
-
-          if (_pending.isNotEmpty) ...[
-            const Text(
-              'All Orders',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppColors.blackCat,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ..._pending.map(
-              (o) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _OrderCard(
-                  order: o,
-                  showLeadingThumb: widget.showCompanyChrome,
-                  onDetails: () => _openOrderDetails(context, o),
+            if (_pending.isNotEmpty) ...[
+              const Text(
+                'All Orders',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppColors.blackCat,
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-          ],
-
-          if (_past.isNotEmpty) ...[
-            const Text(
-              'Past Orders',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppColors.blackCat,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ..._past.map(
-              (o) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _OrderCard(
-                  order: o,
-                  showLeadingThumb: widget.showCompanyChrome,
-                  onDetails: () => _openOrderDetails(context, o),
+              const SizedBox(height: 10),
+              ..._pending.map(
+                (o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _OrderCard(
+                    order: o,
+                    showLeadingThumb: widget.showCompanyChrome,
+                    onDetails: () => _openOrderDetails(context, o),
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+            ],
 
-          if (_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
-            const SizedBox(height: 60),
-            const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          ],
-
-          if (!_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
-            const SizedBox(height: 28),
-            _Card(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 46,
-                    color: AppColors.blackCat.withValues(alpha: 0.35),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'No orders found',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Try changing filters or place a new design request.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+            if (_past.isNotEmpty) ...[
+              const Text(
+                'Past Orders',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppColors.blackCat,
+                ),
               ),
-            ),
+              const SizedBox(height: 10),
+              ..._past.map(
+                (o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _OrderCard(
+                    order: o,
+                    showLeadingThumb: widget.showCompanyChrome,
+                    onDetails: () => _openOrderDetails(context, o),
+                  ),
+                ),
+              ),
+            ],
+
+            if (_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
+              const SizedBox(height: 60),
+              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+
+            if (!_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
+              const SizedBox(height: 28),
+              _Card(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.receipt_long_outlined,
+                      size: 46,
+                      color: AppColors.blackCat.withValues(alpha: 0.35),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'No orders found',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Try changing filters or place a new design request.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
+        bottomNavigationBar: widget.showCompanyChrome
+            ? CompanyBottomNav(
+                currentIndex: widget.bottomNavIndex,
+                onTap: (i) => widget.onNavTap?.call(i),
+              )
+            : null,
       ),
-      bottomNavigationBar: widget.showCompanyChrome
-          ? CompanyBottomNav(
-              currentIndex: widget.bottomNavIndex,
-              onTap: (i) => widget.onNavTap?.call(i),
-            )
-          : null,
-    ));
+    );
   }
 
   void _openOrderDetails(BuildContext context, ClientOrder order) {
@@ -1470,44 +1452,49 @@ class _FilterTabs extends StatelessWidget {
       selected: isSelected,
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: () => onChanged(value),
-      borderRadius: BorderRadius.zero,
-      hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
-      splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
-      highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-              child: Text(
-                '$label #$count',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.w500,
-                  fontFamily: 'ArialBold',
-                  color: isSelected
-                      ? AppColors.blackCat
-                      : AppColors.blackCat.withValues(alpha: 0.55),
+          onTap: () => onChanged(value),
+          borderRadius: BorderRadius.zero,
+          hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
+          splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
+          highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 5,
+                  ),
+                  child: Text(
+                    '$label #$count',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSelected
+                          ? FontWeight.w500
+                          : FontWeight.w500,
+                      fontFamily: 'ArialBold',
+                      color: isSelected
+                          ? AppColors.blackCat
+                          : AppColors.blackCat.withValues(alpha: 0.55),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 4),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 3,
+                  width: isSelected ? 34 : 0,
+                  decoration: BoxDecoration(
+                    color: AppColors.balletSlippers,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 3,
-              width: isSelected ? 34 : 0,
-              decoration: BoxDecoration(
-                color: AppColors.balletSlippers,
-                borderRadius: BorderRadius.zero,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1807,33 +1794,33 @@ class _OrderDetailsLink extends StatelessWidget {
       button: true,
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
-      splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
-      highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Order details',
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.55),
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
+          onTap: onTap,
+          borderRadius: BorderRadius.zero,
+          hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
+          splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
+          highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Order details',
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.blackCat.withValues(alpha: 0.45),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.blackCat.withValues(alpha: 0.45),
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }

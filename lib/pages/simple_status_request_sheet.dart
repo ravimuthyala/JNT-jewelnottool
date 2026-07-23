@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 
 enum SimpleRequestStatus { cancelled, declined, expired }
@@ -64,187 +65,155 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
       namesRoute: true,
       label: 'Request status',
       child: MediaQuery(
-      data: sheetMediaQuery,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Stack(
-          children: [
-            Container(
-              constraints: BoxConstraints(maxHeight: maxH),
-              decoration: const BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-              ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                        child: Container(
-                          height: 5,
-                          width: 54,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _topHeroCondensed(request),
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.snow,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(
-                            color: AppColors.blackCatBorderLight,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              height: 34,
-                              width: 34,
-                              decoration: const BoxDecoration(
-                                color: Colors.transparent,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                cfg.icon,
-                                color: cfg.iconColor,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    cfg.title,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      color: cfg.titleColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${cfg.subtitle} ${_formatDate(date)}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w400,
-                                      fontSize: 13.5,
-                                      color: Colors.black.withValues(
-                                        alpha: 0.62,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_statusReason().isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${_reasonLabel()}: ${_statusReason()}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 13.5,
-                                        color: Colors.black.withValues(
-                                          alpha: 0.70,
-                                        ),
-                                        height: 1.25,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (status != SimpleRequestStatus.expired &&
-                          request.orderType == RequestOrderTypeV2.group &&
-                          status != SimpleRequestStatus.declined) ...[
-                        const SizedBox(height: 14),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Client Measurements',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: Colors.black.withValues(alpha: 0.85),
+        data: sheetMediaQuery,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Stack(
+            children: [
+              Container(
+                constraints: BoxConstraints(maxHeight: maxH),
+                decoration: const BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Center(
+                          child: Container(
+                            height: 5,
+                            width: 54,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.zero,
                             ),
                           ),
                         ),
                         const SizedBox(height: 10),
-                        GroupClientMeasurementsTabs(
-                          clients: _buildGroupMeasurementClients(request),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            SizedBox(
-                              height: 52,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.blackCat,
-                                  foregroundColor: AppColors.snow,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.zero,
-                                  ),
-                                  elevation: 0,
+                        _topHeroCondensed(request),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.snow,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                height: 34,
+                                width: 34,
+                                decoration: const BoxDecoration(
+                                  color: Colors.transparent,
+                                  shape: BoxShape.circle,
                                 ),
-                                onPressed: () => Navigator.pop(context),
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 18),
-                                  child: Text(
-                                    'Close',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                      fontFamily: 'Arial',
-                                    ),
-                                  ),
+                                child: Icon(
+                                  cfg.icon,
+                                  color: cfg.iconColor,
+                                  size: 18,
                                 ),
                               ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      cfg.title,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                        color: cfg.titleColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${cfg.subtitle} ${_formatDate(date)}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w400,
+                                        fontSize: 13.5,
+                                        color: Colors.black.withValues(
+                                          alpha: 0.62,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_statusReason().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${_reasonLabel()}: ${_statusReason()}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 13.5,
+                                          color: Colors.black.withValues(
+                                            alpha: 0.70,
+                                          ),
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (status != SimpleRequestStatus.expired &&
+                            request.orderType == RequestOrderTypeV2.group &&
+                            status != SimpleRequestStatus.declined) ...[
+                          const SizedBox(height: 14),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Client Measurements',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: Colors.black.withValues(alpha: 0.85),
+                              ),
                             ),
-                            if (onResubmit != null)
+                          ),
+                          const SizedBox(height: 10),
+                          GroupClientMeasurementsTabs(
+                            clients: _buildGroupMeasurementClients(request),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Center(
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            alignment: WrapAlignment.center,
+                            children: [
                               SizedBox(
                                 height: 52,
                                 child: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.snow,
-                                    foregroundColor: AppColors.blackCat,
+                                    backgroundColor: AppColors.blackCat,
+                                    foregroundColor: AppColors.snow,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.zero,
                                     ),
-                                    side: const BorderSide(
-                                      color: AppColors.blackCat,
-                                    ),
                                     elevation: 0,
                                   ),
-                                  onPressed: () async {
-                                    Navigator.pop(context);
-                                    await onResubmit!.call();
-                                  },
+                                  onPressed: () => Navigator.pop(context),
                                   child: const Padding(
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 18,
                                     ),
                                     child: Text(
-                                      'Resubmit',
+                                      'Close',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 12,
@@ -254,40 +223,74 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                          ],
+                              if (onResubmit != null)
+                                SizedBox(
+                                  height: 52,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.snow,
+                                      foregroundColor: AppColors.blackCat,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      side: const BorderSide(
+                                        color: AppColors.blackCat,
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () async {
+                                      Navigator.pop(context);
+                                      await onResubmit!.call();
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 18,
+                                      ),
+                                      child: Text(
+                                        'Resubmit',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                          fontFamily: 'Arial',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              right: 6,
-              top: 6,
-              child: Semantics(
-                button: true,
-                label: 'Close',
-                onTap: () => Navigator.pop(context),
-                child: ExcludeSemantics(
-                  child: InkWell(
-                    borderRadius: BorderRadius.zero,
-                    onTap: () => Navigator.pop(context),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 24,
-                        color: Colors.black.withValues(alpha: 0.70),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Semantics(
+                  button: true,
+                  label: 'Close',
+                  onTap: () => Navigator.pop(context),
+                  child: ExcludeSemantics(
+                    child: InkWell(
+                      borderRadius: BorderRadius.zero,
+                      onTap: () => Navigator.pop(context),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 24,
+                          color: Colors.black.withValues(alpha: 0.70),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -730,24 +733,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
     }
   }
 
-  static String _formatDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${days[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _formatDate(DateTime d) => formatDateMdy(d);
 
   List<GroupClientMeasurementData> _buildGroupMeasurementClients(
     ClientRequestV2 request,

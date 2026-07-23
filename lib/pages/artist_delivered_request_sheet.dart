@@ -9,6 +9,7 @@ import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 import '../widgets/group_client_measurements_tabs.dart';
@@ -1822,42 +1823,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
-  String _needByLabel(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  String _needByLabel(DateTime d) => formatDateMdy(d);
 
-  String _fmtDateLong(DateTime? d) {
-    if (d == null) return '-';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}, ${d.year}';
-  }
+  String _fmtDateLong(DateTime? d) => formatDateMdyOrDash(d);
 }

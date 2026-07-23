@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/client_custom_request_repository.dart';
+import '../utils/date_format_utils.dart';
 import '../services/notifications_service.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -558,7 +559,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     final submittedAt = req.clientSubmittedAt;
     final submittedText = submittedAt == null
         ? 'Submitted'
-        : 'Submitted ${_monthShort(submittedAt.month)} ${submittedAt.day}';
+        : 'Submitted ${formatDateMdy(submittedAt)}';
     final campaignName = req.campaignName.trim().isNotEmpty
         ? req.campaignName.trim()
         : 'Campaign';
@@ -713,7 +714,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     if (status == OrderStatus.expired) {
       final due = req.needBy;
       if (due != null) {
-        return 'Expired ${_monthShort(due.month)} ${due.day}, ${due.year}';
+        return 'Expired ${formatDateMdy(due)}';
       }
       return 'Expired';
     }
@@ -722,7 +723,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       final cancelledAt = req.cancelledAt;
       final when = cancelledAt == null
           ? 'Cancelled'
-          : 'Cancelled ${_monthShort(cancelledAt.month)} ${cancelledAt.day}, ${cancelledAt.year}';
+          : 'Cancelled ${formatDateMdy(cancelledAt)}';
       final reason = req.cancelReason.trim();
       if (reason.isNotEmpty) {
         return '$when • Reason: $reason';
@@ -798,24 +799,6 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       default:
         return OrderStatus.newOrder;
     }
-  }
-
-  String _monthShort(int m) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return months[(m - 1).clamp(0, 11)];
   }
 
   List<ClientOrder> get _orders {

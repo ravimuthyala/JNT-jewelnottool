@@ -6,6 +6,7 @@ import 'dart:io';
 import 'artist_history_page.dart'; // ✅ for ArtistOrderLite
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 
 Future<void> showDeliveredHistorySheetLite({
@@ -80,7 +81,10 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
         errorBuilder: (_, _, _) => fallback(),
       );
     }
-    if (path.startsWith('gs://') || path.startsWith('blob:') || path.startsWith('content://') || (kIsWeb && !isAsset)) {
+    if (path.startsWith('gs://') ||
+        path.startsWith('blob:') ||
+        path.startsWith('content://') ||
+        (kIsWeb && !isAsset)) {
       return FutureBuilder<String>(
         future: StorageUrlResolver.resolve(path).then((v) => v ?? ''),
         builder: (_, snap) {
@@ -125,7 +129,6 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
     );
   }
 
-
   Uint8List? _decodeDataImageBytes(String value) {
     final src = value.trim();
     if (!src.startsWith('data:image/')) return null;
@@ -148,128 +151,128 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       namesRoute: true,
       label: 'Delivery history',
       child: Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        constraints: BoxConstraints(maxHeight: maxH),
-        decoration: const BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              height: 5,
-              width: 54,
-              decoration: BoxDecoration(
-                color: AppColors.blackCat.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.zero,
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxH),
+          decoration: const BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                height: 5,
+                width: 54,
+                decoration: BoxDecoration(
+                  color: AppColors.blackCat.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.zero,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-            // ✅ NO duplicate "Ava Client's Request" text
-            // ✅ X button top-right
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-              child: Row(
-                children: [
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-            ),
-
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                children: [
-                  _hero(context),
-                  const SizedBox(height: 12),
-
-                  // ✅ Shipped with + Budget (exact layout)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _pillCard(
-                          icon: Icons.local_shipping_outlined,
-                          text: 'Shipped with ${order.carrier ?? '—'}',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _pillCard(
-                          icon: Icons.attach_money_rounded,
-                          text:
-                              'Budget: \$${order.budgetMin} to \$${order.budgetMax}',
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // ✅ Delivered section (exact content)
-                  _deliveredCard(),
-                  const SizedBox(height: 16),
-
-                  // ✅ ONLY photos sections after this (nothing else)
-                  _sectionTitle('Uploaded Photos (Client)'),
-                  const SizedBox(height: 10),
-                  if (order.clientPhotos.isEmpty)
-                    _emptyPhotos()
-                  else
-                    _photosGrid(order.clientPhotos),
-
-                  const SizedBox(height: 16),
-
-                  _sectionTitle('Uploaded Photos (Artist)'),
-                  const SizedBox(height: 10),
-                  if (order.artistPhotos.isEmpty)
-                    _emptyPhotos()
-                  else
-                    _photosGrid(order.artistPhotos),
-                ],
-              ),
-            ),
-
-            // ✅ Bottom close button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              child: Center(
-                child: SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.blackCat,
-                      foregroundColor: AppColors.snow,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
+              // ✅ NO duplicate "Ava Client's Request" text
+              // ✅ X button top-right
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                child: Row(
+                  children: [
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
                     ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 18),
-                      child: Text(
-                        'Close',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                  ],
+                ),
+              ),
+
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    _hero(context),
+                    const SizedBox(height: 12),
+
+                    // ✅ Shipped with + Budget (exact layout)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _pillCard(
+                            icon: Icons.local_shipping_outlined,
+                            text: 'Shipped with ${order.carrier ?? '—'}',
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _pillCard(
+                            icon: Icons.attach_money_rounded,
+                            text:
+                                'Budget: \$${order.budgetMin} to \$${order.budgetMax}',
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ✅ Delivered section (exact content)
+                    _deliveredCard(),
+                    const SizedBox(height: 16),
+
+                    // ✅ ONLY photos sections after this (nothing else)
+                    _sectionTitle('Uploaded Photos (Client)'),
+                    const SizedBox(height: 10),
+                    if (order.clientPhotos.isEmpty)
+                      _emptyPhotos()
+                    else
+                      _photosGrid(order.clientPhotos),
+
+                    const SizedBox(height: 16),
+
+                    _sectionTitle('Uploaded Photos (Artist)'),
+                    const SizedBox(height: 10),
+                    if (order.artistPhotos.isEmpty)
+                      _emptyPhotos()
+                    else
+                      _photosGrid(order.artistPhotos),
+                  ],
+                ),
+              ),
+
+              // ✅ Bottom close button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                child: Center(
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.blackCat,
+                        foregroundColor: AppColors.snow,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 18),
+                        child: Text(
+                          'Close',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -360,25 +363,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
   }
 
   Widget _deliveredCard() {
-    String fmtDate(DateTime? d) {
-      if (d == null) return '—';
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-    }
+    String fmtDate(DateTime? d) => formatDateMdyOrDash(d, fallback: '—');
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -396,7 +381,9 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.snow,
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: 0.05),
+              ),
             ),
             alignment: Alignment.center,
             child: const Icon(Icons.check_rounded, color: Color(0xFF2E8B57)),
@@ -454,7 +441,10 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.image_outlined, color: AppColors.blackCat.withValues(alpha: 0.45)),
+          Icon(
+            Icons.image_outlined,
+            color: AppColors.blackCat.withValues(alpha: 0.45),
+          ),
           const SizedBox(width: 10),
           Text(
             'No photos',

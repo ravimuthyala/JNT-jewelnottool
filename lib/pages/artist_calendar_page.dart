@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 
 // âœ… reuse your existing model WITHOUT changing that file
 import '../models/artist_request_legacy_models.dart'
@@ -478,159 +479,161 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
       namesRoute: true,
       label: 'Artist calendar',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntStandardAppBar(
-        onNotifications: _openNotifications,
-        trailing: _avatarMenu(),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: Column(
-              children: [
-                _tabPill(),
-                const SizedBox(height: 12),
-                if (_tabCtrl.index == 0) ...[
-                  Row(
-                    children: [
-                      _iconChip(
-                        icon: Icons.chevron_left_rounded,
-                        semanticLabel: 'Previous month',
-                        onTap: () => setState(() {
-                          _focusedMonth = _startOfMonth(
-                            DateTime(
-                              _focusedMonth.year,
-                              _focusedMonth.month - 1,
-                              1,
-                            ),
-                          );
-                        }),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.snow,
-                            borderRadius: BorderRadius.zero,
-                            border: Border.all(
-                              color: AppColors.blackCat.withValues(alpha: 0.05),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.calendar_month_outlined,
-                                size: 18,
-                                color: AppColors.blackCat,
+        backgroundColor: AppColors.snow,
+        appBar: JntStandardAppBar(
+          onNotifications: _openNotifications,
+          trailing: _avatarMenu(),
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Column(
+                children: [
+                  _tabPill(),
+                  const SizedBox(height: 12),
+                  if (_tabCtrl.index == 0) ...[
+                    Row(
+                      children: [
+                        _iconChip(
+                          icon: Icons.chevron_left_rounded,
+                          semanticLabel: 'Previous month',
+                          onTap: () => setState(() {
+                            _focusedMonth = _startOfMonth(
+                              DateTime(
+                                _focusedMonth.year,
+                                _focusedMonth.month - 1,
+                                1,
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  monthLabel,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                    color: AppColors.blackCat,
+                            );
+                          }),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.snow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.05,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.calendar_month_outlined,
+                                  size: 18,
+                                  color: AppColors.blackCat,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    monthLabel,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: AppColors.blackCat,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Semantics(
-                                button: true,
-                                child: GestureDetector(
-                                onTap: () => setState(() {
-                                  final now = _dateOnly(DateTime.now());
-                                  _selectedDay = now;
-                                  _focusedMonth = _startOfMonth(now);
-                                }),
-                                child: Text(
-                                  'Today',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                    color: AppColors.blackCat,
+                                Semantics(
+                                  button: true,
+                                  child: GestureDetector(
+                                    onTap: () => setState(() {
+                                      final now = _dateOnly(DateTime.now());
+                                      _selectedDay = now;
+                                      _focusedMonth = _startOfMonth(now);
+                                    }),
+                                    child: Text(
+                                      'Today',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        color: AppColors.blackCat,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      _iconChip(
-                        icon: Icons.chevron_right_rounded,
-                        semanticLabel: 'Next month',
-                        onTap: () => setState(() {
-                          _focusedMonth = _startOfMonth(
-                            DateTime(
-                              _focusedMonth.year,
-                              _focusedMonth.month + 1,
-                              1,
-                            ),
-                          );
-                        }),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+                        const SizedBox(width: 10),
+                        _iconChip(
+                          icon: Icons.chevron_right_rounded,
+                          semanticLabel: 'Next month',
+                          onTap: () => setState(() {
+                            _focusedMonth = _startOfMonth(
+                              DateTime(
+                                _focusedMonth.year,
+                                _focusedMonth.month + 1,
+                                1,
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabCtrl,
-              children: [_monthlyView(), _scheduleView()],
+            Expanded(
+              child: TabBarView(
+                controller: _tabCtrl,
+                children: [_monthlyView(), _scheduleView()],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: widget.showBottomNav
+            ? BottomNavigationBar(
+                currentIndex: widget.bottomNavIndex,
+                selectedItemColor: AppColors.blackCat,
+                unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
+                backgroundColor: AppColors.balletSlippers,
+                type: BottomNavigationBarType.fixed,
+                onTap: (i) {
+                  if (widget.onNavTap != null) {
+                    widget.onNavTap!(i);
+                    return;
+                  }
+                  if (i != widget.bottomNavIndex) {
+                    Navigator.pop(context);
+                  }
+                },
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.home_filled),
+                    label: 'Home',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.add_circle_outline),
+                    label: 'Design',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.inbox_outlined),
+                    label: 'Requests',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    label: 'Calendar',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.history),
+                    label: 'History',
+                  ),
+                ],
+              )
+            : null,
       ),
-      bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigationBar(
-              currentIndex: widget.bottomNavIndex,
-              selectedItemColor: AppColors.blackCat,
-              unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.35),
-              backgroundColor: AppColors.balletSlippers,
-              type: BottomNavigationBarType.fixed,
-              onTap: (i) {
-                if (widget.onNavTap != null) {
-                  widget.onNavTap!(i);
-                  return;
-                }
-                if (i != widget.bottomNavIndex) {
-                  Navigator.pop(context);
-                }
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_filled),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.add_circle_outline),
-                  label: 'Design',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.inbox_outlined),
-                  label: 'Requests',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  label: 'Calendar',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.history),
-                  label: 'History',
-                ),
-              ],
-            )
-          : null,
-    ),
     );
   }
 
@@ -722,7 +725,9 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(size: JntHeaderMetrics.avatarSize),
+          child: const ArtistProfileAvatarIcon(
+            size: JntHeaderMetrics.avatarSize,
+          ),
         ),
       ),
       itemBuilder: (_) {
@@ -829,20 +834,20 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
       button: true,
       label: semanticLabel,
       child: ExcludeSemantics(
-      child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: onTap,
-      child: Container(
-        height: 44,
-        width: 44,
-        decoration: BoxDecoration(
-          color: AppColors.snow,
+        child: InkWell(
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatLight),
+          onTap: onTap,
+          child: Container(
+            height: 44,
+            width: 44,
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatLight),
+            ),
+            child: Icon(icon, color: AppColors.blackCat),
+          ),
         ),
-        child: Icon(icon, color: AppColors.blackCat),
-      ),
-      ),
       ),
     );
   }
@@ -991,78 +996,82 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
       onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
-      onTap: onTap,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final cellHeight = constraints.maxHeight;
-          final cellWidth = constraints.maxWidth;
-          final dotSize = (cellHeight * 0.09).clamp(3.0, 5.0);
-          final spacing = (cellHeight * 0.05).clamp(2.0, 4.0);
-          final availableForCircle = cellHeight - (spacing + dotSize + 4);
-          final circleSize = availableForCircle.clamp(22.0, 34.0).toDouble();
-          final textSize = (11.5 * fontScale(context)).clamp(10.0, 13.0);
+          onTap: onTap,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final cellHeight = constraints.maxHeight;
+              final cellWidth = constraints.maxWidth;
+              final dotSize = (cellHeight * 0.09).clamp(3.0, 5.0);
+              final spacing = (cellHeight * 0.05).clamp(2.0, 4.0);
+              final availableForCircle = cellHeight - (spacing + dotSize + 4);
+              final circleSize = availableForCircle
+                  .clamp(22.0, 34.0)
+                  .toDouble();
+              final textSize = (11.5 * fontScale(context)).clamp(10.0, 13.0);
 
-          return SizedBox(
-            width: cellWidth,
-            height: cellHeight,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  height: circleSize,
-                  width: circleSize,
-                  decoration: BoxDecoration(
-                    color: circleBg,
-                    shape: BoxShape.circle,
-                    border: todayRing,
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: AppColors.blackCat.withValues(alpha: 0.18),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${day.day}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: textSize,
-                      color: dayTextColor,
-                    ),
-                  ),
-                ),
-                SizedBox(height: spacing),
-                if (dotCount > 0)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(dotCount, (_) {
-                      return Container(
-                        width: dotSize,
-                        height: dotSize,
-                        margin: const EdgeInsets.symmetric(horizontal: 1.2),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.snow.withValues(alpha: 0.95)
-                              : AppColors.blackCat.withValues(
-                                  alpha: isInMonth ? 0.85 : 0.25,
+              return SizedBox(
+                width: cellWidth,
+                height: cellHeight,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 140),
+                      height: circleSize,
+                      width: circleSize,
+                      decoration: BoxDecoration(
+                        color: circleBg,
+                        shape: BoxShape.circle,
+                        border: todayRing,
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.18,
+                                  ),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
                                 ),
-                          shape: BoxShape.circle,
+                              ]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          fontSize: textSize,
+                          color: dayTextColor,
                         ),
-                      );
-                    }),
-                  )
-                else
-                  SizedBox(height: dotSize),
-              ],
-            ),
-          );
-        },
-      ),
+                      ),
+                    ),
+                    SizedBox(height: spacing),
+                    if (dotCount > 0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(dotCount, (_) {
+                          return Container(
+                            width: dotSize,
+                            height: dotSize,
+                            margin: const EdgeInsets.symmetric(horizontal: 1.2),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.snow.withValues(alpha: 0.95)
+                                  : AppColors.blackCat.withValues(
+                                      alpha: isInMonth ? 0.85 : 0.25,
+                                    ),
+                              shape: BoxShape.circle,
+                            ),
+                          );
+                        }),
+                      )
+                    else
+                      SizedBox(height: dotSize),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -1191,96 +1200,96 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           });
         },
         child: InkWell(
-      borderRadius: BorderRadius.zero,
-      onTap: () {
-        setState(() {
-          _selectedDay = due;
-          _focusedMonth = _startOfMonth(due);
-          _tabCtrl.index = 0;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatLight),
-        ),
-        child: Row(
-          children: [
-            Container(
-              height: 42,
-              width: 42,
-              decoration: BoxDecoration(
-                color: AppColors.balletSlippers,
-                border: Border.all(
-                  color: AppColors.blackCat.withValues(alpha: 0.06),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                r.clientName.isEmpty ? 'C' : r.clientName[0].toUpperCase(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.blackCat,
-                ),
-              ),
+          onTap: () {
+            setState(() {
+              _selectedDay = due;
+              _focusedMonth = _startOfMonth(due);
+              _tabCtrl.index = 0;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatLight),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    r.clientName.isEmpty ? 'Client' : r.clientName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            child: Row(
+              children: [
+                Container(
+                  height: 42,
+                  width: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.balletSlippers,
+                    border: Border.all(
+                      color: AppColors.blackCat.withValues(alpha: 0.06),
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    r.clientName.isEmpty ? 'C' : r.clientName[0].toUpperCase(),
+                    style: const TextStyle(
                       fontWeight: FontWeight.w900,
                       color: AppColors.blackCat,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Need by ${_shortDate(due)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w700,
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        r.clientName.isEmpty ? 'Client' : r.clientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Need by ${_shortDate(due)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        r.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    r.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                    ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  dueText,
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: dueTextColor,
+                    fontSize: 12,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Text(
-              dueText,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: dueTextColor,
-                fontSize: 12,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1363,23 +1372,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return '${months[m.month - 1]} ${m.year}';
   }
 
-  String _shortDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}';
-  }
+  String _shortDate(DateTime d) => formatDateMdy(d);
 
   String _selectedHeaderLabel(DateTime d) {
     final today = _dateOnly(DateTime.now());
@@ -1391,25 +1384,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return label;
   }
 
-  String _dateSectionLabel(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final wd = wds[d.weekday - 1];
-    return '$wd, ${months[d.month - 1]} ${d.day}';
-  }
+  String _dateSectionLabel(DateTime d) => formatDateMdy(d);
 }
 
 enum _HeaderAvatarAction {

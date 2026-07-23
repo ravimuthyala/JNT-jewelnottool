@@ -11,6 +11,7 @@ import '../services/artist_requests_repository.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart' as storage_resolver;
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../utils/scenario_4_1.dart';
 import '../widgets/company_client_request_card.dart';
@@ -1005,59 +1006,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     return 'Pending';
   }
 
-  String _needByLabel(DateTime date) {
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[(date.month - 1).clamp(0, 11)]} ${date.day}, ${date.year}';
-  }
+  String _needByLabel(DateTime date) => formatDateMdy(date);
 
-  String _submittedLabel(DateTime date) {
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[(date.month - 1).clamp(0, 11)]} ${date.day}, ${date.year}';
-  }
+  String _submittedLabel(DateTime date) => formatDateMdy(date);
 
-  String _acceptByLabel(DateTime date) {
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[(date.month - 1).clamp(0, 11)]} ${date.day}, ${date.year}';
-  }
+  String _acceptByLabel(DateTime date) => formatDateMdy(date);
 
   Future<void> _openDetails(ClientRequestV2 request) async {
     final artistStyleRequestView =
@@ -1992,29 +1945,29 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       namesRoute: true,
       label: 'Client campaigns',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntStandardAppBar(
-        onNotifications: () {
-          if (widget.onOpenNotifications != null) {
-            widget.onOpenNotifications!.call();
-          } else {
-            NotificationsPage.showAsModal(context);
-          }
-        },
-        trailing: _AvatarMenu(
-          onSelected: _onAvatarMenuSelected,
-          displayName: _headerDisplayName.isNotEmpty
-              ? _headerDisplayName
-              : (_supabase.auth.currentUser?.userMetadata?['displayName'] ??
-                        _supabase.auth.currentUser?.email ??
-                        '')
-                    .toString()
-                    .trim(),
-          avatarUrl: _headerAvatarUrl,
-          showEarnings: widget.onOpenEarnings != null,
+        backgroundColor: AppColors.snow,
+        appBar: JntStandardAppBar(
+          onNotifications: () {
+            if (widget.onOpenNotifications != null) {
+              widget.onOpenNotifications!.call();
+            } else {
+              NotificationsPage.showAsModal(context);
+            }
+          },
+          trailing: _AvatarMenu(
+            onSelected: _onAvatarMenuSelected,
+            displayName: _headerDisplayName.isNotEmpty
+                ? _headerDisplayName
+                : (_supabase.auth.currentUser?.userMetadata?['displayName'] ??
+                          _supabase.auth.currentUser?.email ??
+                          '')
+                      .toString()
+                      .trim(),
+            avatarUrl: _headerAvatarUrl,
+            showEarnings: widget.onOpenEarnings != null,
+          ),
         ),
-      ),
-      body: content,
+        body: content,
       ),
     );
   }
@@ -2038,9 +1991,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       } catch (e) {
         debugPrint('[ClientCampaignsPage] signOut failed: $e');
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to log out: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unable to log out: $e')));
         return;
       }
       if (!mounted) return;

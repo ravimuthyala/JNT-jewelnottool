@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
@@ -954,7 +955,9 @@ class _OrderSafe {
         final text = v.trim();
         final parsed = DateTime.tryParse(text);
         if (parsed != null) return parsed;
-        final mmddyyyy = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(text);
+        final mmddyyyy = RegExp(
+          r'^(\d{1,2})/(\d{1,2})/(\d{4})$',
+        ).firstMatch(text);
         if (mmddyyyy != null) {
           final month = int.tryParse(mmddyyyy.group(1) ?? '');
           final day = int.tryParse(mmddyyyy.group(2) ?? '');
@@ -987,23 +990,7 @@ class _OrderSafe {
 
     String dateDisplay(dynamic value) {
       final parsed = dt(value);
-      if (parsed != null) {
-        const months = <String>[
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec',
-        ];
-        return '${months[parsed.month - 1]} ${parsed.day}, ${parsed.year}';
-      }
+      if (parsed != null) return formatDateMdy(parsed);
       return (value ?? '').toString().trim();
     }
 
@@ -3685,10 +3672,12 @@ class _BaseOrderDetails extends StatelessWidget {
             ],
           ],
           _bullet('Need by', _valueOrDash(order.needByDisplay)),
-          if (_isBrandRequest && order.jntRevealDateDisplay.trim().isNotEmpty) ...[
+          if (_isBrandRequest &&
+              order.jntRevealDateDisplay.trim().isNotEmpty) ...[
             _bullet('JNT Reveal Date', order.jntRevealDateDisplay.trim()),
           ],
-          if (!_isBrandRequest && order.clientDescription.trim().isNotEmpty) ...[
+          if (!_isBrandRequest &&
+              order.clientDescription.trim().isNotEmpty) ...[
             _bullet('Description', order.clientDescription.trim()),
           ],
           _bullet('Request Artist', _requestArtistDisplay()),
@@ -3915,11 +3904,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 Container(width: 1, color: AppColors.blackCatBorderLight),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _dimensionHandCard(
-                    'Right Hand',
-                    rightHand,
-                    nfc.right,
-                  ),
+                  child: _dimensionHandCard('Right Hand', rightHand, nfc.right),
                 ),
               ],
             ),
@@ -4185,26 +4170,7 @@ class _BaseOrderDetails extends StatelessWidget {
     return '\$${max!}';
   }
 
-  String _placedOnText() {
-    final dt = order.createdAt;
-    if (dt == null) return '-';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-  }
+  String _placedOnText() => formatDateMdyOrDash(order.createdAt);
 }
 
 class _RequestNfcDetails {
@@ -5991,24 +5957,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return channels.join(', ');
   }
 
-  String _formatDeliveryDate(DateTime? value) {
-    if (value == null) return '-';
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[value.month - 1]} ${value.day}, ${value.year}';
-  }
+  String _formatDeliveryDate(DateTime? value) => formatDateMdyOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();
@@ -6318,10 +6267,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           orderId: widget.order.id,
           orderNumber: widget.order.id,
           sourceCollection: _orderCollection,
-          extra: <String, dynamic>{
-            'rating': _rating,
-            'tipAmount': tipAmount,
-          },
+          extra: <String, dynamic>{'rating': _rating, 'tipAmount': tipAmount},
         );
       });
 
@@ -6363,6 +6309,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
   Future<void> _loadLatestReviewFromDb() async {
     try {
       final snap = await AppDatabase.instance

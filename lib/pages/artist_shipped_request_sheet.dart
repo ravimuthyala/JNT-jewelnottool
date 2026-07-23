@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import '../utils/request_nfc_details_loader.dart';
@@ -484,148 +485,148 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       namesRoute: true,
       label: 'Shipped request details',
       child: MediaQuery(
-      data: sheetMediaQuery,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Container(
-          constraints: BoxConstraints(maxHeight: maxH),
-          decoration: const BoxDecoration(
-            color: AppColors.snow,
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                height: 5,
-                width: 54,
-                decoration: BoxDecoration(
-                  color: AppColors.blackCat.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.zero,
+        data: sheetMediaQuery,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            constraints: BoxConstraints(maxHeight: maxH),
+            decoration: const BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  height: 5,
+                  width: 54,
+                  decoration: BoxDecoration(
+                    color: AppColors.blackCat.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.zero,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
+                const SizedBox(height: 6),
 
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  children: [
-                    _topHeroCentered(
-                      request: widget.request,
-                      onClose: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(height: 12),
-
-                    FutureBuilder<_ShipmentInfo>(
-                      future: _loadShipmentInfo(),
-                      builder: (context, snapshot) {
-                        final info = snapshot.data ?? _fallbackShipmentInfo();
-                        return _shipmentStatusCard(info);
-                      },
-                    ),
-
-                    const SizedBox(height: 12),
-                    _descriptionAndCompanyBioSection(widget.request),
-                    const SizedBox(height: 12),
-                    if (_isBrandRequest(widget.request)) ...[
-                      _acceptedClientDetailsSection(widget.request),
-                      const SizedBox(height: 12),
-                    ],
-                    _measurementSection(),
-                    const SizedBox(height: 12),
-                    _paymentSection(),
-                    const SizedBox(height: 12),
-                    _clientPhotosSection(modalClientPhotos),
-                    const SizedBox(height: 12),
-                    _artistPhotosSection(widget.request.artistImages),
-                  ],
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                child: _softBox(
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.local_shipping_outlined,
-                            color: AppColors.blackCat.withValues(alpha: 0.65),
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Delivery status updates automatically from courier tracking.',
-                              style: TextStyle(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.72,
-                                ),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13.5,
-                              ),
-                            ),
-                          ),
-                        ],
+                      _topHeroCentered(
+                        request: widget.request,
+                        onClose: () => Navigator.pop(context),
                       ),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 44,
-                        child: ElevatedButton.icon(
-                          onPressed: _isMarkingDelivered
-                              ? null
-                              : _markDeliveredForTesting,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                          icon: _isMarkingDelivered
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.snow,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.check_circle_outline_rounded,
-                                  size: 18,
-                                ),
-                          label: Text(
-                            _isMarkingDelivered
-                                ? 'Updating...'
-                                : 'Mark as Delivered (Test)',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
+
+                      FutureBuilder<_ShipmentInfo>(
+                        future: _loadShipmentInfo(),
+                        builder: (context, snapshot) {
+                          final info = snapshot.data ?? _fallbackShipmentInfo();
+                          return _shipmentStatusCard(info);
+                        },
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Temporary test action until courier integration is connected.',
-                        style: TextStyle(
-                          color: AppColors.blackCat.withValues(alpha: 0.58),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+
+                      const SizedBox(height: 12),
+                      _descriptionAndCompanyBioSection(widget.request),
+                      const SizedBox(height: 12),
+                      if (_isBrandRequest(widget.request)) ...[
+                        _acceptedClientDetailsSection(widget.request),
+                        const SizedBox(height: 12),
+                      ],
+                      _measurementSection(),
+                      const SizedBox(height: 12),
+                      _paymentSection(),
+                      const SizedBox(height: 12),
+                      _clientPhotosSection(modalClientPhotos),
+                      const SizedBox(height: 12),
+                      _artistPhotosSection(widget.request.artistImages),
                     ],
                   ),
                 ),
-              ),
-            ],
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                  child: _softBox(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_shipping_outlined,
+                              color: AppColors.blackCat.withValues(alpha: 0.65),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Delivery status updates automatically from courier tracking.',
+                                style: TextStyle(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.72,
+                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: ElevatedButton.icon(
+                            onPressed: _isMarkingDelivered
+                                ? null
+                                : _markDeliveredForTesting,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            icon: _isMarkingDelivered
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.snow,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 18,
+                                  ),
+                            label: Text(
+                              _isMarkingDelivered
+                                  ? 'Updating...'
+                                  : 'Mark as Delivered (Test)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Temporary test action until courier integration is connected.',
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.58),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -660,7 +661,10 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 const SizedBox(height: 10),
                 _shippingInfoRow('Shipped by', courier.isEmpty ? '-' : courier),
                 const SizedBox(height: 8),
-_shippingInfoRow(                  'Tracking #',                  tracking.isEmpty ? '-' : tracking,                ),
+                _shippingInfoRow(
+                  'Tracking #',
+                  tracking.isEmpty ? '-' : tracking,
+                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 44,
@@ -894,16 +898,16 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
             onTap: onClose,
             child: ExcludeSemantics(
               child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: onClose,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Icon(
-                Icons.close_rounded,
-                size: 24,
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-              ),
-            ),
+                borderRadius: BorderRadius.zero,
+                onTap: onClose,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 24,
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1069,9 +1073,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
   }
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
-    final requestType = r.isDirectRequest
-        ? 'Direct'
-        : 'Standard';
+    final requestType = r.isDirectRequest ? 'Direct' : 'Standard';
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group'
         : 'Single';
@@ -1148,7 +1150,11 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
                 color: AppColors.blackCatBorderLight,
               ),
               const SizedBox(width: 10),
-              const Icon(Icons.nfc_rounded, size: 15, color: AppColors.blackCat),
+              const Icon(
+                Icons.nfc_rounded,
+                size: 15,
+                color: AppColors.blackCat,
+              ),
               const SizedBox(width: 5),
               const Text(
                 'NFC',
@@ -1228,24 +1234,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
     );
   }
 
-  static String _needByLabel(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _needByLabel(DateTime d) => formatDateMdy(d);
 
   static String _prettyLength(String raw) {
     final value = raw.trim();
@@ -1332,6 +1321,7 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
       ),
     );
   }
+
   Widget _paymentDetailRow(
     String label,
     String value, {
@@ -2121,12 +2111,12 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
               onTap: () => _openImagePreview(src),
               child: ExcludeSemantics(
                 child: InkWell(
-              borderRadius: BorderRadius.zero,
-              onTap: () => _openImagePreview(src),
-              child: ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: _imageForPath(src),
-              ),
+                  borderRadius: BorderRadius.zero,
+                  onTap: () => _openImagePreview(src),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: _imageForPath(src),
+                  ),
                 ),
               ),
             ),
@@ -2193,22 +2183,5 @@ _shippingInfoRow(                  'Tracking #',                  tracking.isEmp
     );
   }
 
-  static String _fmtDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const wds = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${wds[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  static String _fmtDate(DateTime d) => formatDateMdy(d);
 }

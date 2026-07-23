@@ -7,6 +7,7 @@ import '../models/client_request_v2.dart';
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
+import '../utils/date_format_utils.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
@@ -503,21 +504,7 @@ class _SupabaseOrderService {
       if (explicit.isNotEmpty) return explicit;
       final resolved = date(values);
       if (resolved == null) return '';
-      const months = <String>[
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${months[resolved.month - 1]} ${resolved.day}, ${resolved.year}';
+      return formatDateMdy(resolved);
     }
 
     int? integer(List<Object?> values) {
@@ -1698,7 +1685,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     final submittedAt = req.clientSubmittedAt;
     final submittedText = submittedAt == null
         ? 'Submitted'
-        : 'Submitted ${_monthShort(submittedAt.month)} ${submittedAt.day}';
+        : 'Submitted ${formatDateMdy(submittedAt)}';
     final clientName = widget.profile.basic.name.trim().isNotEmpty
         ? widget.profile.basic.name.trim()
         : 'Client';
@@ -1794,9 +1781,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         : profileLength;
     final needByDisplayForOrder = req.needByDisplay.trim().isNotEmpty
         ? req.needByDisplay.trim()
-        : (req.needBy == null
-              ? ''
-              : '${_monthShort(req.needBy!.month)} ${req.needBy!.day}, ${req.needBy!.year}');
+        : (req.needBy == null ? '' : formatDateMdy(req.needBy!));
 
     return ClientOrder(
       id: req.id,
@@ -1946,7 +1931,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     if (status == OrderStatus.expired) {
       final due = req.needBy;
       if (due != null) {
-        return 'Expired ${_monthShort(due.month)} ${due.day}, ${due.year}';
+        return 'Expired ${formatDateMdy(due)}';
       }
       return 'Expired';
     }
@@ -1955,7 +1940,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       final cancelledAt = req.cancelledAt;
       final when = cancelledAt == null
           ? 'Cancelled'
-          : 'Cancelled ${_monthShort(cancelledAt.month)} ${cancelledAt.day}, ${cancelledAt.year}';
+          : 'Cancelled ${formatDateMdy(cancelledAt)}';
       final reason = req.cancelReason.trim();
       if (reason.isNotEmpty) {
         return '$when • Reason: $reason';
@@ -2022,24 +2007,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       default:
         return OrderStatus.inReview;
     }
-  }
-
-  String _monthShort(int m) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return months[(m - 1).clamp(0, 11)];
   }
 
   List<ClientOrder> get _orders {
@@ -2158,159 +2125,159 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       namesRoute: true,
       label: 'Client orders',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
+        backgroundColor: AppColors.snow,
 
-      // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
-      appBar: widget.showCompanyChrome && widget.companyName != null
-          ? CompanyHeader(
-              companyName: widget.companyName!,
-              imageUrl: widget.profile.basic.profileImageUrl,
-              onOpenProfile: widget.onOpenProfile,
-              onLogout: widget.onLogout,
-            )
-          : JntStandardAppBar(
-              onNotifications: () {
-                NotificationsPage.showAsModal(context);
+        // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
+        appBar: widget.showCompanyChrome && widget.companyName != null
+            ? CompanyHeader(
+                companyName: widget.companyName!,
+                imageUrl: widget.profile.basic.profileImageUrl,
+                onOpenProfile: widget.onOpenProfile,
+                onLogout: widget.onLogout,
+              )
+            : JntStandardAppBar(
+                onNotifications: () {
+                  NotificationsPage.showAsModal(context);
+                },
+                notificationFocusNode: _notificationsFocusNode,
+                trailing: _AvatarMenu(
+                  onSelected: _onAvatarMenuSelected,
+                  avatarUrl: widget.profile.basic.profileImageUrl,
+                  displayName: widget.profile.basic.name,
+                  showProfile: widget.showProfileMenu,
+                  showEarnings: widget.onOpenEarnings != null,
+                  showHistory: widget.showExtendedAvatarMenu,
+                  showCalendar: widget.showExtendedAvatarMenu,
+                  showArtist: widget.showExtendedAvatarMenu,
+                  showReviews: widget.showExtendedAvatarMenu,
+                ),
+              ),
+
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+          children: [
+            _FilterTabs(
+              selected: _filter,
+              counts: <OrdersFilter, int>{
+                OrdersFilter.all: _orders.length,
+                OrdersFilter.pending: _orders.where(_isSubmittedOrder).length,
+                OrdersFilter.submitted: _orders
+                    .where(
+                      (o) =>
+                          o.status == OrderStatus.newOrder ||
+                          o.status == OrderStatus.inReview,
+                    )
+                    .length,
+                OrdersFilter.inProgress: _orders
+                    .where((o) => o.status == OrderStatus.inProgress)
+                    .length,
+                OrdersFilter.shipped: _orders
+                    .where((o) => o.status == OrderStatus.shipped)
+                    .length,
+                OrdersFilter.delivered: _orders
+                    .where((o) => o.status == OrderStatus.delivered)
+                    .length,
+                OrdersFilter.declined: _orders
+                    .where((o) => o.status == OrderStatus.declined)
+                    .length,
+                OrdersFilter.cancelledExpired: _orders
+                    .where(
+                      (o) =>
+                          o.status == OrderStatus.cancelled ||
+                          o.status == OrderStatus.expired,
+                    )
+                    .length,
               },
-              notificationFocusNode: _notificationsFocusNode,
-              trailing: _AvatarMenu(
-                onSelected: _onAvatarMenuSelected,
-                avatarUrl: widget.profile.basic.profileImageUrl,
-                displayName: widget.profile.basic.name,
-                showProfile: widget.showProfileMenu,
-                showEarnings: widget.onOpenEarnings != null,
-                showHistory: widget.showExtendedAvatarMenu,
-                showCalendar: widget.showExtendedAvatarMenu,
-                showArtist: widget.showExtendedAvatarMenu,
-                showReviews: widget.showExtendedAvatarMenu,
-              ),
+              onChanged: (f) => setState(() => _filter = f),
             ),
+            const SizedBox(height: 16),
 
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
-        children: [
-          _FilterTabs(
-            selected: _filter,
-            counts: <OrdersFilter, int>{
-              OrdersFilter.all: _orders.length,
-              OrdersFilter.pending: _orders.where(_isSubmittedOrder).length,
-              OrdersFilter.submitted: _orders
-                  .where(
-                    (o) =>
-                        o.status == OrderStatus.newOrder ||
-                        o.status == OrderStatus.inReview,
-                  )
-                  .length,
-              OrdersFilter.inProgress: _orders
-                  .where((o) => o.status == OrderStatus.inProgress)
-                  .length,
-              OrdersFilter.shipped: _orders
-                  .where((o) => o.status == OrderStatus.shipped)
-                  .length,
-              OrdersFilter.delivered: _orders
-                  .where((o) => o.status == OrderStatus.delivered)
-                  .length,
-              OrdersFilter.declined: _orders
-                  .where((o) => o.status == OrderStatus.declined)
-                  .length,
-              OrdersFilter.cancelledExpired: _orders
-                  .where(
-                    (o) =>
-                        o.status == OrderStatus.cancelled ||
-                        o.status == OrderStatus.expired,
-                  )
-                  .length,
-            },
-            onChanged: (f) => setState(() => _filter = f),
-          ),
-          const SizedBox(height: 16),
-
-          if (_pending.isNotEmpty) ...[
-            const Text(
-              'All Orders',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppColors.blackCat,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ..._pending.map(
-              (o) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _OrderCard(
-                  order: o,
-                  showLeadingThumb: widget.showCompanyChrome,
-                  onDetails: () => _openOrderDetails(context, o),
+            if (_pending.isNotEmpty) ...[
+              const Text(
+                'All Orders',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppColors.blackCat,
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-          ],
-
-          if (_past.isNotEmpty) ...[
-            const Text(
-              'Past Orders',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppColors.blackCat,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ..._past.map(
-              (o) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _OrderCard(
-                  order: o,
-                  showLeadingThumb: widget.showCompanyChrome,
-                  onDetails: () => _openOrderDetails(context, o),
+              const SizedBox(height: 10),
+              ..._pending.map(
+                (o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _OrderCard(
+                    order: o,
+                    showLeadingThumb: widget.showCompanyChrome,
+                    onDetails: () => _openOrderDetails(context, o),
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+            ],
 
-          if (_pending.isEmpty && _past.isEmpty) ...[
-            const SizedBox(height: 28),
-            _Card(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 46,
-                    color: Colors.black.withValues(alpha: 0.35),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'No orders found',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Try changing filters or place a new design request.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+            if (_past.isNotEmpty) ...[
+              const Text(
+                'Past Orders',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppColors.blackCat,
+                ),
               ),
-            ),
+              const SizedBox(height: 10),
+              ..._past.map(
+                (o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _OrderCard(
+                    order: o,
+                    showLeadingThumb: widget.showCompanyChrome,
+                    onDetails: () => _openOrderDetails(context, o),
+                  ),
+                ),
+              ),
+            ],
+
+            if (_pending.isEmpty && _past.isEmpty) ...[
+              const SizedBox(height: 28),
+              _Card(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.receipt_long_outlined,
+                      size: 46,
+                      color: Colors.black.withValues(alpha: 0.35),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'No orders found',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Try changing filters or place a new design request.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-        ],
-      ),
-      bottomNavigationBar: widget.showCompanyChrome
-          ? CompanyBottomNav(
-              currentIndex: widget.bottomNavIndex,
-              onTap: (i) => widget.onNavTap?.call(i),
-            )
-          : null,
+        ),
+        bottomNavigationBar: widget.showCompanyChrome
+            ? CompanyBottomNav(
+                currentIndex: widget.bottomNavIndex,
+                onTap: (i) => widget.onNavTap?.call(i),
+              )
+            : null,
       ),
     );
   }
@@ -3286,7 +3253,10 @@ class _OrderNfcChipLine extends StatelessWidget {
         if (trailingGap <= 0) return const _NfcChip();
         return Row(
           mainAxisSize: MainAxisSize.min,
-          children: [const _NfcChip(), SizedBox(width: trailingGap)],
+          children: [
+            const _NfcChip(),
+            SizedBox(width: trailingGap),
+          ],
         );
       },
     );

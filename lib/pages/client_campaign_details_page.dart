@@ -8,6 +8,7 @@ import '../constants/profile_table_columns.dart';
 import '../models/client_request_v2.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
 class ClientCampaignDetailsPage extends StatefulWidget {
@@ -52,202 +53,204 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       namesRoute: true,
       label: 'Campaign details',
       child: Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        constraints: BoxConstraints(maxHeight: maxH),
-        decoration: const BoxDecoration(color: AppColors.snow),
-        child: FutureBuilder<_RequestDetailsVm>(
-          future: _vmFuture,
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return Column(
-                children: [
-                  _headerBar(context),
-                  const Expanded(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.blackCat,
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxH),
+          decoration: const BoxDecoration(color: AppColors.snow),
+          child: FutureBuilder<_RequestDetailsVm>(
+            future: _vmFuture,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return Column(
+                  children: [
+                    _headerBar(context),
+                    const Expanded(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.blackCat,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            }
+                  ],
+                );
+              }
 
-            if (snap.hasError || !snap.hasData) {
+              if (snap.hasError || !snap.hasData) {
+                return Column(
+                  children: [
+                    _headerBar(context),
+                    Expanded(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            'Unable to load campaign request details.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              final vm = snap.data!;
               return Column(
                 children: [
                   _headerBar(context),
                   Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(
-                          'Unable to load campaign request details.',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            vm.statusLabel,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.blackCat,
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 14),
+                        _overviewCard(vm),
+                        const SizedBox(height: 16),
+                        _sectionContainer(
+                          child: _plainSection(
+                            title: vm.isBrandRequest
+                                ? 'Company Bio'
+                                : 'Client Bio',
+                            body: vm.bioSectionBody,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _sectionContainer(
+                          child: _plainSection(
+                            title: 'Custom Request Description',
+                            body: vm.customDescription,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _sectionContainer(child: _nailDimensionsSection(vm)),
+                        const SizedBox(height: 12),
+                        _sectionContainer(
+                          child: _numberOfSetsSection(vm.numberOfSets),
+                        ),
+                        const SizedBox(height: 12),
+                        _sectionContainer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _sectionHeader(text: 'Inspiration Photos'),
+                              const SizedBox(height: 10),
+                              _photosStrip(vm.photos),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.snow,
+                                side: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.7,
+                                  ),
+                                ),
+                                backgroundColor: AppColors.blackCat.withValues(
+                                  alpha: 0.7,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await widget.onDecline();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Unable to decline request: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Text(
+                                widget.declineLabel,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.snow,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed: () async {
+                                try {
+                                  await widget.onAccept();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Unable to accept request: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Text(
+                                widget.acceptLabel,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.snow,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               );
-            }
-
-            final vm = snap.data!;
-            return Column(
-              children: [
-                _headerBar(context),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-                    children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          vm.statusLabel,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.blackCat,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _overviewCard(vm),
-                      const SizedBox(height: 16),
-                      _sectionContainer(
-                        child: _plainSection(
-                          title: vm.isBrandRequest ? 'Company Bio' : 'Client Bio',
-                          body: vm.bioSectionBody,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _sectionContainer(
-                        child: _plainSection(
-                          title: 'Custom Request Description',
-                          body: vm.customDescription,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _sectionContainer(child: _nailDimensionsSection(vm)),
-                      const SizedBox(height: 12),
-                      _sectionContainer(
-                        child: _numberOfSetsSection(vm.numberOfSets),
-                      ),
-                      const SizedBox(height: 12),
-                      _sectionContainer(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _sectionHeader(text: 'Inspiration Photos'),
-                            const SizedBox(height: 10),
-                            _photosStrip(vm.photos),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 56,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.snow,
-                              side: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.7,
-                                ),
-                              ),
-                              backgroundColor: AppColors.blackCat.withValues(
-                                alpha: 0.7,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            onPressed: () async {
-                              try {
-                                await widget.onDecline();
-                              } catch (e) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Unable to decline request: $e',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Text(
-                              widget.declineLabel,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.snow,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: SizedBox(
-                          height: 56,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            onPressed: () async {
-                              try {
-                                await widget.onAccept();
-                              } catch (e) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Unable to accept request: $e',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Text(
-                              widget.acceptLabel,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.snow,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
+            },
+          ),
         ),
-      ),
       ),
     );
   }
@@ -632,7 +635,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           child: Text(
             vm.requestType,
             textAlign: TextAlign.right,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 14,
@@ -694,8 +697,13 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(child: requestTypeSegment),
+        // Request type values ("Direct to Artist"/"Direct to Client") run
+        // noticeably longer than the order-type/NFC values ("Single",
+        // "Group", "NFC"), so give it a larger share of the row instead of
+        // splitting evenly -- otherwise it clips even with wrapping.
+        Expanded(flex: 2, child: requestTypeSegment),
         const SizedBox(width: 12),
         divider(),
         const SizedBox(width: 12),
@@ -956,62 +964,64 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   button: true,
                   label: 'View campaign image full screen',
                   child: InkWell(
-                  onTap: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (dialogContext) => Dialog(
-                        backgroundColor: Colors.black,
-                        insetPadding: const EdgeInsets.all(8),
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: InteractiveViewer(
-                                minScale: 0.8,
-                                maxScale: 4,
-                                child: Center(
-                                  child: Image(
-                                    image: imageProvider,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, _, _) =>
-                                        const SizedBox.shrink(),
+                    onTap: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (dialogContext) => Dialog(
+                          backgroundColor: Colors.black,
+                          insetPadding: const EdgeInsets.all(8),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: InteractiveViewer(
+                                  minScale: 0.8,
+                                  maxScale: 4,
+                                  child: Center(
+                                    child: Image(
+                                      image: imageProvider,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, _, _) =>
+                                          const SizedBox.shrink(),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: IconButton(
-                                tooltip: 'Close image preview',
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(),
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.white,
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: IconButton(
+                                  tooltip: 'Close image preview',
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                      );
+                    },
+                    child: Container(
+                      width: size,
+                      height: size,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                        color: Colors.black.withValues(alpha: 0.04),
                       ),
-                    );
-                  },
-                  child: Container(
-                    width: size,
-                    height: size,
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.blackCatBorderLight),
-                      color: Colors.black.withValues(alpha: 0.04),
-                    ),
-                    child: Image(
-                      image: imageProvider,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      child: Image(
+                        image: imageProvider,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
                     ),
                   ),
-                ),
                 ),
               );
             },
@@ -1201,8 +1211,12 @@ class _RequestDetailsVm {
       'need_by': request.neededBy.toIso8601String(),
       'needBy': request.neededBy.toIso8601String(),
       'status': request.status.name,
-      'order_type': request.orderType == RequestOrderTypeV2.group ? 'group' : 'single',
-      'orderType': request.orderType == RequestOrderTypeV2.group ? 'group' : 'single',
+      'order_type': request.orderType == RequestOrderTypeV2.group
+          ? 'group'
+          : 'single',
+      'orderType': request.orderType == RequestOrderTypeV2.group
+          ? 'group'
+          : 'single',
       'is_direct_request': request.isDirectRequest,
       'isDirectRequest': request.isDirectRequest,
       'openToClientPool': request.openToClientPool,
@@ -1973,10 +1987,10 @@ class _RequestDetailsVm {
         asDate(requestDetails['requestAcceptBy']) ??
         asDate(details['requestAcceptBy']) ??
         (DateTime(
-                needBy.year,
-                needBy.month,
-                needBy.day,
-              ).subtract(const Duration(days: 5)));
+          needBy.year,
+          needBy.month,
+          needBy.day,
+        ).subtract(const Duration(days: 5)));
     final jntRevealDate = firstNonEmpty([
       _dateLabelOrBlank(root['jntRevealDateDisplay']),
       _dateLabelOrBlank(root['jnt_reveal_date_display']),
@@ -2077,9 +2091,14 @@ class _RequestDetailsVm {
     String extractUuidFromText(Object? raw) {
       final text = (raw ?? '').toString();
       if (text.trim().isEmpty) return '';
-      final matches = RegExp(
-        r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
-      ).allMatches(text).map((m) => m.group(0) ?? '').where((v) => v.isNotEmpty).toList();
+      final matches =
+          RegExp(
+                r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+              )
+              .allMatches(text)
+              .map((m) => m.group(0) ?? '')
+              .where((v) => v.isNotEmpty)
+              .toList();
       if (matches.isEmpty) return '';
       return matches.first.toLowerCase();
     }
@@ -2179,8 +2198,16 @@ class _RequestDetailsVm {
         if (value.trim().isEmpty) return const <String, dynamic>{};
         try {
           final rows = exact
-              ? await supabase.from('company').select().eq(column, value.trim()).limit(1)
-              : await supabase.from('company').select().ilike(column, value.trim()).limit(1);
+              ? await supabase
+                    .from('company')
+                    .select()
+                    .eq(column, value.trim())
+                    .limit(1)
+              : await supabase
+                    .from('company')
+                    .select()
+                    .ilike(column, value.trim())
+                    .limit(1);
           if (rows.isNotEmpty) return asMap(rows.first);
         } catch (_) {}
         return const <String, dynamic>{};
@@ -2236,7 +2263,8 @@ class _RequestDetailsVm {
         final emailNeedle = email.trim().toLowerCase();
         final nameNeedle = companyName.trim().toLowerCase();
         final filterParts = <String>[
-          if (emailNeedle.isNotEmpty) 'company->>contactEmail.ilike."$emailNeedle"',
+          if (emailNeedle.isNotEmpty)
+            'company->>contactEmail.ilike."$emailNeedle"',
           if (emailNeedle.isNotEmpty) 'company->>email.ilike."$emailNeedle"',
           if (emailNeedle.isNotEmpty) 'basic->>email.ilike."$emailNeedle"',
           if (emailNeedle.isNotEmpty) 'profile->>email.ilike."$emailNeedle"',
@@ -2245,7 +2273,11 @@ class _RequestDetailsVm {
           if (nameNeedle.isNotEmpty) 'profile->>name.ilike."$nameNeedle"',
         ];
         if (filterParts.isNotEmpty) {
-          final rows = await supabase.from('company').select().or(filterParts.join(',')).limit(1);
+          final rows = await supabase
+              .from('company')
+              .select()
+              .or(filterParts.join(','))
+              .limit(1);
           if (rows.isNotEmpty) return asMap(rows.first);
         }
       } catch (_) {}
@@ -2260,15 +2292,17 @@ class _RequestDetailsVm {
     );
     final requestClientData = await loadRequestClientData();
     final requestClientDims = asMap(requestClientData['nailDimensions']);
-    final clientBio = cleanCompanyBio(firstNonEmpty([
-      requestClientData['bio'],
-      detailClientBasicForCompany['bio'],
-      rootClientBasicForCompany['bio'],
-      root['clientBio'],
-      root['client_bio'],
-      details['clientBio'],
-      details['client_bio'],
-    ]));
+    final clientBio = cleanCompanyBio(
+      firstNonEmpty([
+        requestClientData['bio'],
+        detailClientBasicForCompany['bio'],
+        rootClientBasicForCompany['bio'],
+        root['clientBio'],
+        root['client_bio'],
+        details['clientBio'],
+        details['client_bio'],
+      ]),
+    );
     companyBio = extractCompanyBio(
       companyRow,
       allowSnapshotDescriptionFallback: false,
@@ -2280,12 +2314,14 @@ class _RequestDetailsVm {
       );
     }
     if (companyBio.isEmpty) {
-      companyBio = cleanCompanyBio(firstNonEmpty([
-        root['panel_companyBio'],
-        root['panel_company_bio'],
-        root['companyBio'],
-        root['company_bio'],
-      ]));
+      companyBio = cleanCompanyBio(
+        firstNonEmpty([
+          root['panel_companyBio'],
+          root['panel_company_bio'],
+          root['companyBio'],
+          root['company_bio'],
+        ]),
+      );
     }
     if (!isBrandRequest && clientBio.isNotEmpty) {
       companyBio = clientBio;
@@ -2374,9 +2410,7 @@ class _RequestDetailsVm {
         String pickCurrent({required bool left, required String key}) {
           final cap = key[0].toUpperCase() + key.substring(1);
           final prefixed = left ? 'l$cap' : 'r$cap';
-          return dimValue(
-            fallbackDims[prefixed] ?? fallbackDims[key],
-          );
+          return dimValue(fallbackDims[prefixed] ?? fallbackDims[key]);
         }
 
         leftHand = NailDimensionsV2(
@@ -2521,24 +2555,7 @@ class _RequestDetailsVm {
     return candidates.any(truthy);
   }
 
-  static String _dateLabel(DateTime? d) {
-    if (d == null) return '-';
-    const months = <String>[
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
-  }
+  static String _dateLabel(DateTime? d) => formatDateMdyOrDash(d);
 
   static String _dateLabelOrBlank(dynamic value) {
     if (value == null) return '';
@@ -2573,13 +2590,15 @@ class _RequestDetailsVm {
           ? 'Direct to Artist'
           : 'Standard';
     }
-    return hasSpecificArtist || !openToArtistPool ? 'Direct' : 'Direct to Client';
+    return hasSpecificArtist || !openToArtistPool
+        ? 'Direct'
+        : 'Direct to Client';
   }
 }
 
-
 class StorageUrlResolver {
-  static final Map<String, Future<String?>> _cache = <String, Future<String?>>{};
+  static final Map<String, Future<String?>> _cache =
+      <String, Future<String?>>{};
 
   static Future<String?> resolve(String raw) {
     final value = raw.trim();
