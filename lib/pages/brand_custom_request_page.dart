@@ -948,6 +948,11 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     return _nfcRequest ? base + _nfcBudgetSurcharge : base;
   }
 
+  int _effectiveArtistBudgetMin() {
+    final base = _artistBudget.start.round();
+    return _nfcRequest ? base + _nfcBudgetSurcharge : base;
+  }
+
   bool _isClientNameNfcEligible(String name) {
     return _clientNfcEligibleByNameLower[name.trim().toLowerCase()] == true;
   }
@@ -1531,6 +1536,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           : const <String>[];
       final effectiveClientBudgetMin = _effectiveClientBudgetMin();
       final effectiveClientBudgetMax = _clientBudget.end.round();
+      final effectiveArtistBudgetMin = _effectiveArtistBudgetMin();
+      final effectiveArtistBudgetMax = _artistBudget.end.round();
 
       final requestId = _generateRequestId();
       _pendingRequestDocId = requestId;
@@ -1632,12 +1639,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         if (_jntRevealDate != null)
           'jntRevealDateDisplay': _revealDateCtrl.text.trim(),
         'descriptionPreview': _descCtrl.text.trim(),
-        'budgetMin': _artistBudget.start.round(),
-        'budgetMax': _artistBudget.end.round(),
+        'budgetMin': effectiveArtistBudgetMin,
+        'budgetMax': effectiveArtistBudgetMax,
         'clientBudgetMin': effectiveClientBudgetMin,
         'clientBudgetMax': effectiveClientBudgetMax,
-        'artistBudgetMin': _artistBudget.start.round(),
-        'artistBudgetMax': _artistBudget.end.round(),
+        'artistBudgetMin': effectiveArtistBudgetMin,
+        'artistBudgetMax': effectiveArtistBudgetMax,
         'isDirectRequest': isDirectToArtist,
         'fallbackToPool': fallbackToPool,
         'openToClientPool': isOpenToClientPool,
@@ -1775,16 +1782,16 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           },
         },
         'budget': <String, dynamic>{
-          'min': _artistBudget.start.round(),
-          'max': _artistBudget.end.round(),
+          'min': effectiveArtistBudgetMin,
+          'max': effectiveArtistBudgetMax,
         },
         'clientBudget': <String, dynamic>{
           'min': effectiveClientBudgetMin,
           'max': effectiveClientBudgetMax,
         },
         'artistBudget': <String, dynamic>{
-          'min': _artistBudget.start.round(),
-          'max': _artistBudget.end.round(),
+          'min': effectiveArtistBudgetMin,
+          'max': effectiveArtistBudgetMax,
         },
         'order': <String, dynamic>{
           'type': orderTypeValue,
@@ -3194,10 +3201,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             ),
             const SizedBox(height: 10),
             _BudgetCard(
-              minLabel: '\$15',
+              minLabel: _nfcRequest ? '\$${15 + _nfcBudgetSurcharge}' : '\$15',
               maxLabel: '\$5000',
               values: _artistBudget,
-              displayStartOffset: 0,
+              displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
               onChanged: (v) => setState(() => _artistBudget = v),
               onChangeEnd: (_) {},
             ),

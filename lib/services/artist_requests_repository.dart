@@ -1600,6 +1600,25 @@ class ArtistRequestsRepository {
     addMap(row['request_details']);
     addMap(row['requestDetails']);
 
+    // Status-transition writes (e.g. _persistStatusUpdate for Mark
+    // Shipped/Delivered) only ever touch the flat root status/artist_status/
+    // client_status columns -- never the summary/details/payload/
+    // request_details JSONB blobs merged in above. Those blobs can hold a
+    // full-snapshot copy of status from an earlier stage (e.g. still
+    // 'completed' after the request has since been marked shipped), written
+    // by stage-transition handlers like _forcePersistArtistAcceptedDesigning
+    // that snapshot status into the blob columns. addMap's overwrite
+    // semantics let that stale blob value win over the fresher flat column,
+    // silently reverting the displayed status on the next fetch. Re-assert
+    // the flat columns last so they're always authoritative.
+    if (row['status'] != null) data['status'] = row['status'];
+    if (row['artist_status'] != null) {
+      data['artistStatus'] = row['artist_status'];
+    }
+    if (row['client_status'] != null) {
+      data['clientStatus'] = row['client_status'];
+    }
+
     final details = _asMap(row['details']);
     final payload = _asMap(row['payload']);
     final rootRequestDetails = _asMap(row['request_details']).isNotEmpty
