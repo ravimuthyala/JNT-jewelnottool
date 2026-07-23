@@ -633,6 +633,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       selectedClientName: req.selectedClientName,
       selectedClientEmail: req.selectedClientEmail,
       selectedArtistName: selectedArtistName,
+      openToClientPool: req.openToClientPool,
       artistProfileImage: req.artistProfileImage,
       createdAt: submittedAt,
       artistAcceptedAmount: acceptedAmountInt,
@@ -1854,6 +1855,7 @@ class ClientOrder {
   final String selectedClientName;
   final String selectedClientEmail;
   final String selectedArtistName;
+  final bool openToClientPool;
   final String artistProfileImage;
   final DateTime? cancelledAt;
   final DateTime? needBy;
@@ -1919,6 +1921,7 @@ class ClientOrder {
     this.selectedClientName = '',
     this.selectedClientEmail = '',
     this.selectedArtistName = '',
+    this.openToClientPool = true,
     this.artistProfileImage = '',
     this.cancelledAt,
     this.needBy,

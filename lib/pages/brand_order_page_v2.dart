@@ -647,6 +647,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       acceptedClientName: req.acceptedClientName,
       clientResponseStatus: req.clientResponseStatus,
       selectedArtistName: selectedArtistName,
+      openToClientPool: req.openToClientPool,
       artistProfileImage: req.artistProfileImage,
       createdAt: submittedAt,
       artistAcceptedAmount: acceptedAmountInt,
@@ -1952,6 +1953,7 @@ class ClientOrder {
   final String acceptedClientName;
   final String clientResponseStatus;
   final String selectedArtistName;
+  final bool openToClientPool;
   final String artistProfileImage;
   final DateTime? cancelledAt;
   final DateTime? needBy;
@@ -2021,6 +2023,7 @@ class ClientOrder {
     this.acceptedClientName = '',
     this.clientResponseStatus = '',
     this.selectedArtistName = '',
+    this.openToClientPool = true,
     this.artistProfileImage = '',
     this.cancelledAt,
     this.needBy,

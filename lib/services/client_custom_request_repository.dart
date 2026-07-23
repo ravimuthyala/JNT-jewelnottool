@@ -841,6 +841,7 @@ class SubmittedClientRequestSummary {
     required this.deliveredAt,
     this.nfcRequested = false,
     this.acceptedClientName = '',
+    this.openToClientPool = true,
   });
 
   final String id;
@@ -905,6 +906,7 @@ class SubmittedClientRequestSummary {
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
   final bool nfcRequested;
+  final bool openToClientPool;
 
   static Future<SubmittedClientRequestSummary> fromDocWithDetails(dynamic doc) async {
     final data = doc.data();
@@ -1654,6 +1656,9 @@ class SubmittedClientRequestSummary {
       data['artistName'],
       data['artist_display_name'],
       data['artistDisplayName'],
+      requestDetails['selectedArtist'],
+      detailData['selectedArtist'],
+      payloadData['selectedArtist'],
       orderDetails['selectedArtist'],
     ], fallback: 'Artist');
     final selectedClientName = firstNonEmpty([
@@ -1684,6 +1689,26 @@ class SubmittedClientRequestSummary {
       orderDetails['type'],
       detailData['orderType'],
     ], fallback: 'single').toLowerCase();
+    bool boolFromValue(Object? value, {required bool fallback}) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      final text = (value ?? '').toString().trim().toLowerCase();
+      if (text == 'true' || text == 'yes' || text == '1') return true;
+      if (text == 'false' || text == 'no' || text == '0') return false;
+      return fallback;
+    }
+
+    final openToClientPool = boolFromValue(
+      data['open_to_client_pool'] ??
+          data['openToClientPool'] ??
+          payloadData['openToClientPool'] ??
+          payloadData['open_to_client_pool'] ??
+          detailData['openToClientPool'] ??
+          detailData['open_to_client_pool'] ??
+          orderDetails['openToClientPool'] ??
+          orderDetails['open_to_client_pool'],
+      fallback: true,
+    );
     final cancellation = _asMap(detailData['cancellation'])
       ..addAll(_asMap(requestDetails['cancellation']));
     final cancelReason = firstNonEmpty([
@@ -2240,6 +2265,7 @@ class SubmittedClientRequestSummary {
       trackingNumber: trackingNumber,
       shippedAt: shippedAt,
       deliveredAt: deliveredAt,
+      openToClientPool: openToClientPool,
     );
   }
 }
