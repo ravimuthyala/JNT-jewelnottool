@@ -620,7 +620,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         Container(width: 1, height: 16, color: AppColors.blackCatBorderLight);
 
     final requestTypeSegment = Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
@@ -634,7 +634,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         Flexible(
           child: Text(
             vm.requestType,
-            textAlign: TextAlign.right,
+            textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -662,6 +662,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         Flexible(
           child: Text(
             vm.orderType,
+            textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -675,7 +676,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
 
     final nfcSegment = Row(
-      mainAxisAlignment: MainAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.nfc_rounded, size: 16, color: AppColors.blackCat),
@@ -683,6 +684,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         const Flexible(
           child: Text(
             'NFC',
+            textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -699,11 +701,10 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Request type values ("Direct to Artist"/"Direct to Client") run
-        // noticeably longer than the order-type/NFC values ("Single",
-        // "Group", "NFC"), so give it a larger share of the row instead of
-        // splitting evenly -- otherwise it clips even with wrapping.
-        Expanded(flex: 2, child: requestTypeSegment),
+        // Equal flex for every visible segment so each is centered within
+        // its own slot and the divider(s) always land at the same relative
+        // position, whether NFC is shown or not.
+        Expanded(child: requestTypeSegment),
         const SizedBox(width: 12),
         divider(),
         const SizedBox(width: 12),
@@ -1822,9 +1823,20 @@ class _RequestDetailsVm {
                           .where((e) => e.isNotEmpty)
                           .toList(growable: false)));
 
+    // root is the raw DB row, whose real columns are snake_case
+    // (company_name/brand_name/client_name) -- the camelCase keys below
+    // never exist there and always fail, silently falling through to
+    // request.clientName every time. For brand requests that field is
+    // reassigned (in ArtistRequestsRepository) to the accepted/selected
+    // client's name for the artist's benefit, not the brand's own name,
+    // so relying on it here showed the wrong name. Check the real
+    // snake_case columns first.
     final brandName = firstNonEmpty([
+      root['company_name'],
       root['companyName'],
+      root['brand_name'],
       root['brandName'],
+      root['client_name'],
       root['clientName'],
       request.clientName,
     ], fallback: 'Brand Company');

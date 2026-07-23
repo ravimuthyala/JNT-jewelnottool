@@ -650,8 +650,13 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         }
       }
 
-      brandVisible.sort((a, b) => a.neededBy.compareTo(b.neededBy));
-      clientVisible.sort((a, b) => a.neededBy.compareTo(b.neededBy));
+      // Most recently submitted first, not soonest deadline.
+      int byNewest(ClientRequestV2 a, ClientRequestV2 b) =>
+          (b.submittedAt ?? b.neededBy).compareTo(
+            a.submittedAt ?? a.neededBy,
+          );
+      brandVisible.sort(byNewest);
+      clientVisible.sort(byNewest);
 
       if (!mounted) return;
       setState(() {
@@ -1987,10 +1992,38 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
 
   Widget _avatarWidget(ClientRequestV2 request) {
     final path = request.clientProfileImage.trim();
-    if (path.isEmpty) {
-      return const Icon(Icons.business, color: AppColors.blackCat);
+    // Match CompanyClientRequestCard's own name-priority (brandName first
+    // for brand requests) so the initial-letter fallback here always shows
+    // the same letter as the name text on the card, and matches the
+    // details modal's fallback too.
+    final displayName = request.sourceCollection == 'Company_Custom_Requests'
+        ? (request.brandName.trim().isEmpty
+              ? request.clientName.trim()
+              : request.brandName.trim())
+        : request.clientName.trim();
+    Widget initialFallback() {
+      final letter = displayName.isEmpty ? 'B' : displayName[0].toUpperCase();
+      return Container(
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: AppColors.balletSlippers,
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Text(
+          letter,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            color: AppColors.blackCat,
+          ),
+        ),
+      );
     }
-    return _imageFromPath(path, fallback: const Icon(Icons.business));
+
+    if (path.isEmpty) {
+      return initialFallback();
+    }
+    return _imageFromPath(path, fallback: initialFallback());
   }
 
   Future<String> _loadPreviewImagePath(ClientRequestV2 request) async {

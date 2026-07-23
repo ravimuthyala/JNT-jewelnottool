@@ -1812,7 +1812,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     // Sort
     if (_sort == 'Newest') {
-      list.sort((a, b) => b.neededBy.compareTo(a.neededBy));
+      // "Newest" means most recently submitted, not the latest deadline --
+      // fall back to neededBy only for legacy rows missing submittedAt.
+      list.sort(
+        (a, b) => (b.submittedAt ?? b.neededBy).compareTo(
+          a.submittedAt ?? a.neededBy,
+        ),
+      );
     } else if (_sort == 'Soonest needed') {
       list.sort((a, b) => a.neededBy.compareTo(b.neededBy));
     } else if (_sort == 'Higher budget') {
@@ -9540,25 +9546,25 @@ class InReviewDetailsSheet extends StatelessWidget {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Request type values ("Direct to Artist"/"Direct to
-                // Client") run noticeably longer than order-type/NFC values
-                // ("Single", "Group", "NFC"), so give this segment more of
-                // the row instead of splitting evenly.
-                Flexible(
-                  flex: 2,
-                  child: _requestTypePill(
-                    context: context,
-                    // requestTypeLabel is frozen at submission and must
-                    // never be recomputed from current state (e.g. after
-                    // client/artist acceptance). Fall back to the live
-                    // isDirect computation only for legacy rows.
-                    text: request.requestTypeLabel.isNotEmpty
-                        ? request.requestTypeLabel
-                        : (isDirect ? 'Direct' : 'Standard'),
-                    icon: isDirect
-                        ? Icons.arrow_outward_rounded
-                        : Icons.arrow_forward_rounded,
-                    alignEnd: true,
+                // Equal flex for every visible segment so each is centered
+                // within its own slot and the divider(s) always land at the
+                // same relative position, whether NFC is shown or not.
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: _requestTypePill(
+                      context: context,
+                      // requestTypeLabel is frozen at submission and must
+                      // never be recomputed from current state (e.g. after
+                      // client/artist acceptance). Fall back to the live
+                      // isDirect computation only for legacy rows.
+                      text: request.requestTypeLabel.isNotEmpty
+                          ? request.requestTypeLabel
+                          : (isDirect ? 'Direct' : 'Standard'),
+                      icon: isDirect
+                          ? Icons.arrow_outward_rounded
+                          : Icons.arrow_forward_rounded,
+                    ),
                   ),
                 ),
                 SizedBox(width: 12 * s),
@@ -9568,14 +9574,16 @@ class InReviewDetailsSheet extends StatelessWidget {
                   color: AppColors.blackCatBorderLight,
                 ),
                 SizedBox(width: 12 * s),
-                Flexible(
-                  child: _requestTypePill(
-                    context: context,
-                    text: isGroup ? 'Group' : 'Single',
-                    icon: isGroup
-                        ? Icons.groups_2_outlined
-                        : Icons.person_outline_rounded,
-                    alignEnd: requiresNfc,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: _requestTypePill(
+                      context: context,
+                      text: isGroup ? 'Group' : 'Single',
+                      icon: isGroup
+                          ? Icons.groups_2_outlined
+                          : Icons.person_outline_rounded,
+                    ),
                   ),
                 ),
                 if (requiresNfc) ...[
@@ -9586,12 +9594,14 @@ class InReviewDetailsSheet extends StatelessWidget {
                     color: AppColors.blackCatBorderLight,
                   ),
                   SizedBox(width: 12 * s),
-                  Flexible(
-                    child: _requestTypePill(
-                      context: context,
-                      text: 'NFC',
-                      icon: Icons.nfc_rounded,
-                      alignEnd: false,
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: _requestTypePill(
+                        context: context,
+                        text: 'NFC',
+                        icon: Icons.nfc_rounded,
+                      ),
                     ),
                   ),
                 ],
@@ -9607,14 +9617,12 @@ class InReviewDetailsSheet extends StatelessWidget {
     required BuildContext context,
     required String text,
     required IconData icon,
-    required bool alignEnd,
   }) {
     final s = _reqScale(context);
 
     return Row(
-      mainAxisAlignment: alignEnd
-          ? MainAxisAlignment.end
-          : MainAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16 * s, color: AppColors.blackCat),
         SizedBox(width: 8 * s),

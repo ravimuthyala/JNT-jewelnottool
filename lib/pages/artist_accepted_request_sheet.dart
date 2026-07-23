@@ -3028,14 +3028,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
         return Row(
           children: [
-            // Request type values ("Direct to Artist"/"Direct to Client")
-            // run noticeably longer than order-type/NFC values ("Single",
-            // "Group", "NFC"), so give this segment more of the row instead
-            // of splitting evenly -- otherwise it clips even with wrapping.
+            // Equal flex for every visible segment so each is centered
+            // within its own slot and the divider(s) always land at the
+            // same relative position, whether NFC is shown or not.
             Expanded(
-              flex: 2,
               child: Align(
-                alignment: Alignment.centerRight,
+                alignment: Alignment.center,
                 child: _chipInfo(
                   icon: r.isDirectRequest
                       ? Icons.arrow_outward_rounded
@@ -3053,9 +3051,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
             const SizedBox(width: 8),
             Expanded(
               child: Align(
-                alignment: requiresNfc
-                    ? Alignment.center
-                    : Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: _chipInfo(
                   icon: r.orderType == RequestOrderTypeV2.group
                       ? Icons.groups_2_outlined
@@ -3074,7 +3070,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               const SizedBox(width: 8),
               Expanded(
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: Alignment.center,
                   child: _chipInfo(icon: Icons.nfc_rounded, text: 'NFC'),
                 ),
               ),
