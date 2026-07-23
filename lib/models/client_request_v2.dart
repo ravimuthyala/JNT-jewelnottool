@@ -77,6 +77,11 @@ class ClientRequestV2 {
   final double? artistFinalAmount;
 
   final bool isDirectRequest;
+  // Frozen at submission (brand_custom_request_page._computeRequestTypeLabel)
+  // and must never be recomputed from current acceptance state -- values:
+  // 'Standard', 'Direct to Artist', 'Direct to Client', 'Direct'. Empty for
+  // legacy rows that predate this field.
+  final String requestTypeLabel;
   final bool fallbackToPool;
   final bool openToClientPool;
   final bool allowNonLicensed;
@@ -175,6 +180,7 @@ class ClientRequestV2 {
     this.artistFinalAmount,
     required this.status,
     required this.isDirectRequest,
+    this.requestTypeLabel = '',
     this.fallbackToPool = true,
     this.openToClientPool = true,
     this.allowNonLicensed = true,
@@ -349,6 +355,7 @@ class ClientRequestV2 {
       artistFinalAmount: artistFinalAmount ?? this.artistFinalAmount,
       status: status ?? this.status,
       isDirectRequest: isDirectRequest,
+      requestTypeLabel: requestTypeLabel,
       fallbackToPool: fallbackToPool ?? this.fallbackToPool,
       openToClientPool: openToClientPool ?? this.openToClientPool,
       allowNonLicensed: allowNonLicensed ?? this.allowNonLicensed,

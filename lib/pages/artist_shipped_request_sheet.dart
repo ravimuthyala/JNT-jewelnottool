@@ -1073,7 +1073,13 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   }
 
   Widget _requestTypeOrderRow(ClientRequestV2 r) {
-    final requestType = r.isDirectRequest ? 'Direct' : 'Standard';
+    // requestTypeLabel is frozen at submission and must never be
+    // recomputed from current state (e.g. after client/artist acceptance).
+    // Fall back to the old simplified rule only for legacy rows that
+    // predate this field.
+    final requestType = r.requestTypeLabel.isNotEmpty
+        ? r.requestTypeLabel
+        : (r.isDirectRequest ? 'Direct' : 'Standard');
     final orderType = r.orderType == RequestOrderTypeV2.group
         ? 'Group'
         : 'Single';

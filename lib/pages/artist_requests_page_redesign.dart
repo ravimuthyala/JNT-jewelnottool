@@ -5489,7 +5489,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                r.isDirectRequest ? 'Direct' : 'Standard',
+                                // requestTypeLabel is frozen at submission and
+                                // must never be recomputed from current state
+                                // (e.g. after client/artist acceptance).
+                                r.requestTypeLabel.isNotEmpty
+                                    ? r.requestTypeLabel
+                                    : (r.isDirectRequest
+                                          ? 'Direct'
+                                          : 'Standard'),
                                 style: _t(
                                   11.5,
                                   w: FontWeight.w700,
@@ -9536,7 +9543,13 @@ class InReviewDetailsSheet extends StatelessWidget {
                 Flexible(
                   child: _requestTypePill(
                     context: context,
-                    text: isDirect ? 'Direct' : 'Standard',
+                    // requestTypeLabel is frozen at submission and must
+                    // never be recomputed from current state (e.g. after
+                    // client/artist acceptance). Fall back to the live
+                    // isDirect computation only for legacy rows.
+                    text: request.requestTypeLabel.isNotEmpty
+                        ? request.requestTypeLabel
+                        : (isDirect ? 'Direct' : 'Standard'),
                     icon: isDirect
                         ? Icons.arrow_outward_rounded
                         : Icons.arrow_forward_rounded,

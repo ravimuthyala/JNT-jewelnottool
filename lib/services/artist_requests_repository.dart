@@ -616,6 +616,16 @@ class ArtistRequestsRepository {
       budgetMax: safeBudgetMax,
       status: status,
       isDirectRequest: directFlag,
+      // Deliberately NOT reading data['requestType']/data['request_type']:
+      // that key is overloaded elsewhere with the unrelated value
+      // 'companyCustomRequest' (a record-category tag, not this label) --
+      // only requestTypeLabel/requestTypeDisplay are unambiguous.
+      requestTypeLabel: _firstNonEmptyString(
+        data['requestTypeLabel'],
+        data['requestTypeDisplay'],
+        data['request_type_label'],
+        data['request_type_display'],
+      ),
       fallbackToPool: _asNullableBool(data['fallbackToPool']) ?? true,
       openToClientPool: _asNullableBool(data['openToClientPool']) ?? true,
       allowNonLicensed:
@@ -1476,6 +1486,16 @@ class ArtistRequestsRepository {
       artistFinalAmount: artistFinalAmount,
       status: status,
       isDirectRequest: directFlag || selectedArtist.isNotEmpty,
+      // Deliberately NOT reading data['requestType']/data['request_type']:
+      // that key is overloaded elsewhere with the unrelated value
+      // 'companyCustomRequest' (a record-category tag, not this label) --
+      // only requestTypeLabel/requestTypeDisplay are unambiguous.
+      requestTypeLabel: _firstNonEmptyString(
+        data['requestTypeLabel'],
+        data['requestTypeDisplay'],
+        data['request_type_label'],
+        data['request_type_display'],
+      ),
       fallbackToPool: fallbackToPool,
       openToClientPool: openToClientPool,
       allowNonLicensed: allowNonLicensed,

@@ -413,7 +413,13 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _requestTypeRow() {
-    final requestLabel = request.isDirectRequest ? 'Direct' : 'Standard';
+    // requestTypeLabel is frozen at submission and must never be
+    // recomputed from current state (e.g. after client/artist acceptance).
+    // Fall back to the old simplified rule only for legacy rows that
+    // predate this field.
+    final requestLabel = request.requestTypeLabel.isNotEmpty
+        ? request.requestTypeLabel
+        : (request.isDirectRequest ? 'Direct' : 'Standard');
     final orderLabel = request.orderType == RequestOrderTypeV2.group
         ? 'Group'
         : 'Single';

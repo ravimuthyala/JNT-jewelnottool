@@ -1975,7 +1975,34 @@ class _RequestDetailsVm {
       openToClientPool: openToClientPool,
       openToArtistPool: openToArtistPool,
     );
-    final requestType = computedRequestType;
+    // requestTypeLabel/requestTypeDisplay are frozen at submission and must
+    // never be recomputed from current state (e.g. after client/artist
+    // acceptance). Deliberately not reading requestType: that key is
+    // overloaded elsewhere with the unrelated value 'companyCustomRequest'.
+    // Fall back to the live computation only for legacy rows that predate
+    // this field.
+    final storedRequestTypeLabel = firstNonEmpty([
+      request.requestTypeLabel,
+      root['requestTypeLabel'],
+      root['request_type_label'],
+      order['requestTypeLabel'],
+      order['request_type_label'],
+      details['requestTypeLabel'],
+      details['request_type_label'],
+      requestDetails['requestTypeLabel'],
+      requestDetails['request_type_label'],
+      payload['requestTypeLabel'],
+      payload['request_type_label'],
+      root['requestTypeDisplay'],
+      root['request_type_display'],
+      details['requestTypeDisplay'],
+      details['request_type_display'],
+      payload['requestTypeDisplay'],
+      payload['request_type_display'],
+    ]);
+    final requestType = storedRequestTypeLabel.isNotEmpty
+        ? storedRequestTypeLabel
+        : computedRequestType;
     final customDescription = firstNonEmpty([
       requestDetails['description'],
       root['descriptionPreview'],
