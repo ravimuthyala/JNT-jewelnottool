@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../constants/profile_table_columns.dart';
+
 class ArtistDirectoryEntry {
   const ArtistDirectoryEntry({
     required this.id,
@@ -214,7 +216,7 @@ class ArtistDirectoryService {
         final pageLimit = (maxRows - rows.length).clamp(1, pageSize);
         final page = await _client
             .from(table)
-            .select()
+            .select(columnsForProfileTable(table) ?? '*')
             .order('id')
             .range(offset, offset + pageLimit - 1);
         if (page.isEmpty) break;
@@ -679,13 +681,9 @@ class ArtistDirectoryService {
     );
 
     final portfolioImages = <String>[
-      ...collectImageUrls(_asList(data['portfolioImages'])),
       ...collectImageUrls(_asList(data['portfolio_images'])),
-      ...collectImageUrls(_asList(data['panel_artist_portfolioImages'])),
       ...collectImageUrls(_asList(data['panel_artist_portfolio_images'])),
-      ...collectImageUrls(_asList(data['panel_portfolioImages'])),
       ...collectImageUrls(_asList(data['panel_portfolio_images'])),
-      ...collectImageUrls(_asList(data['portfolioItems'])),
       ...collectImageUrls(_asList(data['portfolio_items'])),
       ...collectImageUrls(_asList(portfolio['images'])),
       ...collectImageUrls(_asList(portfolio['items'])),

@@ -1231,7 +1231,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   OrdersFilter _filter = OrdersFilter.all;
   StreamSubscription<List<SubmittedClientRequestSummary>>?
   _submittedRequestsSub;
-  StreamSubscription<dynamic>? _brandPartnerStatusSub;
   List<ClientOrder> _submittedOrders = const [];
   final FocusNode _notificationsFocusNode = FocusNode(
     debugLabel: 'ordersNotifications',
@@ -1241,7 +1240,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   @override
   void initState() {
     super.initState();
-    unawaited(_listenBrandPartnerStatus());
     _subscribeSubmittedOrders();
     _scheduleInitialA11yFocus();
   }
@@ -1264,7 +1262,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   @override
   void dispose() {
     _submittedRequestsSub?.cancel();
-    _brandPartnerStatusSub?.cancel();
     _notificationsFocusNode.dispose();
     super.dispose();
   }
@@ -1298,43 +1295,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       _focusRequestQueued = false;
       _notificationsFocusNode.requestFocus();
     });
-  }
-
-  Future<void> _listenBrandPartnerStatus() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final uid = user?.id;
-    final email = (user?.email ?? widget.profile.basic.email)
-        .trim()
-        .toLowerCase();
-    if ((uid == null || uid.isEmpty) && email.isEmpty) return;
-
-    try {
-      Map<String, dynamic>? row;
-      if (uid != null && uid.isNotEmpty) {
-        row = await Supabase.instance.client
-            .from('client')
-            .select()
-            .eq('id', uid)
-            .maybeSingle();
-        row ??= await Supabase.instance.client
-            .from('client_artist')
-            .select()
-            .eq('id', uid)
-            .maybeSingle();
-      }
-      if (row == null && email.isNotEmpty) {
-        row = await Supabase.instance.client
-            .from('client')
-            .select()
-            .ilike('email', email)
-            .maybeSingle();
-        row ??= await Supabase.instance.client
-            .from('client_artist')
-            .select()
-            .ilike('email', email)
-            .maybeSingle();
-      }
-    } catch (_) {}
   }
 
   void _subscribeSubmittedOrders() {
