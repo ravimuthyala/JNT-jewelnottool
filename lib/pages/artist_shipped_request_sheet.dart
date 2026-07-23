@@ -1124,18 +1124,16 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             nfc.main.left['thumb'] == true || nfc.main.right['thumb'] == true;
         return Row(
           children: [
-            // Request type values ("Direct to Artist"/"Direct to Client")
-            // run noticeably longer than order-type/NFC values ("Single",
-            // "Group", "NFC"), so give this segment more of the row instead
-            // of splitting evenly -- otherwise it clips even with wrapping.
+            // Equal flex for every visible segment so each is centered
+            // within its own slot and the divider(s) always land at the
+            // same relative position, whether NFC is shown or not.
             Expanded(
-              flex: 2,
               child: segment(
                 icon: r.isDirectRequest
                     ? Icons.arrow_outward_rounded
                     : Icons.arrow_forward_rounded,
                 text: requestType,
-                alignment: Alignment.centerRight,
+                alignment: Alignment.center,
               ),
             ),
             const SizedBox(width: 10),
@@ -1151,9 +1149,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                     ? Icons.groups_2_outlined
                     : Icons.person_outline_rounded,
                 text: orderType,
-                alignment: requiresNfc
-                    ? Alignment.center
-                    : Alignment.centerLeft,
+                alignment: Alignment.center,
               ),
             ),
             if (requiresNfc) ...[
@@ -1168,7 +1164,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 child: segment(
                   icon: Icons.nfc_rounded,
                   text: 'NFC',
-                  alignment: Alignment.centerLeft,
+                  alignment: Alignment.center,
                 ),
               ),
             ],
