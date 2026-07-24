@@ -47,6 +47,7 @@ dependencies:
   nfc_manager: ^3.5.0
   supabase_flutter: ^2.5.6
   sentry_flutter: ^9.24.0
+  http: ^1.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

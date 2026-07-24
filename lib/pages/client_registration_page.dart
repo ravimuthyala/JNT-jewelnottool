@@ -15,6 +15,7 @@ import '../services/supabase_bootstrap.dart';
 import '../theme/app_colors.dart';
 import '../config/auth_flags.dart';
 import '../models/client_profile_models.dart';
+import '../services/nail_measurement_service.dart';
 import '../services/notifications_service.dart';
 import '../utils/registration_input_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
@@ -558,19 +559,21 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
               }
             }
 
-            Future<void> captureCurrentStep() async {
+            Future<void> captureCurrentStep({
+              ImageSource source = ImageSource.camera,
+            }) async {
               if (measuring) return;
               setModalState(() => measuring = true);
               try {
-                _authLog('opening camera for ${step.key}');
+                _authLog('opening ${source.name} for ${step.key}');
                 final image = await _picker.pickImage(
-                  source: ImageSource.camera,
+                  source: source,
                   imageQuality: 80,
                   maxWidth: 1080,
                   maxHeight: 1080,
                 );
                 if (image == null) {
-                  _authLog('camera canceled for ${step.key}');
+                  _authLog('${source.name} canceled for ${step.key}');
                   return;
                 }
 
@@ -580,9 +583,47 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                   'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
                 );
 
-                final mm = await _askManualMeasurement(step.title);
-                if (mm == null) return;
-                await saveCurrentAndMoveNext(mm);
+                double? mm;
+                if (NailMeasurementService.isConfigured) {
+                  _authLog('requesting API measurement for ${step.key}');
+                  final coin = _coinReferences.firstWhere(
+                    (c) => c.name == _measurementCoinReference,
+                    orElse: () => _coinReferences.first,
+                  );
+                  // One hand photo yields widths for all 5 fingers of that
+                  // hand, so fill every sibling finger before moving on.
+                  final handWidths = await NailMeasurementService.measureFullHandMm(
+                    imageBytes: bytes,
+                    hand: step.hand,
+                    coinName: coin.name,
+                    coinDiameterMm: coin.diameterMm,
+                  );
+                  _authLog('API full-hand measurement for ${step.hand}: $handWidths');
+                  if (handWidths == null || handWidths[step.finger] == null) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(pageContext).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Could not measure from photo. Make sure the coin is visible and try again.',
+                          ),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  for (final sibling in _nailCaptureSteps) {
+                    if (sibling.hand != step.hand) continue;
+                    final width = handWidths[sibling.finger];
+                    if (width != null) {
+                      measured[sibling.key] = (width * 10).roundToDouble() / 10.0;
+                    }
+                  }
+                  mm = handWidths[step.finger];
+                } else {
+                  mm = await _askManualMeasurement(step.title);
+                  if (mm == null) return;
+                }
+                await saveCurrentAndMoveNext(mm!);
               } catch (_) {
                 _authLog('capture failed for ${step.key}');
                 if (mounted) {
@@ -613,7 +654,8 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                   16,
                   16 + MediaQuery.of(modalContext).viewInsets.bottom,
                 ),
-                child: Column(
+                child: SingleChildScrollView(
+                  child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -825,6 +867,19 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                       ],
                     ),
                     const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: measuring
+                            ? null
+                            : () => captureCurrentStep(
+                                source: ImageSource.gallery,
+                              ),
+                        icon: const Icon(Icons.upload_outlined, size: 18),
+                        label: const Text('Upload image (testing)'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     TextButton(
                       onPressed: () async {
                         final nextCoin = await _showCoinSelector();
@@ -836,6 +891,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                       child: const Text('Change Coin/Currency'),
                     ),
                   ],
+                  ),
                 ),
               ),
             );

@@ -1,9 +1,14 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+
 class NailMeasurementService {
-  static const String _apiUrl = 'http://10.0.2.2:8000/v1/nail-measurements/measure';
+  static const String _apiUrl = String.fromEnvironment(
+    'NAIL_MEASUREMENT_API_URL',
+    defaultValue:
+        'https://uolyyyq9ih.execute-api.us-east-2.amazonaws.com/measure/single-finger',
+  );
   static const String _apiKey = String.fromEnvironment(
     'NAIL_MEASUREMENT_API_KEY',
     defaultValue: '',
@@ -38,43 +43,123 @@ class NailMeasurementService {
     required Uint8List imageBytes,
     required String hand,
     required String finger,
-    required String coinReference,
-    String currency = 'USD',
+    required String coinName,
+    required double coinDiameterMm,
   }) async {
     if (!isConfigured) return null;
     if (imageBytes.isEmpty || imageBytes.lengthInBytes > _maxPayloadBytes) {
       return null;
     }
 
-    final uri = Uri.tryParse(_apiUrl.trim());
-    if (uri == null || uri.host.trim().isEmpty) return null;
+    final baseUri = Uri.tryParse(_apiUrl.trim());
+    if (baseUri == null || baseUri.host.trim().isEmpty) return null;
 
-    final payload = <String, dynamic>{
-      'imageBase64': base64Encode(imageBytes),
-      'hand': hand,
-      'finger': finger,
-      'coinReference': coinReference,
-      'currency': currency,
-    };
+    final uri = baseUri.replace(
+      queryParameters: {
+        ...baseUri.queryParameters,
+        'hand': hand,
+        'finger': finger,
+        'coinName': coinName,
+        'coinDiameterMm': coinDiameterMm.toString(),
+      },
+    );
 
-    final client = HttpClient();
     try {
-      final req = await client.postUrl(uri).timeout(_requestTimeout);
-      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      final request = http.MultipartRequest('POST', uri)
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            imageBytes,
+            filename: 'nail.jpg',
+          ),
+        );
       if (_apiKey.trim().isNotEmpty) {
-        req.headers.set('x-api-key', _apiKey.trim());
+        request.headers['x-api-key'] = _apiKey.trim();
       }
-      req.write(jsonEncode(payload));
-      final res = await req.close().timeout(_requestTimeout);
-      final body = await utf8.decoder.bind(res).join().timeout(_requestTimeout);
+
+      final streamedRes = await request.send().timeout(_requestTimeout);
+      final res = await http.Response.fromStream(streamedRes).timeout(
+        _requestTimeout,
+      );
+      print('[CLIENT-REG] API Response Status: ${res.statusCode}, Body: ${res.body}');
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return null;
+      }
+
+      final decoded = jsonDecode(res.body);
+      return _extractMm(decoded);
+    } catch (e, stack) {
+      print('[CLIENT-REG] API Connection Exception: $e');
+      print(stack);
+      return null;
+    }
+  }
+
+  /// Calls /measure/full-hand so one photo returns widths for all 5 fingers
+  /// of [hand] at once, instead of one photo per finger.
+  static Future<Map<String, double>?> measureFullHandMm({
+    required Uint8List imageBytes,
+    required String hand,
+    required String coinName,
+    required double coinDiameterMm,
+  }) async {
+    if (!isConfigured) return null;
+    if (imageBytes.isEmpty || imageBytes.lengthInBytes > _maxPayloadBytes) {
+      return null;
+    }
+
+    final baseUri = Uri.tryParse(_apiUrl.trim());
+    if (baseUri == null || baseUri.host.trim().isEmpty) return null;
+
+    final fullHandPath = baseUri.path.replaceFirst(
+      RegExp(r'/measure/[^/]+$'),
+      '/measure/full-hand',
+    );
+    final uri = baseUri.replace(
+      path: fullHandPath,
+      queryParameters: {
+        'hand': hand,
+        'coinName': coinName,
+        'coinDiameterMm': coinDiameterMm.toString(),
+      },
+    );
+
+    try {
+      final request = http.MultipartRequest('POST', uri)
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            imageBytes,
+            filename: 'hand.jpg',
+          ),
+        );
+      if (_apiKey.trim().isNotEmpty) {
+        request.headers['x-api-key'] = _apiKey.trim();
+      }
+
+      final streamedRes = await request.send().timeout(_requestTimeout);
+      final res = await http.Response.fromStream(streamedRes).timeout(
+        _requestTimeout,
+      );
       if (res.statusCode < 200 || res.statusCode >= 300) return null;
 
-      final decoded = jsonDecode(body);
-      return _extractMm(decoded);
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map) return null;
+      final measurements = decoded['measurements'];
+      if (measurements is! Map) return null;
+
+      final result = <String, double>{};
+      for (final entry in measurements.entries) {
+        final finger = entry.value;
+        if (finger is! Map) continue;
+        final widthMm = finger['widthMm'];
+        if (widthMm is num) {
+          result[entry.key as String] = widthMm.toDouble();
+        }
+      }
+      return result.isEmpty ? null : result;
     } catch (_) {
       return null;
-    } finally {
-      client.close(force: true);
     }
   }
 
