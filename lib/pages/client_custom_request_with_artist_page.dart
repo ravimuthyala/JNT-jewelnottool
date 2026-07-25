@@ -69,6 +69,7 @@ class _ClientCustomRequestWithArtistPageState
   static const int _maxImageSizeBytes = 2 * 1024 * 1024;
   static const int _maxInspirationPhotos = 10;
   final TextEditingController _dateCtrl = TextEditingController();
+  final TextEditingController _revealDateCtrl = TextEditingController();
   final TextEditingController _descCtrl = TextEditingController();
   final FocusNode _notificationsFocusNode = FocusNode(
     debugLabel: 'designWithArtistNotifications',
@@ -81,6 +82,7 @@ class _ClientCustomRequestWithArtistPageState
   bool _focusRequestQueued = false;
 
   DateTime? _needBy;
+  DateTime? _jntRevealDate;
 
   bool _allowNonLicensed = true; // default checked
   bool _fallbackToPool = true; // default yes
@@ -164,11 +166,8 @@ class _ClientCustomRequestWithArtistPageState
   }
 
   void _applyNfcBudgetDelta({required int oldCount, required int newCount}) {
-    final delta = (newCount - oldCount) * 7.0;
-    if (delta == 0) return;
-    final nextStart = (_clientBudget.start + delta)
-        .clamp(15.0, 5000.0)
-        .toDouble();
+    final nextStart = newCount > 0 ? 22.0 : 15.0;
+    if (_clientBudget.start == nextStart) return;
     final nextEnd = _clientBudget.end < nextStart
         ? nextStart
         : _clientBudget.end;
@@ -261,7 +260,9 @@ class _ClientCustomRequestWithArtistPageState
   /// display text, not structured fields — resolve the full address before
   /// applying it. Nominatim-backed suggestions (placeId null) apply
   /// unchanged, synchronously.
-  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+  Future<void> _selectShippingStreetSuggestion(
+    AddressSuggestion selected,
+  ) async {
     if (selected.placeId != null) {
       final resolved = await AddressValidationService.resolvePlaceDetails(
         selected.placeId!,
@@ -1063,6 +1064,7 @@ class _ClientCustomRequestWithArtistPageState
   void dispose() {
     _shipStreetAutocompleteDebounce?.cancel();
     _dateCtrl.dispose();
+    _revealDateCtrl.dispose();
     _descCtrl.dispose();
     _shipStreetCtrl.dispose();
     _shipCityCtrl.dispose();
@@ -1167,6 +1169,11 @@ class _ClientCustomRequestWithArtistPageState
                         _needBy = picked;
                         _dateCtrl.text =
                             '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
+                        if (_jntRevealDate != null &&
+                            !_jntRevealDate!.isAfter(picked)) {
+                          _jntRevealDate = null;
+                          _revealDateCtrl.clear();
+                        }
                         _fieldErrors.remove('needBy');
                       });
                       Navigator.of(ctx).pop();
@@ -1179,6 +1186,31 @@ class _ClientCustomRequestWithArtistPageState
         ),
       ),
     );
+  }
+
+  Future<void> _pickRevealDate() async {
+    if (_needBy == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Need By Date first.')),
+      );
+      return;
+    }
+    final firstDate = _needBy!.add(const Duration(days: 1));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          _jntRevealDate != null && !_jntRevealDate!.isBefore(firstDate)
+          ? _jntRevealDate!
+          : firstDate,
+      firstDate: firstDate,
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _jntRevealDate = picked;
+      _revealDateCtrl.text =
+          '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
+    });
   }
 
   CompletedClient? _findClient(String? id) {
@@ -1869,8 +1901,10 @@ class _ClientCustomRequestWithArtistPageState
 
   void _resetFormAfterSubmit() {
     _dateCtrl.clear();
+    _revealDateCtrl.clear();
     _descCtrl.clear();
     _needBy = null;
+    _jntRevealDate = null;
     _inspirationPhotos.clear();
     _pickedPhotoFiles.clear();
     _pickedPhotoBytes.clear();
@@ -2013,6 +2047,7 @@ class _ClientCustomRequestWithArtistPageState
     final now = DateTime.now();
 
     final needBy = needByDate.toIso8601String();
+    final revealDate = _jntRevealDate?.toIso8601String();
     final description = _descCtrl.text.trim();
     final clientBudgetMin = _clientBudget.start.round();
     final clientBudgetMax = _clientBudget.end.round();
@@ -2062,6 +2097,9 @@ class _ClientCustomRequestWithArtistPageState
       'clientSubmittedAtLocal': now.toIso8601String(),
       'needBy': needBy,
       'needByDisplay': _dateCtrl.text.trim(),
+      if (revealDate != null) 'jntRevealDate': revealDate,
+      if (revealDate != null)
+        'jntRevealDateDisplay': _revealDateCtrl.text.trim(),
       'descriptionPreview': description.length > 140
           ? '${description.substring(0, 140)}...'
           : description,
@@ -2100,6 +2138,9 @@ class _ClientCustomRequestWithArtistPageState
       'requestDetails': {
         'needBy': needBy,
         'needByDisplay': _dateCtrl.text.trim(),
+        if (revealDate != null) 'jntRevealDate': revealDate,
+        if (revealDate != null)
+          'jntRevealDateDisplay': _revealDateCtrl.text.trim(),
         'description': description,
       },
       'budget': {'min': artistBudgetMin, 'max': artistBudgetMax},
@@ -2549,6 +2590,16 @@ class _ClientCustomRequestWithArtistPageState
                   ),
 
                   const SizedBox(height: 14),
+                  _fieldLabel(
+                    'JNT Reveal Date (Date the artwork is published publicly)',
+                  ),
+                  const SizedBox(height: 8),
+                  _DateField(
+                    controller: _revealDateCtrl,
+                    onTap: _pickRevealDate,
+                  ),
+
+                  const SizedBox(height: 14),
                   _fieldLabel('Description *'),
                   const SizedBox(height: 8),
                   Semantics(
@@ -2691,22 +2742,24 @@ class _ClientCustomRequestWithArtistPageState
                                         label: 'Remove inspiration photo',
                                         child: ExcludeSemantics(
                                           child: GestureDetector(
-                                        onTap: () =>
-                                            _removeInspirationPhoto(photos[i]),
-                                        child: Container(
-                                          height: 20,
-                                          width: 20,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
+                                            onTap: () =>
+                                                _removeInspirationPhoto(
+                                                  photos[i],
+                                                ),
+                                            child: Container(
+                                              height: 20,
+                                              width: 20,
+                                              decoration: const BoxDecoration(
+                                                color: Colors.black54,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                size: 14,
+                                                color: Colors.white,
+                                              ),
+                                            ),
                                           ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            size: 14,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
                                         ),
                                       ),
                                     ),
@@ -2924,87 +2977,92 @@ class _ClientCustomRequestWithArtistPageState
                           label: 'Search client by name',
                           textField: true,
                           child: TextFormField(
-                          controller: slot.searchController,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          onTap: () {
-                            setState(() => slot.showSuggestions = true);
-                          },
-                          onChanged: (_) {
-                            setState(() {
-                              slot.showSuggestions = true;
-                              final selected = _findClient(slot.clientId);
-                              final typed = slot.searchController.text
-                                  .trim()
-                                  .toLowerCase();
-                              if (selected == null ||
-                                  typed != selected.name.trim().toLowerCase()) {
-                                final oldNfcCount = slot.draftNails == null
-                                    ? 0
-                                    : _nfcSelectedCount(
-                                        slot.draftNails!.dimensions,
-                                      );
-                                slot.clientId = null;
-                                slot.draftNails = null;
-                                slot.savedNails = null;
-                                _applyNfcBudgetDelta(
-                                  oldCount: oldNfcCount,
-                                  newCount: 0,
-                                );
-                              }
-                            });
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'Type client name',
-                            hintStyle: TextStyle(
-                              fontSize: 12.5,
+                            controller: slot.searchController,
+                            style: const TextStyle(
+                              fontSize: 12,
                               fontWeight: FontWeight.w400,
+                              color: AppColors.blackCat,
                               fontFamily: 'Arial',
-                              color: AppColors.blackCat.withValues(alpha: 0.35),
                             ),
-                            filled: true,
-                            fillColor: _requestSnow,
-                            focusColor: _requestSnow,
-                            hoverColor: _requestSnow,
-                            suffixIcon: Icon(
-                              Icons.search_rounded,
-                              size: 22,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 6,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
+                            onTap: () {
+                              setState(() => slot.showSuggestions = true);
+                            },
+                            onChanged: (_) {
+                              setState(() {
+                                slot.showSuggestions = true;
+                                final selected = _findClient(slot.clientId);
+                                final typed = slot.searchController.text
+                                    .trim()
+                                    .toLowerCase();
+                                if (selected == null ||
+                                    typed !=
+                                        selected.name.trim().toLowerCase()) {
+                                  final oldNfcCount = slot.draftNails == null
+                                      ? 0
+                                      : _nfcSelectedCount(
+                                          slot.draftNails!.dimensions,
+                                        );
+                                  slot.clientId = null;
+                                  slot.draftNails = null;
+                                  slot.savedNails = null;
+                                  _applyNfcBudgetDelta(
+                                    oldCount: oldNfcCount,
+                                    newCount: 0,
+                                  );
+                                }
+                              });
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Type client name',
+                              hintStyle: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w400,
+                                fontFamily: 'Arial',
                                 color: AppColors.blackCat.withValues(
-                                  alpha: 0.04,
+                                  alpha: 0.35,
                                 ),
                               ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
+                              filled: true,
+                              fillColor: _requestSnow,
+                              focusColor: _requestSnow,
+                              hoverColor: _requestSnow,
+                              suffixIcon: Icon(
+                                Icons.search_rounded,
+                                size: 22,
                                 color: AppColors.blackCat.withValues(
-                                  alpha: 0.04,
+                                  alpha: 0.45,
                                 ),
                               ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.04,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.04,
+                                  ),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.04,
+                                  ),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.04,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
                         ),
 
                         if (slot.showSuggestions) ...[
@@ -3286,8 +3344,6 @@ class _ClientCustomRequestWithArtistPageState
 
             const SizedBox(height: 10),
             _BudgetCard(
-              minLabel: '\$15',
-              maxLabel: '\$5000',
               values: _sanitizeBudgetRange(_clientBudget),
               onChanged: (v) =>
                   setState(() => _clientBudget = _sanitizeBudgetRange(v)),
@@ -3800,37 +3856,37 @@ class _SoftButton extends StatelessWidget {
       label: label,
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: backgroundColor,
+          onTap: onTap,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatBorderLight),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: iconColor ?? AppColors.blackCat.withValues(alpha: 0.9),
+          child: Container(
+            height: 44,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatBorderLight),
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w400,
-                fontSize: 14,
-                fontFamily: 'Arial',
-                color: textColor ?? AppColors.blackCat,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: iconColor ?? AppColors.blackCat.withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
+                    fontFamily: 'Arial',
+                    color: textColor ?? AppColors.blackCat,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    ),
       ),
     );
   }
@@ -4182,21 +4238,21 @@ class _SearchableSelectField extends StatelessWidget {
                       label: item,
                       child: ExcludeSemantics(
                         child: InkWell(
-                      onTap: () => onSelected(item),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        child: Text(
-                          item,
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w400,
+                          onTap: () => onSelected(item),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            child: Text(
+                              item,
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
                       ),
                     );
                   },
@@ -4212,29 +4268,18 @@ class _SearchableSelectField extends StatelessWidget {
 
 class _BudgetCard extends StatelessWidget {
   const _BudgetCard({
-    required this.minLabel,
-    required this.maxLabel,
     required this.values,
     required this.onChanged,
     required this.onChangeEnd,
   });
 
-  final String minLabel;
-  final String maxLabel;
   final RangeValues values;
   final ValueChanged<RangeValues> onChanged;
   final ValueChanged<RangeValues> onChangeEnd;
 
-  Null get center => null;
-
-  String _fmtMoney(double v) => '\$${v.round()}';
-
   @override
   Widget build(BuildContext context) {
     final start = values.start;
-    final end = values.end;
-
-    final currentText = '${_fmtMoney(start)} - ${_fmtMoney(end)}';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -4243,50 +4288,56 @@ class _BudgetCard extends StatelessWidget {
         borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /*Row(
-            children: [
-              Text(minLabel, style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 11.5)),
-              const Spacer(),
-              Text(maxLabel, style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 11.5)),
-            ],
-          ),*/
-          const SizedBox(height: 8),
-
-          // ✅ Single range text (no duplicates)
-          Text(
-            currentText,
-            //textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
-          ),
-
-          const SizedBox(height: 6),
-
-          Theme(
-            data: Theme.of(context).copyWith(
-              sliderTheme: SliderTheme.of(context).copyWith(
-                activeTrackColor: AppColors.blackCat,
-                inactiveTrackColor: AppColors.blackCat.withValues(alpha: 0.10),
-                thumbColor: AppColors.blackCat,
-                overlayColor: AppColors.blackCat.withValues(alpha: 0.10),
-                rangeThumbShape: const RoundRangeSliderThumbShape(
-                  enabledThumbRadius: 9,
-                ),
-                trackHeight: 3.2,
-
-                // ✅ This removes the duplicate bubble/tooltip values
-                showValueIndicator: ShowValueIndicator.never,
+          Expanded(
+            child: TextFormField(
+              key: ValueKey<int>(start.round()),
+              initialValue: start.round().toString(),
+              enabled: false,
+              decoration: const InputDecoration(
+                labelText: 'Min',
+                prefixText: '\$',
               ),
             ),
-            child: RangeSlider(
-              min: 15,
-              max: 5000,
-              divisions: 485,
-              values: values,
-              onChanged: onChanged,
-              onChangeEnd: onChangeEnd,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  key: ValueKey<String>('max-${start.round()}'),
+                  initialValue: '',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Max',
+                    prefixText: '\$',
+                  ),
+                  onChanged: (raw) {
+                    final parsed = double.tryParse(raw);
+                    if (parsed == null) return;
+                    final next = parsed.clamp(start, 5000.0).toDouble();
+                    final range = RangeValues(start, next);
+                    onChanged(range);
+                    onChangeEnd(range);
+                  },
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Maximum allowed: \$5,000',
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -4318,39 +4369,41 @@ class _RadioPill extends StatelessWidget {
       label: label,
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        height: 30,
-        decoration: BoxDecoration(
-          color: bg,
+          onTap: onTap,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: border, width: selected ? 1.6 : 1),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 22, // ✅ smaller icon
-              color: selected
-                  ? AppColors.blackCat
-                  : AppColors.blackCat.withValues(alpha: 0.35),
+          child: Container(
+            height: 30,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: border, width: selected ? 1.6 : 1),
             ),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  size: 22, // ✅ smaller icon
+                  color: selected
+                      ? AppColors.blackCat
+                      : AppColors.blackCat.withValues(alpha: 0.35),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    ),
       ),
     );
   }

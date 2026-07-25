@@ -21,13 +21,15 @@ import '../widgets/jnt_modal_app_bar.dart';
 
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
+import 'login_page.dart';
 import 'client_shell_page.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../widgets/payment_method_section.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
-import '../widgets/coin_selector_page.dart';
+import '../widgets/full_hand_measurement_flow.dart';
+import '../widgets/registration_date_of_birth_picker.dart';
 
 const Color _clientRegHeaderBg = AppColors.alabaster;
 const Color _clientRegBodyBg = AppColors.snow;
@@ -57,13 +59,18 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   final ScrollController _registrationScrollController = ScrollController();
   bool _pickingImage = false;
   final ImagePicker _picker = ImagePicker();
-  final FocusNode _profilePhotoFocusNode = FocusNode(debugLabel: 'clientProfilePhotoUpload');
+  final FocusNode _profilePhotoFocusNode = FocusNode(
+    debugLabel: 'clientProfilePhotoUpload',
+  );
   Uint8List? _profilePhotoBytes;
   final Map<String, Uint8List> _guidedMeasurementPhotos = {};
 
   // Basic info
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _dateOfBirthCtrl = TextEditingController();
+  DateTime? _dateOfBirth;
+  bool _consentToStoreNailImages = true;
   Timer? _emailAvailabilityDebounce;
   bool _checkingEmailAvailability = false;
   String? _lastCheckedEmail;
@@ -142,12 +149,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       _emailCtrl.text = 'client_$randomNum@example.com';
       _passCtrl.text = 'Password123!';
       _confirmPassCtrl.text = 'Password123!';
-      
+
       final p1 = 500 + rand.nextInt(400);
       final p2 = 100 + rand.nextInt(899);
       final p3 = 1000 + rand.nextInt(8999);
       _phoneCtrl.text = '($p1) $p2-$p3';
-      
+
       _instagramCtrl.text = 'client_$randomNum';
       _tiktokCtrl.text = 'client_$randomNum';
       _bioCtrl.text = 'This is a test bio for client $randomNum.';
@@ -212,68 +219,71 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     // No lifecycle side effects while the picker is active.
   }
 
-  static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
-    _NailCaptureStep(
-      key: 'lThumb',
-      hand: 'left',
-      finger: 'thumb',
-      title: 'Left Thumb',
-    ),
-    _NailCaptureStep(
-      key: 'lIndex',
-      hand: 'left',
-      finger: 'index',
-      title: 'Left Index',
-    ),
-    _NailCaptureStep(
-      key: 'lMiddle',
-      hand: 'left',
-      finger: 'middle',
-      title: 'Left Middle',
-    ),
-    _NailCaptureStep(
-      key: 'lRing',
-      hand: 'left',
-      finger: 'ring',
-      title: 'Left Ring',
-    ),
-    _NailCaptureStep(
-      key: 'lPinky',
-      hand: 'left',
-      finger: 'pinky',
-      title: 'Left Pinky',
-    ),
-    _NailCaptureStep(
-      key: 'rThumb',
-      hand: 'right',
-      finger: 'thumb',
-      title: 'Right Thumb',
-    ),
-    _NailCaptureStep(
-      key: 'rIndex',
-      hand: 'right',
-      finger: 'index',
-      title: 'Right Index',
-    ),
-    _NailCaptureStep(
-      key: 'rMiddle',
-      hand: 'right',
-      finger: 'middle',
-      title: 'Right Middle',
-    ),
-    _NailCaptureStep(
-      key: 'rRing',
-      hand: 'right',
-      finger: 'ring',
-      title: 'Right Ring',
-    ),
-    _NailCaptureStep(
-      key: 'rPinky',
-      hand: 'right',
-      finger: 'pinky',
-      title: 'Right Pinky',
-    ),
-  ];
+  // Old 10-photo (one per finger) capture step list. Superseded by the
+  // 2-shot-per-hand flow in full_hand_measurement_flow.dart. Kept for
+  // reference, not deleted.
+  // static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
+  //   _NailCaptureStep(
+  //     key: 'lThumb',
+  //     hand: 'left',
+  //     finger: 'thumb',
+  //     title: 'Left Thumb',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'lIndex',
+  //     hand: 'left',
+  //     finger: 'index',
+  //     title: 'Left Index',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'lMiddle',
+  //     hand: 'left',
+  //     finger: 'middle',
+  //     title: 'Left Middle',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'lRing',
+  //     hand: 'left',
+  //     finger: 'ring',
+  //     title: 'Left Ring',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'lPinky',
+  //     hand: 'left',
+  //     finger: 'pinky',
+  //     title: 'Left Pinky',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'rThumb',
+  //     hand: 'right',
+  //     finger: 'thumb',
+  //     title: 'Right Thumb',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'rIndex',
+  //     hand: 'right',
+  //     finger: 'index',
+  //     title: 'Right Index',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'rMiddle',
+  //     hand: 'right',
+  //     finger: 'middle',
+  //     title: 'Right Middle',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'rRing',
+  //     hand: 'right',
+  //     finger: 'ring',
+  //     title: 'Right Ring',
+  //   ),
+  //   _NailCaptureStep(
+  //     key: 'rPinky',
+  //     hand: 'right',
+  //     finger: 'pinky',
+  //     title: 'Right Pinky',
+  //   ),
+  // ];
 
   NailDimensions _dimensionsWithOverrides(Map<String, double> measured) {
     final d = _nailPrefs.dimensions;
@@ -291,58 +301,58 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     );
   }
 
-  Future<double?> _askManualMeasurement(String fingerTitle) async {
-    final ctrl = TextEditingController();
-    final value = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.snow,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text('Enter $fingerTitle (mm)'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            hintText: 'e.g. 14.5',
-            border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCatLight,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              textStyle: Theme.of(
-                ctx,
-              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final parsed = double.tryParse(ctrl.text.trim());
-              Navigator.pop(ctx, parsed);
-            },
-            style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              textStyle: Theme.of(
-                ctx,
-              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    ctrl.dispose();
-    return value;
-  }
+  //   Future<double?> _askManualMeasurement(String fingerTitle) async {
+  //     final ctrl = TextEditingController();
+  //     final value = await showDialog<double>(
+  //       context: context,
+  //       builder: (ctx) => AlertDialog(
+  //         backgroundColor: AppColors.snow,
+  //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+  //         title: Text('Enter $fingerTitle (mm)'),
+  //         content: TextField(
+  //           controller: ctrl,
+  //           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  //           decoration: const InputDecoration(
+  //             hintText: 'e.g. 14.5',
+  //             border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+  //           ),
+  //         ),
+  //         actions: [
+  //           ElevatedButton(
+  //             style: ElevatedButton.styleFrom(
+  //               backgroundColor: AppColors.blackCatLight,
+  //               foregroundColor: AppColors.snow,
+  //               shape: const RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.zero,
+  //               ),
+  //               textStyle: Theme.of(
+  //                 ctx,
+  //               ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
+  //             ),
+  //             onPressed: () => Navigator.pop(ctx),
+  //             child: const Text('Cancel'),
+  //           ),
+  //           ElevatedButton(
+  //             onPressed: () {
+  //               final parsed = double.tryParse(ctrl.text.trim());
+  //               Navigator.pop(ctx, parsed);
+  //             },
+  //             style: ElevatedButton.styleFrom(
+  //               shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+  //               backgroundColor: AppColors.blackCat,
+  //               foregroundColor: AppColors.snow,
+  //               textStyle: Theme.of(
+  //                 ctx,
+  //               ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
+  //             ),
+  //             child: const Text('Save'),
+  //           ),
+  //         ],
+  //       ),
+  //     );
+  //     ctrl.dispose();
+  //     return value;
+  //   }
 
   Map<String, double> _currentMeasuredMap() {
     final d = _nailPrefs.dimensions;
@@ -374,474 +384,493 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     });
   }
 
-  Future<bool> _showMeasurementGuide() async {
-    final allowed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => Scaffold(
-          backgroundColor: AppColors.snow,
-          appBar: AppBar(
-            backgroundColor: AppColors.snow,
-            elevation: 0,
-            leading: IconButton(
-              tooltip: 'Back',
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => Navigator.pop(context, false),
-            ),
-            centerTitle: true,
-            title: const Text(
-              'Nail Measurement',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-          ),
-          body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.snow,
-                      borderRadius: BorderRadius.zero,
-                      border: Border.all(
-                        color: AppColors.blackCat.withValues(alpha: 0.10),
-                      ),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.straighten_rounded, size: 26),
-                        SizedBox(height: 12),
-                        Text(
-                          'How to Measure Your Nails',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          "We'll use a coin or currency as a reference guide to accurately measure your nail width.",
-                          style: TextStyle(fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const _MeasureStepTile(
-                    step: 1,
-                    title: 'Keep It Flat',
-                    subtitle:
-                        'Position your finger flat on a table for maximum accuracy.',
-                  ),
-                  const _MeasureStepTile(
-                    step: 2,
-                    title: 'Use a Reference Coin',
-                    subtitle:
-                        'Place the coin next to your fingernail to use as a measurement guide.',
-                  ),
-                  const _MeasureStepTile(
-                    step: 3,
-                    title: 'Scan with Camera',
-                    subtitle:
-                        "Point your phone's camera to capture both your nail and the reference coin.",
-                  ),
-                  const _MeasureStepTile(
-                    step: 4,
-                    title: 'Confirm Measurement',
-                    subtitle:
-                        "We'll calculate your nail width based on the coin reference.",
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                      ),
-                      child: const Text(
-                        'Continue',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.snow,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    return allowed == true;
-  }
-
-  Future<String?> _showCoinSelector() async {
-    final selected = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => CoinSelectorPage(
-          items: coinReferences,
-          progressText: '${_currentMeasuredMap().length}/10',
-          title: 'Select Coin',
-          initialSelection: _measurementCoinReference,
-        ),
-      ),
-    );
-    return selected;
-  }
+  //   Future<bool> _showMeasurementGuide() async {
+  //     final allowed = await Navigator.of(context).push<bool>(
+  //       MaterialPageRoute(
+  //         fullscreenDialog: true,
+  //         builder: (_) => Scaffold(
+  //           backgroundColor: AppColors.snow,
+  //           appBar: AppBar(
+  //             backgroundColor: AppColors.snow,
+  //             elevation: 0,
+  //             leading: IconButton(
+  //               tooltip: 'Back',
+  //               icon: const Icon(Icons.arrow_back_rounded),
+  //               onPressed: () => Navigator.pop(context, false),
+  //             ),
+  //             centerTitle: true,
+  //             title: const Text(
+  //               'Nail Measurement',
+  //               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+  //             ),
+  //           ),
+  //           body: SafeArea(
+  //             child: Padding(
+  //               padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+  //               child: Column(
+  //                 crossAxisAlignment: CrossAxisAlignment.stretch,
+  //                 children: [
+  //                   Container(
+  //                     padding: const EdgeInsets.all(16),
+  //                     decoration: BoxDecoration(
+  //                       color: AppColors.snow,
+  //                       borderRadius: BorderRadius.zero,
+  //                       border: Border.all(
+  //                         color: AppColors.blackCat.withValues(alpha: 0.10),
+  //                       ),
+  //                     ),
+  //                     child: const Column(
+  //                       crossAxisAlignment: CrossAxisAlignment.start,
+  //                       children: [
+  //                         Icon(Icons.straighten_rounded, size: 26),
+  //                         SizedBox(height: 12),
+  //                         Text(
+  //                           'How to Measure Your Nails',
+  //                           style: TextStyle(
+  //                             fontWeight: FontWeight.w700,
+  //                             fontSize: 18,
+  //                           ),
+  //                         ),
+  //                         SizedBox(height: 8),
+  //                         Text(
+  //                           "We'll use a coin or currency as a reference guide to accurately measure your nail width.",
+  //                           style: TextStyle(fontSize: 14),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   const _MeasureStepTile(
+  //                     step: 1,
+  //                     title: 'Keep It Flat',
+  //                     subtitle:
+  //                         'Position your finger flat on a table for maximum accuracy.',
+  //                   ),
+  //                   const _MeasureStepTile(
+  //                     step: 2,
+  //                     title: 'Use a Reference Coin',
+  //                     subtitle:
+  //                         'Place the coin next to your fingernail to use as a measurement guide.',
+  //                   ),
+  //                   const _MeasureStepTile(
+  //                     step: 3,
+  //                     title: 'Scan with Camera',
+  //                     subtitle:
+  //                         "Point your phone's camera to capture both your nail and the reference coin.",
+  //                   ),
+  //                   const _MeasureStepTile(
+  //                     step: 4,
+  //                     title: 'Confirm Measurement',
+  //                     subtitle:
+  //                         "We'll calculate your nail width based on the coin reference.",
+  //                   ),
+  //                   const Spacer(),
+  //                   SizedBox(
+  //                     height: 52,
+  //                     child: ElevatedButton(
+  //                       onPressed: () => Navigator.pop(context, true),
+  //                       style: ElevatedButton.styleFrom(
+  //                         backgroundColor: AppColors.blackCat,
+  //                         foregroundColor: AppColors.snow,
+  //                         shape: const RoundedRectangleBorder(
+  //                           borderRadius: BorderRadius.zero,
+  //                         ),
+  //                       ),
+  //                       child: const Text(
+  //                         'Continue',
+  //                         style: TextStyle(
+  //                           fontWeight: FontWeight.w700,
+  //                           color: AppColors.snow,
+  //                         ),
+  //                       ),
+  //                     ),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ),
+  //           ),
+  //         ),
+  //       ),
+  //     );
+  //     return allowed == true;
+  //   }
+  //
+  //   Future<String?> _showCoinSelector() async {
+  //     final selected = await Navigator.of(context).push<String>(
+  //       MaterialPageRoute(
+  //         fullscreenDialog: true,
+  //         builder: (_) => CoinSelectorPage(
+  //           items: coinReferences,
+  //           progressText: '${_currentMeasuredMap().length}/10',
+  //           title: 'Select Coin',
+  //           initialSelection: _measurementCoinReference,
+  //         ),
+  //       ),
+  //     );
+  //     return selected;
+  //   }
+  //
+  //   Future<void> _startGuidedNailMeasurement() async {
+  //     if (!mounted) return;
+  //     final proceed = await _showMeasurementGuide();
+  //     if (!proceed || !mounted) return;
+  //
+  //     final selectedCoin = await _showCoinSelector();
+  //     if (selectedCoin == null || selectedCoin.trim().isEmpty || !mounted) {
+  //       return;
+  //     }
+  //     _measurementCoinReference = selectedCoin;
+  //
+  //     final measured = _currentMeasuredMap();
+  //     var stepIndex = 0;
+  //     var measuring = false;
+  //     var sheetClosed = false;
+  //     final pageContext = context;
+  //
+  //     await showModalBottomSheet<void>(
+  //       context: context,
+  //       isScrollControlled: true,
+  //       backgroundColor: AppColors.blackCat,
+  //       builder: (sheetContext) {
+  //         return StatefulBuilder(
+  //           builder: (modalContext, setModalState) {
+  //             final step = _nailCaptureSteps[stepIndex];
+  //             final progressLabel =
+  //                 '${measured.length}/${_nailCaptureSteps.length}';
+  //
+  //             Future<void> saveCurrentAndMoveNext(double mm) async {
+  //               if (!mm.isFinite || mm <= 0) {
+  //                 _authLog('invalid measurement for ${step.key}: $mm');
+  //                 ScaffoldMessenger.of(pageContext).showSnackBar(
+  //                   const SnackBar(
+  //                     content: Text(
+  //                       'Invalid measurement value. Please try again.',
+  //                     ),
+  //                   ),
+  //                 );
+  //                 return;
+  //               }
+  //               _authLog('saving measurement ${step.key} => $mm');
+  //               measured[step.key] = (mm * 10).roundToDouble() / 10.0;
+  //               _persistMeasuredMap(measured);
+  //               if (stepIndex < _nailCaptureSteps.length - 1) {
+  //                 _authLog('moving to next step index=${stepIndex + 1}');
+  //                 setModalState(() => stepIndex += 1);
+  //               } else {
+  //                 _authLog('final step complete; closing measurement sheet');
+  //                 sheetClosed = true;
+  //                 Navigator.of(sheetContext).pop();
+  //                 ScaffoldMessenger.of(pageContext).showSnackBar(
+  //                   const SnackBar(
+  //                     content: Text('Nail measurements saved for both hands.'),
+  //                   ),
+  //                 );
+  //               }
+  //             }
+  //
+  //             Future<void> captureCurrentStep() async {
+  //               if (measuring) return;
+  //               setModalState(() => measuring = true);
+  //               try {
+  //                 _authLog('opening camera for ${step.key}');
+  //                 final image = await _picker.pickImage(
+  //                   source: ImageSource.camera,
+  //                   imageQuality: 80,
+  //                   maxWidth: 1080,
+  //                   maxHeight: 1080,
+  //                 );
+  //                 if (image == null) {
+  //                   _authLog('camera canceled for ${step.key}');
+  //                   return;
+  //                 }
+  //
+  //                 final bytes = await image.readAsBytes();
+  //                 _guidedMeasurementPhotos[step.key] = bytes;
+  //                 _authLog(
+  //                   'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
+  //                 );
+  //
+  //                 final mm = await _askManualMeasurement(step.title);
+  //                 if (mm == null) return;
+  //                 await saveCurrentAndMoveNext(mm);
+  //               } catch (_) {
+  //                 _authLog('capture failed for ${step.key}');
+  //                 if (mounted) {
+  //                   ScaffoldMessenger.of(pageContext).showSnackBar(
+  //                     const SnackBar(
+  //                       content: Text(
+  //                         'Unable to measure from photo. Please try again.',
+  //                       ),
+  //                     ),
+  //                   );
+  //                 }
+  //               } finally {
+  //                 if (mounted && !sheetClosed) {
+  //                   setModalState(() => measuring = false);
+  //                 }
+  //               }
+  //             }
+  //
+  //             return SafeArea(
+  //               child: Container(
+  //                 decoration: const BoxDecoration(
+  //                   color: AppColors.snow,
+  //                   borderRadius: BorderRadius.zero,
+  //                 ),
+  //                 padding: EdgeInsets.fromLTRB(
+  //                   16,
+  //                   14,
+  //                   16,
+  //                   16 + MediaQuery.of(modalContext).viewInsets.bottom,
+  //                 ),
+  //                 child: Column(
+  //                   mainAxisSize: MainAxisSize.min,
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: [
+  //                     Row(
+  //                       children: [
+  //                         const Expanded(
+  //                           child: Text(
+  //                             'Measure Your Nail',
+  //                             style: TextStyle(
+  //                               fontWeight: FontWeight.w700,
+  //                               fontSize: 16,
+  //                               color: AppColors.blackCat,
+  //                             ),
+  //                           ),
+  //                         ),
+  //                         Text(
+  //                           progressLabel,
+  //                           style: const TextStyle(
+  //                             fontWeight: FontWeight.w700,
+  //                             fontSize: 15,
+  //                             color: AppColors.blackCat,
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                     const SizedBox(height: 10),
+  //                     SizedBox(
+  //                       height: 40,
+  //                       child: ListView.separated(
+  //                         scrollDirection: Axis.horizontal,
+  //                         itemBuilder: (_, i) {
+  //                           final s = _nailCaptureSteps[i];
+  //                           final done = measured[s.key] != null;
+  //                           final current = i == stepIndex;
+  //                           return Semantics(
+  //                             button: true,
+  //                             selected: current,
+  //                             label:
+  //                                 '${s.title}${done ? ', measured' : ', not measured'}',
+  //                             onTap: () =>
+  //                                 setModalState(() => stepIndex = i),
+  //                             child: ExcludeSemantics(
+  //                               child: InkWell(
+  //                                 onTap: () =>
+  //                                     setModalState(() => stepIndex = i),
+  //                                 child: Container(
+  //                                   padding: const EdgeInsets.symmetric(
+  //                                     horizontal: 10,
+  //                                     vertical: 8,
+  //                                   ),
+  //                                   decoration: BoxDecoration(
+  //                                     color: current
+  //                                         ? AppColors.blackCat
+  //                                         : (done
+  //                                               ? AppColors.balletSlippers
+  //                                               : AppColors.snow),
+  //                                     border: Border.all(
+  //                                       color: current
+  //                                           ? AppColors.blackCat
+  //                                           : AppColors.blackCat.withValues(
+  //                                               alpha: 0.12,
+  //                                             ),
+  //                                     ),
+  //                                     borderRadius: BorderRadius.zero,
+  //                                   ),
+  //                                   child: Text(
+  //                                     s.finger,
+  //                                     style: TextStyle(
+  //                                       color: current
+  //                                           ? AppColors.snow
+  //                                           : AppColors.blackCat,
+  //                                       fontWeight: FontWeight.w700,
+  //                                       fontSize: 12,
+  //                                     ),
+  //                                   ),
+  //                                 ),
+  //                               ),
+  //                             ),
+  //                           );
+  //                         },
+  //                         separatorBuilder: (_, _) => const SizedBox(width: 8),
+  //                         itemCount: _nailCaptureSteps.length,
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 12),
+  //                     Container(
+  //                       width: double.infinity,
+  //                       height: 320,
+  //                       decoration: const BoxDecoration(
+  //                         color: AppColors.blackCat,
+  //                         borderRadius: BorderRadius.zero,
+  //                       ),
+  //                       child: Center(
+  //                         child: Column(
+  //                           mainAxisSize: MainAxisSize.min,
+  //                           children: [
+  //                             const Icon(
+  //                               Icons.camera_alt_rounded,
+  //                               size: 70,
+  //                               color: AppColors.snow,
+  //                             ),
+  //                             const SizedBox(height: 10),
+  //                             Text(
+  //                               'Scan your ${step.title}',
+  //                               style: const TextStyle(
+  //                                 color: AppColors.snow,
+  //                                 fontWeight: FontWeight.w700,
+  //                                 fontSize: 18,
+  //                               ),
+  //                             ),
+  //                           ],
+  //                         ),
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     Text(
+  //                       'Reference: $_measurementCoinReference',
+  //                       style: TextStyle(
+  //                         color: AppColors.blackCat,
+  //                         fontWeight: FontWeight.w500,
+  //                         fontSize: 14,
+  //                         fontFamily: 'ArialBold',
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 6),
+  //                     Text(
+  //                       'Enter width in mm for ${step.title} (you can re-image any finger and latest value is saved).',
+  //                       style: TextStyle(
+  //                         color: AppColors.blackCat,
+  //                         fontSize: 13,
+  //                         fontFamily: 'Arial',
+  //                         fontWeight: FontWeight.w500,
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 10),
+  //                     Container(
+  //                       width: double.infinity,
+  //                       padding: const EdgeInsets.all(10),
+  //                       decoration: const BoxDecoration(
+  //                         color: AppColors.snow,
+  //                         borderRadius: BorderRadius.zero,
+  //                       ),
+  //                       child: const Text(
+  //                         'Captured photos will upload with your client account when you sign up.',
+  //                         style: TextStyle(fontSize: 12),
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 12),
+  //                     Row(
+  //                       children: [
+  //                         Expanded(
+  //                           child: OutlinedButton(
+  //                             onPressed: measuring
+  //                                 ? null
+  //                                 : () async {
+  //                                     try {
+  //                                       _authLog(
+  //                                         'manual entry opened for ${step.key}',
+  //                                       );
+  //                                       final manual =
+  //                                           await _askManualMeasurement(
+  //                                             step.title,
+  //                                           );
+  //                                       if (manual == null) return;
+  //                                       await saveCurrentAndMoveNext(manual);
+  //                                     } catch (e) {
+  //                                       _authLog(
+  //                                         'manual save failed for ${step.key}: $e',
+  //                                       );
+  //                                     }
+  //                                   },
+  //                             style: OutlinedButton.styleFrom(
+  //                               shape: RoundedRectangleBorder(
+  //                                 borderRadius: BorderRadius.zero,
+  //                               ),
+  //                             ),
+  //                             child: const Text('Enter Manually'),
+  //                           ),
+  //                         ),
+  //                         const SizedBox(width: 10),
+  //                         Expanded(
+  //                           child: ElevatedButton.icon(
+  //                             onPressed: measuring ? null : captureCurrentStep,
+  //                             icon: measuring
+  //                                 ? const SizedBox(
+  //                                     width: 14,
+  //                                     height: 14,
+  //                                     child: CircularProgressIndicator(
+  //                                       strokeWidth: 2,
+  //                                     ),
+  //                                   )
+  //                                 : const Icon(Icons.camera_alt_outlined),
+  //                             label: Text(
+  //                               measuring
+  //                                   ? 'Measuring...'
+  //                                   : (measured[step.key] == null
+  //                                         ? 'Capture'
+  //                                         : 'Re-image'),
+  //                             ),
+  //                             style: ElevatedButton.styleFrom(
+  //                               shape: RoundedRectangleBorder(
+  //                                 borderRadius: BorderRadius.zero,
+  //                               ),
+  //                               backgroundColor: AppColors.blackCat,
+  //                               foregroundColor: AppColors.snow,
+  //                             ),
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     TextButton(
+  //                       onPressed: () async {
+  //                         final nextCoin = await _showCoinSelector();
+  //                         if (nextCoin == null || nextCoin.trim().isEmpty) return;
+  //                         setModalState(
+  //                           () => _measurementCoinReference = nextCoin,
+  //                         );
+  //                       },
+  //                       child: const Text('Change Coin/Currency'),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ),
+  //             );
+  //           },
+  //         );
+  //       },
+  //     );
+  //   }
+  // ---- end of old 10-photo (one per finger) guided measurement flow ----
 
   Future<void> _startGuidedNailMeasurement() async {
+    debugPrint(
+      '[FullHandMeasurement] Capture Photo button tapped (client_registration_page)',
+    );
     if (!mounted) return;
-    final proceed = await _showMeasurementGuide();
-    if (!proceed || !mounted) return;
-
-    final selectedCoin = await _showCoinSelector();
-    if (selectedCoin == null || selectedCoin.trim().isEmpty || !mounted) {
-      return;
-    }
-    _measurementCoinReference = selectedCoin;
-
-    final measured = _currentMeasuredMap();
-    var stepIndex = 0;
-    var measuring = false;
-    var sheetClosed = false;
-    final pageContext = context;
-
-    await showModalBottomSheet<void>(
+    final result = await showFullHandMeasurementFlow(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.blackCat,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (modalContext, setModalState) {
-            final step = _nailCaptureSteps[stepIndex];
-            final progressLabel =
-                '${measured.length}/${_nailCaptureSteps.length}';
-
-            Future<void> saveCurrentAndMoveNext(double mm) async {
-              if (!mm.isFinite || mm <= 0) {
-                _authLog('invalid measurement for ${step.key}: $mm');
-                ScaffoldMessenger.of(pageContext).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Invalid measurement value. Please try again.',
-                    ),
-                  ),
-                );
-                return;
-              }
-              _authLog('saving measurement ${step.key} => $mm');
-              measured[step.key] = (mm * 10).roundToDouble() / 10.0;
-              _persistMeasuredMap(measured);
-              if (stepIndex < _nailCaptureSteps.length - 1) {
-                _authLog('moving to next step index=${stepIndex + 1}');
-                setModalState(() => stepIndex += 1);
-              } else {
-                _authLog('final step complete; closing measurement sheet');
-                sheetClosed = true;
-                Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(pageContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Nail measurements saved for both hands.'),
-                  ),
-                );
-              }
-            }
-
-            Future<void> captureCurrentStep() async {
-              if (measuring) return;
-              setModalState(() => measuring = true);
-              try {
-                _authLog('opening camera for ${step.key}');
-                final image = await _picker.pickImage(
-                  source: ImageSource.camera,
-                  imageQuality: 80,
-                  maxWidth: 1080,
-                  maxHeight: 1080,
-                );
-                if (image == null) {
-                  _authLog('camera canceled for ${step.key}');
-                  return;
-                }
-
-                final bytes = await image.readAsBytes();
-                _guidedMeasurementPhotos[step.key] = bytes;
-                _authLog(
-                  'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
-                );
-
-                final mm = await _askManualMeasurement(step.title);
-                if (mm == null) return;
-                await saveCurrentAndMoveNext(mm);
-              } catch (_) {
-                _authLog('capture failed for ${step.key}');
-                if (mounted) {
-                  ScaffoldMessenger.of(pageContext).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Unable to measure from photo. Please try again.',
-                      ),
-                    ),
-                  );
-                }
-              } finally {
-                if (mounted && !sheetClosed) {
-                  setModalState(() => measuring = false);
-                }
-              }
-            }
-
-            return SafeArea(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  14,
-                  16,
-                  16 + MediaQuery.of(modalContext).viewInsets.bottom,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Measure Your Nail',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          progressLabel,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: AppColors.blackCat,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 40,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemBuilder: (_, i) {
-                          final s = _nailCaptureSteps[i];
-                          final done = measured[s.key] != null;
-                          final current = i == stepIndex;
-                          return Semantics(
-                            button: true,
-                            selected: current,
-                            label:
-                                '${s.title}${done ? ', measured' : ', not measured'}',
-                            onTap: () =>
-                                setModalState(() => stepIndex = i),
-                            child: ExcludeSemantics(
-                              child: InkWell(
-                                onTap: () =>
-                                    setModalState(() => stepIndex = i),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: current
-                                        ? AppColors.blackCat
-                                        : (done
-                                              ? AppColors.balletSlippers
-                                              : AppColors.snow),
-                                    border: Border.all(
-                                      color: current
-                                          ? AppColors.blackCat
-                                          : AppColors.blackCat.withValues(
-                                              alpha: 0.12,
-                                            ),
-                                    ),
-                                    borderRadius: BorderRadius.zero,
-                                  ),
-                                  child: Text(
-                                    s.finger,
-                                    style: TextStyle(
-                                      color: current
-                                          ? AppColors.snow
-                                          : AppColors.blackCat,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemCount: _nailCaptureSteps.length,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      height: 320,
-                      decoration: const BoxDecoration(
-                        color: AppColors.blackCat,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.camera_alt_rounded,
-                              size: 70,
-                              color: AppColors.snow,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Scan your ${step.title}',
-                              style: const TextStyle(
-                                color: AppColors.snow,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Reference: $_measurementCoinReference',
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        fontFamily: 'ArialBold',
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Enter width in mm for ${step.title} (you can re-image any finger and latest value is saved).',
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 13,
-                        fontFamily: 'Arial',
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: AppColors.snow,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      child: const Text(
-                        'Captured photos will upload with your client account when you sign up.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: measuring
-                                ? null
-                                : () async {
-                                    try {
-                                      _authLog(
-                                        'manual entry opened for ${step.key}',
-                                      );
-                                      final manual =
-                                          await _askManualMeasurement(
-                                            step.title,
-                                          );
-                                      if (manual == null) return;
-                                      await saveCurrentAndMoveNext(manual);
-                                    } catch (e) {
-                                      _authLog(
-                                        'manual save failed for ${step.key}: $e',
-                                      );
-                                    }
-                                  },
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            child: const Text('Enter Manually'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: measuring ? null : captureCurrentStep,
-                            icon: measuring
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.camera_alt_outlined),
-                            label: Text(
-                              measuring
-                                  ? 'Measuring...'
-                                  : (measured[step.key] == null
-                                        ? 'Capture'
-                                        : 'Re-image'),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () async {
-                        final nextCoin = await _showCoinSelector();
-                        if (nextCoin == null || nextCoin.trim().isEmpty) return;
-                        setModalState(
-                          () => _measurementCoinReference = nextCoin,
-                        );
-                      },
-                      child: const Text('Change Coin/Currency'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      initialMeasured: _currentMeasuredMap(),
+      photosOut: _guidedMeasurementPhotos,
+      initialCoinReference: _measurementCoinReference,
+    );
+    if (result == null || !mounted) return;
+    _persistMeasuredMap(result);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Nail measurements saved for both hands.')),
     );
   }
 
@@ -902,7 +931,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     return values.any((v) => v != null && v.isFinite && v >= 8);
   }
 
-
   /// Builds the sub-maps consumed by the `client` table upsert in
   /// `_completeRegistration` (`payload['profile']`/`['basic']`/`['address']`/
   /// `['payment']`/`['nailPreferences']`/`['registration']`). Only build keys
@@ -919,6 +947,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     return {
       'profile': {
         'name': draft.basic.name,
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
         'phone': draft.basic.phone,
         'profileImageUrl': draft.basic.profileImageUrl,
         'photoUrl': draft.basic.profileImageUrl,
@@ -930,6 +959,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       'basic': {
         'name': draft.basic.name,
         'email': draft.basic.email,
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
         'phone': draft.basic.phone,
         'profileImageUrl': draft.basic.profileImageUrl,
         'photoUrl': draft.basic.profileImageUrl,
@@ -973,6 +1003,8 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         },
       },
       'registration': {
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
+        'consentToStoreNailImages': _consentToStoreNailImages,
         'hasSizingKitAlready': _nailPrefs.isComplete,
         'kitPurchased': _kitPurchased,
         'bypassCheckoutUsed': kAllowRegistrationWithoutCheckout,
@@ -1011,7 +1043,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   }
 
   Future<Map<String, String>> _uploadGuidedMeasurementPhotos(String uid) async {
-    if (_guidedMeasurementPhotos.isEmpty) {
+    if (!_consentToStoreNailImages || _guidedMeasurementPhotos.isEmpty) {
       return const <String, String>{};
     }
 
@@ -1230,6 +1262,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     _profilePhotoFocusNode.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _dateOfBirthCtrl.dispose();
     _passCtrl.dispose();
     _confirmPassCtrl.dispose();
     _phoneCtrl.dispose();
@@ -1441,14 +1474,17 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     String? Function(String?)? validator,
     bool required = false,
   }) {
-    return _req(required, _typeAheadPickerField(
-      label: label,
-      hint: hint,
-      options: options,
-      selectedValue: selectedValue,
-      onChanged: onChanged,
-      validator: validator,
-    ));
+    return _req(
+      required,
+      _typeAheadPickerField(
+        label: label,
+        hint: hint,
+        options: options,
+        selectedValue: selectedValue,
+        onChanged: onChanged,
+        validator: validator,
+      ),
+    );
   }
 
   Widget _typeAheadPickerField({
@@ -1589,6 +1625,34 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     return null;
   }
 
+  String? _dateOfBirthValidator(String? value) {
+    if (_dateOfBirth == null) return 'Date of Birth is required';
+    return null;
+  }
+
+  Future<void> _showAgeIneligibleDialog() async {
+    await showRegistrationAgeIneligibleDialog(context: context);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginDialog()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final selected = await showRegistrationDateOfBirthPicker(context: context);
+    if (selected == null || !mounted) return;
+    setState(() {
+      _dateOfBirth = selected;
+      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(
+        selected,
+      );
+    });
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(selected) && mounted) {
+      await _showAgeIneligibleDialog();
+    }
+  }
+
   void _onEmailChanged(String value) {
     _emailAvailabilityDebounce?.cancel();
     final normalized = value.trim().toLowerCase();
@@ -1604,22 +1668,25 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     }
 
     setState(() => _checkingEmailAvailability = true);
-    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
-      final role = await SupabaseAuthService.findExistingRoleForEmail(
-        normalized,
-      );
-      if (!mounted) return;
-      if (_emailCtrl.text.trim().toLowerCase() != normalized) {
-        // Text changed again while the check was in flight; ignore this
-        // stale result, the newer debounce cycle will handle it.
-        return;
-      }
-      setState(() {
-        _checkingEmailAvailability = false;
-        _lastCheckedEmail = normalized;
-        _emailTakenRole = role;
-      });
-    });
+    _emailAvailabilityDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () async {
+        final role = await SupabaseAuthService.findExistingRoleForEmail(
+          normalized,
+        );
+        if (!mounted) return;
+        if (_emailCtrl.text.trim().toLowerCase() != normalized) {
+          // Text changed again while the check was in flight; ignore this
+          // stale result, the newer debounce cycle will handle it.
+          return;
+        }
+        setState(() {
+          _checkingEmailAvailability = false;
+          _lastCheckedEmail = normalized;
+          _emailTakenRole = role;
+        });
+      },
+    );
   }
 
   /// Real-time email availability feedback, shown as the user types/pauses
@@ -1824,62 +1891,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     return result ?? false;
   }
 
-  Widget promosAndNailTipsCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.blackCat.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Promos & Nail Tips',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: const BoxDecoration(
-              color: snow,
-              borderRadius: BorderRadius.zero,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.local_offer_outlined,
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Get 10% off your first custom set — use WELCOME10',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: AppColors.blackCat.withValues(alpha: 0.75),
-                      height: 1.2,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _finishClientRegistrationForUser({
     required User user,
     required ClientProfileDraft draft,
@@ -1994,6 +2005,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       setState(() => _showValidationErrors = true);
     }
     if (_formKey.currentState?.validate() != true) return;
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(_dateOfBirth!)) {
+      await _showAgeIneligibleDialog();
+      return;
+    }
     if (!_hasRequiredPaymentMethod()) {
       _showPaymentValidationMessage(
         'Please enter at least one payment method before continuing.',
@@ -2485,562 +2500,621 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       namesRoute: true,
       label: 'Client registration',
       child: Theme(
-      data: themed,
-      child: Scaffold(
-        backgroundColor: _clientRegBodyBg,
-        appBar: JntModalAppBar(
-          onClose: () => Navigator.of(
-            context,
-            rootNavigator: true,
-          ).pushNamedAndRemoveUntil('/register', (route) => false),
-          closeTooltip: 'Close client registration',
-          closeIcon: const Icon(Icons.close),
-          leadingWidth: 60,
-          leading: Tooltip(
-            message: 'Fill dummy data',
-            child: IconButton(
-              icon: const Icon(Icons.auto_fix_high),
-              iconSize: 20,
-              color: AppColors.blackCat,
-              onPressed: _autofillRandomData,
-              style: IconButton.styleFrom(
-                foregroundColor: AppColors.blackCat,
-                minimumSize: const Size(40, 40),
-                padding: const EdgeInsets.all(8),
-                shape: const RoundedRectangleBorder(),
+        data: themed,
+        child: Scaffold(
+          backgroundColor: _clientRegBodyBg,
+          appBar: JntModalAppBar(
+            onClose: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            closeTooltip: 'Close client registration',
+            closeIcon: const Icon(Icons.close),
+            leadingWidth: 60,
+            leading: Tooltip(
+              message: 'Fill dummy data',
+              child: IconButton(
+                icon: const Icon(Icons.auto_fix_high),
+                iconSize: 20,
+                color: AppColors.blackCat,
+                onPressed: _autofillRandomData,
+                style: IconButton.styleFrom(
+                  foregroundColor: AppColors.blackCat,
+                  minimumSize: const Size(40, 40),
+                  padding: const EdgeInsets.all(8),
+                  shape: const RoundedRectangleBorder(),
+                ),
               ),
             ),
           ),
-        ),
-        body: SafeArea(
-          child: ListView(
-            controller: _registrationScrollController,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-            children: [
-              Form(
-                key: _formKey,
-                autovalidateMode: _validationTriggeredStep == _registrationStep
-                    ? AutovalidateMode.always
-                    : AutovalidateMode.disabled,
-                child: Column(
-                  children: [
-                    _registrationProgressTabs(),
-                    if (_registrationStep == 0) ...[
-                    _SectionCard(
-                      title: 'Basic Information',
-                      subtitle:
-                          'Fill in your details to create your client account',
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 4),
-                          _ProfileUpload(
-                            imageBytes: _profilePhotoBytes,
-                            onTap: _pickProfilePhoto,
-                            focusNode: _profilePhotoFocusNode,
-                          ),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.required('Name'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _nameCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
+          body: SafeArea(
+            child: ListView(
+              controller: _registrationScrollController,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+              children: [
+                Form(
+                  key: _formKey,
+                  autovalidateMode:
+                      _validationTriggeredStep == _registrationStep
+                      ? AutovalidateMode.always
+                      : AutovalidateMode.disabled,
+                  child: Column(
+                    children: [
+                      _registrationProgressTabs(),
+                      if (_registrationStep == 0) ...[
+                        _SectionCard(
+                          title: 'Basic Information',
+                          subtitle:
+                              'Fill in your details to create your client account',
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 4),
+                              _ProfileUpload(
+                                imageBytes: _profilePhotoBytes,
+                                onTap: _pickProfilePhoto,
+                                focusNode: _profilePhotoFocusNode,
                               ),
-                              decoration: _dec('Name', 'Enter Name'),
-                              validator: (v) => _requiredValidator(v, 'Name'),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
+                              const SizedBox(height: 6),
 
-                          _FieldLabel.required('Email'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _emailCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
-                              ),
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: _dec('Email', 'Enter Email'),
-                              validator: _emailValidator,
-                              onChanged: _onEmailChanged,
-                            ),
-                          ),
-                          _buildEmailAvailabilityStatus(),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.required('Password'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _passCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
-                              ),
-                              obscureText: _obscure,
-                              decoration: _dec(
-                                'Password',
-                                'Enter Password',
-                                suffixIcon: IconButton(
-                                  iconSize: 18,
-                                  tooltip: _obscure
-                                      ? 'Show password'
-                                      : 'Hide password',
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
-                                  icon: Icon(
-                                    _obscure
-                                        ? Icons.visibility_off
-                                        : Icons.visibility,
+                              _FieldLabel.required('Name'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _nameCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
                                   ),
+                                  decoration: _dec('Name', 'Enter Name'),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'Name'),
                                 ),
                               ),
-                              validator: _passwordValidator,
-                              onChanged: _onPasswordChanged,
-                            ),
-                          ),
-                          _buildPasswordStatus(),
-                          const SizedBox(height: 6),
-                          // ✅ Confirm Password (NEW)
-                          _FieldLabel.required('Confirm Password'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                            controller: _confirmPassCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
-                            ),
-                            obscureText: _obscure,
-                            decoration: _dec(
-                              'Confirm Password',
-                              'Re-enter Password',
-                              suffixIcon: IconButton(
-                                iconSize: 18,
-                                tooltip: _obscure
-                                    ? 'Show password'
-                                    : 'Hide password',
-                                onPressed: () =>
-                                    setState(() => _obscure = !_obscure),
-                                icon: Icon(
-                                  _obscure
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.required('Email'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _emailCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  keyboardType: TextInputType.emailAddress,
+                                  decoration: _dec('Email', 'Enter Email'),
+                                  validator: _emailValidator,
+                                  onChanged: _onEmailChanged,
                                 ),
                               ),
-                            ),
-                            validator: _confirmPasswordValidator,
-                            onChanged: _onConfirmPasswordChanged,
-                            ),
-                          ),
-                          _buildConfirmPasswordStatus(),
-                          const SizedBox(height: 6),
-                          _FieldLabel.required('Phone'),
-                          const SizedBox(height: 6),
-                          FormField<String>(
-                            validator: (value) =>
-                                _phoneValidator(_phoneCtrl.text),
-                            builder: (field) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    height: _fieldHeight,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.snow,
-                                      borderRadius: BorderRadius.zero,
-                                      border: Border.all(
-                                        color: AppColors.blackCatBorderLight,
+                              _buildEmailAvailabilityStatus(),
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.required('Date of Birth'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _dateOfBirthCtrl,
+                                  readOnly: true,
+                                  onTap: _pickDateOfBirth,
+                                  decoration: _dec(
+                                    'Date of Birth',
+                                    'MM/DD/YYYY',
+                                    suffixIcon: const Icon(
+                                      Icons.calendar_today_outlined,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  validator: _dateOfBirthValidator,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.required('Password'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _passCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  obscureText: _obscure,
+                                  decoration: _dec(
+                                    'Password',
+                                    'Enter Password',
+                                    suffixIcon: IconButton(
+                                      iconSize: 18,
+                                      tooltip: _obscure
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                      onPressed: () =>
+                                          setState(() => _obscure = !_obscure),
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
                                       ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 132,
-                                          child: _countryCodeDropdown(
-                                            value: _phoneAreaCode,
-                                            embedded: true,
-                                            onChanged: (code) => setState(
-                                              () => _phoneAreaCode =
-                                                  code.dialCode ?? '+1',
-                                            ),
+                                  ),
+                                  validator: _passwordValidator,
+                                  onChanged: _onPasswordChanged,
+                                ),
+                              ),
+                              _buildPasswordStatus(),
+                              const SizedBox(height: 6),
+                              // ✅ Confirm Password (NEW)
+                              _FieldLabel.required('Confirm Password'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _confirmPassCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  obscureText: _obscure,
+                                  decoration: _dec(
+                                    'Confirm Password',
+                                    'Re-enter Password',
+                                    suffixIcon: IconButton(
+                                      iconSize: 18,
+                                      tooltip: _obscure
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                      onPressed: () =>
+                                          setState(() => _obscure = !_obscure),
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
+                                      ),
+                                    ),
+                                  ),
+                                  validator: _confirmPasswordValidator,
+                                  onChanged: _onConfirmPasswordChanged,
+                                ),
+                              ),
+                              _buildConfirmPasswordStatus(),
+                              const SizedBox(height: 6),
+                              _FieldLabel.required('Phone'),
+                              const SizedBox(height: 6),
+                              FormField<String>(
+                                validator: (value) =>
+                                    _phoneValidator(_phoneCtrl.text),
+                                builder: (field) {
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        height: _fieldHeight,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.snow,
+                                          borderRadius: BorderRadius.zero,
+                                          border: Border.all(
+                                            color:
+                                                AppColors.blackCatBorderLight,
                                           ),
                                         ),
-                                        Container(
-                                          width: 1,
-                                          color: AppColors.blackCatBorderLight,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Semantics(
-                                            label: 'Phone number',
-                                            isRequired: true,
-                                            textField: true,
-                                            child: TextFormField(
-                                            controller: _phoneCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                              fontFamily: 'Arial',
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 132,
+                                              child: _countryCodeDropdown(
+                                                value: _phoneAreaCode,
+                                                embedded: true,
+                                                onChanged: (code) => setState(
+                                                  () => _phoneAreaCode =
+                                                      code.dialCode ?? '+1',
+                                                ),
+                                              ),
                                             ),
-                                            keyboardType: TextInputType.phone,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                              LengthLimitingTextInputFormatter(
-                                                10,
-                                              ),
-                                              UsPhoneTextInputFormatter(),
-                                            ],
-                                            onChanged: field.didChange,
-                                            decoration: InputDecoration(
-                                              hintText: 'Enter 10-digit phone',
-                                              hintStyle: TextStyle(
-                                                fontSize: _hintFs,
-                                                color: _clientRegBrandInk
-                                                    .withValues(alpha: 0.42),
-                                                fontFamily: 'Arial',
-                                              ),
-                                              border: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical:
-                                                        _fieldVerticalPadding,
+                                            Container(
+                                              width: 1,
+                                              color:
+                                                  AppColors.blackCatBorderLight,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Semantics(
+                                                label: 'Phone number',
+                                                isRequired: true,
+                                                textField: true,
+                                                child: TextFormField(
+                                                  controller: _phoneCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                    fontFamily: 'Arial',
                                                   ),
-                                              isDense: false,
+                                                  keyboardType:
+                                                      TextInputType.phone,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(
+                                                      10,
+                                                    ),
+                                                    UsPhoneTextInputFormatter(),
+                                                  ],
+                                                  onChanged: field.didChange,
+                                                  decoration: InputDecoration(
+                                                    hintText:
+                                                        'Enter 10-digit phone',
+                                                    hintStyle: TextStyle(
+                                                      fontSize: _hintFs,
+                                                      color: _clientRegBrandInk
+                                                          .withValues(
+                                                            alpha: 0.42,
+                                                          ),
+                                                      fontFamily: 'Arial',
+                                                    ),
+                                                    border: InputBorder.none,
+                                                    enabledBorder:
+                                                        InputBorder.none,
+                                                    focusedBorder:
+                                                        InputBorder.none,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical:
+                                                              _fieldVerticalPadding,
+                                                        ),
+                                                    isDense: false,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
+                                            const SizedBox(width: 10),
+                                          ],
+                                        ),
+                                      ),
+                                      if (field.hasError)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 6,
+                                            left: 4,
+                                          ),
+                                          child: Text(
+                                            field.errorText!,
+                                            style: const TextStyle(
+                                              color: Color(0xFFB3261E),
+                                              fontSize: 10.5,
+                                              height: 1.1,
+                                              fontWeight: FontWeight.w400,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 10),
-                                      ],
-                                    ),
-                                  ),
-                                  if (field.hasError)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 6,
-                                        left: 4,
-                                      ),
-                                      child: Text(
-                                        field.errorText!,
-                                        style: const TextStyle(
-                                          color: Color(0xFFB3261E),
-                                          fontSize: 10.5,
-                                          height: 1.1,
-                                          fontWeight: FontWeight.w400,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.normal('Instagram'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _instagramCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
-                            ),
-                            decoration: _dec('Instagram', 'Enter Instagram'),
-                            validator: _socialRequiredValidator,
-                          ),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.normal('TikTok'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _tiktokCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
-                            ),
-                            decoration: _dec('TikTok', 'Enter TikTok'),
-                            validator: _socialRequiredValidator,
-                          ),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.normal('Bio'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _bioCtrl,
-                            style: const TextStyle(
-                              fontSize: _inputFs,
-                              fontFamily: 'Arial',
-                            ),
-                            maxLines: 4,
-                            decoration: _dec('Bio', 'Enter Bio'),
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    _SectionCard(
-                      title: 'Address Information',
-                      subtitle:
-                          'Provide your shipping address (required to receive nail sizing kit and custom sets)',
-                      child: Column(
-                        children: [
-                          _FieldLabel.required('Street Address'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _streetCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
+                                    ],
+                                  );
+                                },
                               ),
-                              decoration: _dec(
-                                'Street Address',
-                                'Enter Street Address',
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.normal('Instagram'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _instagramCtrl,
+                                style: const TextStyle(
+                                  fontSize: _inputFs,
+                                  fontFamily: 'Arial',
+                                ),
+                                decoration: _dec(
+                                  'Instagram',
+                                  'Enter Instagram',
+                                ),
+                                validator: _socialRequiredValidator,
                               ),
-                              onChanged: (_) => _autofillAddressFromStreet(),
-                              validator: (v) =>
-                                  _requiredValidator(v, 'Street Address'),
-                            ),
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.normal('TikTok'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _tiktokCtrl,
+                                style: const TextStyle(
+                                  fontSize: _inputFs,
+                                  fontFamily: 'Arial',
+                                ),
+                                decoration: _dec('TikTok', 'Enter TikTok'),
+                                validator: _socialRequiredValidator,
+                              ),
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.normal('Bio'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _bioCtrl,
+                                style: const TextStyle(
+                                  fontSize: _inputFs,
+                                  fontFamily: 'Arial',
+                                ),
+                                maxLines: 4,
+                                decoration: _dec('Bio', 'Enter Bio'),
+                              ),
+                              const SizedBox(height: 4),
+                            ],
                           ),
-                          if (_streetSuggestionsLoading)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: LinearProgressIndicator(minHeight: 2),
-                            ),
-                          if (_streetSuggestions.isNotEmpty)
-                            Builder(
-                              builder: (context) {
-                                final suggestionCount =
-                                    _streetSuggestions.length;
-                                final menuHeight =
-                                    AutocompleteDropdownSizing.menuHeight(
-                                      itemCount: suggestionCount,
-                                      itemExtent: 40,
-                                    );
-                                return Container(
-                                  margin: const EdgeInsets.only(top: 8),
-                                  decoration: BoxDecoration(
-                                    color: _clientRegBodyBg,
-                                    borderRadius: BorderRadius.zero,
-                                    border: Border.all(
-                                      color: _clientRegBrandInk.withValues(
-                                        alpha: 0.20,
-                                      ),
-                                    ),
-                                  ),
-                                  constraints: BoxConstraints(
-                                    maxHeight: menuHeight,
-                                  ),
-                                  child: ListView.separated(
-                                    shrinkWrap:
-                                        AutocompleteDropdownSizing.shrinkWrap(
-                                          suggestionCount,
-                                        ),
-                                    physics:
-                                        AutocompleteDropdownSizing.scrollPhysics(
-                                          suggestionCount,
-                                        ),
-                                    itemCount: suggestionCount,
-                                    separatorBuilder: (_, _) =>
-                                        const Divider(height: 1),
-                                    itemBuilder: (_, i) => ListTile(
-                                      dense: true,
-                                      title: Text(
-                                        _streetSuggestions[i].displayLabel,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      onTap: () => _selectStreetSuggestion(
-                                        _streetSuggestions[i],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.required('City'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _cityCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
-                              ),
-                              decoration: _dec('City', 'Enter City'),
-                              validator: (v) => _requiredValidator(v, 'City'),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-
-                          _isUnitedStates
-                              ? _FieldLabel.required('State')
-                              : _FieldLabel.normal('State / Region'),
-                          const SizedBox(height: 6),
-                          if (_isUnitedStates)
-                            _typeAheadPicker(
-                              label: 'State',
-                              hint: 'Type state',
-                              options: usStates,
-                              selectedValue: _selectedState,
-                              required: true,
-                              onChanged: (v) =>
-                                  setState(() => _selectedState = v),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'State is required'
-                                  : null,
-                            )
-                          else
-                            TextFormField(
-                              controller: _manualStateCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
-                              ),
-                              decoration: _dec(
-                                'State / Region',
-                                'Enter State / Region',
-                              ),
-                            ),
-                          const SizedBox(height: 6),
-
-                          _isUnitedStates
-                              ? _FieldLabel.required('Zip Code')
-                              : _FieldLabel.normal('Zip Code'),
-                          const SizedBox(height: 6),
-                          _req(
-                            _isUnitedStates,
-                            TextFormField(
-                              controller: _zipCtrl,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                fontFamily: 'Arial',
-                              ),
-                              keyboardType: TextInputType.number,
-                              inputFormatters: _isUnitedStates
-                                  ? <TextInputFormatter>[
-                                      FilteringTextInputFormatter.digitsOnly,
-                                      LengthLimitingTextInputFormatter(5),
-                                    ]
-                                  : <TextInputFormatter>[],
-                              decoration: _dec('Zip Code', 'Enter Zip Code'),
-                              validator: _zipValidator,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-
-                          _FieldLabel.required('Country'),
-                          const SizedBox(height: 6),
-                          _typeAheadPicker(
-                            label: 'Country',
-                            hint: 'Type country',
-                            options: countries,
-                            selectedValue: _selectedCountry,
-                            required: true,
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() {
-                                _selectedCountry = v;
-                                if (_isUnitedStates) {
-                                  _manualStateCtrl.clear();
-                                } else {
-                                  _selectedState = null;
-                                }
-                              });
-                            },
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Country is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-                    promosAndNailTipsCard(),
-                    const SizedBox(height: 6),
-                    PaymentMethodSection(
-                      initial: _payment,
-                      onChanged: (updated) =>
-                          setState(() => _payment = updated),
-                    ),
-                  ] else ...[
-
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: snow,
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: AppColors.blackCat.withValues(alpha: 0.06),
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Nail Photos',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Capture each finger photo here. The photos will upload with your client account when you sign up.',
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.72),
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _startGuidedNailMeasurement,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _clientRegBrandInk,
-                                foregroundColor: AppColors.snow,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
+
+                        const SizedBox(height: 6),
+
+                        _SectionCard(
+                          title: 'Address Information',
+                          subtitle:
+                              'Provide your shipping address (required to receive nail sizing kit and custom sets)',
+                          child: Column(
+                            children: [
+                              _FieldLabel.required('Street Address'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _streetCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  decoration: _dec(
+                                    'Street Address',
+                                    'Enter Street Address',
+                                  ),
+                                  onChanged: (_) =>
+                                      _autofillAddressFromStreet(),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'Street Address'),
                                 ),
                               ),
-                              icon: const Icon(Icons.camera_alt_outlined),
-                              label: const Text('Capture Photo'),
+                              if (_streetSuggestionsLoading)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8),
+                                  child: LinearProgressIndicator(minHeight: 2),
+                                ),
+                              if (_streetSuggestions.isNotEmpty)
+                                Builder(
+                                  builder: (context) {
+                                    final suggestionCount =
+                                        _streetSuggestions.length;
+                                    final menuHeight =
+                                        AutocompleteDropdownSizing.menuHeight(
+                                          itemCount: suggestionCount,
+                                          itemExtent: 40,
+                                        );
+                                    return Container(
+                                      margin: const EdgeInsets.only(top: 8),
+                                      decoration: BoxDecoration(
+                                        color: _clientRegBodyBg,
+                                        borderRadius: BorderRadius.zero,
+                                        border: Border.all(
+                                          color: _clientRegBrandInk.withValues(
+                                            alpha: 0.20,
+                                          ),
+                                        ),
+                                      ),
+                                      constraints: BoxConstraints(
+                                        maxHeight: menuHeight,
+                                      ),
+                                      child: ListView.separated(
+                                        shrinkWrap:
+                                            AutocompleteDropdownSizing.shrinkWrap(
+                                              suggestionCount,
+                                            ),
+                                        physics:
+                                            AutocompleteDropdownSizing.scrollPhysics(
+                                              suggestionCount,
+                                            ),
+                                        itemCount: suggestionCount,
+                                        separatorBuilder: (_, _) =>
+                                            const Divider(height: 1),
+                                        itemBuilder: (_, i) => ListTile(
+                                          dense: true,
+                                          title: Text(
+                                            _streetSuggestions[i].displayLabel,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          onTap: () => _selectStreetSuggestion(
+                                            _streetSuggestions[i],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.required('City'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _cityCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  decoration: _dec('City', 'Enter City'),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'City'),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+
+                              _isUnitedStates
+                                  ? _FieldLabel.required('State')
+                                  : _FieldLabel.normal('State / Region'),
+                              const SizedBox(height: 6),
+                              if (_isUnitedStates)
+                                _typeAheadPicker(
+                                  label: 'State',
+                                  hint: 'Type state',
+                                  options: usStates,
+                                  selectedValue: _selectedState,
+                                  required: true,
+                                  onChanged: (v) =>
+                                      setState(() => _selectedState = v),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                      ? 'State is required'
+                                      : null,
+                                )
+                              else
+                                TextFormField(
+                                  controller: _manualStateCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  decoration: _dec(
+                                    'State / Region',
+                                    'Enter State / Region',
+                                  ),
+                                ),
+                              const SizedBox(height: 6),
+
+                              _isUnitedStates
+                                  ? _FieldLabel.required('Zip Code')
+                                  : _FieldLabel.normal('Zip Code'),
+                              const SizedBox(height: 6),
+                              _req(
+                                _isUnitedStates,
+                                TextFormField(
+                                  controller: _zipCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: _isUnitedStates
+                                      ? <TextInputFormatter>[
+                                          FilteringTextInputFormatter
+                                              .digitsOnly,
+                                          LengthLimitingTextInputFormatter(5),
+                                        ]
+                                      : <TextInputFormatter>[],
+                                  decoration: _dec(
+                                    'Zip Code',
+                                    'Enter Zip Code',
+                                  ),
+                                  validator: _zipValidator,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+
+                              _FieldLabel.required('Country'),
+                              const SizedBox(height: 6),
+                              _typeAheadPicker(
+                                label: 'Country',
+                                hint: 'Type country',
+                                options: countries,
+                                selectedValue: _selectedCountry,
+                                required: true,
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  setState(() {
+                                    _selectedCountry = v;
+                                    if (_isUnitedStates) {
+                                      _manualStateCtrl.clear();
+                                    } else {
+                                      _selectedState = null;
+                                    }
+                                  });
+                                },
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                    ? 'Country is required'
+                                    : null,
+                              ),
+                              const SizedBox(height: 4),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+                        const SizedBox(height: 6),
+                        PaymentMethodSection(
+                          initial: _payment,
+                          onChanged: (updated) =>
+                              setState(() => _payment = updated),
+                        ),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: snow,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCat.withValues(alpha: 0.06),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    NailPreferencesInlineEditor(
-                      initial: _nailPrefs,
-                      showDimensionImages: false,
-                      onChanged: (updated) =>
-                          setState(() => _nailPrefs = updated),
-                    ),
-                  ],
-                    const SizedBox(height: 6),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Nail Photos',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Capture 2 photos per hand (4 fingers, then thumb). The photos will upload with your client account when you sign up.',
+                                style: TextStyle(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.72,
+                                  ),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                value: _consentToStoreNailImages,
+                                onChanged: (value) => setState(
+                                  () => _consentToStoreNailImages =
+                                      value ?? false,
+                                ),
+                                title: const Text(
+                                  'Do you consent to store the nail image',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _startGuidedNailMeasurement,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _clientRegBrandInk,
+                                    foregroundColor: AppColors.snow,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.camera_alt_outlined),
+                                  label: const Text('Capture Photo'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        NailPreferencesInlineEditor(
+                          initial: _nailPrefs,
+                          showDimensionImages: false,
+                          onChanged: (updated) =>
+                              setState(() => _nailPrefs = updated),
+                        ),
+                      ],
+                      const SizedBox(height: 6),
 
-                    /*if (!_nailPrefs.isComplete) ...[
+                      /*if (!_nailPrefs.isComplete) ...[
                       if (!_kitPurchased)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -3059,98 +3133,98 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                         onAddToCart: _startCheckout,
                       ),
                     ],*/
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 18),
 
-                    _wizardNavButtons(canCreate: canCreate),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
-}
-
-class _NailCaptureStep {
-  const _NailCaptureStep({
-    required this.key,
-    required this.hand,
-    required this.finger,
-    required this.title,
-  });
-
-  final String key;
-  final String hand;
-  final String finger;
-  final String title;
-}
-
-class _MeasureStepTile extends StatelessWidget {
-  const _MeasureStepTile({
-    required this.step,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final int step;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: AppColors.blackCat,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '$step',
-              style: const TextStyle(
-                color: AppColors.snow,
-                fontWeight: FontWeight.w700,
-                fontSize: 20,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black.withValues(alpha: 0.72),
+                      _wizardNavButtons(canCreate: canCreate),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
+
+// class _NailCaptureStep {
+//   const _NailCaptureStep({
+//     required this.key,
+//     required this.hand,
+//     required this.finger,
+//     required this.title,
+//   });
+//
+//   final String key;
+//   final String hand;
+//   final String finger;
+//   final String title;
+// }
+
+// class _MeasureStepTile extends StatelessWidget {
+//   const _MeasureStepTile({
+//     required this.step,
+//     required this.title,
+//     required this.subtitle,
+//   });
+//
+//   final int step;
+//   final String title;
+//   final String subtitle;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Padding(
+//       padding: const EdgeInsets.only(bottom: 10),
+//       child: Row(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Container(
+//             width: 42,
+//             height: 42,
+//             alignment: Alignment.center,
+//             decoration: const BoxDecoration(
+//               color: AppColors.blackCat,
+//               shape: BoxShape.circle,
+//             ),
+//             child: Text(
+//               '$step',
+//               style: const TextStyle(
+//                 color: AppColors.snow,
+//                 fontWeight: FontWeight.w700,
+//                 fontSize: 20,
+//               ),
+//             ),
+//           ),
+//           const SizedBox(width: 12),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   title,
+//                   style: const TextStyle(
+//                     fontWeight: FontWeight.w700,
+//                     fontSize: 16,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 2),
+//                 Text(
+//                   subtitle,
+//                   style: TextStyle(
+//                     fontSize: 14,
+//                     color: Colors.black.withValues(alpha: 0.72),
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
 class _CoinReference {
   const _CoinReference({
@@ -3165,6 +3239,7 @@ class _CoinReference {
   final String icon;
 }
 
+// ignore: unused_element
 const List<_CoinReference> _coinReferences = <_CoinReference>[
   _CoinReference(
     group: 'UNITED STATES',
@@ -3271,47 +3346,50 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
             button: true,
             onTap: () => Navigator.pop(context, item.name),
             child: InkWell(
-          onTap: () => Navigator.pop(context, item.name),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.snow,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(
-                color: AppColors.blackCat.withValues(alpha: 0.12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Text(item.icon, style: const TextStyle(fontSize: 36)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${item.diameterMm.toStringAsFixed(2)}mm diameter',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.blackCat.withValues(alpha: 0.65),
-                        ),
-                      ),
-                    ],
+              onTap: () => Navigator.pop(context, item.name),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(
+                    color: AppColors.blackCat.withValues(alpha: 0.12),
                   ),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    Text(item.icon, style: const TextStyle(fontSize: 36)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${item.diameterMm.toStringAsFixed(2)}mm diameter',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.blackCat.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
           ),
         ),
       );

@@ -91,6 +91,29 @@ class RegistrationInputUtils {
 
   static String normalizeExpiry(String value) =>
       value.replaceAll(RegExp(r'[^0-9/]'), '');
+
+  static String formatDateOfBirth(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '$month/$day/${value.year}';
+  }
+
+  static int ageOn(DateTime dateOfBirth, DateTime onDate) {
+    var age = onDate.year - dateOfBirth.year;
+    final birthdayHasOccurred =
+        onDate.month > dateOfBirth.month ||
+        (onDate.month == dateOfBirth.month && onDate.day >= dateOfBirth.day);
+    if (!birthdayHasOccurred) age--;
+    return age;
+  }
+
+  static bool isEligibleByDateOfBirth(
+    DateTime dateOfBirth, {
+    DateTime? onDate,
+  }) {
+    final today = onDate ?? DateTime.now();
+    return ageOn(dateOfBirth, today) >= 14;
+  }
 }
 
 class UsPhoneTextInputFormatter extends TextInputFormatter {

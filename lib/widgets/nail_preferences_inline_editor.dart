@@ -701,6 +701,7 @@ class _FingerInput extends StatelessWidget {
                 height: 78,
                 width: 68,
                 fit: BoxFit.cover,
+                cacheWidth: 140,
                 errorBuilder: (_, _, _) {
                   return Container(
                     height: 78,
@@ -847,6 +848,7 @@ class _ShapeCard extends StatelessWidget {
                 child: Image.asset(
                   imageAsset,
                   fit: BoxFit.contain,
+                  cacheWidth: 240,
                   errorBuilder: (_, _, _) => Icon(
                     Icons.front_hand_outlined,
                     size: 24,
@@ -1016,6 +1018,7 @@ class _LengthImageCard extends StatelessWidget {
                 height: 96,
                 width: double.infinity,
                 fit: BoxFit.contain,
+                cacheWidth: 400,
                 errorBuilder: (_, _, _) => Container(
                   height: 96,
                   decoration: BoxDecoration(

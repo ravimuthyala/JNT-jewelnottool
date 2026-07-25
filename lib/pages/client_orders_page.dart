@@ -1789,6 +1789,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     final profileLength = _profileNailLengthTitle();
     final profileLeftHand = _profileHandDimensions(true);
     final profileRightHand = _profileHandDimensions(false);
+    final profileEmail = widget.profile.basic.email.trim().toLowerCase();
     final leftHandForOrder = _hasAnyDimension(req.leftHandDimensions)
         ? req.leftHandDimensions
         : profileLeftHand;
@@ -1821,18 +1822,37 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       hasAssignedArtist: selectedArtistName.isNotEmpty,
       orderType: req.orderType,
       groupClients: req.groupClients
-          .map(
-            (client) => OrderClientMeasurement(
+          .map((client) {
+            // Group-order slots only ever hold a snapshot captured when that
+            // client accepted -- unlike the single-order fields above, they
+            // never fell back to the viewer's own current profile. For the
+            // viewer's own slot specifically, fill in anything still missing
+            // from their live profile, same as a single-client order does.
+            final isViewersOwnSlot =
+                client.clientEmail.trim().toLowerCase() == profileEmail;
+            return OrderClientMeasurement(
               clientId: client.clientId,
               clientName: client.clientName,
               clientEmail: client.clientEmail,
               responseStatus: client.responseStatus,
-              nailShape: client.nailShape,
-              nailLength: client.nailLength,
-              leftHandDimensions: client.leftHandDimensions,
-              rightHandDimensions: client.rightHandDimensions,
-            ),
-          )
+              nailShape: client.nailShape.trim().isNotEmpty
+                  ? client.nailShape
+                  : (isViewersOwnSlot ? profileShape : client.nailShape),
+              nailLength: client.nailLength.trim().isNotEmpty
+                  ? client.nailLength
+                  : (isViewersOwnSlot ? profileLength : client.nailLength),
+              leftHandDimensions: _hasAnyDimension(client.leftHandDimensions)
+                  ? client.leftHandDimensions
+                  : (isViewersOwnSlot
+                        ? profileLeftHand
+                        : client.leftHandDimensions),
+              rightHandDimensions: _hasAnyDimension(client.rightHandDimensions)
+                  ? client.rightHandDimensions
+                  : (isViewersOwnSlot
+                        ? profileRightHand
+                        : client.rightHandDimensions),
+            );
+          })
           .toList(growable: false),
       clientDescription: req.description.isNotEmpty
           ? req.description

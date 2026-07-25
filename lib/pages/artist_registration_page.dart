@@ -24,6 +24,7 @@ import 'email_verification_pending_page.dart';
 import '../widgets/direct_request_year_calendar.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
+import '../widgets/registration_date_of_birth_picker.dart';
 
 const Color _artistRegSnow = AppColors.snow;
 const Color _artistRegInk = AppColors.blackCat;
@@ -77,6 +78,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   // Account credentials
   // -----------------------
   final _emailCtrl = TextEditingController();
+  final _dateOfBirthCtrl = TextEditingController();
+  DateTime? _dateOfBirth;
   final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -177,6 +180,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   // ✅ add upload images ABOVE "No previous projects uploaded yet"
   // -----------------------
   final List<Uint8List> _portfolioImages = [];
+  bool _consentToStoreAndPublishPortfolio = true;
   String? _lastPortfolioUploadErrorDetail;
   final _projectNotesCtrl = TextEditingController();
   final _instagramCtrl = TextEditingController();
@@ -479,6 +483,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       'profile': {
         'studioName': _studioNameCtrl.text.trim(),
         'displayName': _displayNameCtrl.text.trim(),
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
+        'consentToStoreAndPublishPortfolio': _consentToStoreAndPublishPortfolio,
         'languageSpoken': _languageSpokenCtrl.text.trim(),
         'currency': (_currency ?? '').trim(),
         'photoUrl': profilePhotoUrl.trim(),
@@ -691,6 +697,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   void dispose() {
     _streetAutocompleteDebounce?.cancel();
     _emailCtrl.dispose();
+    _dateOfBirthCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
     _phoneCtrl.dispose();
@@ -907,7 +914,9 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   }
 
   Future<List<String>> _uploadPortfolioImages(String uid) async {
-    if (_portfolioImages.isEmpty) return const <String>[];
+    if (!_consentToStoreAndPublishPortfolio || _portfolioImages.isEmpty) {
+      return const <String>[];
+    }
 
     _lastPortfolioUploadErrorDetail = null;
 
@@ -1287,40 +1296,40 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       button: true,
       selected: selected,
       child: ExcludeSemantics(
-      child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.blackCat.withValues(alpha: 0.12)
-              : Colors.white,
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.zero,
-          border: Border.all(
-            color: selected
-                ? AppColors.blackCat
-                : AppColors.blackCat.withValues(alpha: 0.08),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selected) ...[
-              const Icon(Icons.check, size: 16, color: AppColors.blackCat),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: _chipFs,
-                fontWeight: FontWeight.w700,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.blackCat.withValues(alpha: 0.12)
+                  : Colors.white,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(
+                color: selected
+                    ? AppColors.blackCat
+                    : AppColors.blackCat.withValues(alpha: 0.08),
               ),
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (selected) ...[
+                  const Icon(Icons.check, size: 16, color: AppColors.blackCat),
+                  const SizedBox(width: 6),
+                ],
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: _chipFs,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1342,42 +1351,45 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           button: true,
           selected: selected,
           child: ExcludeSemantics(
-          child: InkWell(
-          borderRadius: BorderRadius.zero,
-          onTap: () => setState(() => _nailTechType = type),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.snow,
+            child: InkWell(
               borderRadius: BorderRadius.zero,
-              border: Border.all(
-                color: selected
-                    ? AppColors.blackCat
-                    : AppColors.blackCat.withValues(alpha: 0.08),
-                width: selected ? 1.6 : 1.0,
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: _inputFs,
-                      fontWeight: FontWeight.w400,
-                    ),
+              onTap: () => setState(() => _nailTechType = type),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(
+                    color: selected
+                        ? AppColors.blackCat
+                        : AppColors.blackCat.withValues(alpha: 0.08),
+                    width: selected ? 1.6 : 1.0,
                   ),
                 ),
-                if (selected)
-                  const Icon(
-                    Icons.check_circle,
-                    size: 22,
-                    color: AppColors.blackCat,
-                  ),
-              ],
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: _inputFs,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    if (selected)
+                      const Icon(
+                        Icons.check_circle,
+                        size: 22,
+                        color: AppColors.blackCat,
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          ),
           ),
         ),
       );
@@ -1415,14 +1427,15 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           Semantics(
             isRequired: true,
             child: TextFormField(
-            controller: _licenseCtrl,
-            style: const TextStyle(fontSize: _inputFs),
-            decoration: _dec('License # *', 'Enter license number'),
-            validator: (v) {
-              if (_nailTechType != NailTechType.professional) return null;
-              if (v == null || v.trim().isEmpty) return 'License # is required';
-              return null;
-            },
+              controller: _licenseCtrl,
+              style: const TextStyle(fontSize: _inputFs),
+              decoration: _dec('License # *', 'Enter license number'),
+              validator: (v) {
+                if (_nailTechType != NailTechType.professional) return null;
+                if (v == null || v.trim().isEmpty)
+                  return 'License # is required';
+                return null;
+              },
             ),
           ),
           const SizedBox(height: 6),
@@ -1480,19 +1493,19 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         Semantics(
           isRequired: true,
           child: TextFormField(
-          controller: _schoolCtrl,
-          style: const TextStyle(fontSize: _inputFs),
-          decoration: _dec(
-            'School / Training Program *',
-            'Enter school or program name',
-          ),
-          validator: (v) {
-            if (_nailTechType != NailTechType.student) return null;
-            if (v == null || v.trim().isEmpty) {
-              return 'School/Program is required';
-            }
-            return null;
-          },
+            controller: _schoolCtrl,
+            style: const TextStyle(fontSize: _inputFs),
+            decoration: _dec(
+              'School / Training Program *',
+              'Enter school or program name',
+            ),
+            validator: (v) {
+              if (_nailTechType != NailTechType.student) return null;
+              if (v == null || v.trim().isEmpty) {
+                return 'School/Program is required';
+              }
+              return null;
+            },
           ),
         ),
         const SizedBox(height: 6),
@@ -1630,6 +1643,11 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       return;
     }
 
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(_dateOfBirth!)) {
+      await _showAgeIneligibleDialog();
+      return;
+    }
+
     if (_services.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1750,8 +1768,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         supabaseUser = await SupabaseAuthService.signup(
           email: email,
           password: password,
-        )
-            .timeout(const Duration(seconds: 20));
+        ).timeout(const Duration(seconds: 20));
       } on AuthException catch (e) {
         final message = e.message.toLowerCase();
         if (!message.contains('already')) {
@@ -1887,6 +1904,34 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     }
   }
 
+  String? _dateOfBirthValidator(String? value) {
+    if (_dateOfBirth == null) return 'Date of Birth is required';
+    return null;
+  }
+
+  Future<void> _showAgeIneligibleDialog() async {
+    await showRegistrationAgeIneligibleDialog(context: context);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const ArtistLoginPage()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final selected = await showRegistrationDateOfBirthPicker(context: context);
+    if (selected == null || !mounted) return;
+    setState(() {
+      _dateOfBirth = selected;
+      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(
+        selected,
+      );
+    });
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(selected) && mounted) {
+      await _showAgeIneligibleDialog();
+    }
+  }
+
   // -----------------------
   // Build
   // -----------------------
@@ -1913,89 +1958,92 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         namesRoute: true,
         label: 'Artist registration',
         child: Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: JntModalAppBar(
-          onClose: () => Navigator.of(
-            context,
-            rootNavigator: true,
-          ).pushNamedAndRemoveUntil('/register', (route) => false),
-          closeTooltip: 'Close artist registration',
-          closeIcon: const Icon(Icons.close),
-        ),
-        body: SafeArea(
-          child: Form(
-            key: _formKey,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-              children: [
-                // -----------------------
-                // ✅ Artist Profile (AFTER Account Credentials)
-                // -----------------------
-                _sectionCard(
-                  title: 'Artist Profile',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
-                  ),
-                  child: Column(
-                    children: [
-                      _profilePicTile(),
-                      const SizedBox(height: 14),
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _studioNameCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec(
-                          'Full Name / Studio Name *',
-                          'Full Name / Studio Name',
+          backgroundColor: AppColors.snow,
+          appBar: JntModalAppBar(
+            onClose: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            closeTooltip: 'Close artist registration',
+            closeIcon: const Icon(Icons.close),
+          ),
+          body: SafeArea(
+            child: Form(
+              key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+                children: [
+                  // -----------------------
+                  // ✅ Artist Profile (AFTER Account Credentials)
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Artist Profile',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                    ),
+                    child: Column(
+                      children: [
+                        _profilePicTile(),
+                        const SizedBox(height: 14),
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _studioNameCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec(
+                              'Full Name / Studio Name *',
+                              'Full Name / Studio Name',
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
+                          ),
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
+                        const SizedBox(height: 6),
 
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _displayNameCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('Display Name *', 'Display Name'),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _displayNameCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec('Display Name *', 'Display Name'),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
+                        const SizedBox(height: 6),
 
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _languageSpokenCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec(
-                          'Language Spoken *',
-                          'Enter language(s) spoken',
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _languageSpokenCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec(
+                              'Language Spoken *',
+                              'Enter language(s) spoken',
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
+                          ),
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        const SizedBox(height: 6),
+
+                        _typeAheadPicker(
+                          label: 'Currency *',
+                          hint: 'Select currency',
+                          options: currencyOptions,
+                          selectedValue: _currency,
+                          onChanged: (v) => setState(() => _currency = v),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Currency is required'
+                              : null,
                         ),
-                      ),
-                      const SizedBox(height: 6),
+                        const SizedBox(height: 6),
 
-                      _typeAheadPicker(
-                        label: 'Currency *',
-                        hint: 'Select currency',
-                        options: currencyOptions,
-                        selectedValue: _currency,
-                        onChanged: (v) => setState(() => _currency = v),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Currency is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 6),
-
-                      /*   DropdownButtonFormField<String>(
+                        /*   DropdownButtonFormField<String>(
                       value: _experience,
                       decoration: _dec('Years of Experience *', 'Select'),
                       items: const [
@@ -2010,927 +2058,966 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                     const SizedBox(height: 6),*/
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _bioCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        maxLines: 5,
-                        decoration: _dec(
-                          'Bio / About *',
-                          'Tell clients about you',
-                        ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-                // -----------------------
-                // Account Credentials
-                // -----------------------
-                _sectionCard(
-                  title: 'Account Credentials',
-                  subtitle: 'Used to sign in to your artist account.',
-                  child: Column(
-                    children: [
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _emailCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: _dec('Email *', 'Email'),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) return 'Email is required';
-                          if (!RegistrationInputUtils.isValidEmail(value)) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _passCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        obscureText: _obscurePassword,
-                        decoration: _dec(
-                          'Password *',
-                          'Enter password',
-                          suffixIcon: IconButton(
-                            iconSize: 18,
-                            tooltip: _obscurePassword
-                                ? 'Show password'
-                                : 'Hide password',
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _bioCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            maxLines: 5,
+                            decoration: _dec(
+                              'Bio / About *',
+                              'Tell clients about you',
                             ),
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
                           ),
-                        ),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) return 'Password is required';
-                          if (!RegistrationInputUtils.isStrongPassword(value)) {
-                            return 'Use 8+ chars with upper, lower, number, and symbol';
-                          }
-                          return null;
-                        },
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Password must include uppercase, lowercase, number, and symbol.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.blackCat.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // ✅ Confirm password with eye icon
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _confirmCtrl,
-                        obscureText: _obscureConfirmPassword,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec(
-                          'Confirm Password *',
-                          'Confirm password',
-                          suffixIcon: IconButton(
-                            iconSize: 18,
-                            tooltip: _obscureConfirmPassword
-                                ? 'Show password'
-                                : 'Hide password',
-                            onPressed: () => setState(
-                              () => _obscureConfirmPassword =
-                                  !_obscureConfirmPassword,
-                            ),
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
-                          ),
-                        ),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Confirm password is required';
-                          }
-                          if (v.trim() != _passCtrl.text.trim()) {
-                            return 'Passwords do not match';
-                          }
-                          return null;
-                        },
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      FormField<String>(
-                        validator: (value) {
-                          final digits = RegistrationInputUtils.normalizePhone(
-                            _phoneCtrl.text,
-                          );
-                          return digits.length != 10
-                              ? 'Enter exactly 10 digits'
-                              : null;
-                        },
-                        builder: (field) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                height: _fieldHeight,
-                                decoration: BoxDecoration(
-                                  color: AppColors.snow,
-                                  borderRadius: BorderRadius.zero,
-                                  border: Border.all(
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.35,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 106,
-                                      child: _countryCodeDropdown(
-                                        value: _phoneAreaCode,
-                                        embedded: true,
-                                        onChanged: (code) => setState(
-                                          () => _phoneAreaCode =
-                                              code.dialCode ?? '+1',
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 1,
-                                      color: AppColors.blackCatBorderLight,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _phoneCtrl,
-                                        style: const TextStyle(
-                                          fontSize: _inputFs,
-                                        ),
-                                        keyboardType: TextInputType.phone,
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter
-                                              .digitsOnly,
-                                          LengthLimitingTextInputFormatter(10),
-                                          UsPhoneTextInputFormatter(),
-                                        ],
-                                        onChanged: field.didChange,
-                                        decoration: InputDecoration(
-                                          hintText: 'Enter 10-digit phone',
-                                          hintStyle: TextStyle(
-                                            fontSize: 13,
-                                            color: AppColors.blackCat,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                          border: InputBorder.none,
-                                          enabledBorder: InputBorder.none,
-                                          focusedBorder: InputBorder.none,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                vertical: _fieldVerticalPadding,
-                                              ),
-                                          isDense: false,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                  ],
-                                ),
-                              ),
-                              if (field.hasError)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: 6,
-                                    left: 4,
-                                  ),
-                                  child: Text(
-                                    field.errorText!,
-                                    style: const TextStyle(
-                                      color: Color(0xFFB3261E),
-                                      fontSize: 10.5,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-                // -----------------------
-                // Location & Service Area
-                // -----------------------
-                _sectionCard(
-                  title: 'Location & Service Area',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFEAF7F2), Color(0xFFF5F0FF)],
-                  ),
-                  child: Column(
-                    children: [
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _cityCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('City *', 'City'),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) return 'City is required';
-                          if (!RegExp(r"^[A-Za-z .'-]{2,}$").hasMatch(value)) {
-                            return 'Enter a valid city';
-                          }
-                          return null;
-                        },
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const SizedBox(height: 6),
-                      _typeAheadPicker(
-                        label: 'Country *',
-                        hint: 'Select country',
-                        options: countries,
-                        selectedValue: _selectedCountry,
-                        onChanged: (v) {
-                          setState(() {
-                            _selectedCountry = v ?? 'United States';
-                            if (!_isUnitedStates) _state = null;
-                            if (_isShippingAddressSame) {
-                              _shippingCountryCtrl.text = _selectedCountry;
-                            }
-                          });
-                        },
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? 'Country is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 6),
-                      if (_isUnitedStates) ...[
-                        _typeAheadPicker(
-                          label: 'State *',
-                          hint: 'Select state',
-                          options: usStates,
-                          selectedValue: _state,
-                          onChanged: (v) => setState(() => _state = v),
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'State is required'
-                              : null,
-                        ),
-                      ] else ...[
-                        TextFormField(
-                          controller: _manualStateCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('State / Region', 'Enter region'),
-                          validator: (_) => null,
                         ),
                       ],
-                      const SizedBox(height: 6),
+                    ),
+                  ),
 
-                      DropdownButtonFormField<String>(
-                        initialValue: _timeZone,
-                        style: const TextStyle(
-                          fontSize: _inputFs,
-                          color: AppColors.blackCat,
-                          fontWeight: FontWeight.w400,
+                  const SizedBox(height: 6),
+                  // -----------------------
+                  // Account Credentials
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Account Credentials',
+                    subtitle: 'Used to sign in to your artist account.',
+                    child: Column(
+                      children: [
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _emailCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: _dec('Email *', 'Email'),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) return 'Email is required';
+                              if (!RegistrationInputUtils.isValidEmail(value)) {
+                                return 'Enter a valid email';
+                              }
+                              return null;
+                            },
+                          ),
                         ),
-                        decoration: _dec('Time Zone *', 'America/New_York'),
-                        items: timeZones
-                            .map(
-                              (t) => DropdownMenuItem(
-                                value: t,
-                                child: Text(
-                                  t,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    color: AppColors.blackCat,
+                        const SizedBox(height: 6),
+
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _dateOfBirthCtrl,
+                            readOnly: true,
+                            onTap: _pickDateOfBirth,
+                            decoration: _dec(
+                              'Date of Birth *',
+                              'MM/DD/YYYY',
+                              suffixIcon: const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 18,
+                              ),
+                            ),
+                            validator: _dateOfBirthValidator,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _passCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            obscureText: _obscurePassword,
+                            decoration: _dec(
+                              'Password *',
+                              'Enter password',
+                              suffixIcon: IconButton(
+                                iconSize: 18,
+                                tooltip: _obscurePassword
+                                    ? 'Show password'
+                                    : 'Hide password',
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.45,
                                   ),
                                 ),
                               ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(() {
-                          _timeZone = v ?? _timeZone;
-                          if (_isShippingAddressSame) {
-                            _shippingTimeZoneCtrl.text = _timeZone;
-                          }
-                        }),
-                      ),
-                    ],
-                  ),
-                ),
+                            ),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) return 'Password is required';
+                              if (!RegistrationInputUtils.isStrongPassword(
+                                value,
+                              )) {
+                                return 'Use 8+ chars with upper, lower, number, and symbol';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Password must include uppercase, lowercase, number, and symbol.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
 
-                const SizedBox(height: 6),
+                        // ✅ Confirm password with eye icon
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _confirmCtrl,
+                            obscureText: _obscureConfirmPassword,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec(
+                              'Confirm Password *',
+                              'Confirm password',
+                              suffixIcon: IconButton(
+                                iconSize: 18,
+                                tooltip: _obscureConfirmPassword
+                                    ? 'Show password'
+                                    : 'Hide password',
+                                onPressed: () => setState(
+                                  () => _obscureConfirmPassword =
+                                      !_obscureConfirmPassword,
+                                ),
+                                icon: Icon(
+                                  _obscureConfirmPassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return 'Confirm password is required';
+                              }
+                              if (v.trim() != _passCtrl.text.trim()) {
+                                return 'Passwords do not match';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 6),
 
-                // -----------------------
-                // Address Information
-                // -----------------------
-                _sectionCard(
-                  title: 'Address Information',
-                  subtitle:
-                      'Provide your shipping address (all fields required)',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _requiredFieldLabel('Street Address'),
-                      const SizedBox(height: 6),
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _addressLine1Ctrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec(
-                          'Street Address',
-                          'Enter Street Address',
-                        ),
-                        onChanged: (_) => _autofillAddressFromStreet(),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) {
-                            return 'Street Address is required';
-                          }
-                          return null;
-                        },
-                        ),
-                      ),
-                      if (_streetSuggestionsLoading)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: LinearProgressIndicator(minHeight: 2),
-                        ),
-                      if (_streetSuggestions.isNotEmpty)
-                        Builder(
-                          builder: (context) {
-                            final suggestionCount = _streetSuggestions.length;
-                            final menuHeight =
-                                AutocompleteDropdownSizing.menuHeight(
-                                  itemCount: suggestionCount,
-                                  itemExtent: 40,
+                        FormField<String>(
+                          validator: (value) {
+                            final digits =
+                                RegistrationInputUtils.normalizePhone(
+                                  _phoneCtrl.text,
                                 );
-                            return Container(
-                              margin: const EdgeInsets.only(top: 8),
-                              decoration: BoxDecoration(
-                                color: _artistRegSnow,
-                                borderRadius: BorderRadius.zero,
-                                border: Border.all(
-                                  color: _artistRegInk.withValues(alpha: 0.20),
-                                ),
-                              ),
-                              constraints: BoxConstraints(
-                                maxHeight: menuHeight,
-                              ),
-                              child: ListView.separated(
-                                shrinkWrap:
-                                    AutocompleteDropdownSizing.shrinkWrap(
-                                      suggestionCount,
+                            return digits.length != 10
+                                ? 'Enter exactly 10 digits'
+                                : null;
+                          },
+                          builder: (field) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  height: _fieldHeight,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.snow,
+                                    borderRadius: BorderRadius.zero,
+                                    border: Border.all(
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.35,
+                                      ),
                                     ),
-                                physics:
-                                    AutocompleteDropdownSizing.scrollPhysics(
-                                      suggestionCount,
-                                    ),
-                                itemCount: suggestionCount,
-                                separatorBuilder: (_, _) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (_, i) => ListTile(
-                                  dense: true,
-                                  title: Text(
-                                    _streetSuggestions[i].displayLabel,
-                                    style: const TextStyle(fontSize: 12),
                                   ),
-                                  onTap: () => _applyStreetSuggestion(
-                                    _streetSuggestions[i],
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 106,
+                                        child: _countryCodeDropdown(
+                                          value: _phoneAreaCode,
+                                          embedded: true,
+                                          onChanged: (code) => setState(
+                                            () => _phoneAreaCode =
+                                                code.dialCode ?? '+1',
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        width: 1,
+                                        color: AppColors.blackCatBorderLight,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _phoneCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                          ),
+                                          keyboardType: TextInputType.phone,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
+                                            LengthLimitingTextInputFormatter(
+                                              10,
+                                            ),
+                                            UsPhoneTextInputFormatter(),
+                                          ],
+                                          onChanged: field.didChange,
+                                          decoration: InputDecoration(
+                                            hintText: 'Enter 10-digit phone',
+                                            hintStyle: TextStyle(
+                                              fontSize: 13,
+                                              color: AppColors.blackCat,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                            border: InputBorder.none,
+                                            enabledBorder: InputBorder.none,
+                                            focusedBorder: InputBorder.none,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  vertical:
+                                                      _fieldVerticalPadding,
+                                                ),
+                                            isDense: false,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                    ],
                                   ),
                                 ),
-                              ),
+                                if (field.hasError)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: 6,
+                                      left: 4,
+                                    ),
+                                    child: Text(
+                                      field.errorText!,
+                                      style: const TextStyle(
+                                        color: Color(0xFFB3261E),
+                                        fontSize: 10.5,
+                                        height: 1.1,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             );
                           },
                         ),
-                      const SizedBox(height: 16),
-                      _requiredFieldLabel('City'),
-                      const SizedBox(height: 6),
-                      Semantics(
-                        isRequired: true,
-                        child: TextFormField(
-                        controller: _addressCityCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        decoration: _dec('City', 'Enter City'),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) return 'City is required';
-                          return null;
-                        },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _isUnitedStates
-                          ? _requiredFieldLabel('State')
-                          : _fieldLabel('State / Region'),
-                      const SizedBox(height: 6),
-                      if (_isUnitedStates)
-                        _typeAheadPicker(
-                          label: 'State',
-                          hint: 'Select State',
-                          options: usStates,
-                          selectedValue: _state,
-                          onChanged: (v) => setState(() => _state = v),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'State is required'
-                              : null,
-                        )
-                      else
-                        TextFormField(
-                          controller: _manualStateCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec(
-                            'State / Region',
-                            'Enter State / Region',
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+                  // -----------------------
+                  // Location & Service Area
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Location & Service Area',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEAF7F2), Color(0xFFF5F0FF)],
+                    ),
+                    child: Column(
+                      children: [
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _cityCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec('City *', 'City'),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) return 'City is required';
+                              if (!RegExp(
+                                r"^[A-Za-z .'-]{2,}$",
+                              ).hasMatch(value)) {
+                                return 'Enter a valid city';
+                              }
+                              return null;
+                            },
                           ),
-                          validator: (_) => null,
                         ),
-                      const SizedBox(height: 16),
-                      _isUnitedStates
-                          ? _requiredFieldLabel('Zip Code')
-                          : _fieldLabel('Zip Code'),
-                      const SizedBox(height: 6),
-                      Semantics(
-                        isRequired: _isUnitedStates,
-                        child: TextFormField(
-                        controller: _zipCtrl,
-                        style: const TextStyle(fontSize: _inputFs),
-                        keyboardType: TextInputType.text,
-                        textInputAction: TextInputAction.next,
-                        decoration: _dec('Zip Code', 'Enter Zip Code'),
-                        validator: (v) {
-                          final value = (v ?? '').trim();
-                          if (value.isEmpty) {
-                            return _isUnitedStates
-                                ? 'Zip Code is required'
-                                : null;
-                          }
-                          if (!_isUnitedStates) return null;
-                          final ok = RegExp(
-                            r'^\d{5}(-\d{4})?$',
-                          ).hasMatch(value);
-                          if (!ok) return 'Enter a valid ZIP code';
-                          return null;
-                        },
+                        const SizedBox(height: 6),
+                        const SizedBox(height: 6),
+                        _typeAheadPicker(
+                          label: 'Country *',
+                          hint: 'Select country',
+                          options: countries,
+                          selectedValue: _selectedCountry,
+                          onChanged: (v) {
+                            setState(() {
+                              _selectedCountry = v ?? 'United States';
+                              if (!_isUnitedStates) _state = null;
+                              if (_isShippingAddressSame) {
+                                _shippingCountryCtrl.text = _selectedCountry;
+                              }
+                            });
+                          },
+                          validator: (v) => (v == null || v.isEmpty)
+                              ? 'Country is required'
+                              : null,
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      _requiredFieldLabel('Country'),
-                      const SizedBox(height: 6),
-                      _typeAheadPicker(
-                        label: 'Country',
-                        hint: 'Select Country',
-                        options: countries,
-                        selectedValue: _selectedCountry,
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() {
-                            _selectedCountry = v;
-                            if (_selectedCountry != 'United States') {
-                              _state = null;
-                              _zipCtrl.clear();
+                        const SizedBox(height: 6),
+                        if (_isUnitedStates) ...[
+                          _typeAheadPicker(
+                            label: 'State *',
+                            hint: 'Select state',
+                            options: usStates,
+                            selectedValue: _state,
+                            onChanged: (v) => setState(() => _state = v),
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'State is required'
+                                : null,
+                          ),
+                        ] else ...[
+                          TextFormField(
+                            controller: _manualStateCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec('State / Region', 'Enter region'),
+                            validator: (_) => null,
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+
+                        DropdownButtonFormField<String>(
+                          initialValue: _timeZone,
+                          style: const TextStyle(
+                            fontSize: _inputFs,
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          decoration: _dec('Time Zone *', 'America/New_York'),
+                          items: timeZones
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(
+                                    t,
+                                    style: const TextStyle(
+                                      fontSize: _inputFs,
+                                      color: AppColors.blackCat,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) => setState(() {
+                            _timeZone = v ?? _timeZone;
+                            if (_isShippingAddressSame) {
+                              _shippingTimeZoneCtrl.text = _timeZone;
                             }
-                          });
-                        },
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Country is required'
-                            : null,
-                      ),
-                    ],
+                          }),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 6),
+                  const SizedBox(height: 6),
 
-                // -----------------------
-                // Services & Pricing
-                // -----------------------
-                _sectionCard(
-                  title: 'Specialization & Pricing',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                  // -----------------------
+                  // Address Information
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Address Information',
+                    subtitle:
+                        'Provide your shipping address (all fields required)',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _requiredFieldLabel('Street Address'),
+                        const SizedBox(height: 6),
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _addressLine1Ctrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec(
+                              'Street Address',
+                              'Enter Street Address',
+                            ),
+                            onChanged: (_) => _autofillAddressFromStreet(),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) {
+                                return 'Street Address is required';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        if (_streetSuggestionsLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          ),
+                        if (_streetSuggestions.isNotEmpty)
+                          Builder(
+                            builder: (context) {
+                              final suggestionCount = _streetSuggestions.length;
+                              final menuHeight =
+                                  AutocompleteDropdownSizing.menuHeight(
+                                    itemCount: suggestionCount,
+                                    itemExtent: 40,
+                                  );
+                              return Container(
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: _artistRegSnow,
+                                  borderRadius: BorderRadius.zero,
+                                  border: Border.all(
+                                    color: _artistRegInk.withValues(
+                                      alpha: 0.20,
+                                    ),
+                                  ),
+                                ),
+                                constraints: BoxConstraints(
+                                  maxHeight: menuHeight,
+                                ),
+                                child: ListView.separated(
+                                  shrinkWrap:
+                                      AutocompleteDropdownSizing.shrinkWrap(
+                                        suggestionCount,
+                                      ),
+                                  physics:
+                                      AutocompleteDropdownSizing.scrollPhysics(
+                                        suggestionCount,
+                                      ),
+                                  itemCount: suggestionCount,
+                                  separatorBuilder: (_, _) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (_, i) => ListTile(
+                                    dense: true,
+                                    title: Text(
+                                      _streetSuggestions[i].displayLabel,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    onTap: () => _applyStreetSuggestion(
+                                      _streetSuggestions[i],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 16),
+                        _requiredFieldLabel('City'),
+                        const SizedBox(height: 6),
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _addressCityCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec('City', 'Enter City'),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) return 'City is required';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _isUnitedStates
+                            ? _requiredFieldLabel('State')
+                            : _fieldLabel('State / Region'),
+                        const SizedBox(height: 6),
+                        if (_isUnitedStates)
+                          _typeAheadPicker(
+                            label: 'State',
+                            hint: 'Select State',
+                            options: usStates,
+                            selectedValue: _state,
+                            onChanged: (v) => setState(() => _state = v),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'State is required'
+                                : null,
+                          )
+                        else
+                          TextFormField(
+                            controller: _manualStateCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            decoration: _dec(
+                              'State / Region',
+                              'Enter State / Region',
+                            ),
+                            validator: (_) => null,
+                          ),
+                        const SizedBox(height: 16),
+                        _isUnitedStates
+                            ? _requiredFieldLabel('Zip Code')
+                            : _fieldLabel('Zip Code'),
+                        const SizedBox(height: 6),
+                        Semantics(
+                          isRequired: _isUnitedStates,
+                          child: TextFormField(
+                            controller: _zipCtrl,
+                            style: const TextStyle(fontSize: _inputFs),
+                            keyboardType: TextInputType.text,
+                            textInputAction: TextInputAction.next,
+                            decoration: _dec('Zip Code', 'Enter Zip Code'),
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) {
+                                return _isUnitedStates
+                                    ? 'Zip Code is required'
+                                    : null;
+                              }
+                              if (!_isUnitedStates) return null;
+                              final ok = RegExp(
+                                r'^\d{5}(-\d{4})?$',
+                              ).hasMatch(value);
+                              if (!ok) return 'Enter a valid ZIP code';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _requiredFieldLabel('Country'),
+                        const SizedBox(height: 6),
+                        _typeAheadPicker(
+                          label: 'Country',
+                          hint: 'Select Country',
+                          options: countries,
+                          selectedValue: _selectedCountry,
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _selectedCountry = v;
+                              if (_selectedCountry != 'United States') {
+                                _state = null;
+                                _zipCtrl.clear();
+                              }
+                            });
+                          },
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Country is required'
+                              : null,
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      /*const Text(
+
+                  const SizedBox(height: 6),
+
+                  // -----------------------
+                  // Services & Pricing
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Specialization & Pricing',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        /*const Text(
                         'Specializations Offered',
                         style: TextStyle(
                           fontSize: _subFs,
                           fontWeight: FontWeight.w700,
                         ),
                       ),*/
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _chip(
-                            'Intricate Nail Art',
-                            _services.contains('Intricate Nail Art'),
-                            () {
-                              setState(
-                                () => _services.contains('Intricate Nail Art')
-                                    ? _services.remove('Intricate Nail Art')
-                                    : _services.add('Intricate Nail Art'),
-                              );
-                            },
-                          ),
-                          _chip(
-                            'Gel / Acrylic',
-                            _services.contains('Gel / Acrylic'),
-                            () {
-                              setState(
-                                () => _services.contains('Gel / Acrylic')
-                                    ? _services.remove('Gel / Acrylic')
-                                    : _services.add('Gel / Acrylic'),
-                              );
-                            },
-                          ),
-                          _chip(
-                            '3D Nail Art',
-                            _services.contains('3D Nail Art'),
-                            () {
-                              setState(
-                                () => _services.contains('3D Nail Art')
-                                    ? _services.remove('3D Nail Art')
-                                    : _services.add('3D Nail Art'),
-                              );
-                            },
-                          ),
-                          _chip(
-                            'Airbrush/Stamping',
-                            _services.contains('Airbrush/Stamping'),
-                            () {
-                              setState(
-                                () => _services.contains('Airbrush/Stamping')
-                                    ? _services.remove('Airbrush/Stamping')
-                                    : _services.add('Airbrush/Stamping'),
-                              );
-                            },
-                          ),
-                          _chip(
-                            'Encapsulation',
-                            _services.contains('Encapsulation '),
-                            () {
-                              setState(
-                                () => _services.contains('Encapsulation ')
-                                    ? _services.remove('Encapsulation ')
-                                    : _services.add('Encapsulation '),
-                              );
-                            },
-                          ),
-                          _chip(
-                            'Dip Powder',
-                            _services.contains('Dip Powder'),
-                            () {
-                              setState(
-                                () => _services.contains('Dip Powder')
-                                    ? _services.remove('Dip Powder')
-                                    : _services.add('Dip Powder'),
-                              );
-                            },
-                          ),
-                          _chip(
-                            'Sculptured',
-                            _services.contains('Sculptured'),
-                            () {
-                              setState(
-                                () => _services.contains('Sculptured')
-                                    ? _services.remove('Sculptured')
-                                    : _services.add('Sculptured'),
-                              );
-                            },
-                          ),
-                          _chip('PolyGel', _services.contains('PolyGel'), () {
-                            setState(
-                              () => _services.contains('PolyGel')
-                                  ? _services.remove('PolyGel')
-                                  : _services.add('PolyGel'),
-                            );
-                          }),
-                          _chip(
-                            'Chrome & Metallic',
-                            _services.contains('Chrome & Metallic'),
-                            () {
-                              setState(
-                                () => _services.contains('Chrome & Metallic')
-                                    ? _services.remove('Chrome & Metallic')
-                                    : _services.add('Chrome & Metallic'),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Semantics(
-                              isRequired: true,
-                              child: TextFormField(
-                              controller: _minPriceCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.number,
-                              decoration: _dec('Min Price (\$) *', '50'),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Required'
-                                  : null,
-                              ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _chip(
+                              'Intricate Nail Art',
+                              _services.contains('Intricate Nail Art'),
+                              () {
+                                setState(
+                                  () => _services.contains('Intricate Nail Art')
+                                      ? _services.remove('Intricate Nail Art')
+                                      : _services.add('Intricate Nail Art'),
+                                );
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Semantics(
-                              isRequired: true,
-                              child: TextFormField(
-                              controller: _maxPriceCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.number,
-                              decoration: _dec('Max Price (\$) *', '200'),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Required'
-                                  : null,
-                              ),
+                            _chip(
+                              'Gel / Acrylic',
+                              _services.contains('Gel / Acrylic'),
+                              () {
+                                setState(
+                                  () => _services.contains('Gel / Acrylic')
+                                      ? _services.remove('Gel / Acrylic')
+                                      : _services.add('Gel / Acrylic'),
+                                );
+                              },
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
+                            _chip(
+                              '3D Nail Art',
+                              _services.contains('3D Nail Art'),
+                              () {
+                                setState(
+                                  () => _services.contains('3D Nail Art')
+                                      ? _services.remove('3D Nail Art')
+                                      : _services.add('3D Nail Art'),
+                                );
+                              },
+                            ),
+                            _chip(
+                              'Airbrush/Stamping',
+                              _services.contains('Airbrush/Stamping'),
+                              () {
+                                setState(
+                                  () => _services.contains('Airbrush/Stamping')
+                                      ? _services.remove('Airbrush/Stamping')
+                                      : _services.add('Airbrush/Stamping'),
+                                );
+                              },
+                            ),
+                            _chip(
+                              'Encapsulation',
+                              _services.contains('Encapsulation '),
+                              () {
+                                setState(
+                                  () => _services.contains('Encapsulation ')
+                                      ? _services.remove('Encapsulation ')
+                                      : _services.add('Encapsulation '),
+                                );
+                              },
+                            ),
+                            _chip(
+                              'Dip Powder',
+                              _services.contains('Dip Powder'),
+                              () {
+                                setState(
+                                  () => _services.contains('Dip Powder')
+                                      ? _services.remove('Dip Powder')
+                                      : _services.add('Dip Powder'),
+                                );
+                              },
+                            ),
+                            _chip(
+                              'Sculptured',
+                              _services.contains('Sculptured'),
+                              () {
+                                setState(
+                                  () => _services.contains('Sculptured')
+                                      ? _services.remove('Sculptured')
+                                      : _services.add('Sculptured'),
+                                );
+                              },
+                            ),
+                            _chip('PolyGel', _services.contains('PolyGel'), () {
+                              setState(
+                                () => _services.contains('PolyGel')
+                                    ? _services.remove('PolyGel')
+                                    : _services.add('PolyGel'),
+                              );
+                            }),
+                            _chip(
+                              'Chrome & Metallic',
+                              _services.contains('Chrome & Metallic'),
+                              () {
+                                setState(
+                                  () => _services.contains('Chrome & Metallic')
+                                      ? _services.remove('Chrome & Metallic')
+                                      : _services.add('Chrome & Metallic'),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
 
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Rush availability',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'Arial',
-                                    color: AppColors.blackCat,
-                                  ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Semantics(
+                                isRequired: true,
+                                child: TextFormField(
+                                  controller: _minPriceCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  decoration: _dec('Min Price (\$) *', '50'),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                      ? 'Required'
+                                      : null,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Enable if you can take expedited requests.',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.blackCat,
-                                    fontWeight: FontWeight.w500,
-                                    fontFamily: 'Arial',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Transform.scale(
-                            scale: 0.88,
-                            child: Switch(
-                              value: _rush,
-                              onChanged: (v) => setState(() => _rush = v),
-                              activeThumbColor: const Color(0xFF1F1B24),
-                              activeTrackColor: const Color(
-                                0xFF1F1B24,
-                              ).withValues(alpha: 0.45),
-                              inactiveThumbColor: AppColors.blackCatLight,
-                              inactiveTrackColor: AppColors.blackCatLight
-                                  .withValues(alpha: 0.35),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // ✅ Year Calendar Availability (UPDATED to use the real multi-month calendar widget)
-                // Requires:
-                // 1) import '../widgets/direct_request_year_calendar.dart';
-                // 2) state vars: bool _directRequestsEnabled, bool _showYearCalendar;
-                //    int _directRequestYear; Set<DateTime> _blockedDates;
-                _sectionCard(
-                  title: 'Year Calendar Availability',
-                  subtitle:
-                      'Control when your Direct Request button is available. '
-                      'Block off specific days, weeks, or months. Optional.',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'Direct Requests',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'ArialBold',
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                          const Spacer(),
-                          Transform.scale(
-                            scale: 0.88,
-                            child: Switch(
-                              value: _directRequestsEnabled,
-                              onChanged: (v) =>
-                                  setState(() => _directRequestsEnabled = v),
-                              activeThumbColor: const Color(0xFF1F1B24),
-                              activeTrackColor: const Color(
-                                0xFF1F1B24,
-                              ).withValues(alpha: 0.45),
-                              inactiveThumbColor: AppColors.blackCatLight,
-                              inactiveTrackColor: AppColors.blackCatLight
-                                  .withValues(alpha: 0.35),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        _directRequestsEnabled
-                            ? 'Clients can send Direct Requests on unblocked dates.'
-                            : 'Direct Requests are currently turned OFF.',
-                        style: TextStyle(
-                          color: AppColors.blackCat,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Arial',
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Text(
-                            'Accepts NFC',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'ArialBold',
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                          const Spacer(),
-                          Transform.scale(
-                            scale: 0.88,
-                            child: Switch(
-                              value: _nfcRequestEnabled,
-                              onChanged: (v) =>
-                                  setState(() => _nfcRequestEnabled = v),
-                              activeThumbColor: const Color(0xFF1F1B24),
-                              activeTrackColor: const Color(
-                                0xFF1F1B24,
-                              ).withValues(alpha: 0.45),
-                              inactiveThumbColor: AppColors.blackCatLight,
-                              inactiveTrackColor: AppColors.blackCatLight
-                                  .withValues(alpha: 0.35),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        _nfcRequestEnabled
-                            ? 'Clients can send NFC upgrade requests.'
-                            : 'NFC upgrade requests are currently turned OFF.',
-                        style: const TextStyle(
-                          color: AppColors.blackCat,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Arial',
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          tooltip: _showYearCalendar
-                              ? 'Hide year calendar'
-                              : 'Show year calendar',
-                          icon: Icon(
-                            _showYearCalendar
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                          ),
-                          onPressed: () => setState(() {
-                            _showYearCalendar = !_showYearCalendar;
-                            if (_showYearCalendar) {
-                              _yearCalendarNonce =
-                                  DateTime.now().millisecondsSinceEpoch;
-                            }
-                          }),
-                        ),
-                      ),
-
-                      // Collapsible calendar
-                      AnimatedCrossFade(
-                        firstChild: const SizedBox.shrink(),
-                        secondChild: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.snow,
-                            borderRadius: BorderRadius.zero,
-                            border: Border.all(
-                              color: AppColors.blackCat.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // ✅ This is the actual multi-month calendar UI (year dropdown + day/week/month block)
-                              DirectRequestYearCalendar(
-                                key: ValueKey(_yearCalendarNonce),
-                                initialDirectRequestsOn: _directRequestsEnabled,
-                                initialYear: _directRequestYear,
-                                initialMonth: DateTime.now().month,
-                                initialBlockedDays: _blockedDates,
-                                showDirectRequestsFooter: false,
-                                onChanged: (directOn, year, blocked) {
-                                  // keep parent state in sync
-                                  setState(() {
-                                    _directRequestsEnabled = directOn;
-                                    _directRequestYear = year;
-                                    _blockedDates
-                                      ..clear()
-                                      ..addAll(blocked);
-                                  });
-                                },
                               ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Semantics(
+                                isRequired: true,
+                                child: TextFormField(
+                                  controller: _maxPriceCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  decoration: _dec('Max Price (\$) *', '200'),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                      ? 'Required'
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
 
-                              const SizedBox(height: 6),
-
-                              Row(
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.info_outline, size: 22),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Tip: Tap a day to block it. Tap the left week strip to block a week. '
-                                      'Tap the month title to block the whole month.',
-                                      style: TextStyle(
-                                        color: AppColors.blackCat.withValues(
-                                          alpha: 0.6,
-                                        ),
-                                        fontWeight: FontWeight.w400,
-                                        fontSize: 13,
-                                        fontFamily: 'Arial',
-                                      ),
+                                  const Text(
+                                    'Rush availability',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Arial',
+                                      color: AppColors.blackCat,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Enable if you can take expedited requests.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.blackCat,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Arial',
                                     ),
                                   ),
                                 ],
                               ),
-                            ],
+                            ),
+                            Transform.scale(
+                              scale: 0.88,
+                              child: Switch(
+                                value: _rush,
+                                onChanged: (v) => setState(() => _rush = v),
+                                activeThumbColor: const Color(0xFF1F1B24),
+                                activeTrackColor: const Color(
+                                  0xFF1F1B24,
+                                ).withValues(alpha: 0.45),
+                                inactiveThumbColor: AppColors.blackCatLight,
+                                inactiveTrackColor: AppColors.blackCatLight
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  // ✅ Year Calendar Availability (UPDATED to use the real multi-month calendar widget)
+                  // Requires:
+                  // 1) import '../widgets/direct_request_year_calendar.dart';
+                  // 2) state vars: bool _directRequestsEnabled, bool _showYearCalendar;
+                  //    int _directRequestYear; Set<DateTime> _blockedDates;
+                  _sectionCard(
+                    title: 'Year Calendar Availability',
+                    subtitle:
+                        'Control when your Direct Request button is available. '
+                        'Block off specific days, weeks, or months. Optional.',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Direct Requests',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'ArialBold',
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                            const Spacer(),
+                            Transform.scale(
+                              scale: 0.88,
+                              child: Switch(
+                                value: _directRequestsEnabled,
+                                onChanged: (v) =>
+                                    setState(() => _directRequestsEnabled = v),
+                                activeThumbColor: const Color(0xFF1F1B24),
+                                activeTrackColor: const Color(
+                                  0xFF1F1B24,
+                                ).withValues(alpha: 0.45),
+                                inactiveThumbColor: AppColors.blackCatLight,
+                                inactiveTrackColor: AppColors.blackCatLight
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          _directRequestsEnabled
+                              ? 'Clients can send Direct Requests on unblocked dates.'
+                              : 'Direct Requests are currently turned OFF.',
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Arial',
+                            fontSize: 13,
                           ),
                         ),
-                        crossFadeState: _showYearCalendar
-                            ? CrossFadeState.showSecond
-                            : CrossFadeState.showFirst,
-                        duration: const Duration(milliseconds: 180),
-                      ),
-                    ],
-                  ),
-                ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Text(
+                              'Accepts NFC',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'ArialBold',
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                            const Spacer(),
+                            Transform.scale(
+                              scale: 0.88,
+                              child: Switch(
+                                value: _nfcRequestEnabled,
+                                onChanged: (v) =>
+                                    setState(() => _nfcRequestEnabled = v),
+                                activeThumbColor: const Color(0xFF1F1B24),
+                                activeTrackColor: const Color(
+                                  0xFF1F1B24,
+                                ).withValues(alpha: 0.45),
+                                inactiveThumbColor: AppColors.blackCatLight,
+                                inactiveTrackColor: AppColors.blackCatLight
+                                    .withValues(alpha: 0.35),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          _nfcRequestEnabled
+                              ? 'Clients can send NFC upgrade requests.'
+                              : 'NFC upgrade requests are currently turned OFF.',
+                          style: const TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Arial',
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: _showYearCalendar
+                                ? 'Hide year calendar'
+                                : 'Show year calendar',
+                            icon: Icon(
+                              _showYearCalendar
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                            ),
+                            onPressed: () => setState(() {
+                              _showYearCalendar = !_showYearCalendar;
+                              if (_showYearCalendar) {
+                                _yearCalendarNonce =
+                                    DateTime.now().millisecondsSinceEpoch;
+                              }
+                            }),
+                          ),
+                        ),
 
-                // -----------------------
-                // Availability & Booking
-                // -----------------------
-                /*_sectionCard(
+                        // Collapsible calendar
+                        AnimatedCrossFade(
+                          firstChild: const SizedBox.shrink(),
+                          secondChild: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.snow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.35,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // ✅ This is the actual multi-month calendar UI (year dropdown + day/week/month block)
+                                DirectRequestYearCalendar(
+                                  key: ValueKey(_yearCalendarNonce),
+                                  initialDirectRequestsOn:
+                                      _directRequestsEnabled,
+                                  initialYear: _directRequestYear,
+                                  initialMonth: DateTime.now().month,
+                                  initialBlockedDays: _blockedDates,
+                                  showDirectRequestsFooter: false,
+                                  onChanged: (directOn, year, blocked) {
+                                    // keep parent state in sync
+                                    setState(() {
+                                      _directRequestsEnabled = directOn;
+                                      _directRequestYear = year;
+                                      _blockedDates
+                                        ..clear()
+                                        ..addAll(blocked);
+                                    });
+                                  },
+                                ),
+
+                                const SizedBox(height: 6),
+
+                                Row(
+                                  children: [
+                                    const Icon(Icons.info_outline, size: 22),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Tip: Tap a day to block it. Tap the left week strip to block a week. '
+                                        'Tap the month title to block the whole month.',
+                                        style: TextStyle(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.6,
+                                          ),
+                                          fontWeight: FontWeight.w400,
+                                          fontSize: 13,
+                                          fontFamily: 'Arial',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          crossFadeState: _showYearCalendar
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                          duration: const Duration(milliseconds: 180),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // -----------------------
+                  // Availability & Booking
+                  // -----------------------
+                  /*_sectionCard(
                 title: 'Your Calendar',
                 subtitle: 'Provide your working days and timings',
                 gradient: const LinearGradient(colors: [Color(0xFFEAF7F2), Color(0xFFF5F0FF)]),
@@ -3134,45 +3221,45 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                   ],
                 ),
               ),*/
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
 
-                // -----------------------
-                // ✅ Portfolio (below availability)
-                // ✅ upload images ABOVE the "No previous projects..." row
-                // -----------------------
-                _sectionCard(
-                  title: 'Portfolio',
-                  subtitle:
-                      'Upload Previous Art. (${_portfolioImages.length} photo(s))',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ✅ NEW: "I am" section right after Portfolio heading
-                      _techTypeToggle(),
-                      const SizedBox(height: 6),
-                      _techTypeFields(),
+                  // -----------------------
+                  // ✅ Portfolio (below availability)
+                  // ✅ upload images ABOVE the "No previous projects..." row
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Portfolio',
+                    subtitle:
+                        'Upload Previous Art. (${_portfolioImages.length} photo(s))',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ✅ NEW: "I am" section right after Portfolio heading
+                        _techTypeToggle(),
+                        const SizedBox(height: 6),
+                        _techTypeFields(),
 
-                      const SizedBox(height: 6),
+                        const SizedBox(height: 6),
 
-                      // ✅ Upload previous projects (single header + single Upload button)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Upload previous Art',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.8,
+                        // ✅ Upload previous projects (single header + single Upload button)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Upload previous Art',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.8,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          /* TextButton(
+                            /* TextButton(
                           onPressed: _pickPortfolioImages,
                           child: const Text(
                             'Upload',
@@ -3182,827 +3269,864 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                               color: AppColors.deepPlum,
                             ),),
                           ),*/
-                        ],
-                      ),
-                      Text(
-                        'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.blackCat.withValues(alpha: 0.6),
-                          fontWeight: FontWeight.w500,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 6),
+                        Text(
+                          'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.blackCat.withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
 
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          ..._portfolioImages.map((b) {
-                            return ClipRRect(
-                              borderRadius: BorderRadius.zero,
-                              child: Container(
-                                width: 86,
-                                height: 86,
-                                color: AppColors.snow,
-                                child: Image.memory(b, fit: BoxFit.cover),
-                              ),
-                            );
-                          }),
-                          Semantics(
-                            button: true,
-                            label: 'Add portfolio image',
-                            onTap: _pickPortfolioImages,
-                            child: ExcludeSemantics(
-                              child: InkWell(
-                            onTap: _pickPortfolioImages,
-                            borderRadius: BorderRadius.zero,
-                            child: Container(
-                              width: 86,
-                              height: 86,
-                              decoration: BoxDecoration(
-                                color: AppColors.snow,
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            ..._portfolioImages.map((b) {
+                              return ClipRRect(
                                 borderRadius: BorderRadius.zero,
-                                border: Border.all(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.35,
+                                child: Container(
+                                  width: 86,
+                                  height: 86,
+                                  color: AppColors.snow,
+                                  child: Image.memory(b, fit: BoxFit.cover),
+                                ),
+                              );
+                            }),
+                            Semantics(
+                              button: true,
+                              label: 'Add portfolio image',
+                              onTap: _pickPortfolioImages,
+                              child: ExcludeSemantics(
+                                child: InkWell(
+                                  onTap: _pickPortfolioImages,
+                                  borderRadius: BorderRadius.zero,
+                                  child: Container(
+                                    width: 86,
+                                    height: 86,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.snow,
+                                      borderRadius: BorderRadius.zero,
+                                      border: Border.all(
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_photo_alternate_outlined,
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.9,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        const Text(
+                                          'Add',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.add_photo_alternate_outlined,
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.9,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  const Text(
-                                    'Add',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
 
-                      const SizedBox(height: 6),
-
-                      if (_portfolioImages.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.snow,
-                            borderRadius: BorderRadius.zero,
-                            border: Border.all(
-                              color: AppColors.blackCat.withValues(alpha: 0.35),
-                            ),
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: _consentToStoreAndPublishPortfolio,
+                          onChanged: (value) => setState(
+                            () => _consentToStoreAndPublishPortfolio =
+                                value ?? false,
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.image_outlined,
+                          title: const Text(
+                            'Do you consent to store the Portfolio pics and reveal to public',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        if (_portfolioImages.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.snow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
                                 color: AppColors.blackCat.withValues(
-                                  alpha: 0.55,
+                                  alpha: 0.35,
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Text(
-                                  'No previous art uploaded yet',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w400,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.image_outlined,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.55,
                                   ),
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text(
+                                    'No previous art uploaded yet',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // ✅ Then Project Notes + Instagram + TikTok (NO portfolio link)
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _projectNotesCtrl,
+                          decoration: _dec('Project Notes', 'Project notes'),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _instagramCtrl,
+                          decoration: _dec(
+                            'Instagram or TikTok (one required)',
+                            'Instagram',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _tiktokCtrl,
+                          decoration: _dec('TikTok', 'TikTok'),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  // -----------------------
+                  // Payment Method
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Payment Method',
+                    subtitle: 'Select a method and save it (required).',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _chip('PayPal', _paymentMethod == 'PayPal', () {
+                              setState(() {
+                                _paymentMethod = 'PayPal';
+                                _paymentSaved = false;
+                              });
+                            }),
+                            _chip('Venmo', _paymentMethod == 'Venmo', () {
+                              setState(() {
+                                _paymentMethod = 'Venmo';
+                                _paymentSaved = false;
+                              });
+                            }),
+                            _chip(
+                              'Apple Pay',
+                              _paymentMethod == 'Apple Pay',
+                              () {
+                                setState(() {
+                                  _paymentMethod = 'Apple Pay';
+                                  _paymentSaved = false;
+                                });
+                              },
+                            ),
+                            _chip(
+                              'Credit Card',
+                              _paymentMethod == 'Credit Card',
+                              () {
+                                setState(() {
+                                  _paymentMethod = 'Credit Card';
+                                  _paymentSaved = false;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+
+                        // ---- PayPal ----
+                        if (_paymentMethod == 'PayPal') ...[
+                          TextField(
+                            controller: _paypalEmailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            decoration: _dec(
+                              'PayPal Email *',
+                              'name@example.com',
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+
+                        // ---- Venmo ----
+                        if (_paymentMethod == 'Venmo') ...[
+                          TextField(
+                            controller: _venmoHandleCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            decoration: _dec(
+                              'Venmo Handle / Phone *',
+                              '@yourhandle or phone',
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+
+                        // ---- Apple Pay ----
+                        if (_paymentMethod == 'Apple Pay') ...[
+                          TextField(
+                            controller: _applePayPaymentNameCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            decoration: _dec(
+                              'Full Name *',
+                              'Name on Apple Pay',
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _applePayPaymentPhoneCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                              UsPhoneTextInputFormatter(),
+                            ],
+                            decoration: _dec(
+                              'Phone Number *',
+                              'Apple Pay phone',
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _applePayPaymentEmailCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: _dec(
+                              'Apple ID Email *',
+                              'email linked to Apple Pay',
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+
+                        // ---- Credit Card ----
+                        if (_paymentMethod == 'Credit Card') ...[
+                          TextField(
+                            controller: _cardNameCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            decoration: _dec('Name on Card *', 'Full name'),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _cardNumberCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(19),
+                              CardNumberTextInputFormatter(),
+                            ],
+                            decoration: _dec(
+                              'Card Number *',
+                              '1234 5678 9012 3456',
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _cardExpiryCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _paymentInputFs,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(4),
+                                    ExpiryDateTextInputFormatter(),
+                                  ],
+                                  decoration: _dec(
+                                    'Expiration Date (MM/YY) *',
+                                    'MM/YY',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: _cardCvvCtrl,
+                                  style: const TextStyle(
+                                    fontSize: _paymentInputFs,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(4),
+                                  ],
+                                  decoration: _dec('CVV *', '123'),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-
-                      // ✅ Then Project Notes + Instagram + TikTok (NO portfolio link)
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _projectNotesCtrl,
-                        decoration: _dec('Project Notes', 'Project notes'),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _instagramCtrl,
-                        decoration: _dec(
-                          'Instagram or TikTok (one required)',
-                          'Instagram',
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _tiktokCtrl,
-                        decoration: _dec('TikTok', 'TikTok'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                // -----------------------
-                // Payment Method
-                // -----------------------
-                _sectionCard(
-                  title: 'Payment Method',
-                  subtitle: 'Select a method and save it (required).',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _chip('PayPal', _paymentMethod == 'PayPal', () {
-                            setState(() {
-                              _paymentMethod = 'PayPal';
-                              _paymentSaved = false;
-                            });
-                          }),
-                          _chip('Venmo', _paymentMethod == 'Venmo', () {
-                            setState(() {
-                              _paymentMethod = 'Venmo';
-                              _paymentSaved = false;
-                            });
-                          }),
-                          _chip('Apple Pay', _paymentMethod == 'Apple Pay', () {
-                            setState(() {
-                              _paymentMethod = 'Apple Pay';
-                              _paymentSaved = false;
-                            });
-                          }),
-                          _chip(
-                            'Credit Card',
-                            _paymentMethod == 'Credit Card',
-                            () {
-                              setState(() {
-                                _paymentMethod = 'Credit Card';
-                                _paymentSaved = false;
-                              });
-                            },
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _cardZipCtrl,
+                            style: const TextStyle(fontSize: _paymentInputFs),
+                            keyboardType: TextInputType.number,
+                            decoration: _dec('Billing ZIP *', 'ZIP code'),
                           ),
+                          const SizedBox(height: 6),
                         ],
-                      ),
-                      const SizedBox(height: 6),
 
-                      // ---- PayPal ----
-                      if (_paymentMethod == 'PayPal') ...[
-                        TextField(
-                          controller: _paypalEmailCtrl,
-                          keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          decoration: _dec(
-                            'PayPal Email *',
-                            'name@example.com',
+                        SizedBox(
+                          height: 46,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.deepPlum,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            onPressed: () {
+                              final ok = _paymentFieldsValid();
+                              if (!ok) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Please fill required payment fields.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              setState(() => _paymentSaved = true);
+                            },
+                            child: const Text(
+                              'Save Payment Method',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.snow,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 6),
-                      ],
 
-                      // ---- Venmo ----
-                      if (_paymentMethod == 'Venmo') ...[
-                        TextField(
-                          controller: _venmoHandleCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          decoration: _dec(
-                            'Venmo Handle / Phone *',
-                            '@yourhandle or phone',
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-
-                      // ---- Apple Pay ----
-                      if (_paymentMethod == 'Apple Pay') ...[
-                        TextField(
-                          controller: _applePayPaymentNameCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          decoration: _dec('Full Name *', 'Name on Apple Pay'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _applePayPaymentPhoneCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(10),
-                            UsPhoneTextInputFormatter(),
-                          ],
-                          decoration: _dec('Phone Number *', 'Apple Pay phone'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _applePayPaymentEmailCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _dec(
-                            'Apple ID Email *',
-                            'email linked to Apple Pay',
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-
-                      // ---- Credit Card ----
-                      if (_paymentMethod == 'Credit Card') ...[
-                        TextField(
-                          controller: _cardNameCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          decoration: _dec('Name on Card *', 'Full name'),
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _cardNumberCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(19),
-                            CardNumberTextInputFormatter(),
-                          ],
-                          decoration: _dec(
-                            'Card Number *',
-                            '1234 5678 9012 3456',
-                          ),
-                        ),
-                        const SizedBox(height: 6),
                         Row(
                           children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _cardExpiryCtrl,
-                                style: const TextStyle(
-                                  fontSize: _paymentInputFs,
-                                ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                  ExpiryDateTextInputFormatter(),
-                                ],
-                                decoration: _dec(
-                                  'Expiration Date (MM/YY) *',
-                                  'MM/YY',
-                                ),
-                              ),
+                            Icon(
+                              Icons.info_outline,
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
+                              size: _inputFs * 1.2,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _cardCvvCtrl,
-                                style: const TextStyle(
-                                  fontSize: _paymentInputFs,
-                                ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                ],
-                                decoration: _dec('CVV *', '123'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _cardZipCtrl,
-                          style: const TextStyle(fontSize: _paymentInputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec('Billing ZIP *', 'ZIP code'),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-
-                      SizedBox(
-                        height: 46,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.deepPlum,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                          onPressed: () {
-                            final ok = _paymentFieldsValid();
-                            if (!ok) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Please fill required payment fields.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            setState(() => _paymentSaved = true);
-                          },
-                          child: const Text(
-                            'Save Payment Method',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.snow,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: AppColors.blackCat.withValues(alpha: 0.55),
-                            size: _inputFs * 1.2,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _paymentSaved ? 'Saved ✅' : 'Not saved yet',
-                            style: TextStyle(
-                              color: AppColors.blackCat,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // Nail Material Bundles
-                // -----------------------
-                _sectionCard(
-                  title: 'Nail Material Bundles',
-                  subtitle:
-                      'Starter bundles for gel, tips, tools and more. (Required)',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        height: 320,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            _bundleCard(
-                              title: 'Starter Material Bundle',
-                              subtitle: 'Perfect for new artists.',
-                              price: '\$50',
-                              imageAsset: 'assets/images/nail_bundle_50.png',
-                              selected: _selectedBundle == 'Starter',
-                              purchased:
-                                  _bundlePurchased &&
-                                  _selectedBundle == 'Starter',
-                              disableAdd: _bundlePurchased,
-                              onTap: () =>
-                                  setState(() => _selectedBundle = 'Starter'),
-                              onAdd: () => _openBundleCheckout(
-                                bundleKey: 'Starter',
-                                title: 'Starter Material Bundle',
-                                subtitle: 'Perfect for new artists.',
-                                priceText: '\$50',
-                                imageAsset: 'assets/images/nail_bundle_50.png',
-                              ),
-                            ),
-
-                            const SizedBox(width: 12),
-                            _bundleCard(
-                              title: 'Pro Material Bundle',
-                              subtitle: 'Gel, tools & tips.',
-                              price: '\$100',
-                              imageAsset: 'assets/images/nail_bundle_100.png',
-                              selected: _selectedBundle == 'Pro',
-                              purchased:
-                                  _bundlePurchased && _selectedBundle == 'Pro',
-                              disableAdd: _bundlePurchased,
-                              onTap: () =>
-                                  setState(() => _selectedBundle = 'Pro'),
-                              onAdd: () => _openBundleCheckout(
-                                bundleKey: 'Pro',
-                                title: 'Pro Material Bundle',
-                                subtitle: 'Gel, tools & tips.',
-                                priceText: '\$100',
-                                imageAsset: 'assets/images/nail_bundle_100.png',
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            _bundleCard(
-                              title: 'Studio Bundle',
-                              subtitle: 'For high volume artists.',
-                              price: '\$150',
-                              imageAsset: 'assets/images/nail_bundle_150.png',
-                              selected: _selectedBundle == 'Studio',
-                              purchased:
-                                  _bundlePurchased &&
-                                  _selectedBundle == 'Studio',
-                              disableAdd: _bundlePurchased,
-                              onTap: () =>
-                                  setState(() => _selectedBundle = 'Studio'),
-                              onAdd: () => _openBundleCheckout(
-                                bundleKey: 'Studio',
-                                title: 'Studio Bundle',
-                                subtitle: 'For high volume artists.',
-                                priceText: '\$150',
-                                imageAsset: 'assets/images/nail_bundle_150.png',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(
-                            _bundlePurchased
-                                ? Icons.check_circle_outline
-                                : Icons.lock_outline,
-                            size: 22,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _bundlePurchased
-                                  ? 'Purchased'
-                                  : 'You must purchase a bundle before account creation.',
+                            const SizedBox(width: 8),
+                            Text(
+                              _paymentSaved ? 'Saved ✅' : 'Not saved yet',
                               style: TextStyle(
                                 color: AppColors.blackCat,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // ✅ Payout (add Apple Pay + fields)
-                // -----------------------
-                _sectionCard(
-                  title: 'Payout',
-                  subtitle: 'How you receive payouts (can be updated later).',
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFEAF7F2), Color(0xFFF5F0FF)],
-                  ),
-                  child: Column(
-                    children: [
-                      DropdownButtonFormField<PayoutMethod>(
-                        initialValue: _payoutMethod,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.blackCat,
-                          fontWeight: FontWeight.w500,
-                        ),
-
-                        // ✅ controls the "Select state" when value is null
-                        hint: Text(
-                          'Select state',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                          ),
-                        ),
-                        decoration: _dec(
-                          'Payout Method *',
-                          'Select payout method',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: PayoutMethod.paypal,
-                            child: Text(
-                              'PayPal',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.blackCat,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: PayoutMethod.venmo,
-                            child: Text(
-                              'Venmo',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.blackCat,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: PayoutMethod.bankTransfer,
-                            child: Text(
-                              'Bank Transfer',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.blackCat,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: PayoutMethod.applePay,
-                            child: Text(
-                              'Apple Pay',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.blackCat,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (v) => setState(
-                          () => _payoutMethod = v ?? PayoutMethod.paypal,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      if (_payoutMethod == PayoutMethod.paypal ||
-                          _payoutMethod == PayoutMethod.venmo) ...[
-                        TextField(
-                          controller: _legalNameCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          decoration: _dec('Legal Name *', 'Legal Name'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _payoutEmailCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _dec(
-                            _payoutMethod == PayoutMethod.venmo
-                                ? 'Venmo Email *'
-                                : 'PayPal Email *',
-                            'Email',
-                          ),
-                        ),
-                      ],
-
-                      if (_payoutMethod == PayoutMethod.bankTransfer) ...[
-                        TextField(
-                          controller: _legalNameCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          decoration: _dec('Legal Name *', 'Legal Name'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _bankNameCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          decoration: _dec('Bank Name *', 'Bank name'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _routingCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec(
-                            'Routing Number *',
-                            'Routing number',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _accountNumberCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec(
-                            'Account Number *',
-                            'Account number',
-                          ),
-                        ),
-                      ],
-
-                      if (_payoutMethod == PayoutMethod.applePay) ...[
-                        TextField(
-                          controller: _applePayNameCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          decoration: _dec('Full Name *', 'Name on Apple Pay'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _applePayPhoneCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(10),
-                            UsPhoneTextInputFormatter(),
                           ],
-                          decoration: _dec('Phone Number *', 'Apple Pay phone'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _applePayEmailCtrl,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _dec(
-                            'Apple ID Email *',
-                            'Email linked to Apple Pay',
-                          ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 6),
+                  const SizedBox(height: 6),
 
-                if (widget.showAdaCompliance) ...[
                   // -----------------------
-                  // Policies & Agreements
+                  // Nail Material Bundles
                   // -----------------------
                   _sectionCard(
-                    title: 'Policies & Agreements',
+                    title: 'Nail Material Bundles',
+                    subtitle:
+                        'Starter bundles for gel, tips, tools and more. (Required)',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
+                    ),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _checkRow(
-                          value: _agreeTerms,
-                          text: 'I agree to the Terms & Conditions *',
-                          onChanged: (v) => setState(() => _agreeTerms = v),
-                        ),
-                        _checkRow(
-                          value: _noCopyright,
-                          text:
-                              'I will not use copyrighted designs without permission *',
-                          onChanged: (v) => setState(() => _noCopyright = v),
-                        ),
-                        _checkRow(
-                          value: _agreeSafety,
-                          text:
-                              'I agree to follow safety & hygiene guidelines *',
-                          onChanged: (v) => setState(() => _agreeSafety = v),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Receive JNT Nail updates & offers',
-                                style: TextStyle(
-                                  fontSize: _inputFs,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.75,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Transform.scale(
-                              scale: 0.88,
-                              child: Switch(
-                                value: _receiveUpdates,
-                                onChanged: (v) =>
-                                    setState(() => _receiveUpdates = v),
-                                activeThumbColor: AppColors.blackCat,
-                                inactiveThumbColor: AppColors.blackCatLight,
-                                inactiveTrackColor: AppColors.blackCatLight
-                                    .withValues(alpha: 0.35),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 6),
-
-                // -----------------------
-                // Create Artist Account
-                // -----------------------
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.blackCat,
-                      foregroundColor: AppColors.snow,
-                      disabledBackgroundColor: AppColors.blackCat.withValues(
-                        alpha: 0.35,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                    onPressed: _submitting ? null : _submit,
-                    child: _submitting
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        SizedBox(
+                          height: 320,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
                             children: [
-                              const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.snow,
-                                  ),
+                              _bundleCard(
+                                title: 'Starter Material Bundle',
+                                subtitle: 'Perfect for new artists.',
+                                price: '\$50',
+                                imageAsset: 'assets/images/nail_bundle_50.png',
+                                selected: _selectedBundle == 'Starter',
+                                purchased:
+                                    _bundlePurchased &&
+                                    _selectedBundle == 'Starter',
+                                disableAdd: _bundlePurchased,
+                                onTap: () =>
+                                    setState(() => _selectedBundle = 'Starter'),
+                                onAdd: () => _openBundleCheckout(
+                                  bundleKey: 'Starter',
+                                  title: 'Starter Material Bundle',
+                                  subtitle: 'Perfect for new artists.',
+                                  priceText: '\$50',
+                                  imageAsset:
+                                      'assets/images/nail_bundle_50.png',
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Text(
-                                _submitStatus,
-                                style: const TextStyle(
-                                  fontSize: _inputFs,
-                                  fontWeight: FontWeight.w700,
+
+                              const SizedBox(width: 12),
+                              _bundleCard(
+                                title: 'Pro Material Bundle',
+                                subtitle: 'Gel, tools & tips.',
+                                price: '\$100',
+                                imageAsset: 'assets/images/nail_bundle_100.png',
+                                selected: _selectedBundle == 'Pro',
+                                purchased:
+                                    _bundlePurchased &&
+                                    _selectedBundle == 'Pro',
+                                disableAdd: _bundlePurchased,
+                                onTap: () =>
+                                    setState(() => _selectedBundle = 'Pro'),
+                                onAdd: () => _openBundleCheckout(
+                                  bundleKey: 'Pro',
+                                  title: 'Pro Material Bundle',
+                                  subtitle: 'Gel, tools & tips.',
+                                  priceText: '\$100',
+                                  imageAsset:
+                                      'assets/images/nail_bundle_100.png',
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              _bundleCard(
+                                title: 'Studio Bundle',
+                                subtitle: 'For high volume artists.',
+                                price: '\$150',
+                                imageAsset: 'assets/images/nail_bundle_150.png',
+                                selected: _selectedBundle == 'Studio',
+                                purchased:
+                                    _bundlePurchased &&
+                                    _selectedBundle == 'Studio',
+                                disableAdd: _bundlePurchased,
+                                onTap: () =>
+                                    setState(() => _selectedBundle = 'Studio'),
+                                onAdd: () => _openBundleCheckout(
+                                  bundleKey: 'Studio',
+                                  title: 'Studio Bundle',
+                                  subtitle: 'For high volume artists.',
+                                  priceText: '\$150',
+                                  imageAsset:
+                                      'assets/images/nail_bundle_150.png',
                                 ),
                               ),
                             ],
-                          )
-                        : const Text(
-                            'Create Account',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Icon(
+                              _bundlePurchased
+                                  ? Icons.check_circle_outline
+                                  : Icons.lock_outline,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _bundlePurchased
+                                    ? 'Purchased'
+                                    : 'You must purchase a bundle before account creation.',
+                                style: TextStyle(
+                                  color: AppColors.blackCat,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  // -----------------------
+                  // ✅ Payout (add Apple Pay + fields)
+                  // -----------------------
+                  _sectionCard(
+                    title: 'Payout',
+                    subtitle: 'How you receive payouts (can be updated later).',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEAF7F2), Color(0xFFF5F0FF)],
+                    ),
+                    child: Column(
+                      children: [
+                        DropdownButtonFormField<PayoutMethod>(
+                          initialValue: _payoutMethod,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w500,
+                          ),
+
+                          // ✅ controls the "Select state" when value is null
+                          hint: Text(
+                            'Select state',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              color: AppColors.snow,
-                              fontFamily: 'Arial',
+                              color: AppColors.blackCat,
                             ),
                           ),
+                          decoration: _dec(
+                            'Payout Method *',
+                            'Select payout method',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: PayoutMethod.paypal,
+                              child: Text(
+                                'PayPal',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.blackCat,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: PayoutMethod.venmo,
+                              child: Text(
+                                'Venmo',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.blackCat,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: PayoutMethod.bankTransfer,
+                              child: Text(
+                                'Bank Transfer',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.blackCat,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: PayoutMethod.applePay,
+                              child: Text(
+                                'Apple Pay',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.blackCat,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) => setState(
+                            () => _payoutMethod = v ?? PayoutMethod.paypal,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        if (_payoutMethod == PayoutMethod.paypal ||
+                            _payoutMethod == PayoutMethod.venmo) ...[
+                          TextField(
+                            controller: _legalNameCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            decoration: _dec('Legal Name *', 'Legal Name'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _payoutEmailCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: _dec(
+                              _payoutMethod == PayoutMethod.venmo
+                                  ? 'Venmo Email *'
+                                  : 'PayPal Email *',
+                              'Email',
+                            ),
+                          ),
+                        ],
+
+                        if (_payoutMethod == PayoutMethod.bankTransfer) ...[
+                          TextField(
+                            controller: _legalNameCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            decoration: _dec('Legal Name *', 'Legal Name'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _bankNameCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            decoration: _dec('Bank Name *', 'Bank name'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _routingCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            keyboardType: TextInputType.number,
+                            decoration: _dec(
+                              'Routing Number *',
+                              'Routing number',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _accountNumberCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            keyboardType: TextInputType.number,
+                            decoration: _dec(
+                              'Account Number *',
+                              'Account number',
+                            ),
+                          ),
+                        ],
+
+                        if (_payoutMethod == PayoutMethod.applePay) ...[
+                          TextField(
+                            controller: _applePayNameCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            decoration: _dec(
+                              'Full Name *',
+                              'Name on Apple Pay',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _applePayPhoneCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                              UsPhoneTextInputFormatter(),
+                            ],
+                            decoration: _dec(
+                              'Phone Number *',
+                              'Apple Pay phone',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _applePayEmailCtrl,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: _dec(
+                              'Apple ID Email *',
+                              'Email linked to Apple Pay',
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 6),
+
+                  if (widget.showAdaCompliance) ...[
+                    // -----------------------
+                    // Policies & Agreements
+                    // -----------------------
+                    _sectionCard(
+                      title: 'Policies & Agreements',
+                      child: Column(
+                        children: [
+                          _checkRow(
+                            value: _agreeTerms,
+                            text: 'I agree to the Terms & Conditions *',
+                            onChanged: (v) => setState(() => _agreeTerms = v),
+                          ),
+                          _checkRow(
+                            value: _noCopyright,
+                            text:
+                                'I will not use copyrighted designs without permission *',
+                            onChanged: (v) => setState(() => _noCopyright = v),
+                          ),
+                          _checkRow(
+                            value: _agreeSafety,
+                            text:
+                                'I agree to follow safety & hygiene guidelines *',
+                            onChanged: (v) => setState(() => _agreeSafety = v),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Receive JNT Nail updates & offers',
+                                  style: TextStyle(
+                                    fontSize: _inputFs,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.75,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Transform.scale(
+                                scale: 0.88,
+                                child: Switch(
+                                  value: _receiveUpdates,
+                                  onChanged: (v) =>
+                                      setState(() => _receiveUpdates = v),
+                                  activeThumbColor: AppColors.blackCat,
+                                  inactiveThumbColor: AppColors.blackCatLight,
+                                  inactiveTrackColor: AppColors.blackCatLight
+                                      .withValues(alpha: 0.35),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 6),
+
+                  // -----------------------
+                  // Create Artist Account
+                  // -----------------------
+                  SizedBox(
+                    height: 54,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.blackCat,
+                        foregroundColor: AppColors.snow,
+                        disabledBackgroundColor: AppColors.blackCat.withValues(
+                          alpha: 0.35,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                      onPressed: _submitting ? null : _submit,
+                      child: _submitting
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.snow,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _submitStatus,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const Text(
+                              'Create Account',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.snow,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -4025,112 +4149,112 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       button: true,
       selected: selected,
       child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        width: 220,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(
-            color: selected
-                ? AppColors.blackCat.withValues(alpha: 0.45)
-                : AppColors.blackCat.withValues(alpha: 0.06),
-            width: selected ? 1.4 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 10),
+        onTap: onTap,
+        borderRadius: BorderRadius.zero,
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: selected
+                  ? AppColors.blackCat.withValues(alpha: 0.45)
+                  : AppColors.blackCat.withValues(alpha: 0.06),
+              width: selected ? 1.4 : 1,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F0FF),
-                  borderRadius: BorderRadius.zero,
-                ),
-                alignment: Alignment.center,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: Image.asset(
-                    imageAsset,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    errorBuilder: (_, _, _) => Text(
-                      'Image',
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.35),
-                        fontWeight: FontWeight.w800,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.blackCat.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F0FF),
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  alignment: Alignment.center,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: Image.asset(
+                      imageAsset,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (_, _, _) => Text(
+                        'Image',
+                        style: TextStyle(
+                          color: AppColors.blackCat.withValues(alpha: 0.35),
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: _titleFs,
-                fontWeight: FontWeight.w700,
+              const SizedBox(height: 6),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: _titleFs,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: _subFs,
-                color: AppColors.blackCat.withValues(alpha: 0.55),
-                height: 1.25,
-                fontWeight: FontWeight.w500,
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: _subFs,
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                  height: 1.25,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 6),
-            Text(
-              price,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                color: Color(0xFFF06C7A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 40,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: (purchased || disableAdd) ? null : onAdd,
-                child: Text(
-                  purchased ? 'Purchased' : 'Add to Cart',
-                  style: TextStyle(
-                    fontSize: _inputFs,
-                    fontWeight: FontWeight.w700,
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                price,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFFF06C7A),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 40,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: (purchased || disableAdd) ? null : onAdd,
+                  child: Text(
+                    purchased ? 'Purchased' : 'Add to Cart',
+                    style: TextStyle(
+                      fontSize: _inputFs,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -4144,36 +4268,36 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       button: true,
       label: text,
       child: ExcludeSemantics(
-      child: InkWell(
-      onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.zero,
-      overlayColor: WidgetStateColor.resolveWith(
-        (_) => AppColors.blackCat.withValues(alpha: 0.12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Checkbox(
-              value: value,
-              onChanged: (v) => onChanged(v ?? false),
-              activeColor: AppColors.blackCat,
-              checkColor: AppColors.snow,
-            ),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontSize: _subFs,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat,
+        child: InkWell(
+          onTap: () => onChanged(!value),
+          borderRadius: BorderRadius.zero,
+          overlayColor: WidgetStateColor.resolveWith(
+            (_) => AppColors.blackCat.withValues(alpha: 0.12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: value,
+                  onChanged: (v) => onChanged(v ?? false),
+                  activeColor: AppColors.blackCat,
+                  checkColor: AppColors.snow,
                 ),
-              ),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: _subFs,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }

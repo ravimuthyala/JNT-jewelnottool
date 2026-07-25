@@ -111,6 +111,12 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
   }
 
   Future<void> _logoutToHomePage() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('BRAND SHELL SIGN OUT FAILED: $e');
+    }
+    if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
 

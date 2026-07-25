@@ -469,11 +469,36 @@ Object _encodeValue(Object? value) {
   return value;
 }
 
+// Deep-merges [overlay] onto [base]: nested maps are merged key-by-key
+// (overlay wins per-key, recursively), everything else (including lists) is
+// a direct replacement. Used so a partial status-update write (a handful of
+// changed fields) never silently drops the rest of an existing JSONB
+// document -- the caller only intends to *change* the fields it names, not
+// replace the whole document with just those fields.
+Map<String, dynamic> _deepMergeValues(
+  Map<String, dynamic> base,
+  Map<String, dynamic> overlay,
+) {
+  final result = Map<String, dynamic>.from(base);
+  overlay.forEach((key, value) {
+    final existingValue = result[key];
+    if (value is Map && existingValue is Map) {
+      result[key] = _deepMergeValues(
+        Map<String, dynamic>.from(existingValue),
+        Map<String, dynamic>.from(value),
+      );
+    } else {
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
 Future<Map<String, dynamic>> _prepareValues(
   Map<String, dynamic> values, {
   Map<String, dynamic>? existing,
 }) async {
-  final out = <String, dynamic>{};
+  final overlay = <String, dynamic>{};
   values.forEach((key, value) {
     final col = _columnName(key);
     if (value is _ArrayUnionMarker) {
@@ -483,12 +508,13 @@ Future<Map<String, dynamic>> _prepareValues(
         if (!list.map((e) => e.toString()).contains(item.toString()))
           list.add(item);
       }
-      out[col] = list;
+      overlay[col] = list;
     } else {
-      out[col] = _encodeValue(value);
+      overlay[col] = _encodeValue(value);
     }
   });
-  return out;
+  if (existing == null || existing.isEmpty) return overlay;
+  return _deepMergeValues(existing, overlay);
 }
 
 extension SupabaseUserDisplayNameCompat on User {
@@ -1762,14 +1788,29 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         .map((e) => e.trim().toLowerCase())
         .where((e) => e.isNotEmpty)
         .toSet();
+    final acceptedGroupClientEmails = request.acceptedGroupClientEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
     final isPoolOpen = request.openToClientPool;
+    final isGroupOrder = request.orderType == RequestOrderTypeV2.group;
 
-    // Once accepted by any client, it should move to Orders and leave Requests.
-    if (acceptedByClient.isNotEmpty) return false;
+    if (isGroupOrder) {
+      // Each invited client responds independently -- hide it only for the
+      // specific client who has already accepted or declined their own
+      // slot, not for every invited client the moment any one of them
+      // responds.
+      if (acceptedGroupClientEmails.contains(viewerEmail)) return false;
+      if (declinedByClient.contains(viewerEmail)) return false;
+    } else {
+      // Single-client/open-pool: once accepted by any client, it should
+      // move to Orders and leave Requests for everyone.
+      if (acceptedByClient.isNotEmpty) return false;
+    }
 
     if (!isPoolOpen) {
       if (viewerEmail.isEmpty) return false;
-      if (request.orderType == RequestOrderTypeV2.group) {
+      if (isGroupOrder) {
         return selectedGroupClientEmails.contains(viewerEmail);
       }
       if (selectedClientEmail.isEmpty) return false;
@@ -3902,6 +3943,73 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           excludeEmails: <String>[clientEmail],
         );
 
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return const <String, dynamic>{};
+    }
+
+    final isGroupOrder = request.orderType == RequestOrderTypeV2.group;
+    List<dynamic>? updatedGroupClients;
+    if (isGroupOrder) {
+      final groupOrderMap = asMap(detailsData['groupOrder']);
+      final rawClients = groupOrderMap['clients'];
+      if (rawClients is List) {
+        updatedGroupClients = rawClients
+            .map((raw) {
+              if (raw is! Map) return raw;
+              final item = Map<String, dynamic>.from(raw);
+              final itemEmail = (item['clientEmail'] ?? '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
+              if (itemEmail != clientEmail) return item;
+              item['responseStatus'] = 'accepted';
+              item['acceptedAt'] = DateTime.now().toIso8601String();
+              item['clientName'] = clientName.isNotEmpty
+                  ? clientName
+                  : item['clientName'];
+              // Merge rather than overwrite -- the brand pre-fills this slot's
+              // shape/length/dimensions when creating the group order, and many
+              // clients have no nail measurements saved on their own account
+              // profile yet, so blindly overwriting would wipe the brand's
+              // pre-filled values with nulls.
+              final existingSavedNails = asMap(item['savedNails']);
+              final existingDimensions = asMap(
+                existingSavedNails['dimensions'],
+              );
+              String mergedDim(String key) {
+                final ownValue = (nailDimensions[key] ?? '').toString().trim();
+                if (ownValue.isNotEmpty) return ownValue;
+                return (existingDimensions[key] ?? '').toString().trim();
+              }
+
+              item['savedNails'] = <String, dynamic>{
+                'shape': nailShape.isNotEmpty
+                    ? nailShape
+                    : (existingSavedNails['shape'] ?? ''),
+                'length': nailLength.isNotEmpty
+                    ? nailLength
+                    : (existingSavedNails['length'] ?? ''),
+                'dimensions': <String, dynamic>{
+                  'lThumb': mergedDim('lThumb'),
+                  'lIndex': mergedDim('lIndex'),
+                  'lMiddle': mergedDim('lMiddle'),
+                  'lRing': mergedDim('lRing'),
+                  'lPinky': mergedDim('lPinky'),
+                  'rThumb': mergedDim('rThumb'),
+                  'rIndex': mergedDim('rIndex'),
+                  'rMiddle': mergedDim('rMiddle'),
+                  'rRing': mergedDim('rRing'),
+                  'rPinky': mergedDim('rPinky'),
+                },
+              };
+              return item;
+            })
+            .toList(growable: false);
+      }
+    }
+
     await _persistStatusUpdate(
       request: request,
       status: 'pending',
@@ -3917,8 +4025,12 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           'clientProfileImage': clientProfileImage,
         if (clientProfileImage.isNotEmpty)
           'clientProfilePic': clientProfileImage,
-        if (nailShape.isNotEmpty) 'nailShape': nailShape,
-        if (nailLength.isNotEmpty) 'nailLength': nailLength,
+        // For a group order the client's own shape/length belong only in
+        // their own groupOrder.clients[] slot (written above) -- writing
+        // them to the shared/top-level fields here too would overwrite them
+        // with whichever client happens to accept most recently.
+        if (!isGroupOrder && nailShape.isNotEmpty) 'nailShape': nailShape,
+        if (!isGroupOrder && nailLength.isNotEmpty) 'nailLength': nailLength,
       },
       detailsExtra: <String, dynamic>{
         'acceptance': <String, dynamic>{
@@ -3934,16 +4046,19 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             if (clientProfileImage.isNotEmpty) 'avatarUrl': clientProfileImage,
           },
         },
-        'nailPreferences': <String, dynamic>{
-          if (nailShape.isNotEmpty) 'shape': nailShape,
-          if (nailLength.isNotEmpty) 'length': nailLength,
-          'dimensions': nailDimensions,
-        },
+        if (!isGroupOrder)
+          'nailPreferences': <String, dynamic>{
+            if (nailShape.isNotEmpty) 'shape': nailShape,
+            if (nailLength.isNotEmpty) 'length': nailLength,
+            'dimensions': nailDimensions,
+          },
         'roleStatuses': <String, dynamic>{
           'brand': 'pending',
           'client': 'pending',
           'artist': 'in_review',
         },
+        if (updatedGroupClients != null)
+          'groupOrder': <String, dynamic>{'clients': updatedGroupClients},
       },
     );
 
@@ -9761,16 +9876,31 @@ class InReviewDetailsSheet extends StatelessWidget {
           nfc: nfcDetails.main,
         );
 
-    String identityFor(_OrderClientTabData client) {
-      if (client.slotIndex > 0) return 'slot:${client.slotIndex}';
+    // Dedup on BOTH slot index and name, not either alone: `groupTabs` is
+    // aggregated from several independent sources (live lookups, snapshot
+    // data, legacy fallbacks), and the same client can end up represented
+    // twice with two different non-zero slot indices from two of those
+    // sources -- a slot-only key would treat those as different people even
+    // though their names match, letting the duplicate through.
+    final seenSlots = <int>{};
+    final seenNames = <String>{};
+    void markSeen(_OrderClientTabData client) {
+      if (client.slotIndex > 0) seenSlots.add(client.slotIndex);
       final nameKey = client.name.trim().toLowerCase();
-      if (nameKey.isNotEmpty) return 'name:$nameKey';
-      return 'submitted';
+      if (nameKey.isNotEmpty) seenNames.add(nameKey);
+    }
+
+    bool alreadySeen(_OrderClientTabData client) {
+      if (client.slotIndex > 0 && seenSlots.contains(client.slotIndex)) {
+        return true;
+      }
+      final nameKey = client.name.trim().toLowerCase();
+      return nameKey.isNotEmpty && seenNames.contains(nameKey);
     }
 
     if (nfcDetails.groupTabs.isNotEmpty) {
       final ordered = <_OrderClientTabData>[submittedClient];
-      final seen = <String>{'submitted'};
+      markSeen(submittedClient);
       final submittedNameKey = submittedClient.name.trim().toLowerCase();
       for (final tab in nfcDetails.groupTabs) {
         final tabNameKey = tab.name.trim().toLowerCase();
@@ -9780,17 +9910,16 @@ class InReviewDetailsSheet extends StatelessWidget {
             tabNameKey == submittedNameKey;
         if (isSubmittedDuplicate) continue;
 
-        final key = identityFor(tab);
-        if (seen.add(key)) {
-          ordered.add(tab);
-        }
+        if (alreadySeen(tab)) continue;
+        markSeen(tab);
+        ordered.add(tab);
       }
       return ordered;
     }
 
     if (request.groupClients.isNotEmpty) {
       final ordered = <_OrderClientTabData>[submittedClient];
-      final seen = <String>{identityFor(submittedClient)};
+      markSeen(submittedClient);
       for (final c in request.groupClients) {
         final name = c.clientName.trim().isNotEmpty
             ? c.clientName.trim()
@@ -9808,10 +9937,9 @@ class InReviewDetailsSheet extends StatelessWidget {
               nfcDetails.groupBySlotIndex[c.slotIndex] ??
               _FingerNfcSelection.empty(),
         );
-        final key = identityFor(tab);
-        if (seen.add(key)) {
-          ordered.add(tab);
-        }
+        if (alreadySeen(tab)) continue;
+        markSeen(tab);
+        ordered.add(tab);
       }
       return ordered;
     }

@@ -10,7 +10,6 @@ import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/searchable_dropdown_field.dart';
 import 'edit_shipping_address_page.dart' show usStates, countries;
-import 'artist_profile_page.dart' show ArtistPayoutSettingsPage;
 
 class CompanyProfilePage extends StatefulWidget {
   const CompanyProfilePage({
@@ -216,7 +215,6 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         'company',
         'addresses',
         'billing',
-        'payout',
       ]) {
         final nextSection = row[section];
         if (nextSection is Map) {
@@ -243,7 +241,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         return;
       } on PostgrestException catch (error) {
         final missingColumn = _missingColumnFromPostgrest(error.message);
-        final canRetry = missingColumn != null && row.containsKey(missingColumn);
+        final canRetry =
+            missingColumn != null && row.containsKey(missingColumn);
         if (!canRetry) rethrow;
         row.remove(missingColumn);
       }
@@ -255,7 +254,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     );
   }
 
-  String _first(Object? a, [
+  String _first(
+    Object? a, [
     Object? b,
     Object? c,
     Object? d,
@@ -557,126 +557,6 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     );
   }
 
-  Map<String, dynamic> _companyPayoutModalData(Map<String, dynamic> row) {
-    final panel = _asMap(row['panel_payout']);
-    final payout = _asMap(row['payout']);
-
-    final method = _first(
-      panel['method'],
-      payout['method'],
-      row['panel_payoutMethod'],
-      row['panel_payout_method'],
-    );
-
-    final paypal = <String, dynamic>{
-      ..._asMap(panel['paypal']),
-      ..._asMap(payout['paypal']),
-    };
-    final venmo = <String, dynamic>{
-      ..._asMap(panel['venmo']),
-      ..._asMap(payout['venmo']),
-    };
-    final ach = <String, dynamic>{
-      ..._asMap(panel['ach']),
-      ..._asMap(payout['ach']),
-    };
-    final applePay = <String, dynamic>{
-      ..._asMap(panel['applePay']),
-      ..._asMap(payout['applePay']),
-    };
-
-    final payoutEmail = _first(
-      row['panel_payoutEmail'],
-      row['panel_payout_email'],
-      paypal['email'],
-      venmo['username'],
-      payout['email'],
-      panel['email'],
-    );
-
-    final payoutLegalName = _first(
-      row['panel_payoutLegalName'],
-      row['panel_payout_legal_name'],
-      ach['accountHolder'],
-      ach['accountHolderName'],
-      payout['accountHolder'],
-      payout['accountHolderName'],
-      panel['accountHolder'],
-      panel['accountHolderName'],
-    );
-
-    final normalizedPanel = <String, dynamic>{
-      ...panel,
-      'method': method,
-      'paypal': paypal,
-      'venmo': venmo,
-      'ach': ach,
-      'applePay': applePay,
-    };
-
-    final normalizedPayout = <String, dynamic>{
-      ...payout,
-      'method': method,
-      'paypal': paypal,
-      'venmo': venmo,
-      'ach': ach,
-      'applePay': applePay,
-      'email': _first(payout['email'], panel['email'], payoutEmail),
-      'accountHolder': _first(
-        payout['accountHolder'],
-        payout['accountHolderName'],
-        ach['accountHolder'],
-        ach['accountHolderName'],
-        payoutLegalName,
-      ),
-      'bankName': _first(
-        payout['bankName'],
-        ach['bankName'],
-        panel['bankName'],
-      ),
-      'routingNumber': _first(
-        payout['routingNumber'],
-        payout['routing'],
-        ach['routingNumber'],
-        ach['routing'],
-        panel['routingNumber'],
-        panel['routing'],
-      ),
-      'accountNumber': _first(
-        payout['accountNumber'],
-        ach['accountNumber'],
-        panel['accountNumber'],
-      ),
-      'applePayName': _first(
-        payout['applePayName'],
-        applePay['fullName'],
-        panel['applePayName'],
-      ),
-      'applePayEmail': _first(
-        payout['applePayEmail'],
-        applePay['email'],
-        panel['applePayEmail'],
-      ),
-      'applePayPhone': _first(
-        payout['applePayPhone'],
-        applePay['phone'],
-        panel['applePayPhone'],
-      ),
-    };
-
-    return <String, dynamic>{
-      ...row,
-      'panel_payout': normalizedPanel,
-      'payout': normalizedPayout,
-      'panel_payoutMethod': method,
-      'panel_artist_payoutMethod': method,
-      'panel_payoutEmail': payoutEmail,
-      'panel_artist_payoutEmail': payoutEmail,
-      'panel_payoutLegalName': payoutLegalName,
-      'panel_artist_payoutLegalName': payoutLegalName,
-    };
-  }
-
   Future<void> _hydrateDraftsFromCompanyRow() async {
     final row = await _readCompanyRow();
     if (!mounted || row == null) return;
@@ -734,42 +614,6 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       setState(() => _billingInfo = updated);
       await _hydrateDraftsFromCompanyRow();
     }
-  }
-
-  Future<void> _openPayoutSettings() async {
-    final row = await _readCompanyRow();
-    if (!mounted) return;
-    final data = _companyPayoutModalData(row ?? _companyRowData);
-    final supabaseId = _first(
-      data['id'],
-      data['uid'],
-      _companyRowData['id'],
-      _companyRowData['uid'],
-      _uid,
-    );
-    if (data.isEmpty || supabaseId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payout settings not found.')),
-      );
-      return;
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.82,
-        child: ClipRRect(
-          borderRadius: BorderRadius.zero,
-          child: ArtistPayoutSettingsPage(
-            supabaseTable: 'company',
-            supabaseId: supabaseId,
-            initialData: data,
-          ),
-        ),
-      ),
-    );
-    await _hydrateDraftsFromCompanyRow();
   }
 
   Future<void> _persistBillingInfo(CompanyBillingDraft billing) async {
@@ -1130,144 +974,140 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       namesRoute: true,
       label: 'Company profile',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: CompanyHeader(
-        companyName: companyName.isEmpty ? 'Company' : companyName,
-        imageUrl: _profileImageUrl,
-        autoFocusNotifications: widget.autoFocusNotifications,
-        notificationFocusRequestKey: widget.notificationFocusRequestKey,
-        trailing: IconButton(
-          onPressed: () => widget.onClose?.call(),
-          icon: const Icon(
-            Icons.close_rounded,
-            size: 26,
-            color: AppColors.blackCat,
+        backgroundColor: AppColors.snow,
+        appBar: CompanyHeader(
+          companyName: companyName.isEmpty ? 'Company' : companyName,
+          imageUrl: _profileImageUrl,
+          autoFocusNotifications: widget.autoFocusNotifications,
+          notificationFocusRequestKey: widget.notificationFocusRequestKey,
+          trailing: IconButton(
+            onPressed: () => widget.onClose?.call(),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 26,
+              color: AppColors.blackCat,
+            ),
+            splashRadius: 20,
+            tooltip: 'Close',
           ),
-          splashRadius: 20,
-          tooltip: 'Close',
+          onLogout: widget.onLogout,
         ),
-        onLogout: widget.onLogout,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-        children: [
-          const SizedBox(height: 6),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+          children: [
+            const SizedBox(height: 6),
 
-          // Avatar moved into body (not header)
-          Center(
-            child: SizedBox(
-              height: 72,
-              width: 72,
-              child: ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _safeProfileAvatar(
-                        imageUrl: _profileImageUrl,
-                        displayName: companyName,
+            // Avatar moved into body (not header)
+            Center(
+              child: SizedBox(
+                height: 72,
+                width: 72,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.zero,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: _safeProfileAvatar(
+                          imageUrl: _profileImageUrl,
+                          displayName: companyName,
+                        ),
                       ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Material(
-                        color: AppColors.snow,
-                        borderRadius: BorderRadius.zero,
-                        child: Semantics(
-                          button: true,
-                          label: 'Change company logo',
-                          onTap: _uploadingPhoto
-                              ? null
-                              : _pickAndUploadProfilePhoto,
-                          child: ExcludeSemantics(
-                            child: InkWell(
-                          onTap: _uploadingPhoto
-                              ? null
-                              : _pickAndUploadProfilePhoto,
-                          child: Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: AppColors.blackCatBorderLight,
-                              ),
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            child: _uploadingPhoto
-                                ? const Padding(
-                                    padding: EdgeInsets.all(5),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.8,
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Material(
+                          color: AppColors.snow,
+                          borderRadius: BorderRadius.zero,
+                          child: Semantics(
+                            button: true,
+                            label: 'Change company logo',
+                            onTap: _uploadingPhoto
+                                ? null
+                                : _pickAndUploadProfilePhoto,
+                            child: ExcludeSemantics(
+                              child: InkWell(
+                                onTap: _uploadingPhoto
+                                    ? null
+                                    : _pickAndUploadProfilePhoto,
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: AppColors.blackCatBorderLight,
                                     ),
-                                  )
-                                : const Icon(Icons.edit, size: 14),
-                          ),
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  child: _uploadingPhoto
+                                      ? const Padding(
+                                          padding: EdgeInsets.all(5),
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.8,
+                                          ),
+                                        )
+                                      : const Icon(Icons.edit, size: 14),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          const SizedBox(height: 10),
-          Center(
-            child: Text(
-              companyName.isEmpty ? 'Company' : companyName,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w900,
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                companyName.isEmpty ? 'Company' : companyName,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Center(
-            child: Text(
-              locationText.isEmpty ? 'No location on file' : locationText,
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w400,
-                color: Colors.black.withValues(alpha: 0.55),
+            const SizedBox(height: 2),
+            Center(
+              child: Text(
+                locationText.isEmpty ? 'No location on file' : locationText,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black.withValues(alpha: 0.55),
+                ),
               ),
             ),
-          ),
 
-          const SizedBox(height: 18),
+            const SizedBox(height: 18),
 
-          // BUSINESS
-          _RowChevronTile(
-            icon: Icons.business_outlined,
-            title: 'Business Info',
-            onTap: _editBusinessInfo,
-          ),
+            // BUSINESS
+            _RowChevronTile(
+              icon: Icons.business_outlined,
+              title: 'Business Info',
+              onTap: _editBusinessInfo,
+            ),
 
-          // ACCOUNT
-          _RowChevronTile(
-            icon: Icons.credit_card_outlined,
-            title: 'Billing',
-            onTap: widget.onOpenBilling ?? _editBilling,
-          ),
-          _RowChevronTile(
-            icon: Icons.account_balance_wallet_outlined,
-            title: 'Payout Settings',
-            onTap: _openPayoutSettings,
-          ),
-          _RowChevronTile(
-            icon: Icons.location_on_outlined,
-            title: 'Addresses',
-            onTap: widget.onOpenShippingAddresses ?? _editAddresses,
-          ),
+            // ACCOUNT
+            _RowChevronTile(
+              icon: Icons.credit_card_outlined,
+              title: 'Billing',
+              onTap: widget.onOpenBilling ?? _editBilling,
+            ),
+            _RowChevronTile(
+              icon: Icons.location_on_outlined,
+              title: 'Addresses',
+              onTap: widget.onOpenShippingAddresses ?? _editAddresses,
+            ),
 
-          const SizedBox(height: 22),
+            const SizedBox(height: 22),
 
-          _TextDangerButton(text: 'Log out', onTap: widget.onLogout),
-        ],
+            _TextDangerButton(text: 'Log out', onTap: widget.onLogout),
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   Widget _safeProfileAvatar({
@@ -1351,37 +1191,37 @@ class _RowChevronTile extends StatelessWidget {
         button: true,
         onTap: onTap,
         child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-        decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: AppColors.blackCatBorderLight),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.deepPlum, size: 18),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
-                ),
+          onTap: onTap,
+          borderRadius: BorderRadius.zero,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.blackCatBorderLight),
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.black.withValues(alpha: 0.35),
-              size: 18,
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.deepPlum, size: 18),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.black.withValues(alpha: 0.35),
+                  size: 18,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1693,25 +1533,25 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                         label: m,
                         child: ExcludeSemantics(
                           child: InkWell(
-                        onTap: () => setState(() => _method = m),
-                        borderRadius: BorderRadius.zero,
-                        child: Row(
-                          children: [
-                            Radio<String>(
-                              value: m,
-                              activeColor: AppColors.blackCat,
-                            ),
-                            Expanded(
-                              child: Text(
-                                m,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                            onTap: () => setState(() => _method = m),
+                            borderRadius: BorderRadius.zero,
+                            child: Row(
+                              children: [
+                                Radio<String>(
+                                  value: m,
+                                  activeColor: AppColors.blackCat,
                                 ),
-                              ),
+                                Expanded(
+                                  child: Text(
+                                    m,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
                           ),
                         ),
                       ),
@@ -1726,20 +1566,20 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                             label: 'Name on Card',
                             textField: true,
                             child: TextField(
-                            controller: _nameOnCardCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Name on Card'),
-                          ),
+                              controller: _nameOnCardCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Name on Card'),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Semantics(
                             label: 'Card Number',
                             textField: true,
                             child: TextField(
-                            controller: _cardNumberCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Card Number'),
-                          ),
+                              controller: _cardNumberCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Card Number'),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Row(
@@ -1749,10 +1589,10 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                                   label: 'Expiration Date',
                                   textField: true,
                                   child: TextField(
-                                  controller: _expiryCtrl,
-                                  style: const TextStyle(fontSize: 11),
-                                  decoration: _dec('Expiry MM/YY'),
-                                ),
+                                    controller: _expiryCtrl,
+                                    style: const TextStyle(fontSize: 11),
+                                    decoration: _dec('Expiry MM/YY'),
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -1761,10 +1601,10 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                                   label: 'CVV',
                                   textField: true,
                                   child: TextField(
-                                  controller: _cvvCtrl,
-                                  style: const TextStyle(fontSize: 11),
-                                  decoration: _dec('CVV'),
-                                ),
+                                    controller: _cvvCtrl,
+                                    style: const TextStyle(fontSize: 11),
+                                    decoration: _dec('CVV'),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1775,30 +1615,30 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                             label: 'Account Holder Name',
                             textField: true,
                             child: TextField(
-                            controller: _achAccountNameCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Account Holder Name'),
-                          ),
+                              controller: _achAccountNameCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Account Holder Name'),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Semantics(
                             label: 'Routing Number',
                             textField: true,
                             child: TextField(
-                            controller: _achRoutingCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Routing Number'),
-                          ),
+                              controller: _achRoutingCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Routing Number'),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Semantics(
                             label: 'Account Number',
                             textField: true,
                             child: TextField(
-                            controller: _achAccountCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Account Number'),
-                          ),
+                              controller: _achAccountCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Account Number'),
+                            ),
                           ),
                         ],
                         if (m == 'Apple Pay')
@@ -1806,22 +1646,22 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                             label: 'Apple Pay Email',
                             textField: true,
                             child: TextField(
-                            controller: _applePayEmailCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Apple Pay Email'),
-                            keyboardType: TextInputType.emailAddress,
-                          ),
+                              controller: _applePayEmailCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Apple Pay Email'),
+                              keyboardType: TextInputType.emailAddress,
+                            ),
                           ),
                         if (m == 'Google Pay')
                           Semantics(
                             label: 'Google Pay Email',
                             textField: true,
                             child: TextField(
-                            controller: _googlePayEmailCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Google Pay Email'),
-                            keyboardType: TextInputType.emailAddress,
-                          ),
+                              controller: _googlePayEmailCtrl,
+                              style: const TextStyle(fontSize: 11),
+                              decoration: _dec('Google Pay Email'),
+                              keyboardType: TextInputType.emailAddress,
+                            ),
                           ),
                         const SizedBox(height: 8),
                       ],
@@ -2251,6 +2091,3 @@ class _PopupActions extends StatelessWidget {
     );
   }
 }
-
-
-
