@@ -17,8 +17,9 @@ import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
-import '../widgets/coin_selector_page.dart';
 import '../widgets/jnt_modal_app_bar.dart';
+import '../widgets/full_hand_measurement_flow.dart';
+import '../widgets/registration_date_of_birth_picker.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../models/client_profile_models.dart';
@@ -27,6 +28,7 @@ import '../models/client_profile_models.dart';
 import '../widgets/direct_request_year_calendar.dart';
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
+import 'login_page.dart';
 import 'client_artist_home_page.dart';
 import 'artist_checkout_page_modal_edit.dart';
 
@@ -93,7 +95,9 @@ class _ClientArtistRegistrationPageState
   // Profile image (tap avatar to upload)
   // -----------------------
   final ImagePicker _picker = ImagePicker();
-  final FocusNode _profilePhotoFocusNode = FocusNode(debugLabel: 'clientArtistProfilePhotoUpload');
+  final FocusNode _profilePhotoFocusNode = FocusNode(
+    debugLabel: 'clientArtistProfilePhotoUpload',
+  );
   Uint8List? _profileBytes;
   final Map<String, Uint8List> _guidedMeasurementPhotos = {};
   String _measurementCoinReference = 'US Penny (1¢)';
@@ -102,6 +106,9 @@ class _ClientArtistRegistrationPageState
   // Shared Account Credentials (no duplicates)
   // -----------------------
   final _emailCtrl = TextEditingController();
+  final _dateOfBirthCtrl = TextEditingController();
+  DateTime? _dateOfBirth;
+  bool _consentToStoreNailImages = true;
   Timer? _emailAvailabilityDebounce;
   bool _checkingEmailAvailability = false;
   String? _lastCheckedEmail;
@@ -161,72 +168,73 @@ class _ClientArtistRegistrationPageState
   String get _fullPhone => '$_normalizedAreaCode$_normalizedPhone';
   String _timeZone = 'America/New_York';
 
+  // ignore: unused_element
   void _registrationLog(String message) {
     debugPrint('[CLIENT-ARTIST-REG] $message');
   }
 
-  static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
-    _NailCaptureStep(
-      key: 'lThumb',
-      hand: 'left',
-      finger: 'thumb',
-      title: 'Left Thumb',
-    ),
-    _NailCaptureStep(
-      key: 'lIndex',
-      hand: 'left',
-      finger: 'index',
-      title: 'Left Index',
-    ),
-    _NailCaptureStep(
-      key: 'lMiddle',
-      hand: 'left',
-      finger: 'middle',
-      title: 'Left Middle',
-    ),
-    _NailCaptureStep(
-      key: 'lRing',
-      hand: 'left',
-      finger: 'ring',
-      title: 'Left Ring',
-    ),
-    _NailCaptureStep(
-      key: 'lPinky',
-      hand: 'left',
-      finger: 'pinky',
-      title: 'Left Pinky',
-    ),
-    _NailCaptureStep(
-      key: 'rThumb',
-      hand: 'right',
-      finger: 'thumb',
-      title: 'Right Thumb',
-    ),
-    _NailCaptureStep(
-      key: 'rIndex',
-      hand: 'right',
-      finger: 'index',
-      title: 'Right Index',
-    ),
-    _NailCaptureStep(
-      key: 'rMiddle',
-      hand: 'right',
-      finger: 'middle',
-      title: 'Right Middle',
-    ),
-    _NailCaptureStep(
-      key: 'rRing',
-      hand: 'right',
-      finger: 'ring',
-      title: 'Right Ring',
-    ),
-    _NailCaptureStep(
-      key: 'rPinky',
-      hand: 'right',
-      finger: 'pinky',
-      title: 'Right Pinky',
-    ),
-  ];
+  //   static const List<_NailCaptureStep> _nailCaptureSteps = <_NailCaptureStep>[
+  //     _NailCaptureStep(
+  //       key: 'lThumb',
+  //       hand: 'left',
+  //       finger: 'thumb',
+  //       title: 'Left Thumb',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'lIndex',
+  //       hand: 'left',
+  //       finger: 'index',
+  //       title: 'Left Index',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'lMiddle',
+  //       hand: 'left',
+  //       finger: 'middle',
+  //       title: 'Left Middle',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'lRing',
+  //       hand: 'left',
+  //       finger: 'ring',
+  //       title: 'Left Ring',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'lPinky',
+  //       hand: 'left',
+  //       finger: 'pinky',
+  //       title: 'Left Pinky',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'rThumb',
+  //       hand: 'right',
+  //       finger: 'thumb',
+  //       title: 'Right Thumb',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'rIndex',
+  //       hand: 'right',
+  //       finger: 'index',
+  //       title: 'Right Index',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'rMiddle',
+  //       hand: 'right',
+  //       finger: 'middle',
+  //       title: 'Right Middle',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'rRing',
+  //       hand: 'right',
+  //       finger: 'ring',
+  //       title: 'Right Ring',
+  //     ),
+  //     _NailCaptureStep(
+  //       key: 'rPinky',
+  //       hand: 'right',
+  //       finger: 'pinky',
+  //       title: 'Right Pinky',
+  //     ),
+  //   ];
 
   // -----------------------
   // âœ… Checkout/cart state (ONLY changes are here + gating)
@@ -448,6 +456,7 @@ class _ClientArtistRegistrationPageState
   final Set<DateTime> _blockedDates = <DateTime>{};
 
   final List<Uint8List> _portfolioImages = [];
+  bool _consentToStoreAndPublishPortfolio = true;
   String? _lastPortfolioUploadErrorDetail;
   final _projectNotesCtrl = TextEditingController();
   final _portfolioLinkCtrl = TextEditingController();
@@ -727,7 +736,9 @@ class _ClientArtistRegistrationPageState
   }
 
   Future<List<String>> _uploadPortfolioImages(String uid) async {
-    if (_portfolioImages.isEmpty) return const <String>[];
+    if (!_consentToStoreAndPublishPortfolio || _portfolioImages.isEmpty) {
+      return const <String>[];
+    }
 
     _lastPortfolioUploadErrorDetail = null;
 
@@ -821,7 +832,7 @@ class _ClientArtistRegistrationPageState
   }
 
   Future<Map<String, String>> _uploadGuidedMeasurementPhotos(String uid) async {
-    if (_guidedMeasurementPhotos.isEmpty) {
+    if (!_consentToStoreNailImages || _guidedMeasurementPhotos.isEmpty) {
       return const <String, String>{};
     }
 
@@ -991,6 +1002,9 @@ class _ClientArtistRegistrationPageState
             : _fullNameOrStudioCtrl.text.trim(),
         'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
         'displayName': _displayNameCtrl.text.trim(),
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
+        'consentToStoreNailImages': _consentToStoreNailImages,
+        'consentToStoreAndPublishPortfolio': _consentToStoreAndPublishPortfolio,
         'languageSpoken': _languageSpokenCtrl.text.trim(),
         'currency': (_currency ?? '').trim(),
         'photoUrl': profilePhotoUrl.trim(),
@@ -1065,6 +1079,7 @@ class _ClientArtistRegistrationPageState
           'directRequestYear': _directRequestYear,
         },
         'portfolio': {
+          'consentToStoreAndPublish': _consentToStoreAndPublishPortfolio,
           'projectNotes': _projectNotesCtrl.text.trim(),
           'portfolioLink': _portfolioLinkCtrl.text.trim(),
           'imageCount': portfolioImageUrls.length,
@@ -1108,6 +1123,9 @@ class _ClientArtistRegistrationPageState
         },
       },
       'registration': {
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
+        'consentToStoreNailImages': _consentToStoreNailImages,
+        'consentToStoreAndPublishPortfolio': _consentToStoreAndPublishPortfolio,
         'bypassCheckoutUsed': kAllowRegistrationWithoutCheckout,
         'kitPaid': _kitPaid,
         'bundlePaid': _bundlePaid,
@@ -1304,47 +1322,47 @@ class _ClientArtistRegistrationPageState
       value: itemLabel(value),
       required: true,
       child: PopupMenuButton<T>(
-      color: _snow,
-      surfaceTintColor: _snow,
-      elevation: 4,
-      offset: const Offset(0, _fieldHeight + 6),
-      constraints: BoxConstraints(maxHeight: menuHeight),
-      onSelected: onChanged,
-      itemBuilder: (context) => items
-          .map(
-            (item) => PopupMenuItem<T>(
-              value: item,
-              child: Text(
-                itemLabel(item),
-                style: const TextStyle(
-                  fontSize: _inputFs,
-                  color: _blackCat,
-                  fontFamily: 'Arial',
-                  fontWeight: FontWeight.w400,
+        color: _snow,
+        surfaceTintColor: _snow,
+        elevation: 4,
+        offset: const Offset(0, _fieldHeight + 6),
+        constraints: BoxConstraints(maxHeight: menuHeight),
+        onSelected: onChanged,
+        itemBuilder: (context) => items
+            .map(
+              (item) => PopupMenuItem<T>(
+                value: item,
+                child: Text(
+                  itemLabel(item),
+                  style: const TextStyle(
+                    fontSize: _inputFs,
+                    color: _blackCat,
+                    fontFamily: 'Arial',
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ),
-            ),
-          )
-          .toList(growable: false),
-      child: InputDecorator(
-        decoration: _dec(label, hint),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                itemLabel(value),
-                style: const TextStyle(
-                  fontSize: _inputFs,
-                  color: _blackCat,
-                  fontFamily: 'Arial',
-                  fontWeight: FontWeight.w400,
+            )
+            .toList(growable: false),
+        child: InputDecorator(
+          decoration: _dec(label, hint),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  itemLabel(value),
+                  style: const TextStyle(
+                    fontSize: _inputFs,
+                    color: _blackCat,
+                    fontFamily: 'Arial',
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ),
-            ),
-            const Icon(Icons.arrow_drop_down, color: _blackCat),
-          ],
+              const Icon(Icons.arrow_drop_down, color: _blackCat),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1376,34 +1394,34 @@ class _ClientArtistRegistrationPageState
               hint: 'Dropdown. Double tap to open.',
               isRequired: validator != null,
               child: ExcludeSemantics(
-              child: InkWell(
-              borderRadius: BorderRadius.zero,
-              onTap: onToggle,
-              child: InputDecorator(
-                decoration: _dec(label, hint),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        hasValue ? itemLabel(selected as T) : hint,
-                        style: TextStyle(
-                          fontSize: _inputFs,
-                          color: hasValue
-                              ? _blackCat
-                              : _blackCat.withValues(alpha: 0.45),
-                          fontFamily: 'Arial',
-                          fontWeight: FontWeight.w400,
+                child: InkWell(
+                  borderRadius: BorderRadius.zero,
+                  onTap: onToggle,
+                  child: InputDecorator(
+                    decoration: _dec(label, hint),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            hasValue ? itemLabel(selected as T) : hint,
+                            style: TextStyle(
+                              fontSize: _inputFs,
+                              color: hasValue
+                                  ? _blackCat
+                                  : _blackCat.withValues(alpha: 0.45),
+                              fontFamily: 'Arial',
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
                         ),
-                      ),
+                        Icon(
+                          isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                          color: _blackCat,
+                        ),
+                      ],
                     ),
-                    Icon(
-                      isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-                      color: _blackCat,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              ),
               ),
             ),
             if (isOpen)
@@ -1449,29 +1467,29 @@ class _ClientArtistRegistrationPageState
                           button: true,
                           selected: selectedItem,
                           child: InkWell(
-                          onTap: () {
-                            field.didChange(item);
-                            onChanged(item);
-                            onToggle();
-                          },
-                          child: Container(
-                            color: selectedItem
-                                ? _blackCat.withValues(alpha: 0.10)
-                                : _snow,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 14,
-                            ),
-                            child: Text(
-                              itemLabel(item),
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                color: _blackCat,
-                                fontFamily: 'Arial',
-                                fontWeight: FontWeight.w400,
+                            onTap: () {
+                              field.didChange(item);
+                              onChanged(item);
+                              onToggle();
+                            },
+                            child: Container(
+                              color: selectedItem
+                                  ? _blackCat.withValues(alpha: 0.10)
+                                  : _snow,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 14,
+                              ),
+                              child: Text(
+                                itemLabel(item),
+                                style: const TextStyle(
+                                  fontSize: _inputFs,
+                                  color: _blackCat,
+                                  fontFamily: 'Arial',
+                                  fontWeight: FontWeight.w400,
+                                ),
                               ),
                             ),
-                          ),
                           ),
                         );
                       },
@@ -1505,14 +1523,17 @@ class _ClientArtistRegistrationPageState
     String? Function(String?)? validator,
     bool required = false,
   }) {
-    return _req(required, _typeAheadPickerField(
-      label: label,
-      hint: hint,
-      options: options,
-      selectedValue: selectedValue,
-      onChanged: onChanged,
-      validator: validator,
-    ));
+    return _req(
+      required,
+      _typeAheadPickerField(
+        label: label,
+        hint: hint,
+        options: options,
+        selectedValue: selectedValue,
+        onChanged: onChanged,
+        validator: validator,
+      ),
+    );
   }
 
   Widget _typeAheadPickerField({
@@ -1658,6 +1679,34 @@ class _ClientArtistRegistrationPageState
     return null;
   }
 
+  String? _dateOfBirthValidator(String? value) {
+    if (_dateOfBirth == null) return 'Date of Birth is required';
+    return null;
+  }
+
+  Future<void> _showAgeIneligibleDialog() async {
+    await showRegistrationAgeIneligibleDialog(context: context);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginDialog()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final selected = await showRegistrationDateOfBirthPicker(context: context);
+    if (selected == null || !mounted) return;
+    setState(() {
+      _dateOfBirth = selected;
+      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(
+        selected,
+      );
+    });
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(selected) && mounted) {
+      await _showAgeIneligibleDialog();
+    }
+  }
+
   void _onEmailChanged(String value) {
     _emailAvailabilityDebounce?.cancel();
     final normalized = value.trim().toLowerCase();
@@ -1673,18 +1722,21 @@ class _ClientArtistRegistrationPageState
     }
 
     setState(() => _checkingEmailAvailability = true);
-    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
-      final role = await SupabaseAuthService.findExistingRoleForEmail(
-        normalized,
-      );
-      if (!mounted) return;
-      if (_emailCtrl.text.trim().toLowerCase() != normalized) return;
-      setState(() {
-        _checkingEmailAvailability = false;
-        _lastCheckedEmail = normalized;
-        _emailTakenRole = role;
-      });
-    });
+    _emailAvailabilityDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () async {
+        final role = await SupabaseAuthService.findExistingRoleForEmail(
+          normalized,
+        );
+        if (!mounted) return;
+        if (_emailCtrl.text.trim().toLowerCase() != normalized) return;
+        setState(() {
+          _checkingEmailAvailability = false;
+          _lastCheckedEmail = normalized;
+          _emailTakenRole = role;
+        });
+      },
+    );
   }
 
   Widget _buildEmailAvailabilityStatus() {
@@ -1910,117 +1962,117 @@ class _ClientArtistRegistrationPageState
       button: true,
       selected: selected,
       child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        width: 220,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(
-            color: selected
-                ? _blackCat.withValues(alpha: 0.55)
-                : _blackCat.withValues(alpha: 0.24),
-            width: selected ? 1.4 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.blackCat.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 10),
+        onTap: onTap,
+        borderRadius: BorderRadius.zero,
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _snow,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: selected
+                  ? _blackCat.withValues(alpha: 0.55)
+                  : _blackCat.withValues(alpha: 0.24),
+              width: selected ? 1.4 : 1,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: _snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                alignment: Alignment.center,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: Image.asset(
-                    imageAsset,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    errorBuilder: (_, _, _) => Text(
-                      'Image',
-                      style: TextStyle(
-                        color: _blackCat.withValues(alpha: 0.45),
-                        fontWeight: FontWeight.w800,
-                        fontFamily: 'Arial',
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.blackCat.withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: _snow,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  alignment: Alignment.center,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: Image.asset(
+                      imageAsset,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (_, _, _) => Text(
+                        'Image',
+                        style: TextStyle(
+                          color: _blackCat.withValues(alpha: 0.45),
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'Arial',
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Arial',
-                fontSize: _titleFs,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'Arial',
-                fontSize: _subFs,
-                color: _blackCat.withValues(alpha: 0.68),
-                height: 1.25,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              price,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                color: Color(0xFFF06C7A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 40,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: purchased
-                      ? _blackCat.withValues(alpha: 0.85)
-                      : _blackCat,
-                  foregroundColor: _snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: disableAdd ? null : onAdd,
-                child: Text(
-                  purchased ? 'Purchased' : 'Add to cart',
-                  style: const TextStyle(
-                    fontFamily: 'Arial',
-                    fontSize: _inputFs,
-                    fontWeight: FontWeight.w700,
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'Arial',
+                  fontSize: _titleFs,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Arial',
+                  fontSize: _subFs,
+                  color: _blackCat.withValues(alpha: 0.68),
+                  height: 1.25,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                price,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFFF06C7A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 40,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: purchased
+                        ? _blackCat.withValues(alpha: 0.85)
+                        : _blackCat,
+                    foregroundColor: _snow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: disableAdd ? null : onAdd,
+                  child: Text(
+                    purchased ? 'Purchased' : 'Add to cart',
+                    style: const TextStyle(
+                      fontFamily: 'Arial',
+                      fontSize: _inputFs,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -2034,29 +2086,29 @@ class _ClientArtistRegistrationPageState
       button: true,
       selected: selected,
       child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? _blackCat.withValues(alpha: 0.10) : _snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(
-            color: selected
-                ? _blackCat.withValues(alpha: 0.75)
-                : _blackCat.withValues(alpha: 0.24),
+        onTap: onTap,
+        borderRadius: BorderRadius.zero,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? _blackCat.withValues(alpha: 0.10) : _snow,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(
+              color: selected
+                  ? _blackCat.withValues(alpha: 0.75)
+                  : _blackCat.withValues(alpha: 0.24),
+            ),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Arial',
+              fontSize: _chipFs,
+              fontWeight: FontWeight.w600,
+              color: selected ? _blackCat : _blackCat.withValues(alpha: 0.88),
+            ),
           ),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontFamily: 'Arial',
-            fontSize: _chipFs,
-            fontWeight: FontWeight.w600,
-            color: selected ? _blackCat : _blackCat.withValues(alpha: 0.88),
-          ),
-        ),
-      ),
       ),
     );
   }
@@ -2069,42 +2121,42 @@ class _ClientArtistRegistrationPageState
           button: true,
           selected: selected,
           child: InkWell(
-          borderRadius: BorderRadius.zero,
-          onTap: () => setState(() => _nailTechType = type),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              color: _snow,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(
-                color: selected
-                    ? _blackCat.withValues(alpha: 0.55)
-                    : _blackCat.withValues(alpha: 0.22),
-                width: selected ? 1.6 : 1.0,
+            borderRadius: BorderRadius.zero,
+            onTap: () => setState(() => _nailTechType = type),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: _snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: selected
+                      ? _blackCat.withValues(alpha: 0.55)
+                      : _blackCat.withValues(alpha: 0.22),
+                  width: selected ? 1.6 : 1.0,
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: _inputFs - 2,
-                      fontWeight: FontWeight.w400,
-                      fontFamily: 'Arial',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: _inputFs - 2,
+                        fontWeight: FontWeight.w400,
+                        fontFamily: 'Arial',
+                      ),
                     ),
                   ),
-                ),
-                if (selected)
-                  Icon(
-                    Icons.check_circle,
-                    size: 16,
-                    color: _blackCat.withValues(alpha: 0.9),
-                  ),
-              ],
+                  if (selected)
+                    Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: _blackCat.withValues(alpha: 0.9),
+                    ),
+                ],
+              ),
             ),
           ),
-        ),
         ),
       );
     }
@@ -2233,17 +2285,12 @@ class _ClientArtistRegistrationPageState
       maxWidth: 2000,
       maxHeight: 2000,
     );
-    if (img != null) {
-      final raw = await img.readAsBytes();
-      final bytes = _optimizePortfolioBytes(
-            raw,
-            maxEdge: 900,
-            maxBytes: 650 * 1024,
-          ) ??
-          raw;
-      if (!mounted) return;
-      setState(() => _profileBytes = bytes);
-    }
+    if (img == null) return;
+    final raw = await img.readAsBytes();
+    final bytes =
+        _optimizePortfolioBytes(raw, maxEdge: 900, maxBytes: 650 * 1024) ?? raw;
+    if (!mounted) return;
+    setState(() => _profileBytes = bytes);
     // The OS image picker steals accessibility focus; put it back on the
     // avatar (not wherever the platform happens to land it) so screen
     // reader users stay in place.
@@ -2284,7 +2331,9 @@ class _ClientArtistRegistrationPageState
       final raw = await file.readAsBytes();
       if (raw.isEmpty) continue;
       final optimized = _optimizePortfolioBytes(raw);
-      bytesList.add(optimized != null && optimized.isNotEmpty ? optimized : raw);
+      bytesList.add(
+        optimized != null && optimized.isNotEmpty ? optimized : raw,
+      );
     }
 
     if (!mounted || bytesList.isEmpty) return;
@@ -2466,62 +2515,62 @@ class _ClientArtistRegistrationPageState
     );
   }
 
-  Future<double?> _askManualMeasurement(String fingerTitle) async {
-    final ctrl = TextEditingController();
-    final value = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.snow,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text('Enter $fingerTitle (mm)'),
-        content: TextField(
-          controller: ctrl,
-          style: const TextStyle(fontSize: _inputFs),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            hintText: 'e.g. 14.5',
-            border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCatLight,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              textStyle: Theme.of(
-                ctx,
-              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final parsed = double.tryParse(ctrl.text.trim());
-              Navigator.pop(ctx, parsed);
-            },
-            style: ElevatedButton.styleFrom(
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              textStyle: Theme.of(
-                ctx,
-              ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    ctrl.dispose();
-    return value;
-  }
-
+  //   Future<double?> _askManualMeasurement(String fingerTitle) async {
+  //     final ctrl = TextEditingController();
+  //     final value = await showDialog<double>(
+  //       context: context,
+  //       builder: (ctx) => AlertDialog(
+  //         backgroundColor: AppColors.snow,
+  //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+  //         title: Text('Enter $fingerTitle (mm)'),
+  //         content: TextField(
+  //           controller: ctrl,
+  //           style: const TextStyle(fontSize: _inputFs),
+  //           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  //           decoration: const InputDecoration(
+  //             hintText: 'e.g. 14.5',
+  //             border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+  //           ),
+  //         ),
+  //         actions: [
+  //           ElevatedButton(
+  //             style: ElevatedButton.styleFrom(
+  //               backgroundColor: AppColors.blackCatLight,
+  //               foregroundColor: AppColors.snow,
+  //               shape: const RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.zero,
+  //               ),
+  //               textStyle: Theme.of(
+  //                 ctx,
+  //               ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
+  //             ),
+  //             onPressed: () => Navigator.pop(ctx),
+  //             child: const Text('Cancel'),
+  //           ),
+  //           ElevatedButton(
+  //             onPressed: () {
+  //               final parsed = double.tryParse(ctrl.text.trim());
+  //               Navigator.pop(ctx, parsed);
+  //             },
+  //             style: ElevatedButton.styleFrom(
+  //               shape: const RoundedRectangleBorder(
+  //                 borderRadius: BorderRadius.zero,
+  //               ),
+  //               backgroundColor: AppColors.blackCat,
+  //               foregroundColor: AppColors.snow,
+  //               textStyle: Theme.of(
+  //                 ctx,
+  //               ).textTheme.labelLarge?.copyWith(fontFamily: 'Arial'),
+  //             ),
+  //             child: const Text('Save'),
+  //           ),
+  //         ],
+  //       ),
+  //     );
+  //     ctrl.dispose();
+  //     return value;
+  //   }
+  //
   Map<String, double> _currentMeasuredMap() {
     final d = _nailPrefs.dimensions;
     final out = <String, double>{};
@@ -2551,483 +2600,502 @@ class _ClientArtistRegistrationPageState
       );
     });
   }
-
-  Future<bool> _showMeasurementGuide() async {
-    final allowed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => Semantics(
-          scopesRoute: true,
-          explicitChildNodes: true,
-          namesRoute: true,
-          label: 'Nail measurement guide',
-          child: Scaffold(
-          backgroundColor: AppColors.snow,
-          appBar: AppBar(
-            backgroundColor: AppColors.snow,
-            elevation: 0,
-            leading: IconButton(
-              tooltip: 'Back',
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => Navigator.pop(context, false),
-            ),
-            centerTitle: true,
-            title: const Text(
-              'Nail Measurement',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-          ),
-          body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.snow,
-                      borderRadius: BorderRadius.zero,
-                      border: Border.all(
-                        color: AppColors.blackCat.withValues(alpha: 0.10),
-                      ),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.straighten_rounded, size: 26),
-                        SizedBox(height: 12),
-                        Text(
-                          'How to Measure Your Nails',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          "We'll use a coin or currency as a reference guide to accurately measure your nail width.",
-                          style: TextStyle(fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const _MeasureStepTile(
-                    step: 1,
-                    title: 'Keep It Flat',
-                    subtitle:
-                        'Position your finger flat on a table for maximum accuracy.',
-                  ),
-                  const _MeasureStepTile(
-                    step: 2,
-                    title: 'Use a Reference Coin',
-                    subtitle:
-                        'Place the coin next to your fingernail to use as a measurement guide.',
-                  ),
-                  const _MeasureStepTile(
-                    step: 3,
-                    title: 'Scan with Camera',
-                    subtitle:
-                        "Point your phone's camera to capture both your nail and the reference coin.",
-                  ),
-                  const _MeasureStepTile(
-                    step: 4,
-                    title: 'Confirm Measurement',
-                    subtitle:
-                        "We'll calculate your nail width based on the coin reference.",
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                      ),
-                      child: const Text(
-                        'Continue',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.snow,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        ),
-      ),
-    );
-    return allowed == true;
-  }
-
-  Future<String?> _showCoinSelector() async {
-    final selected = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => CoinSelectorPage(
-          items: coinReferences,
-          progressText: '${_currentMeasuredMap().length}/10',
-          title: 'Select Coin',
-          initialSelection: _measurementCoinReference,
-        ),
-      ),
-    );
-    return selected;
-  }
+  //
+  //   Future<bool> _showMeasurementGuide() async {
+  //     final allowed = await Navigator.of(context).push<bool>(
+  //       MaterialPageRoute(
+  //         fullscreenDialog: true,
+  //         builder: (_) => Semantics(
+  //           scopesRoute: true,
+  //           explicitChildNodes: true,
+  //           namesRoute: true,
+  //           label: 'Nail measurement guide',
+  //           child: Scaffold(
+  //           backgroundColor: AppColors.snow,
+  //           appBar: AppBar(
+  //             backgroundColor: AppColors.snow,
+  //             elevation: 0,
+  //             leading: IconButton(
+  //               tooltip: 'Back',
+  //               icon: const Icon(Icons.arrow_back_rounded),
+  //               onPressed: () => Navigator.pop(context, false),
+  //             ),
+  //             centerTitle: true,
+  //             title: const Text(
+  //               'Nail Measurement',
+  //               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+  //             ),
+  //           ),
+  //           body: SafeArea(
+  //             child: Padding(
+  //               padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+  //               child: Column(
+  //                 crossAxisAlignment: CrossAxisAlignment.stretch,
+  //                 children: [
+  //                   Container(
+  //                     padding: const EdgeInsets.all(16),
+  //                     decoration: BoxDecoration(
+  //                       color: AppColors.snow,
+  //                       borderRadius: BorderRadius.zero,
+  //                       border: Border.all(
+  //                         color: AppColors.blackCat.withValues(alpha: 0.10),
+  //                       ),
+  //                     ),
+  //                     child: const Column(
+  //                       crossAxisAlignment: CrossAxisAlignment.start,
+  //                       children: [
+  //                         Icon(Icons.straighten_rounded, size: 26),
+  //                         SizedBox(height: 12),
+  //                         Text(
+  //                           'How to Measure Your Nails',
+  //                           style: TextStyle(
+  //                             fontWeight: FontWeight.w700,
+  //                             fontSize: 18,
+  //                           ),
+  //                         ),
+  //                         SizedBox(height: 8),
+  //                         Text(
+  //                           "We'll use a coin or currency as a reference guide to accurately measure your nail width.",
+  //                           style: TextStyle(fontSize: 14),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 16),
+  //                   const _MeasureStepTile(
+  //                     step: 1,
+  //                     title: 'Keep It Flat',
+  //                     subtitle:
+  //                         'Position your finger flat on a table for maximum accuracy.',
+  //                   ),
+  //                   const _MeasureStepTile(
+  //                     step: 2,
+  //                     title: 'Use a Reference Coin',
+  //                     subtitle:
+  //                         'Place the coin next to your fingernail to use as a measurement guide.',
+  //                   ),
+  //                   const _MeasureStepTile(
+  //                     step: 3,
+  //                     title: 'Scan with Camera',
+  //                     subtitle:
+  //                         "Point your phone's camera to capture both your nail and the reference coin.",
+  //                   ),
+  //                   const _MeasureStepTile(
+  //                     step: 4,
+  //                     title: 'Confirm Measurement',
+  //                     subtitle:
+  //                         "We'll calculate your nail width based on the coin reference.",
+  //                   ),
+  //                   const Spacer(),
+  //                   SizedBox(
+  //                     height: 52,
+  //                     child: ElevatedButton(
+  //                       onPressed: () => Navigator.pop(context, true),
+  //                       style: ElevatedButton.styleFrom(
+  //                         backgroundColor: AppColors.blackCat,
+  //                         foregroundColor: AppColors.snow,
+  //                         shape: const RoundedRectangleBorder(
+  //                           borderRadius: BorderRadius.zero,
+  //                         ),
+  //                       ),
+  //                       child: const Text(
+  //                         'Continue',
+  //                         style: TextStyle(
+  //                           fontWeight: FontWeight.w700,
+  //                           color: AppColors.snow,
+  //                         ),
+  //                       ),
+  //                     ),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ),
+  //           ),
+  //         ),
+  //         ),
+  //       ),
+  //     );
+  //     return allowed == true;
+  //   }
+  //
+  //   Future<String?> _showCoinSelector() async {
+  //     final selected = await Navigator.of(context).push<String>(
+  //       MaterialPageRoute(
+  //         fullscreenDialog: true,
+  //         builder: (_) => CoinSelectorPage(
+  //           items: coinReferences,
+  //           progressText: '${_currentMeasuredMap().length}/10',
+  //           title: 'Select Coin',
+  //           initialSelection: _measurementCoinReference,
+  //         ),
+  //       ),
+  //     );
+  //     return selected;
+  //   }
+  //
+  //   Future<void> _startGuidedNailMeasurement() async {
+  //     if (!mounted) return;
+  //     final proceed = await _showMeasurementGuide();
+  //     if (!proceed || !mounted) return;
+  //
+  //     final selectedCoin = await _showCoinSelector();
+  //     if (selectedCoin == null || selectedCoin.trim().isEmpty || !mounted) {
+  //       return;
+  //     }
+  //     _measurementCoinReference = selectedCoin;
+  //
+  //     final measured = _currentMeasuredMap();
+  //     var stepIndex = 0;
+  //     var measuring = false;
+  //     var sheetClosed = false;
+  //     final pageContext = context;
+  //
+  //     await showModalBottomSheet<void>(
+  //       context: context,
+  //       isScrollControlled: true,
+  //       backgroundColor: AppColors.blackCat,
+  //       builder: (sheetContext) {
+  //         return StatefulBuilder(
+  //           builder: (modalContext, setModalState) {
+  //             final step = _nailCaptureSteps[stepIndex];
+  //             final progressLabel =
+  //                 '${measured.length}/${_nailCaptureSteps.length}';
+  //
+  //             Future<void> saveCurrentAndMoveNext(double mm) async {
+  //               if (!mm.isFinite || mm <= 0) {
+  //                 _registrationLog('invalid measurement for ${step.key}: $mm');
+  //                 ScaffoldMessenger.of(pageContext).showSnackBar(
+  //                   const SnackBar(
+  //                     content: Text(
+  //                       'Invalid measurement value. Please try again.',
+  //                     ),
+  //                   ),
+  //                 );
+  //                 return;
+  //               }
+  //               _registrationLog('saving measurement ${step.key} => $mm');
+  //               measured[step.key] = (mm * 10).roundToDouble() / 10.0;
+  //               _persistMeasuredMap(measured);
+  //               if (stepIndex < _nailCaptureSteps.length - 1) {
+  //                 _registrationLog('moving to next step index=${stepIndex + 1}');
+  //                 setModalState(() => stepIndex += 1);
+  //               } else {
+  //                 _registrationLog(
+  //                   'final step complete; closing measurement sheet',
+  //                 );
+  //                 sheetClosed = true;
+  //                 Navigator.of(sheetContext).pop();
+  //                 ScaffoldMessenger.of(pageContext).showSnackBar(
+  //                   const SnackBar(
+  //                     content: Text('Nail measurements saved for both hands.'),
+  //                   ),
+  //                 );
+  //               }
+  //             }
+  //
+  //             Future<void> captureCurrentStep() async {
+  //               if (measuring) return;
+  //               setModalState(() => measuring = true);
+  //               try {
+  //                 _registrationLog('opening camera for ${step.key}');
+  //                 final image = await _picker.pickImage(
+  //                   source: ImageSource.camera,
+  //                   imageQuality: 80,
+  //                   maxWidth: 1080,
+  //                   maxHeight: 1080,
+  //                 );
+  //                 if (image == null) {
+  //                   _registrationLog('camera canceled for ${step.key}');
+  //                   return;
+  //                 }
+  //
+  //                 final bytes = await image.readAsBytes();
+  //                 _guidedMeasurementPhotos[step.key] = bytes;
+  //                 _registrationLog(
+  //                   'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
+  //                 );
+  //
+  //                 final mm = await _askManualMeasurement(step.title);
+  //                 if (mm == null) return;
+  //                 await saveCurrentAndMoveNext(mm);
+  //               } catch (_) {
+  //                 _registrationLog('capture failed for ${step.key}');
+  //                 if (mounted) {
+  //                   ScaffoldMessenger.of(pageContext).showSnackBar(
+  //                     const SnackBar(
+  //                       content: Text(
+  //                         'Unable to measure from photo. Please try again.',
+  //                       ),
+  //                     ),
+  //                   );
+  //                 }
+  //               } finally {
+  //                 if (mounted && !sheetClosed) {
+  //                   setModalState(() => measuring = false);
+  //                 }
+  //               }
+  //             }
+  //
+  //             return SafeArea(
+  //               child: Container(
+  //                 decoration: const BoxDecoration(
+  //                   color: AppColors.snow,
+  //                   borderRadius: BorderRadius.zero,
+  //                 ),
+  //                 padding: EdgeInsets.fromLTRB(
+  //                   16,
+  //                   14,
+  //                   16,
+  //                   16 + MediaQuery.of(modalContext).viewInsets.bottom,
+  //                 ),
+  //                 child: Column(
+  //                   mainAxisSize: MainAxisSize.min,
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: [
+  //                     Row(
+  //                       children: [
+  //                         const Expanded(
+  //                           child: Text(
+  //                             'Measure Your Nail',
+  //                             style: TextStyle(
+  //                               fontWeight: FontWeight.w700,
+  //                               fontSize: 16,
+  //                               color: AppColors.blackCat,
+  //                             ),
+  //                           ),
+  //                         ),
+  //                         Text(
+  //                           progressLabel,
+  //                           style: const TextStyle(
+  //                             fontWeight: FontWeight.w700,
+  //                             fontSize: 15,
+  //                             color: AppColors.blackCat,
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                     const SizedBox(height: 10),
+  //                     SizedBox(
+  //                       height: 40,
+  //                       child: ListView.separated(
+  //                         scrollDirection: Axis.horizontal,
+  //                         itemBuilder: (_, i) {
+  //                           final s = _nailCaptureSteps[i];
+  //                           final done = measured[s.key] != null;
+  //                           final current = i == stepIndex;
+  //                           return Semantics(
+  //                             button: true,
+  //                             selected: current,
+  //                             label:
+  //                                 '${s.title}${done ? ', measured' : ', not measured'}',
+  //                             onTap: () =>
+  //                                 setModalState(() => stepIndex = i),
+  //                             child: ExcludeSemantics(
+  //                               child: InkWell(
+  //                                 onTap: () =>
+  //                                     setModalState(() => stepIndex = i),
+  //                                 child: Container(
+  //                                   padding: const EdgeInsets.symmetric(
+  //                                     horizontal: 10,
+  //                                     vertical: 8,
+  //                                   ),
+  //                                   decoration: BoxDecoration(
+  //                                     color: current
+  //                                         ? AppColors.blackCat
+  //                                         : (done
+  //                                               ? AppColors.balletSlippers
+  //                                               : AppColors.snow),
+  //                                     border: Border.all(
+  //                                       color: current
+  //                                           ? AppColors.blackCat
+  //                                           : AppColors.blackCat.withValues(
+  //                                               alpha: 0.12,
+  //                                             ),
+  //                                     ),
+  //                                     borderRadius: BorderRadius.zero,
+  //                                   ),
+  //                                   child: Text(
+  //                                     s.finger,
+  //                                     style: TextStyle(
+  //                                       color: current
+  //                                           ? AppColors.snow
+  //                                           : AppColors.blackCat,
+  //                                       fontWeight: FontWeight.w700,
+  //                                       fontSize: 12,
+  //                                     ),
+  //                                   ),
+  //                                 ),
+  //                               ),
+  //                             ),
+  //                           );
+  //                         },
+  //                         separatorBuilder: (_, _) => const SizedBox(width: 8),
+  //                         itemCount: _nailCaptureSteps.length,
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 12),
+  //                     Container(
+  //                       width: double.infinity,
+  //                       height: 320,
+  //                       decoration: const BoxDecoration(
+  //                         color: AppColors.blackCat,
+  //                         borderRadius: BorderRadius.zero,
+  //                       ),
+  //                       child: Center(
+  //                         child: Column(
+  //                           mainAxisSize: MainAxisSize.min,
+  //                           children: [
+  //                             const Icon(
+  //                               Icons.camera_alt_rounded,
+  //                               size: 70,
+  //                               color: AppColors.snow,
+  //                             ),
+  //                             const SizedBox(height: 10),
+  //                             Text(
+  //                               'Scan your ${step.title}',
+  //                               style: const TextStyle(
+  //                                 color: AppColors.snow,
+  //                                 fontWeight: FontWeight.w700,
+  //                                 fontSize: 18,
+  //                               ),
+  //                             ),
+  //                           ],
+  //                         ),
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     Text(
+  //                       'Reference: $_measurementCoinReference',
+  //                       style: const TextStyle(
+  //                         color: AppColors.blackCat,
+  //                         fontWeight: FontWeight.w500,
+  //                         fontSize: 14,
+  //                         fontFamily: 'ArialBold',
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 6),
+  //                     const Text(
+  //                       'Enter width in mm for each finger (you can re-image any finger and latest value is saved).',
+  //                       style: TextStyle(
+  //                         color: AppColors.blackCat,
+  //                         fontSize: 13,
+  //                         fontFamily: 'Arial',
+  //                         fontWeight: FontWeight.w500,
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 10),
+  //                     Container(
+  //                       width: double.infinity,
+  //                       padding: const EdgeInsets.all(10),
+  //                       decoration: const BoxDecoration(
+  //                         color: AppColors.snow,
+  //                         borderRadius: BorderRadius.zero,
+  //                       ),
+  //                       child: const Text(
+  //                         'Captured photos will upload with your client-artist account when you sign up.',
+  //                         style: TextStyle(fontSize: 12),
+  //                       ),
+  //                     ),
+  //                     const SizedBox(height: 12),
+  //                     Row(
+  //                       children: [
+  //                         Expanded(
+  //                           child: OutlinedButton(
+  //                             onPressed: measuring
+  //                                 ? null
+  //                                 : () async {
+  //                                     try {
+  //                                       _registrationLog(
+  //                                         'manual entry opened for ${step.key}',
+  //                                       );
+  //                                       final manual =
+  //                                           await _askManualMeasurement(
+  //                                             step.title,
+  //                                           );
+  //                                       if (manual == null) return;
+  //                                       await saveCurrentAndMoveNext(manual);
+  //                                     } catch (e) {
+  //                                       _registrationLog(
+  //                                         'manual save failed for ${step.key}: $e',
+  //                                       );
+  //                                     }
+  //                                   },
+  //                             style: OutlinedButton.styleFrom(
+  //                               shape: const RoundedRectangleBorder(
+  //                                 borderRadius: BorderRadius.zero,
+  //                               ),
+  //                             ),
+  //                             child: const Text('Enter Manually'),
+  //                           ),
+  //                         ),
+  //                         const SizedBox(width: 10),
+  //                         Expanded(
+  //                           child: ElevatedButton.icon(
+  //                             onPressed: measuring ? null : captureCurrentStep,
+  //                             icon: measuring
+  //                                 ? const SizedBox(
+  //                                     width: 14,
+  //                                     height: 14,
+  //                                     child: CircularProgressIndicator(
+  //                                       strokeWidth: 2,
+  //                                     ),
+  //                                   )
+  //                                 : const Icon(Icons.camera_alt_outlined),
+  //                             label: Text(
+  //                               measuring
+  //                                   ? 'Measuring...'
+  //                                   : (measured[step.key] == null
+  //                                         ? 'Capture'
+  //                                         : 'Re-image'),
+  //                             ),
+  //                             style: ElevatedButton.styleFrom(
+  //                               shape: const RoundedRectangleBorder(
+  //                                 borderRadius: BorderRadius.zero,
+  //                               ),
+  //                               backgroundColor: AppColors.blackCat,
+  //                               foregroundColor: AppColors.snow,
+  //                             ),
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                     const SizedBox(height: 8),
+  //                     TextButton(
+  //                       onPressed: () async {
+  //                         final nextCoin = await _showCoinSelector();
+  //                         if (nextCoin == null || nextCoin.trim().isEmpty) return;
+  //                         setModalState(
+  //                           () => _measurementCoinReference = nextCoin,
+  //                         );
+  //                       },
+  //                       child: const Text('Change Coin/Currency'),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ),
+  //             );
+  //           },
+  //         );
+  //       },
+  //     );
+  //   }
+  // ---- end of old 10-photo (one per finger) guided measurement flow ----
 
   Future<void> _startGuidedNailMeasurement() async {
+    debugPrint(
+      '[FullHandMeasurement] Capture Photo button tapped (client_artist_registration_page)',
+    );
     if (!mounted) return;
-    final proceed = await _showMeasurementGuide();
-    if (!proceed || !mounted) return;
-
-    final selectedCoin = await _showCoinSelector();
-    if (selectedCoin == null || selectedCoin.trim().isEmpty || !mounted) {
-      return;
-    }
-    _measurementCoinReference = selectedCoin;
-
-    final measured = _currentMeasuredMap();
-    var stepIndex = 0;
-    var measuring = false;
-    var sheetClosed = false;
-    final pageContext = context;
-
-    await showModalBottomSheet<void>(
+    final result = await showFullHandMeasurementFlow(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.blackCat,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (modalContext, setModalState) {
-            final step = _nailCaptureSteps[stepIndex];
-            final progressLabel =
-                '${measured.length}/${_nailCaptureSteps.length}';
-
-            Future<void> saveCurrentAndMoveNext(double mm) async {
-              if (!mm.isFinite || mm <= 0) {
-                _registrationLog('invalid measurement for ${step.key}: $mm');
-                ScaffoldMessenger.of(pageContext).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Invalid measurement value. Please try again.',
-                    ),
-                  ),
-                );
-                return;
-              }
-              _registrationLog('saving measurement ${step.key} => $mm');
-              measured[step.key] = (mm * 10).roundToDouble() / 10.0;
-              _persistMeasuredMap(measured);
-              if (stepIndex < _nailCaptureSteps.length - 1) {
-                _registrationLog('moving to next step index=${stepIndex + 1}');
-                setModalState(() => stepIndex += 1);
-              } else {
-                _registrationLog(
-                  'final step complete; closing measurement sheet',
-                );
-                sheetClosed = true;
-                Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(pageContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Nail measurements saved for both hands.'),
-                  ),
-                );
-              }
-            }
-
-            Future<void> captureCurrentStep() async {
-              if (measuring) return;
-              setModalState(() => measuring = true);
-              try {
-                _registrationLog('opening camera for ${step.key}');
-                final image = await _picker.pickImage(
-                  source: ImageSource.camera,
-                  imageQuality: 80,
-                  maxWidth: 1080,
-                  maxHeight: 1080,
-                );
-                if (image == null) {
-                  _registrationLog('camera canceled for ${step.key}');
-                  return;
-                }
-
-                final bytes = await image.readAsBytes();
-                _guidedMeasurementPhotos[step.key] = bytes;
-                _registrationLog(
-                  'captured photo for ${step.key}: ${bytes.lengthInBytes} bytes',
-                );
-
-                final mm = await _askManualMeasurement(step.title);
-                if (mm == null) return;
-                await saveCurrentAndMoveNext(mm);
-              } catch (_) {
-                _registrationLog('capture failed for ${step.key}');
-                if (mounted) {
-                  ScaffoldMessenger.of(pageContext).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Unable to measure from photo. Please try again.',
-                      ),
-                    ),
-                  );
-                }
-              } finally {
-                if (mounted && !sheetClosed) {
-                  setModalState(() => measuring = false);
-                }
-              }
-            }
-
-            return SafeArea(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  14,
-                  16,
-                  16 + MediaQuery.of(modalContext).viewInsets.bottom,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Measure Your Nail',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          progressLabel,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: AppColors.blackCat,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 40,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemBuilder: (_, i) {
-                          final s = _nailCaptureSteps[i];
-                          final done = measured[s.key] != null;
-                          final current = i == stepIndex;
-                          return Semantics(
-                            button: true,
-                            selected: current,
-                            label:
-                                '${s.title}${done ? ', measured' : ', not measured'}',
-                            onTap: () =>
-                                setModalState(() => stepIndex = i),
-                            child: ExcludeSemantics(
-                              child: InkWell(
-                                onTap: () =>
-                                    setModalState(() => stepIndex = i),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: current
-                                        ? AppColors.blackCat
-                                        : (done
-                                              ? AppColors.balletSlippers
-                                              : AppColors.snow),
-                                    border: Border.all(
-                                      color: current
-                                          ? AppColors.blackCat
-                                          : AppColors.blackCat.withValues(
-                                              alpha: 0.12,
-                                            ),
-                                    ),
-                                    borderRadius: BorderRadius.zero,
-                                  ),
-                                  child: Text(
-                                    s.finger,
-                                    style: TextStyle(
-                                      color: current
-                                          ? AppColors.snow
-                                          : AppColors.blackCat,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                        separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemCount: _nailCaptureSteps.length,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      height: 320,
-                      decoration: const BoxDecoration(
-                        color: AppColors.blackCat,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.camera_alt_rounded,
-                              size: 70,
-                              color: AppColors.snow,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Scan your ${step.title}',
-                              style: const TextStyle(
-                                color: AppColors.snow,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Reference: $_measurementCoinReference',
-                      style: const TextStyle(
-                        color: AppColors.blackCat,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        fontFamily: 'ArialBold',
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Enter width in mm for each finger (you can re-image any finger and latest value is saved).',
-                      style: TextStyle(
-                        color: AppColors.blackCat,
-                        fontSize: 13,
-                        fontFamily: 'Arial',
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: AppColors.snow,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      child: const Text(
-                        'Captured photos will upload with your client-artist account when you sign up.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: measuring
-                                ? null
-                                : () async {
-                                    try {
-                                      _registrationLog(
-                                        'manual entry opened for ${step.key}',
-                                      );
-                                      final manual =
-                                          await _askManualMeasurement(
-                                            step.title,
-                                          );
-                                      if (manual == null) return;
-                                      await saveCurrentAndMoveNext(manual);
-                                    } catch (e) {
-                                      _registrationLog(
-                                        'manual save failed for ${step.key}: $e',
-                                      );
-                                    }
-                                  },
-                            style: OutlinedButton.styleFrom(
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            child: const Text('Enter Manually'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: measuring ? null : captureCurrentStep,
-                            icon: measuring
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.camera_alt_outlined),
-                            label: Text(
-                              measuring
-                                  ? 'Measuring...'
-                                  : (measured[step.key] == null
-                                        ? 'Capture'
-                                        : 'Re-image'),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () async {
-                        final nextCoin = await _showCoinSelector();
-                        if (nextCoin == null || nextCoin.trim().isEmpty) return;
-                        setModalState(
-                          () => _measurementCoinReference = nextCoin,
-                        );
-                      },
-                      child: const Text('Change Coin/Currency'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      initialMeasured: _currentMeasuredMap(),
+      photosOut: _guidedMeasurementPhotos,
+      initialCoinReference: _measurementCoinReference,
+    );
+    if (result == null || !mounted) return;
+    _persistMeasuredMap(result);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Nail measurements saved for both hands.')),
     );
   }
 
@@ -3366,6 +3434,10 @@ class _ClientArtistRegistrationPageState
 
   Future<void> _continue() async {
     if (!await _validateCurrentRegistrationStep()) return;
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(_dateOfBirth!)) {
+      await _showAgeIneligibleDialog();
+      return;
+    }
 
     if (!kAllowRegistrationWithoutCheckout) {
       if (!_canStartCheckout) {
@@ -3420,10 +3492,9 @@ class _ClientArtistRegistrationPageState
         // instead of silently attaching a second role to it. Same-role (or
         // no role data yet — a prior signup that never finished writing
         // its row) is a safe repair/resubmit case.
-        final existingRole =
-            await SupabaseAuthService.findExistingRoleForEmail(
-              _emailCtrl.text,
-            );
+        final existingRole = await SupabaseAuthService.findExistingRoleForEmail(
+          _emailCtrl.text,
+        );
         if (existingRole != null && existingRole != 'client_artist') {
           throw const AuthException(
             SupabaseAuthService.emailAlreadyRegisteredMessage,
@@ -3509,6 +3580,7 @@ class _ClientArtistRegistrationPageState
     _registrationScrollController.dispose();
     _profilePhotoFocusNode.dispose();
     _emailCtrl.dispose();
+    _dateOfBirthCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
     _phoneCtrl.dispose();
@@ -3673,30 +3745,30 @@ class _ClientArtistRegistrationPageState
                               isRequired: true,
                               textField: true,
                               child: TextFormField(
-                              controller: _phoneCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(10),
-                                UsPhoneTextInputFormatter(),
-                              ],
-                              onChanged: field.didChange,
-                              decoration: InputDecoration(
-                                hintText: 'Enter 10-digit phone',
-                                hintStyle: TextStyle(
-                                  fontSize: _hintFs - 0.5,
-                                  color: _blackCat.withValues(alpha: 0.45),
-                                  fontFamily: 'Arial',
+                                controller: _phoneCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(10),
+                                  UsPhoneTextInputFormatter(),
+                                ],
+                                onChanged: field.didChange,
+                                decoration: InputDecoration(
+                                  hintText: 'Enter 10-digit phone',
+                                  hintStyle: TextStyle(
+                                    fontSize: _hintFs - 0.5,
+                                    color: _blackCat.withValues(alpha: 0.45),
+                                    fontFamily: 'Arial',
+                                  ),
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: _fieldVerticalPadding,
+                                  ),
+                                  isDense: false,
                                 ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: _fieldVerticalPadding,
-                                ),
-                                isDense: false,
-                              ),
                               ),
                             ),
                           ),
@@ -3737,6 +3809,26 @@ class _ClientArtistRegistrationPageState
               ),
             ),
             _buildEmailAvailabilityStatus(),
+            const SizedBox(height: 16),
+            _FieldLabel.required('Date of Birth'),
+            const SizedBox(height: 6),
+            _req(
+              true,
+              TextFormField(
+                controller: _dateOfBirthCtrl,
+                readOnly: true,
+                onTap: _pickDateOfBirth,
+                decoration: _dec(
+                  'Date of Birth',
+                  'MM/DD/YYYY',
+                  suffixIcon: const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 18,
+                  ),
+                ),
+                validator: _dateOfBirthValidator,
+              ),
+            ),
           ],
         ),
       ),
@@ -3780,11 +3872,15 @@ class _ClientArtistRegistrationPageState
                   'Enter Password',
                   suffixIcon: IconButton(
                     iconSize: 18,
-                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                    tooltip: _obscurePassword
+                        ? 'Show password'
+                        : 'Hide password',
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                     ),
                   ),
                 ),
@@ -3800,29 +3896,29 @@ class _ClientArtistRegistrationPageState
             _req(
               true,
               TextFormField(
-              controller: _confirmCtrl,
-              style: const TextStyle(fontSize: _inputFs),
-              obscureText: _obscureConfirmPassword,
-              decoration: _dec(
-                'Confirm Password',
-                'Re-enter Password',
-                suffixIcon: IconButton(
-                  iconSize: 18,
-                  tooltip: _obscureConfirmPassword
-                      ? 'Show password'
-                      : 'Hide password',
-                  onPressed: () => setState(
-                    () => _obscureConfirmPassword = !_obscureConfirmPassword,
-                  ),
-                  icon: Icon(
-                    _obscureConfirmPassword
-                        ? Icons.visibility_off
-                        : Icons.visibility,
+                controller: _confirmCtrl,
+                style: const TextStyle(fontSize: _inputFs),
+                obscureText: _obscureConfirmPassword,
+                decoration: _dec(
+                  'Confirm Password',
+                  'Re-enter Password',
+                  suffixIcon: IconButton(
+                    iconSize: 18,
+                    tooltip: _obscureConfirmPassword
+                        ? 'Show password'
+                        : 'Hide password',
+                    onPressed: () => setState(
+                      () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                    ),
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
                   ),
                 ),
-              ),
-              validator: _confirmPasswordValidator,
-              onChanged: _onConfirmPasswordChanged,
+                validator: _confirmPasswordValidator,
+                onChanged: _onConfirmPasswordChanged,
               ),
             ),
             _buildConfirmPasswordStatus(),
@@ -4069,13 +4165,24 @@ class _ClientArtistRegistrationPageState
               ),
               const SizedBox(height: 6),
               Text(
-                'Capture each finger photo here. The photos will upload with your client-artist account when you sign up.',
+                'Capture 2 photos per hand (4 fingers, then thumb). The photos will upload with your client-artist account when you sign up.',
                 style: TextStyle(
                   color: AppColors.blackCat.withValues(alpha: 0.72),
                   fontSize: 14,
                 ),
               ),
               const SizedBox(height: 10),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _consentToStoreNailImages,
+                onChanged: (value) =>
+                    setState(() => _consentToStoreNailImages = value ?? false),
+                title: const Text(
+                  'Do you consent to store the nail image',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -4199,43 +4306,57 @@ class _ClientArtistRegistrationPageState
                     label: 'Add portfolio image',
                     onTap: _pickPortfolioImages,
                     child: ExcludeSemantics(
-                    child: InkWell(
-                    onTap: _pickPortfolioImages,
-                    borderRadius: BorderRadius.zero,
-                    child: Container(
-                      width: 86,
-                      height: 86,
-                      decoration: BoxDecoration(
-                        color: _snow,
+                      child: InkWell(
+                        onTap: _pickPortfolioImages,
                         borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: AppColors.blackCat.withValues(alpha: 0.10),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.add_photo_alternate_outlined,
-                            color: AppColors.blackCat.withValues(alpha: 0.9),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Add',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
+                        child: Container(
+                          width: 86,
+                          height: 86,
+                          decoration: BoxDecoration(
+                            color: _snow,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCat.withValues(alpha: 0.10),
                             ),
                           ),
-                        ],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_photo_alternate_outlined,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.9,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Add',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  ),
                   ),
               ],
             ),
             const SizedBox(height: 16),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _consentToStoreAndPublishPortfolio,
+              onChanged: (value) => setState(
+                () => _consentToStoreAndPublishPortfolio = value ?? false,
+              ),
+              title: const Text(
+                'Do you consent to store the Portfolio pics and reveal to public',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
             if (_portfolioImages.isEmpty)
               Container(
                 padding: const EdgeInsets.all(14),
@@ -4347,30 +4468,30 @@ class _ClientArtistRegistrationPageState
             Semantics(
               button: true,
               child: InkWell(
-              onTap: () => setState(() {
-                _showYearCalendar = !_showYearCalendar;
-                if (_showYearCalendar) {
-                  _yearCalendarNonce = DateTime.now().millisecondsSinceEpoch;
-                }
-              }),
-              child: Row(
-                children: [
-                  Icon(
-                    _showYearCalendar ? Icons.expand_less : Icons.expand_more,
-                    color: AppColors.blackCat.withValues(alpha: 0.6),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _showYearCalendar
-                        ? 'Hide year calendar'
-                        : 'Show year calendar',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
+                onTap: () => setState(() {
+                  _showYearCalendar = !_showYearCalendar;
+                  if (_showYearCalendar) {
+                    _yearCalendarNonce = DateTime.now().millisecondsSinceEpoch;
+                  }
+                }),
+                child: Row(
+                  children: [
+                    Icon(
+                      _showYearCalendar ? Icons.expand_less : Icons.expand_more,
+                      color: AppColors.blackCat.withValues(alpha: 0.6),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _showYearCalendar
+                          ? 'Hide year calendar'
+                          : 'Show year calendar',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -4629,8 +4750,9 @@ class _ClientArtistRegistrationPageState
                           style: const TextStyle(fontSize: _inputFs),
                           keyboardType: TextInputType.number,
                           decoration: _dec('Min Price (\$) *', '15'),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Required'
+                              : null,
                         ),
                       ),
                     ],
@@ -4650,8 +4772,9 @@ class _ClientArtistRegistrationPageState
                           style: const TextStyle(fontSize: _inputFs),
                           keyboardType: TextInputType.number,
                           decoration: _dec('Max Price (\$) *', '5000'),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Required'
+                              : null,
                         ),
                       ),
                     ],
@@ -4725,9 +4848,9 @@ class _ClientArtistRegistrationPageState
                   _paymentSaved = false;
                 }),
                 child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  RadioListTile<String>(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RadioListTile<String>(
                       value: 'PayPal',
                       dense: true,
                       visualDensity: VisualDensity.compact,
@@ -4780,7 +4903,8 @@ class _ClientArtistRegistrationPageState
                           controller: _venmoHandleCtrl,
                           style: const TextStyle(fontSize: _inputFs),
                           decoration: _dec('Venmo', '@handle or phone/email'),
-                          validator: (v) => _requiredValidator(v, 'Venmo Handle'),
+                          validator: (v) =>
+                              _requiredValidator(v, 'Venmo Handle'),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -4910,7 +5034,10 @@ class _ClientArtistRegistrationPageState
                                       LengthLimitingTextInputFormatter(4),
                                       ExpiryDateTextInputFormatter(),
                                     ],
-                                    decoration: _dec('Expiration Date', 'MM/YY'),
+                                    decoration: _dec(
+                                      'Expiration Date',
+                                      'MM/YY',
+                                    ),
                                     validator: _expiryValidator,
                                   ),
                                 ),
@@ -4953,13 +5080,14 @@ class _ClientArtistRegistrationPageState
                           style: const TextStyle(fontSize: _inputFs),
                           keyboardType: TextInputType.number,
                           decoration: _dec('Zip', 'Zip'),
-                          validator: (v) => _requiredValidator(v, 'Billing Zip'),
+                          validator: (v) =>
+                              _requiredValidator(v, 'Billing Zip'),
                         ),
                       ),
                       const SizedBox(height: 6),
                     ],
-                ],
-              ),
+                  ],
+                ),
               ),
             ),
 
@@ -5130,66 +5258,66 @@ class _ClientArtistRegistrationPageState
               value: _payoutMethod.name,
               required: true,
               child: DropdownButtonFormField<PayoutMethod>(
-              initialValue: _payoutMethod,
-              dropdownColor: _snow,
-              style: const TextStyle(
-                fontSize: _inputFs,
-                color: Colors.black,
-                fontWeight: FontWeight.w700,
-              ),
-              hint: Text(
-                'Select state',
-                style: TextStyle(
+                initialValue: _payoutMethod,
+                dropdownColor: _snow,
+                style: const TextStyle(
                   fontSize: _inputFs,
+                  color: Colors.black,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
-              ),
-              decoration: _dec('Payout Method *', 'Select payout method'),
-              items: const [
-                DropdownMenuItem(
-                  value: PayoutMethod.paypal,
-                  child: Text(
-                    'PayPal',
-                    style: TextStyle(
-                      fontSize: _inputFs,
-                      fontWeight: FontWeight.w400,
-                    ),
+                hint: Text(
+                  'Select state',
+                  style: TextStyle(
+                    fontSize: _inputFs,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat.withValues(alpha: 0.45),
                   ),
                 ),
-                DropdownMenuItem(
-                  value: PayoutMethod.venmo,
-                  child: Text(
-                    'Venmo',
-                    style: TextStyle(
-                      fontSize: _inputFs,
-                      fontWeight: FontWeight.w400,
+                decoration: _dec('Payout Method *', 'Select payout method'),
+                items: const [
+                  DropdownMenuItem(
+                    value: PayoutMethod.paypal,
+                    child: Text(
+                      'PayPal',
+                      style: TextStyle(
+                        fontSize: _inputFs,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                   ),
-                ),
-                DropdownMenuItem(
-                  value: PayoutMethod.bankTransfer,
-                  child: Text(
-                    'Bank Transfer',
-                    style: TextStyle(
-                      fontSize: _inputFs,
-                      fontWeight: FontWeight.w400,
+                  DropdownMenuItem(
+                    value: PayoutMethod.venmo,
+                    child: Text(
+                      'Venmo',
+                      style: TextStyle(
+                        fontSize: _inputFs,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                   ),
-                ),
-                DropdownMenuItem(
-                  value: PayoutMethod.applePay,
-                  child: Text(
-                    'Apple Pay',
-                    style: TextStyle(
-                      fontSize: _inputFs,
-                      fontWeight: FontWeight.w400,
+                  DropdownMenuItem(
+                    value: PayoutMethod.bankTransfer,
+                    child: Text(
+                      'Bank Transfer',
+                      style: TextStyle(
+                        fontSize: _inputFs,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                   ),
-                ),
-              ],
-              onChanged: (v) =>
-                  setState(() => _payoutMethod = v ?? PayoutMethod.paypal),
+                  DropdownMenuItem(
+                    value: PayoutMethod.applePay,
+                    child: Text(
+                      'Apple Pay',
+                      style: TextStyle(
+                        fontSize: _inputFs,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ],
+                onChanged: (v) =>
+                    setState(() => _payoutMethod = v ?? PayoutMethod.paypal),
               ),
             ),
             const SizedBox(height: 6),
@@ -5359,104 +5487,116 @@ class _ClientArtistRegistrationPageState
                 _announceStep(index);
               },
               child: ExcludeSemantics(
-              child: InkWell(
-              onTap: () {
-                setState(() {
-                  _registrationStep = index;
-                  _validationTriggeredStep = null;
-                });
-                _announceStep(index);
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 28,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (index > 0)
-                          Expanded(
-                            child: Container(
-                              height: 1.5,
-                              color: completed
-                                  ? AppColors.blackCat.withValues(alpha: 0.55)
-                                  : AppColors.blackCat.withValues(alpha: 0.18),
-                            ),
-                          )
-                        else
-                          const Spacer(),
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: (selected || completed)
-                                ? AppColors.blackCat
-                                : AppColors.blackCat.withValues(alpha: 0.10),
-                          ),
-                          child: completed
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 15,
-                                  color: AppColors.snow,
-                                )
-                              : Text(
-                                  '${index + 1}',
-                                  style: TextStyle(
-                                    fontFamily: 'Arial',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: selected
-                                        ? AppColors.snow
-                                        : AppColors.blackCat,
-                                  ),
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      _registrationStep = index;
+                      _validationTriggeredStep = null;
+                    });
+                    _announceStep(index);
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 28,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (index > 0)
+                              Expanded(
+                                child: Container(
+                                  height: 1.5,
+                                  color: completed
+                                      ? AppColors.blackCat.withValues(
+                                          alpha: 0.55,
+                                        )
+                                      : AppColors.blackCat.withValues(
+                                          alpha: 0.18,
+                                        ),
                                 ),
-                        ),
-                        const SizedBox(width: 6),
-                        if (showConnector)
-                          Expanded(
-                            child: Container(
-                              height: 1.5,
-                              color: (completed || selected)
-                                  ? AppColors.blackCat.withValues(alpha: 0.55)
-                                  : AppColors.blackCat.withValues(alpha: 0.18),
+                              )
+                            else
+                              const Spacer(),
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: (selected || completed)
+                                    ? AppColors.blackCat
+                                    : AppColors.blackCat.withValues(
+                                        alpha: 0.10,
+                                      ),
+                              ),
+                              child: completed
+                                  ? const Icon(
+                                      Icons.check,
+                                      size: 15,
+                                      color: AppColors.snow,
+                                    )
+                                  : Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        fontFamily: 'Arial',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: selected
+                                            ? AppColors.snow
+                                            : AppColors.blackCat,
+                                      ),
+                                    ),
                             ),
-                          )
-                        else
-                          const Spacer(),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 30,
-                    child: Text(
-                      _registrationStepTitles[index],
-                      textAlign: TextAlign.center,
-                      softWrap: true,
-                      style: TextStyle(
-                        fontFamily: 'Arial',
-                        fontSize: 9,
-                        fontWeight: selected
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: AppColors.blackCat.withValues(
-                          alpha: selected ? 1 : 0.65,
+                            const SizedBox(width: 6),
+                            if (showConnector)
+                              Expanded(
+                                child: Container(
+                                  height: 1.5,
+                                  color: (completed || selected)
+                                      ? AppColors.blackCat.withValues(
+                                          alpha: 0.55,
+                                        )
+                                      : AppColors.blackCat.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                ),
+                              )
+                            else
+                              const Spacer(),
+                          ],
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 30,
+                        child: Text(
+                          _registrationStepTitles[index],
+                          textAlign: TextAlign.center,
+                          softWrap: true,
+                          style: TextStyle(
+                            fontFamily: 'Arial',
+                            fontSize: 9,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: AppColors.blackCat.withValues(
+                              alpha: selected ? 1 : 0.65,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 3,
+                        color: selected
+                            ? AppColors.blackCat
+                            : Colors.transparent,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                  Container(
-                    height: 3,
-                    color: selected ? AppColors.blackCat : Colors.transparent,
-                  ),
-                ],
-              ),
-            ),
+                ),
               ),
             ),
           );
@@ -5645,124 +5785,124 @@ class _ClientArtistRegistrationPageState
         namesRoute: true,
         label: 'Client artist registration',
         child: Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: JntModalAppBar(
-          onClose: () => Navigator.of(
-            context,
-            rootNavigator: true,
-          ).pushNamedAndRemoveUntil('/register', (route) => false),
-          closeTooltip: 'Close client-artist registration',
-          closeIcon: const Icon(Icons.close),
-        ),
-        body: SafeArea(
-          child: Form(
-            key: _formKey,
-            autovalidateMode: _validationTriggeredStep == _registrationStep
-                ? AutovalidateMode.always
-                : AutovalidateMode.disabled,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              child: Column(
-                children: [
-                  _registrationProgressTabs(),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: _registrationScrollController,
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Column(
-                        children: _currentRegistrationStepWidgets(),
+          backgroundColor: AppColors.snow,
+          appBar: JntModalAppBar(
+            onClose: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            closeTooltip: 'Close client-artist registration',
+            closeIcon: const Icon(Icons.close),
+          ),
+          body: SafeArea(
+            child: Form(
+              key: _formKey,
+              autovalidateMode: _validationTriggeredStep == _registrationStep
+                  ? AutovalidateMode.always
+                  : AutovalidateMode.disabled,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                child: Column(
+                  children: [
+                    _registrationProgressTabs(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _registrationScrollController,
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Column(
+                          children: _currentRegistrationStepWidgets(),
+                        ),
                       ),
                     ),
-                  ),
-                  _wizardNavButtons(),
-                ],
+                    _wizardNavButtons(),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
         ),
       ),
     );
   }
 }
 
-class _NailCaptureStep {
-  const _NailCaptureStep({
-    required this.key,
-    required this.hand,
-    required this.finger,
-    required this.title,
-  });
-
-  final String key;
-  final String hand;
-  final String finger;
-  final String title;
-}
-
-class _MeasureStepTile extends StatelessWidget {
-  const _MeasureStepTile({
-    required this.step,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final int step;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: AppColors.blackCat,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '$step',
-              style: const TextStyle(
-                color: AppColors.snow,
-                fontWeight: FontWeight.w700,
-                fontSize: 20,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black.withValues(alpha: 0.72),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// class _NailCaptureStep {
+//   const _NailCaptureStep({
+//     required this.key,
+//     required this.hand,
+//     required this.finger,
+//     required this.title,
+//   });
+//
+//   final String key;
+//   final String hand;
+//   final String finger;
+//   final String title;
+// }
+//
+// class _MeasureStepTile extends StatelessWidget {
+//   const _MeasureStepTile({
+//     required this.step,
+//     required this.title,
+//     required this.subtitle,
+//   });
+//
+//   final int step;
+//   final String title;
+//   final String subtitle;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Padding(
+//       padding: const EdgeInsets.only(bottom: 10),
+//       child: Row(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Container(
+//             width: 42,
+//             height: 42,
+//             alignment: Alignment.center,
+//             decoration: const BoxDecoration(
+//               color: AppColors.blackCat,
+//               shape: BoxShape.circle,
+//             ),
+//             child: Text(
+//               '$step',
+//               style: const TextStyle(
+//                 color: AppColors.snow,
+//                 fontWeight: FontWeight.w700,
+//                 fontSize: 20,
+//               ),
+//             ),
+//           ),
+//           const SizedBox(width: 12),
+//           Expanded(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   title,
+//                   style: const TextStyle(
+//                     fontWeight: FontWeight.w700,
+//                     fontSize: 16,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 2),
+//                 Text(
+//                   subtitle,
+//                   style: TextStyle(
+//                     fontSize: 14,
+//                     color: Colors.black.withValues(alpha: 0.72),
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
 class _CoinReference {
   const _CoinReference({
@@ -5778,6 +5918,7 @@ class _CoinReference {
   final String icon;
 }
 
+// ignore: unused_element
 const List<_CoinReference> _coinReferences = <_CoinReference>[
   _CoinReference(
     group: 'UNITED STATES',
@@ -5884,47 +6025,50 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
             button: true,
             onTap: () => Navigator.pop(context, item.name),
             child: InkWell(
-          onTap: () => Navigator.pop(context, item.name),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.snow,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(
-                color: AppColors.blackCat.withValues(alpha: 0.12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Text(item.icon, style: const TextStyle(fontSize: 36)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${item.diameterMm.toStringAsFixed(2)}mm diameter',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.blackCat.withValues(alpha: 0.65),
-                        ),
-                      ),
-                    ],
+              onTap: () => Navigator.pop(context, item.name),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(
+                    color: AppColors.blackCat.withValues(alpha: 0.12),
                   ),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    Text(item.icon, style: const TextStyle(fontSize: 36)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${item.diameterMm.toStringAsFixed(2)}mm diameter',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.blackCat.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
           ),
         ),
       );
@@ -5936,64 +6080,64 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
       namesRoute: true,
       label: 'Select measurement coin',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: AppBar(
         backgroundColor: AppColors.snow,
-        elevation: 0,
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
-        centerTitle: true,
-        title: const Text(
-          'Select Coin / Currency',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Choose the coin or currency you will place next to your nail.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    widget.progressText,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _searchCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  hintText: 'Search coin or country',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-                  prefixIcon: Icon(Icons.search),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(child: ListView(children: groupedWidgets)),
-            ],
+        appBar: AppBar(
+          backgroundColor: AppColors.snow,
+          elevation: 0,
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => Navigator.pop(context),
+          ),
+          centerTitle: true,
+          title: const Text(
+            'Select Coin / Currency',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
         ),
-      ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Choose the coin or currency you will place next to your nail.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.progressText,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _searchCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'Search coin or country',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Expanded(child: ListView(children: groupedWidgets)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -6019,7 +6163,12 @@ class _FieldLabel extends StatelessWidget {
           color: AppColors.blackCat,
         ),
         children: requiredField
-            ? const [TextSpan(text: ' *', style: TextStyle(color: Colors.red))]
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ]
             : null,
       ),
     );
@@ -6053,7 +6202,9 @@ Widget _smallCheckboxRow({
                   onChanged: onChanged,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
                   activeColor: AppColors.blackCat,
                   checkColor: AppColors.snow,
                 ),

@@ -2773,7 +2773,7 @@ class _BaseOrderDetails extends StatelessWidget {
                       final selectedReason = result.reason.trim();
                       final normalizedSelectedReason = selectedReason.isNotEmpty
                           ? selectedReason
-                          : 'Change in plans';
+                          : 'Changed my mind on the design';
                       if (normalizedSelectedReason.isEmpty) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -3604,42 +3604,88 @@ class _BaseOrderDetails extends StatelessWidget {
         root: mergedRoot,
         details: payload,
       );
-      if (parsed.main.anySelected) return parsed;
+
+      Future<_FingerNfcSelection?> liveEligibilityFor(String email) async {
+        final normalized = email.trim().toLowerCase();
+        if (normalized.isEmpty) return null;
+        try {
+          final clientRow =
+              await Supabase.instance.client
+                  .from('client')
+                  .select('nail_preferences')
+                  .ilike('email', normalized)
+                  .maybeSingle() ??
+              const <String, dynamic>{};
+          final clientNailPrefs = asMap(clientRow['nail_preferences']);
+          final clientDims = asMap(clientNailPrefs['dimensions']);
+          if (clientDims.isEmpty) return null;
+          final fallback = _FingerNfcSelection.fromEligibleDimensions(
+            clientDims,
+          );
+          return fallback.anySelected ? fallback : null;
+        } catch (_) {
+          return null;
+        }
+      }
 
       // Brand-sourced (open client pool) requests often never snapshot the
       // accepting client's own finger measurements onto the request row --
       // nailPreferences.dimensions stays null there even after acceptance.
       // Fall back to the accepted client's own saved profile measurements.
-      final acceptedClientEmail = _firstNonEmpty(<Object?>[
-        mergedRoot['acceptedByClientEmail'],
-        mergedRoot['accepted_by_client_email'],
-        asMap(mergedRoot['acceptance'])['acceptedByClientEmail'],
-        asMap(payload['acceptance'])['acceptedByClientEmail'],
-      ]).toLowerCase();
-      if (acceptedClientEmail.isEmpty) return parsed;
-
-      try {
-        final clientRow =
-            await Supabase.instance.client
-                .from('client')
-                .select('nail_preferences')
-                .ilike('email', acceptedClientEmail)
-                .maybeSingle() ??
-            const <String, dynamic>{};
-        final clientNailPrefs = asMap(clientRow['nail_preferences']);
-        final clientDims = asMap(clientNailPrefs['dimensions']);
-        if (clientDims.isEmpty) return parsed;
-        final fallbackMain = _FingerNfcSelection.fromEligibleDimensions(
-          clientDims,
-        );
-        if (!fallbackMain.anySelected) return parsed;
-        return _RequestNfcDetails(
-          main: fallbackMain,
-          groupBySlotIndex: parsed.groupBySlotIndex,
-        );
-      } catch (_) {
-        return parsed;
+      var main = parsed.main;
+      if (!main.anySelected) {
+        final acceptedClientEmail = _firstNonEmpty(<Object?>[
+          mergedRoot['acceptedByClientEmail'],
+          mergedRoot['accepted_by_client_email'],
+          asMap(mergedRoot['acceptance'])['acceptedByClientEmail'],
+          asMap(payload['acceptance'])['acceptedByClientEmail'],
+        ]).toLowerCase();
+        final fallbackMain = await liveEligibilityFor(acceptedClientEmail);
+        if (fallbackMain != null) main = fallbackMain;
       }
+
+      // Same gap, per invited client, for a group order: each slot's own
+      // snapshot dimensions are frequently empty even after that client
+      // accepted, so fall back to their own saved profile the same way the
+      // single-client case above does.
+      final groupOrderMap = <String, dynamic>{
+        ...asMap(mergedRoot['groupOrder']),
+        ...asMap(payload['groupOrder']),
+      };
+      List<dynamic> firstNonEmptyList(List<dynamic> values) {
+        for (final value in values) {
+          final list = _listFromDynamic(value);
+          if (list.isNotEmpty) return list;
+        }
+        return const <dynamic>[];
+      }
+
+      final rawGroupClients = firstNonEmptyList([
+        groupOrderMap['clients'],
+        payload['groupClients'],
+        payload['group_clients'],
+        mergedRoot['groupClients'],
+        mergedRoot['group_clients'],
+      ]);
+
+      final groupBySlotIndex = Map<int, _FingerNfcSelection>.from(
+        parsed.groupBySlotIndex,
+      );
+      for (var i = 0; i < rawGroupClients.length; i++) {
+        final client = asMap(rawGroupClients[i]);
+        final slotIndex =
+            _RequestNfcDetails._intValue(client['slotIndex']) ?? (i + 1);
+        if (groupBySlotIndex[slotIndex]?.anySelected ?? false) continue;
+        final clientEmail = _firstNonEmpty(<Object?>[
+          client['clientEmail'],
+          client['client_email'],
+          client['email'],
+        ]);
+        final fallback = await liveEligibilityFor(clientEmail);
+        if (fallback != null) groupBySlotIndex[slotIndex] = fallback;
+      }
+
+      return _RequestNfcDetails(main: main, groupBySlotIndex: groupBySlotIndex);
     } catch (_) {
       return _RequestNfcDetails.empty();
     }
@@ -4984,13 +5030,16 @@ class _CancelOrderDialog extends StatefulWidget {
 
 class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   final TextEditingController _reasonCtrl = TextEditingController();
-  String _selected = 'Change in plans';
+  String _selected = 'Changed my mind on the design';
+  String _error = '';
 
-  static const List<String> _reasons = [
-    'Change in plans',
-    'Budget concerns',
-    'Unsatisfied with progress',
-  ];
+  static const Map<String, String> _reasons = {
+    'Changed my mind on the design': 'Want to rebrief or rebuild the look',
+    'Not sure about my measurements': 'Want to redo the fit quiz first',
+    'Timing no longer works': 'Event moved or schedule changed',
+    "Can't move forward right now": 'Financial or personal reasons',
+    'Something else': '',
+  };
 
   @override
   void dispose() {
@@ -5068,54 +5117,74 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                 groupValue: _selected,
                 onChanged: (value) {
                   if (value == null) return;
-                  setState(() => _selected = value);
+                  setState(() {
+                    _selected = value;
+                    _error = '';
+                  });
                 },
                 child: Column(
-                  children: _reasons
+                  children: _reasons.entries
                       .map(
-                        (r) => RadioListTile<String>(
-                          value: r,
+                        (entry) => RadioListTile<String>(
+                          value: entry.key,
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           activeColor: AppColors.blackCat,
-                          title: Text(r, style: const TextStyle(fontSize: 13)),
+                          title: Text(
+                            entry.key,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: entry.value.isEmpty
+                              ? null
+                              : Text(
+                                  entry.value,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                         ),
                       )
                       .toList(),
                 ),
               ),
-              TextField(
-                controller: _reasonCtrl,
-                minLines: 1,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'Enter your reason...',
-                  isDense: true,
-                  filled: true,
-                  fillColor: AppColors.snow,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 36,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.blackCat.withValues(alpha: 0.08),
+              if (_selected == 'Something else')
+                TextField(
+                  controller: _reasonCtrl,
+                  minLines: 1,
+                  maxLines: 3,
+                  onChanged: (_) {
+                    if (_error.isNotEmpty) setState(() => _error = '');
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Enter your reason...',
+                    errorText: _error.isEmpty ? null : _error,
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.snow,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 36,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.blackCat.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.blackCat.withValues(alpha: 0.08),
+                      ),
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(
-                      color: AppColors.blackCat.withValues(alpha: 0.08),
-                    ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    fontFamily: 'Arial',
                   ),
                 ),
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.3,
-                  fontFamily: 'Arial',
-                ),
-              ),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -5165,7 +5234,13 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                         ),
                         onPressed: () {
                           final typed = _reasonCtrl.text.trim();
-                          final reason = typed.isNotEmpty ? typed : _selected;
+                          if (_selected == 'Something else' && typed.isEmpty) {
+                            setState(() => _error = 'Please enter a reason.');
+                            return;
+                          }
+                          final reason = _selected == 'Something else'
+                              ? 'Something else: $typed'
+                              : _selected;
                           Navigator.of(context).pop(
                             _CancelOrderResult(confirm: true, reason: reason),
                           );

@@ -1684,7 +1684,7 @@ class _BaseOrderDetails extends StatelessWidget {
                             final typedReason = result.reason.trim();
                             final selectedReason = typedReason.isNotEmpty
                                 ? typedReason
-                                : 'Change in plans';
+                                : 'Changed my mind on the design';
                             if (selectedReason.isEmpty) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -3004,14 +3004,16 @@ class _CancelOrderDialog extends StatefulWidget {
 
 class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   final TextEditingController _reasonCtrl = TextEditingController();
-  String _selected = 'Change in plans';
+  String _selected = 'Changed my mind on the design';
   String _error = '';
 
-  static const List<String> _reasons = [
-    'Change in plans',
-    'Budget concerns',
-    'Unsatisfied with progress',
-  ];
+  static const Map<String, String> _reasons = {
+    'Changed my mind on the design': 'Want to rebrief or rebuild the look',
+    'Not sure about my measurements': 'Want to redo the fit quiz first',
+    'Timing no longer works': 'Event moved or schedule changed',
+    "Can't move forward right now": 'Financial or personal reasons',
+    'Something else': '',
+  };
 
   @override
   void dispose() {
@@ -3095,55 +3097,71 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                   });
                 },
                 child: Column(
-                  children: _reasons
+                  children: _reasons.entries
                       .map(
-                        (r) => RadioListTile<String>(
-                          value: r,
+                        (entry) => RadioListTile<String>(
+                          value: entry.key,
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           activeColor: AppColors.blackCat,
-                          title: Text(r, style: const TextStyle(fontSize: 13)),
+                          title: Text(
+                            entry.key,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: entry.value.isEmpty
+                              ? null
+                              : Text(
+                                  entry.value,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                         ),
                       )
                       .toList(growable: false),
                 ),
               ),
-              Semantics(
-                label: 'Decline reason',
-                textField: true,
-                child: TextField(
-                  controller: _reasonCtrl,
-                  minLines: 1,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    hintText: 'Enter your reason...',
-                    isDense: true,
-                    filled: true,
-                    fillColor: AppColors.snow,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 36,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 20),
+              if (_selected == 'Something else')
+                Semantics(
+                  label: 'Decline reason',
+                  textField: true,
+                  child: TextField(
+                    controller: _reasonCtrl,
+                    minLines: 1,
+                    maxLines: 3,
+                    onChanged: (_) {
+                      if (_error.isNotEmpty) setState(() => _error = '');
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Enter your reason...',
+                      isDense: true,
+                      filled: true,
+                      fillColor: AppColors.snow,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 36,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(
+                          color: AppColors.blackCat.withValues(alpha: 20),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(
+                          color: AppColors.blackCat.withValues(alpha: 20),
+                        ),
                       ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 20),
-                      ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.3,
+                      fontFamily: 'Arial',
                     ),
-                  ),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.3,
-                    fontFamily: 'Arial',
                   ),
                 ),
-              ),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -3193,11 +3211,13 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                         ),
                         onPressed: () {
                           final typed = _reasonCtrl.text.trim();
-                          final reason = typed.isNotEmpty ? typed : _selected;
-                          if (reason.isEmpty) {
-                            setState(() => _error = 'Reason is required.');
+                          if (_selected == 'Something else' && typed.isEmpty) {
+                            setState(() => _error = 'Please enter a reason.');
                             return;
                           }
+                          final reason = _selected == 'Something else'
+                              ? 'Something else: $typed'
+                              : _selected;
                           Navigator.of(context).pop(
                             _CancelOrderResult(confirm: true, reason: reason),
                           );

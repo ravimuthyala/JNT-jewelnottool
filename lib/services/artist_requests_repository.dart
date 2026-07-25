@@ -389,7 +389,13 @@ class ArtistRequestsRepository {
         data['acceptedGroupClientEmails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ..._stringList(
+        data['accepted_group_client_emails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
         detailData['acceptedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['accepted_group_client_emails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     };
     final declinedByClientEmails = <String>{
@@ -397,7 +403,13 @@ class ArtistRequestsRepository {
         data['declinedByClientEmails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ..._stringList(
+        data['declined_by_client_emails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
         detailData['declinedByClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['declined_by_client_emails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     };
     final respondedClientEmails = <String>{
@@ -406,7 +418,9 @@ class ArtistRequestsRepository {
     };
     final groupClientsAllResponded =
         _asBool(data['groupClientsAllResponded']) ||
+        _asBool(data['group_clients_all_responded']) ||
         _asBool(detailData['groupClientsAllResponded']) ||
+        _asBool(detailData['group_clients_all_responded']) ||
         (orderType == RequestOrderTypeV2.group &&
             selectedGroupClientEmails.isNotEmpty &&
             selectedGroupClientEmails.every(respondedClientEmails.contains));
@@ -1004,7 +1018,13 @@ class ArtistRequestsRepository {
         data['acceptedGroupClientEmails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ..._stringList(
+        data['accepted_group_client_emails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
         detailData['acceptedGroupClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['accepted_group_client_emails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
@@ -1013,7 +1033,13 @@ class ArtistRequestsRepository {
         data['declinedByArtistEmails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ..._stringList(
+        data['declined_by_artist_emails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
         detailData['declinedByArtistEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['declined_by_artist_emails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
@@ -1022,7 +1048,13 @@ class ArtistRequestsRepository {
         data['declinedByClientEmails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
       ..._stringList(
+        data['declined_by_client_emails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
         detailData['declinedByClientEmails'],
+      ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
+      ..._stringList(
+        detailData['declined_by_client_emails'],
       ).map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty),
     }.toList(growable: false);
 
@@ -1032,7 +1064,9 @@ class ArtistRequestsRepository {
     };
     final groupClientsAllResponded =
         _asBool(data['groupClientsAllResponded']) ||
+        _asBool(data['group_clients_all_responded']) ||
         _asBool(detailData['groupClientsAllResponded']) ||
+        _asBool(detailData['group_clients_all_responded']) ||
         (orderType == RequestOrderTypeV2.group &&
             selectedGroupClientEmails.isNotEmpty &&
             selectedGroupClientEmails.every(respondedClientEmails.contains));

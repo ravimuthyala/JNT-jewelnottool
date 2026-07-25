@@ -358,6 +358,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     ClientRequestV2 request,
   ) async {
     final table = _detailsTableForCollection(request.sourceCollection);
+    // This table's real shape is {id, request_id, detail_key, data,
+    // updated_at} -- the actual JSON content lives in the `data` column, not
+    // spread across the row itself. A row can also legitimately exist with
+    // an empty `data` (e.g. a stub from an earlier write), which must NOT be
+    // treated as "found the details" -- fall through to the root column below.
     try {
       final rows = await _supabase
           .from(table)
@@ -365,15 +370,18 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           .eq('request_id', request.id)
           .limit(1);
       if (rows.isNotEmpty) {
-        return _asMap(rows.first);
-      }
-      final fallback = await _supabase
-          .from(table)
-          .select()
-          .eq('id', request.id)
-          .limit(1);
-      if (fallback.isNotEmpty) {
-        return _asMap(fallback.first);
+        final data = _asMap(_asMap(rows.first)['data']);
+        if (data.isNotEmpty) return data;
+      } else {
+        final fallback = await _supabase
+            .from(table)
+            .select()
+            .eq('id', request.id)
+            .limit(1);
+        if (fallback.isNotEmpty) {
+          final data = _asMap(_asMap(fallback.first)['data']);
+          if (data.isNotEmpty) return data;
+        }
       }
     } catch (_) {
       // Some environments do not keep a separate *_details row for brand
@@ -479,15 +487,19 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     }
 
     // Keep the optional details table in sync only when it exists and accepts
-    // these columns. The root details JSON is the source of truth.
+    // these columns. The root details JSON is the source of truth. This
+    // table's real shape is {id, request_id, detail_key, data, updated_at}
+    // -- the JSON content must go in `data`; there is no `details`/`payload`
+    // column, so writing those keys was previously silently stripped by the
+    // column filter below, leaving this row with an empty `data`.
     try {
       final detailsTable = _detailsTableForCollection(collection);
       final detailColumns = await _tableColumns(detailsTable);
       final detailsUpdate = <String, dynamic>{
         'request_id': requestId,
         'id': requestId,
-        'details': mergedDetails,
-        'payload': mergedDetails,
+        'detail_key': 'payload',
+        'data': mergedDetails,
         'status':
             summaryPayload['status'] ?? detailsPayload['status'] ?? 'pending',
         'updated_at': nowIso,
@@ -1465,10 +1477,41 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             item['clientName'] = clientName.isNotEmpty
                 ? clientName
                 : item['clientName'];
+            // Merge rather than overwrite: the brand pre-fills this slot's
+            // shape/length/dimensions when creating the group order, and
+            // many clients have no nail measurements saved on their own
+            // account profile yet (_loadAcceptingClientData returns empty
+            // for those). Blindly overwriting savedNails here used to wipe
+            // out the brand's pre-filled values with nulls whenever the
+            // client's own profile had nothing on file, leaving the slot
+            // with no measurements at all.
+            final existingSavedNails = _asMap(item['savedNails']);
+            final existingDimensions = _asMap(existingSavedNails['dimensions']);
+            String mergedDim(String key) {
+              final ownValue = (nailDimensions[key] ?? '').toString().trim();
+              if (ownValue.isNotEmpty) return ownValue;
+              return (existingDimensions[key] ?? '').toString().trim();
+            }
+
             item['savedNails'] = <String, dynamic>{
-              if (nailShape.isNotEmpty) 'shape': nailShape,
-              if (nailLength.isNotEmpty) 'length': nailLength,
-              'dimensions': nailDimensions,
+              'shape': nailShape.isNotEmpty
+                  ? nailShape
+                  : (existingSavedNails['shape'] ?? ''),
+              'length': nailLength.isNotEmpty
+                  ? nailLength
+                  : (existingSavedNails['length'] ?? ''),
+              'dimensions': <String, dynamic>{
+                'lThumb': mergedDim('lThumb'),
+                'lIndex': mergedDim('lIndex'),
+                'lMiddle': mergedDim('lMiddle'),
+                'lRing': mergedDim('lRing'),
+                'lPinky': mergedDim('lPinky'),
+                'rThumb': mergedDim('rThumb'),
+                'rIndex': mergedDim('rIndex'),
+                'rMiddle': mergedDim('rMiddle'),
+                'rRing': mergedDim('rRing'),
+                'rPinky': mergedDim('rPinky'),
+              },
             };
             return item;
           })

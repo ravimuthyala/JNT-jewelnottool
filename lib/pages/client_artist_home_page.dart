@@ -410,6 +410,11 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
   }
 
   Future<void> _logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('CLIENT+ARTIST SIGN OUT FAILED: $e');
+    }
     if (widget.onLogout != null) {
       await widget.onLogout!.call();
       return;

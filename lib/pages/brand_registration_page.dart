@@ -42,14 +42,14 @@ class BrandRegistrationPage extends StatefulWidget {
 @Deprecated('Use BrandRegistrationPage instead.')
 typedef CompanyRegistrationPageV2 = BrandRegistrationPage;
 
-enum CompanyPayoutMethod { paypal, venmo, bankTransfer, applePay }
-
 class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   static const Duration _registrationStepTimeout = Duration(seconds: 20);
   static const Duration _logoUploadTimeout = Duration(seconds: 20);
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
-  final FocusNode _logoUploadFocusNode = FocusNode(debugLabel: 'companyLogoUpload');
+  final FocusNode _logoUploadFocusNode = FocusNode(
+    debugLabel: 'companyLogoUpload',
+  );
   Timer? _billingStreetAutocompleteDebounce;
   Timer? _shippingStreetAutocompleteDebounce;
   List<AddressSuggestion> _billingStreetSuggestions = const [];
@@ -159,16 +159,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
   final _applePayEmailCtrl = TextEditingController();
   final _googlePayEmailCtrl = TextEditingController();
-
-  CompanyPayoutMethod _payoutMethod = CompanyPayoutMethod.paypal;
-  final _payoutLegalNameCtrl = TextEditingController();
-  final _payoutEmailCtrl = TextEditingController();
-  final _payoutBankNameCtrl = TextEditingController();
-  final _payoutRoutingCtrl = TextEditingController();
-  final _payoutAccountNumberCtrl = TextEditingController();
-  final _payoutApplePayNameCtrl = TextEditingController();
-  final _payoutApplePayPhoneCtrl = TextEditingController();
-  final _payoutApplePayEmailCtrl = TextEditingController();
 
   static const List<String> _billingMethods = [
     'Credit/Debit Card',
@@ -405,15 +395,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     _achAccountCtrl.dispose();
     _applePayEmailCtrl.dispose();
     _googlePayEmailCtrl.dispose();
-    _payoutLegalNameCtrl.dispose();
-    _payoutEmailCtrl.dispose();
-    _payoutBankNameCtrl.dispose();
-    _payoutRoutingCtrl.dispose();
-    _payoutAccountNumberCtrl.dispose();
-    _payoutApplePayNameCtrl.dispose();
-    _payoutApplePayPhoneCtrl.dispose();
-    _payoutApplePayEmailCtrl.dispose();
-
     super.dispose();
   }
 
@@ -612,14 +593,17 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     String? Function(String?)? validator,
     bool required = false,
   }) {
-    return _req(required, _typeAheadPickerField(
-      label: label,
-      hint: hint,
-      options: options,
-      selectedValue: selectedValue,
-      onChanged: onChanged,
-      validator: validator,
-    ));
+    return _req(
+      required,
+      _typeAheadPickerField(
+        label: label,
+        hint: hint,
+        options: options,
+        selectedValue: selectedValue,
+        onChanged: onChanged,
+        validator: validator,
+      ),
+    );
   }
 
   Widget _typeAheadPickerField({
@@ -782,20 +766,23 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     }
 
     setState(() => _checkingEmailAvailability = true);
-    _emailAvailabilityDebounce = Timer(const Duration(milliseconds: 500), () async {
-      final role = await SupabaseAuthService.findExistingRoleForEmail(
-        normalized,
-      );
-      if (!mounted) return;
-      if (_emailCtrl.text.trim().toLowerCase() != normalized) {
-        return;
-      }
-      setState(() {
-        _checkingEmailAvailability = false;
-        _lastCheckedEmail = normalized;
-        _emailTakenRole = role;
-      });
-    });
+    _emailAvailabilityDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () async {
+        final role = await SupabaseAuthService.findExistingRoleForEmail(
+          normalized,
+        );
+        if (!mounted) return;
+        if (_emailCtrl.text.trim().toLowerCase() != normalized) {
+          return;
+        }
+        setState(() {
+          _checkingEmailAvailability = false;
+          _lastCheckedEmail = normalized;
+          _emailTakenRole = role;
+        });
+      },
+    );
   }
 
   Widget _buildEmailAvailabilityStatus() {
@@ -996,43 +983,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     return false;
   }
 
-  String? _payoutRequiredValidator(String? value, String fieldName) {
-    if (value == null || value.trim().isEmpty) return '$fieldName is required';
-    return null;
-  }
-
-  Map<String, dynamic> _normalizedCompanyPayoutPayload() {
-    final isPaypal = _payoutMethod == CompanyPayoutMethod.paypal;
-    final isVenmo = _payoutMethod == CompanyPayoutMethod.venmo;
-    final isBank = _payoutMethod == CompanyPayoutMethod.bankTransfer;
-    final isApplePay = _payoutMethod == CompanyPayoutMethod.applePay;
-    return <String, dynamic>{
-      'method': _payoutMethod.name,
-      'paypal': {
-        'enabled': isPaypal,
-        'email': isPaypal ? _payoutEmailCtrl.text.trim() : '',
-      },
-      'venmo': {
-        'enabled': isVenmo,
-        'username': isVenmo ? _payoutEmailCtrl.text.trim() : '',
-      },
-      'ach': {
-        'enabled': isBank,
-        'accountHolder': isBank ? _payoutLegalNameCtrl.text.trim() : '',
-        'bankName': isBank ? _payoutBankNameCtrl.text.trim() : '',
-        'routingNumber': isBank ? _payoutRoutingCtrl.text.trim() : '',
-        'accountNumber': isBank ? _payoutAccountNumberCtrl.text.trim() : '',
-      },
-      'applePay': {
-        'enabled': isApplePay,
-        'fullName': isApplePay ? _payoutApplePayNameCtrl.text.trim() : '',
-        'email': isApplePay ? _payoutApplePayEmailCtrl.text.trim() : '',
-        'phone': isApplePay ? _payoutApplePayPhoneCtrl.text.trim() : '',
-      },
-      'email': _payoutEmailCtrl.text.trim(),
-    };
-  }
-
   Widget promosAndNailTipsCard() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1117,7 +1067,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     final businessType = (_businessType ?? '').trim();
     final companyPhone = '$_normalizedCompanyAreaCode$companyPhoneLocal';
     final contactPhone = '$_normalizedContactAreaCode$contactPhoneLocal';
-    final payout = _normalizedCompanyPayoutPayload();
     return {
       'uid': uid,
       'email': _emailCtrl.text.trim().toLowerCase(),
@@ -1179,13 +1128,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_billing_expiry': billingDraft.expiry,
       'panel_billing_apple_pay_email': billingDraft.applePayEmail,
       'panel_billing_google_pay_email': billingDraft.googlePayEmail,
-      'panel_payout': payout,
-      'panel_payoutMethod': _payoutMethod.name,
-      'panel_payout_method': _payoutMethod.name,
-      'panel_payoutLegalName': _payoutLegalNameCtrl.text.trim(),
-      'panel_payout_legal_name': _payoutLegalNameCtrl.text.trim(),
-      'panel_payoutEmail': _payoutEmailCtrl.text.trim(),
-      'panel_payout_email': _payoutEmailCtrl.text.trim(),
       'panel_profileImageUrl': safeProfilePhotoUrl,
       'panel_profile_image_url': safeProfilePhotoUrl,
       'panel_logoUrl': safeProfilePhotoUrl,
@@ -1262,7 +1204,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         'applePayEmail': billingDraft.applePayEmail,
         'googlePayEmail': billingDraft.googlePayEmail,
       },
-      'payout': payout,
       'createdAt': DateTime.now().toIso8601String(),
       'updatedAt': DateTime.now().toIso8601String(),
     };
@@ -1387,19 +1328,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       'panel_billing_apple_pay_email': payload['panel_billing_apple_pay_email'],
       'panel_billing_google_pay_email':
           payload['panel_billing_google_pay_email'],
-      'panel_payout': payload['panel_payout'],
-      'panel_payoutMethod': payload['panel_payoutMethod'],
-      'panel_payout_method': payload['panel_payout_method'],
-      'panel_payoutLegalName': payload['panel_payoutLegalName'],
-      'panel_payout_legal_name': payload['panel_payout_legal_name'],
-      'panel_payoutEmail': payload['panel_payoutEmail'],
-      'panel_payout_email': payload['panel_payout_email'],
       'profile': payload['profile'],
       'basic': payload['basic'],
       'company': payload['company'],
       'addresses': payload['addresses'],
       'billing': payload['billing'],
-      'payout': payload['payout'],
       'panel_billingStreet': payload['panel_billingStreet'],
       'panel_billing_street': payload['panel_billing_street'],
       'panel_billingCity': payload['panel_billingCity'],
@@ -1761,7 +1694,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   /// display text, not structured fields — resolve the full address before
   /// applying it. Nominatim-backed suggestions (placeId null) apply
   /// unchanged, synchronously.
-  Future<void> _selectBillingStreetSuggestion(AddressSuggestion selected) async {
+  Future<void> _selectBillingStreetSuggestion(
+    AddressSuggestion selected,
+  ) async {
     if (selected.placeId != null) {
       final resolved = await AddressValidationService.resolvePlaceDetails(
         selected.placeId!,
@@ -1820,7 +1755,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   /// display text, not structured fields — resolve the full address before
   /// applying it. Nominatim-backed suggestions (placeId null) apply
   /// unchanged, synchronously.
-  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+  Future<void> _selectShippingStreetSuggestion(
+    AddressSuggestion selected,
+  ) async {
     if (selected.placeId != null) {
       final resolved = await AddressValidationService.resolvePlaceDetails(
         selected.placeId!,
@@ -1908,7 +1845,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
               selected: selected,
               label:
                   'Step ${index + 1} of ${_registrationStepTitles.length}: $title'
-                  '${completed ? ', completed' : selected ? ', current step' : ''}',
+                  '${completed
+                      ? ', completed'
+                      : selected
+                      ? ', current step'
+                      : ''}',
               onTap: () {
                 setState(() {
                   _registrationStep = index;
@@ -1918,95 +1859,106 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
               },
               child: ExcludeSemantics(
                 child: InkWell(
-              onTap: () {
-                setState(() {
-                  _registrationStep = index;
-                  _validationTriggeredStep = null;
-                });
-                _announceStep(index);
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 28,
-                    child: Row(
-                      children: [
-                        if (index > 0)
-                          Expanded(
-                            child: Container(
-                              height: 1.5,
-                              color: completed
-                                  ? AppColors.blackCat.withValues(alpha: 0.55)
-                                  : AppColors.blackCat.withValues(alpha: 0.18),
-                            ),
-                          )
-                        else
-                          const Spacer(),
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: (selected || completed)
-                                ? AppColors.blackCat
-                                : AppColors.blackCat.withValues(alpha: 0.10),
-                          ),
-                          child: completed
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 15,
-                                  color: AppColors.snow,
-                                )
-                              : Text(
-                                  '${index + 1}',
-                                  style: TextStyle(
-                                    fontFamily: 'Arial',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: selected
-                                        ? AppColors.snow
-                                        : AppColors.blackCat,
-                                  ),
+                  onTap: () {
+                    setState(() {
+                      _registrationStep = index;
+                      _validationTriggeredStep = null;
+                    });
+                    _announceStep(index);
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 28,
+                        child: Row(
+                          children: [
+                            if (index > 0)
+                              Expanded(
+                                child: Container(
+                                  height: 1.5,
+                                  color: completed
+                                      ? AppColors.blackCat.withValues(
+                                          alpha: 0.55,
+                                        )
+                                      : AppColors.blackCat.withValues(
+                                          alpha: 0.18,
+                                        ),
                                 ),
-                        ),
-                        const SizedBox(width: 6),
-                        if (showConnector)
-                          Expanded(
-                            child: Container(
-                              height: 1.5,
-                              color: (completed || selected)
-                                  ? AppColors.blackCat.withValues(alpha: 0.55)
-                                  : AppColors.blackCat.withValues(alpha: 0.18),
+                              )
+                            else
+                              const Spacer(),
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: (selected || completed)
+                                    ? AppColors.blackCat
+                                    : AppColors.blackCat.withValues(
+                                        alpha: 0.10,
+                                      ),
+                              ),
+                              child: completed
+                                  ? const Icon(
+                                      Icons.check,
+                                      size: 15,
+                                      color: AppColors.snow,
+                                    )
+                                  : Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        fontFamily: 'Arial',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: selected
+                                            ? AppColors.snow
+                                            : AppColors.blackCat,
+                                      ),
+                                    ),
                             ),
-                          )
-                        else
-                          const Spacer(),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 30,
-                    child: Text(
-                      _registrationStepTitles[index],
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'Arial',
-                        fontSize: 9,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
-                        color: AppColors.blackCat.withValues(
-                          alpha: selected ? 1 : 0.65,
+                            const SizedBox(width: 6),
+                            if (showConnector)
+                              Expanded(
+                                child: Container(
+                                  height: 1.5,
+                                  color: (completed || selected)
+                                      ? AppColors.blackCat.withValues(
+                                          alpha: 0.55,
+                                        )
+                                      : AppColors.blackCat.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                ),
+                              )
+                            else
+                              const Spacer(),
+                          ],
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 30,
+                        child: Text(
+                          _registrationStepTitles[index],
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Arial',
+                            fontSize: 9,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: AppColors.blackCat.withValues(
+                              alpha: selected ? 1 : 0.65,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              ),
+                ),
               ),
             ),
           );
@@ -2078,9 +2030,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                       width: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white,
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : Text(
@@ -2108,519 +2058,530 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       explicitChildNodes: true,
       label: 'Brand registration',
       child: Theme(
-      data: Theme.of(context).copyWith(
-        canvasColor: dropdownBackground,
-        textTheme: Theme.of(context).textTheme.apply(
-          bodyColor: dropdownTextColor,
-          displayColor: dropdownTextColor,
+        data: Theme.of(context).copyWith(
+          canvasColor: dropdownBackground,
+          textTheme: Theme.of(context).textTheme.apply(
+            bodyColor: dropdownTextColor,
+            displayColor: dropdownTextColor,
+          ),
         ),
-      ),
-      child: Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: JntModalAppBar(
-          onClose: () => Navigator.of(
-            context,
-            rootNavigator: true,
-          ).pushNamedAndRemoveUntil('/register', (route) => false),
-          closeTooltip: 'Close brand registration',
-          closeIcon: const Icon(Icons.close),
-        ),
-        body: SafeArea(
-          child: ListView(
-            controller: _registrationScrollController,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-            children: [
-              Form(
-                key: _formKey,
-                autovalidateMode: _validationTriggeredStep == _registrationStep
-                    ? AutovalidateMode.always
-                    : AutovalidateMode.disabled,
-                child: Column(
-                  children: [
-                    _registrationProgressTabs(),
-                    if (_registrationStep == 0) ...[
-                    // -----------------------
-                    // âœ… COMPANY PROFILE & ACCOUNT CREATION (UPDATED)
-                    // -----------------------
-                    _SectionCard(
-                      title: 'Company Profile & Account Creation',
-                      subtitle:
-                          'Create your company account and add company details',
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 6),
-                          _ProfileUpload(
-                            label: 'Company Logo',
-                            onTap: _pickCompanyLogo,
-                            focusNode: _logoUploadFocusNode,
-                            image: _logoBytes != null
-                                ? MemoryImage(_logoBytes!)
-                                : (_logoPath != null
-                                      ? FileImage(File(_logoPath!))
-                                      : null),
-                          ),
-                          const SizedBox(height: 18),
-
-                          _FieldLabel.required('Company Name'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _companyNameCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec(
-                                'Company Name',
-                                'Enter Company Name',
+        child: Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: JntModalAppBar(
+            onClose: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            closeTooltip: 'Close brand registration',
+            closeIcon: const Icon(Icons.close),
+          ),
+          body: SafeArea(
+            child: ListView(
+              controller: _registrationScrollController,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+              children: [
+                Form(
+                  key: _formKey,
+                  autovalidateMode:
+                      _validationTriggeredStep == _registrationStep
+                      ? AutovalidateMode.always
+                      : AutovalidateMode.disabled,
+                  child: Column(
+                    children: [
+                      _registrationProgressTabs(),
+                      if (_registrationStep == 0) ...[
+                        // -----------------------
+                        // âœ… COMPANY PROFILE & ACCOUNT CREATION (UPDATED)
+                        // -----------------------
+                        _SectionCard(
+                          title: 'Company Profile & Account Creation',
+                          subtitle:
+                              'Create your company account and add company details',
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 6),
+                              _ProfileUpload(
+                                label: 'Company Logo',
+                                onTap: _pickCompanyLogo,
+                                focusNode: _logoUploadFocusNode,
+                                image: _logoBytes != null
+                                    ? MemoryImage(_logoBytes!)
+                                    : (_logoPath != null
+                                          ? FileImage(File(_logoPath!))
+                                          : null),
                               ),
-                              validator: (v) =>
-                                  _requiredValidator(v, 'Company Name'),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
+                              const SizedBox(height: 18),
 
-                          _FieldLabel.required('Business Type'),
-                          const SizedBox(height: 6),
-                          _dropdownSemantics(
-                            label: 'Business Type',
-                            value: _businessType,
-                            required: true,
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _businessType,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                color: AppColors.blackCat,
-                              ),
-                              menuMaxHeight: 280,
-                              items: kCompanyBusinessTypes
-                                  .map(
-                                    (b) => DropdownMenuItem<String>(
-                                      value: b,
-                                      child: Text(
-                                        b,
-                                        style: const TextStyle(
-                                          fontSize: _dropFs,
-                                          color: AppColors.blackCat,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) =>
-                                  setState(() => _businessType = v),
-                              decoration: _dec(
-                                'Business Type',
-                                'Select Business Type',
-                              ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Business Type is required'
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.required('Company Email'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller:
-                                  _emailCtrl, // âœ… using your existing controller
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: _dec(
-                                'Company Email',
-                                'Enter Company Email',
-                              ),
-                              validator: _accountEmailValidator,
-                              onChanged: _onEmailChanged,
-                            ),
-                          ),
-                          _buildEmailAvailabilityStatus(),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.required('Company Phone#'),
-                          const SizedBox(height: 6),
-                          FormField<String>(
-                            validator: (value) =>
-                                _phoneValidator(_phoneCtrl.text),
-                            builder: (field) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    height: _fieldHeight,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.snow,
-                                      borderRadius: BorderRadius.zero,
-                                      border: Border.all(
-                                        color: AppColors.blackCatBorderLight,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 132,
-                                          child: _countryCodeDropdown(
-                                            value: _companyPhoneAreaCode,
-                                            embedded: true,
-                                            onChanged: (code) => setState(
-                                              () => _companyPhoneAreaCode =
-                                                  code.dialCode ?? '+1',
-                                            ),
-                                          ),
-                                        ),
-                                        Container(
-                                          width: 1,
-                                          color: AppColors.blackCatBorderLight,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Semantics(
-                                            label: 'Company phone number',
-                                            isRequired: true,
-                                            textField: true,
-                                            child: TextFormField(
-                                              controller: _phoneCtrl,
-                                              style: const TextStyle(
-                                                fontSize: _inputFs,
-                                              ),
-                                              keyboardType:
-                                                  TextInputType.phone,
-                                              inputFormatters: [
-                                                FilteringTextInputFormatter
-                                                    .digitsOnly,
-                                                LengthLimitingTextInputFormatter(
-                                                  10,
-                                                ),
-                                                UsPhoneTextInputFormatter(),
-                                              ],
-                                              onChanged: field.didChange,
-                                              decoration: InputDecoration(
-                                                hintText:
-                                                    'Enter 10-digit phone',
-                                                hintStyle: TextStyle(
-                                                  fontSize: _hintFs,
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.35),
-                                                ),
-                                                border: InputBorder.none,
-                                                enabledBorder:
-                                                    InputBorder.none,
-                                                focusedBorder:
-                                                    InputBorder.none,
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical:
-                                                          _fieldVerticalPadding,
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                      ],
-                                    ),
+                              _FieldLabel.required('Company Name'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _companyNameCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'Company Name',
+                                    'Enter Company Name',
                                   ),
-                                  if (field.hasError)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 6,
-                                        left: 4,
-                                      ),
-                                      child: Text(
-                                        field.errorText!,
-                                        style: const TextStyle(
-                                          color: Color(0xFFB3261E),
-                                          fontSize: 10.5,
-                                          height: 1.1,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.required('Password'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller:
-                                  _passCtrl, // âœ… using your existing controller
-                              style: const TextStyle(fontSize: _inputFs),
-                              obscureText: _obscure,
-                              decoration: _dec(
-                                'Password',
-                                'Enter Password',
-                                suffixIcon: IconButton(
-                                  iconSize: 18,
-                                  tooltip: _obscure
-                                      ? 'Show password'
-                                      : 'Hide password',
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
-                                  icon: Icon(
-                                    _obscure
-                                        ? Icons.visibility_off
-                                        : Icons.visibility,
-                                  ),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'Company Name'),
                                 ),
                               ),
-                              validator: _passwordValidator,
-                              onChanged: _onPasswordChanged,
-                            ),
-                          ),
-                          _buildPasswordStatus(),
-                          const SizedBox(height: 16),
+                              const SizedBox(height: 16),
 
-                          _FieldLabel.required('Confirm Password'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _confirmPassCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              obscureText: _obscureConfirm,
-                              decoration: _dec(
-                                'Confirm Password',
-                                'Re-enter Password',
-                                suffixIcon: IconButton(
-                                  iconSize: 18,
-                                  tooltip: _obscureConfirm
-                                      ? 'Show password'
-                                      : 'Hide password',
-                                  onPressed: () => setState(
-                                    () => _obscureConfirm = !_obscureConfirm,
+                              _FieldLabel.required('Business Type'),
+                              const SizedBox(height: 6),
+                              _dropdownSemantics(
+                                label: 'Business Type',
+                                value: _businessType,
+                                required: true,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: _businessType,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    color: AppColors.blackCat,
                                   ),
-                                  icon: Icon(
-                                    _obscureConfirm
-                                        ? Icons.visibility_off
-                                        : Icons.visibility,
+                                  menuMaxHeight: 280,
+                                  items: kCompanyBusinessTypes
+                                      .map(
+                                        (b) => DropdownMenuItem<String>(
+                                          value: b,
+                                          child: Text(
+                                            b,
+                                            style: const TextStyle(
+                                              fontSize: _dropFs,
+                                              color: AppColors.blackCat,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (v) =>
+                                      setState(() => _businessType = v),
+                                  decoration: _dec(
+                                    'Business Type',
+                                    'Select Business Type',
                                   ),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                      ? 'Business Type is required'
+                                      : null,
                                 ),
                               ),
-                              validator: _confirmPasswordValidator,
-                              onChanged: _onConfirmPasswordChanged,
-                            ),
-                          ),
-                          _buildConfirmPasswordStatus(),
-                          const SizedBox(height: 16),
+                              const SizedBox(height: 16),
 
-                          _FieldLabel.normal('Company URL'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _companyUrlCtrl,
-                            style: const TextStyle(fontSize: _inputFs),
-                            keyboardType: TextInputType.url,
-                            decoration: _dec(
-                              'Company URL',
-                              'https://www.company.com',
-                            ),
-                            validator: _optionalUrlValidator,
-                          ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.normal('TikTok'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _tiktokCtrl,
-                            style: const TextStyle(fontSize: _inputFs),
-                            decoration: _dec(
-                              'TikTok',
-                              'Enter TikTok handle/link',
-                            ),
-                            validator: _socialRequiredValidator,
-                          ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.normal('Instagram'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _instagramCtrl,
-                            style: const TextStyle(fontSize: _inputFs),
-                            decoration: _dec(
-                              'Instagram',
-                              'Enter Instagram handle/link',
-                            ),
-                            validator: _socialRequiredValidator,
-                          ),
-                          const SizedBox(height: 16),
-
-
-                          _FieldLabel.normal('Company Bio'),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _bioCtrl,
-                            style: const TextStyle(fontSize: _inputFs),
-                            maxLines: 4,
-                            decoration: _dec(
-                              'Company Bio',
-                              'Short brand overview',
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // -----------------------
-                    // âœ… PRIMARY CONTACT (NEW SECTION)
-                    // -----------------------
-                    _SectionCard(
-                      title: 'Primary Contact',
-                      subtitle:
-                          'Enter your primary contact details (used for order notifications and communication)',
-                      child: Column(
-                        children: [
-                          _FieldLabel.required('Contact Name'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _contactNameCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec(
-                                'Contact Name',
-                                'Enter Contact Name',
+                              _FieldLabel.required('Company Email'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller:
+                                      _emailCtrl, // âœ… using your existing controller
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.emailAddress,
+                                  decoration: _dec(
+                                    'Company Email',
+                                    'Enter Company Email',
+                                  ),
+                                  validator: _accountEmailValidator,
+                                  onChanged: _onEmailChanged,
+                                ),
                               ),
-                              validator: (v) =>
-                                  _requiredValidator(v, 'Contact Name'),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
+                              _buildEmailAvailabilityStatus(),
+                              const SizedBox(height: 16),
 
-                          _FieldLabel.required('Contact Email'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _contactEmailCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: _dec(
-                                'Contact Email',
-                                'Enter Contact Email',
-                              ),
-                              validator: _emailValidator,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.required('Contact Phone'),
-                          const SizedBox(height: 6),
-                          FormField<String>(
-                            validator: (value) =>
-                                _phoneValidator(_contactPhoneCtrl.text),
-                            builder: (field) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    height: _fieldHeight,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.snow,
-                                      borderRadius: BorderRadius.zero,
-                                      border: Border.all(
-                                        color: AppColors.blackCatBorderLight,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 132,
-                                          child: _countryCodeDropdown(
-                                            value: _contactPhoneAreaCode,
-                                            embedded: true,
-                                            onChanged: (code) => setState(
-                                              () => _contactPhoneAreaCode =
-                                                  code.dialCode ?? '+1',
-                                            ),
+                              _FieldLabel.required('Company Phone#'),
+                              const SizedBox(height: 6),
+                              FormField<String>(
+                                validator: (value) =>
+                                    _phoneValidator(_phoneCtrl.text),
+                                builder: (field) {
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        height: _fieldHeight,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.snow,
+                                          borderRadius: BorderRadius.zero,
+                                          border: Border.all(
+                                            color:
+                                                AppColors.blackCatBorderLight,
                                           ),
                                         ),
-                                        Container(
-                                          width: 1,
-                                          color: AppColors.blackCatBorderLight,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Semantics(
-                                            label: 'Contact phone number',
-                                            isRequired: true,
-                                            textField: true,
-                                            child: TextFormField(
-                                              controller: _contactPhoneCtrl,
-                                              style: const TextStyle(
-                                                fontSize: _inputFs,
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 132,
+                                              child: _countryCodeDropdown(
+                                                value: _companyPhoneAreaCode,
+                                                embedded: true,
+                                                onChanged: (code) => setState(
+                                                  () => _companyPhoneAreaCode =
+                                                      code.dialCode ?? '+1',
+                                                ),
                                               ),
-                                              keyboardType:
-                                                  TextInputType.phone,
-                                              inputFormatters: [
-                                                FilteringTextInputFormatter
-                                                    .digitsOnly,
-                                                LengthLimitingTextInputFormatter(
-                                                  10,
-                                                ),
-                                                UsPhoneTextInputFormatter(),
-                                              ],
-                                              onChanged: field.didChange,
-                                              decoration: InputDecoration(
-                                                hintText:
-                                                    'Enter 10-digit phone',
-                                                hintStyle: TextStyle(
-                                                  fontSize: _hintFs,
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.35),
-                                                ),
-                                                border: InputBorder.none,
-                                                enabledBorder:
-                                                    InputBorder.none,
-                                                focusedBorder:
-                                                    InputBorder.none,
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical:
-                                                          _fieldVerticalPadding,
+                                            ),
+                                            Container(
+                                              width: 1,
+                                              color:
+                                                  AppColors.blackCatBorderLight,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Semantics(
+                                                label: 'Company phone number',
+                                                isRequired: true,
+                                                textField: true,
+                                                child: TextFormField(
+                                                  controller: _phoneCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                  ),
+                                                  keyboardType:
+                                                      TextInputType.phone,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(
+                                                      10,
                                                     ),
+                                                    UsPhoneTextInputFormatter(),
+                                                  ],
+                                                  onChanged: field.didChange,
+                                                  decoration: InputDecoration(
+                                                    hintText:
+                                                        'Enter 10-digit phone',
+                                                    hintStyle: TextStyle(
+                                                      fontSize: _hintFs,
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.35,
+                                                          ),
+                                                    ),
+                                                    border: InputBorder.none,
+                                                    enabledBorder:
+                                                        InputBorder.none,
+                                                    focusedBorder:
+                                                        InputBorder.none,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical:
+                                                              _fieldVerticalPadding,
+                                                        ),
+                                                  ),
+                                                ),
                                               ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                          ],
+                                        ),
+                                      ),
+                                      if (field.hasError)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 6,
+                                            left: 4,
+                                          ),
+                                          child: Text(
+                                            field.errorText!,
+                                            style: const TextStyle(
+                                              color: Color(0xFFB3261E),
+                                              fontSize: 10.5,
+                                              height: 1.1,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 10),
-                                      ],
+                                    ],
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.required('Password'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller:
+                                      _passCtrl, // âœ… using your existing controller
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  obscureText: _obscure,
+                                  decoration: _dec(
+                                    'Password',
+                                    'Enter Password',
+                                    suffixIcon: IconButton(
+                                      iconSize: 18,
+                                      tooltip: _obscure
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                      onPressed: () =>
+                                          setState(() => _obscure = !_obscure),
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
+                                      ),
                                     ),
                                   ),
-                                  if (field.hasError)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        top: 6,
-                                        left: 4,
+                                  validator: _passwordValidator,
+                                  onChanged: _onPasswordChanged,
+                                ),
+                              ),
+                              _buildPasswordStatus(),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.required('Confirm Password'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _confirmPassCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  obscureText: _obscureConfirm,
+                                  decoration: _dec(
+                                    'Confirm Password',
+                                    'Re-enter Password',
+                                    suffixIcon: IconButton(
+                                      iconSize: 18,
+                                      tooltip: _obscureConfirm
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                      onPressed: () => setState(
+                                        () =>
+                                            _obscureConfirm = !_obscureConfirm,
                                       ),
-                                      child: Text(
-                                        field.errorText!,
-                                        style: const TextStyle(
-                                          color: Color(0xFFB3261E),
-                                          fontSize: 10.5,
-                                          height: 1.1,
-                                        ),
+                                      icon: Icon(
+                                        _obscureConfirm
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
                                       ),
                                     ),
-                                ],
-                              );
-                            },
+                                  ),
+                                  validator: _confirmPasswordValidator,
+                                  onChanged: _onConfirmPasswordChanged,
+                                ),
+                              ),
+                              _buildConfirmPasswordStatus(),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.normal('Company URL'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _companyUrlCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                keyboardType: TextInputType.url,
+                                decoration: _dec(
+                                  'Company URL',
+                                  'https://www.company.com',
+                                ),
+                                validator: _optionalUrlValidator,
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.normal('TikTok'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _tiktokCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                decoration: _dec(
+                                  'TikTok',
+                                  'Enter TikTok handle/link',
+                                ),
+                                validator: _socialRequiredValidator,
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.normal('Instagram'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _instagramCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                decoration: _dec(
+                                  'Instagram',
+                                  'Enter Instagram handle/link',
+                                ),
+                                validator: _socialRequiredValidator,
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.normal('Company Bio'),
+                              const SizedBox(height: 6),
+                              TextFormField(
+                                controller: _bioCtrl,
+                                style: const TextStyle(fontSize: _inputFs),
+                                maxLines: 4,
+                                decoration: _dec(
+                                  'Company Bio',
+                                  'Short brand overview',
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    ),
+                        ),
 
-                    ] else ...[
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                    /*
+                        // -----------------------
+                        // âœ… PRIMARY CONTACT (NEW SECTION)
+                        // -----------------------
+                        _SectionCard(
+                          title: 'Primary Contact',
+                          subtitle:
+                              'Enter your primary contact details (used for order notifications and communication)',
+                          child: Column(
+                            children: [
+                              _FieldLabel.required('Contact Name'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _contactNameCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'Contact Name',
+                                    'Enter Contact Name',
+                                  ),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'Contact Name'),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.required('Contact Email'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _contactEmailCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.emailAddress,
+                                  decoration: _dec(
+                                    'Contact Email',
+                                    'Enter Contact Email',
+                                  ),
+                                  validator: _emailValidator,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.required('Contact Phone'),
+                              const SizedBox(height: 6),
+                              FormField<String>(
+                                validator: (value) =>
+                                    _phoneValidator(_contactPhoneCtrl.text),
+                                builder: (field) {
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        height: _fieldHeight,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.snow,
+                                          borderRadius: BorderRadius.zero,
+                                          border: Border.all(
+                                            color:
+                                                AppColors.blackCatBorderLight,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 132,
+                                              child: _countryCodeDropdown(
+                                                value: _contactPhoneAreaCode,
+                                                embedded: true,
+                                                onChanged: (code) => setState(
+                                                  () => _contactPhoneAreaCode =
+                                                      code.dialCode ?? '+1',
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              width: 1,
+                                              color:
+                                                  AppColors.blackCatBorderLight,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Semantics(
+                                                label: 'Contact phone number',
+                                                isRequired: true,
+                                                textField: true,
+                                                child: TextFormField(
+                                                  controller: _contactPhoneCtrl,
+                                                  style: const TextStyle(
+                                                    fontSize: _inputFs,
+                                                  ),
+                                                  keyboardType:
+                                                      TextInputType.phone,
+                                                  inputFormatters: [
+                                                    FilteringTextInputFormatter
+                                                        .digitsOnly,
+                                                    LengthLimitingTextInputFormatter(
+                                                      10,
+                                                    ),
+                                                    UsPhoneTextInputFormatter(),
+                                                  ],
+                                                  onChanged: field.didChange,
+                                                  decoration: InputDecoration(
+                                                    hintText:
+                                                        'Enter 10-digit phone',
+                                                    hintStyle: TextStyle(
+                                                      fontSize: _hintFs,
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.35,
+                                                          ),
+                                                    ),
+                                                    border: InputBorder.none,
+                                                    enabledBorder:
+                                                        InputBorder.none,
+                                                    focusedBorder:
+                                                        InputBorder.none,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical:
+                                                              _fieldVerticalPadding,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                          ],
+                                        ),
+                                      ),
+                                      if (field.hasError)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 6,
+                                            left: 4,
+                                          ),
+                                          child: Text(
+                                            field.errorText!,
+                                            style: const TextStyle(
+                                              color: Color(0xFFB3261E),
+                                              fontSize: 10.5,
+                                              height: 1.1,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 4),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 16),
+
+                        /*
                   // -----------------------
                   // âœ… BRAND DETAILS (supports request modal autofill)
                   // -----------------------
@@ -2699,395 +2660,418 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                   const SizedBox(height: 16),
                   */
 
-                    // -----------------------
-                    // âœ… BILLING ADDRESS + SHIPPING TOGGLE
-                    // -----------------------
-                    _SectionCard(
-                      title: 'Billing Address',
-                      subtitle:
-                          'Enter the billing address/shipping address for your company',
-                      child: Column(
-                        children: [
-                          _FieldLabel.required('Street Address'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _streetCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec(
-                                'Street Address',
-                                'Enter Billing Street Address',
+                        // -----------------------
+                        // âœ… BILLING ADDRESS + SHIPPING TOGGLE
+                        // -----------------------
+                        _SectionCard(
+                          title: 'Billing Address',
+                          subtitle:
+                              'Enter the billing address/shipping address for your company',
+                          child: Column(
+                            children: [
+                              _FieldLabel.required('Street Address'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _streetCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'Street Address',
+                                    'Enter Billing Street Address',
+                                  ),
+                                  onChanged: (_) =>
+                                      _autofillBillingAddressFromStreet(),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'Street Address'),
+                                ),
                               ),
-                              onChanged: (_) =>
-                                  _autofillBillingAddressFromStreet(),
-                              validator: (v) =>
-                                  _requiredValidator(v, 'Street Address'),
-                            ),
-                          ),
-                          if (_billingStreetSuggestionsLoading)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: LinearProgressIndicator(minHeight: 2),
-                            ),
-                          if (_billingStreetSuggestions.isNotEmpty)
-                            Builder(
-                              builder: (context) {
-                                final suggestionCount =
-                                    _billingStreetSuggestions.length;
-                                final menuHeight =
-                                    AutocompleteDropdownSizing.menuHeight(
-                                      itemCount: suggestionCount,
-                                      itemExtent: 40,
-                                    );
-                                return Container(
-                                  margin: const EdgeInsets.only(top: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.zero,
-                                    border: Border.all(color: Colors.black12),
-                                  ),
-                                  constraints: BoxConstraints(
-                                    maxHeight: menuHeight,
-                                  ),
-                                  child: ListView.separated(
-                                    shrinkWrap:
-                                        AutocompleteDropdownSizing.shrinkWrap(
-                                          suggestionCount,
+                              if (_billingStreetSuggestionsLoading)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8),
+                                  child: LinearProgressIndicator(minHeight: 2),
+                                ),
+                              if (_billingStreetSuggestions.isNotEmpty)
+                                Builder(
+                                  builder: (context) {
+                                    final suggestionCount =
+                                        _billingStreetSuggestions.length;
+                                    final menuHeight =
+                                        AutocompleteDropdownSizing.menuHeight(
+                                          itemCount: suggestionCount,
+                                          itemExtent: 40,
+                                        );
+                                    return Container(
+                                      margin: const EdgeInsets.only(top: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.zero,
+                                        border: Border.all(
+                                          color: Colors.black12,
                                         ),
-                                    physics:
-                                        AutocompleteDropdownSizing.scrollPhysics(
-                                          suggestionCount,
-                                        ),
-                                    itemCount: suggestionCount,
-                                    separatorBuilder: (_, _) =>
-                                        const Divider(height: 1),
-                                    itemBuilder: (_, i) => ListTile(
-                                      dense: true,
-                                      title: Text(
-                                        _billingStreetSuggestions[i]
-                                            .displayLabel,
-                                        style: const TextStyle(fontSize: 12),
                                       ),
-                                      onTap: () =>
-                                          _selectBillingStreetSuggestion(
-                                            _billingStreetSuggestions[i],
+                                      constraints: BoxConstraints(
+                                        maxHeight: menuHeight,
+                                      ),
+                                      child: ListView.separated(
+                                        shrinkWrap:
+                                            AutocompleteDropdownSizing.shrinkWrap(
+                                              suggestionCount,
+                                            ),
+                                        physics:
+                                            AutocompleteDropdownSizing.scrollPhysics(
+                                              suggestionCount,
+                                            ),
+                                        itemCount: suggestionCount,
+                                        separatorBuilder: (_, _) =>
+                                            const Divider(height: 1),
+                                        itemBuilder: (_, i) => ListTile(
+                                          dense: true,
+                                          title: Text(
+                                            _billingStreetSuggestions[i]
+                                                .displayLabel,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                            ),
                                           ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.required('City'),
-                          const SizedBox(height: 6),
-                          _req(
-                            true,
-                            TextFormField(
-                              controller: _cityCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec('City', 'Enter Billing City'),
-                              validator: (v) =>
-                                  _requiredValidator(v, 'City'),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          _isBillingUnitedStates
-                              ? _FieldLabel.required('State')
-                              : _FieldLabel.normal('State / Region'),
-                          const SizedBox(height: 6),
-                          if (_isBillingUnitedStates)
-                            _typeAheadPicker(
-                              label: 'State',
-                              hint: 'Type billing state',
-                              options: usStates,
-                              selectedValue: _selectedState,
-                              required: true,
-                              onChanged: (v) =>
-                                  setState(() => _selectedState = v),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'State is required'
-                                  : null,
-                            )
-                          else
-                            TextFormField(
-                              controller: _manualStateCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec(
-                                'State / Region',
-                                'Enter Billing State / Region',
-                              ),
-                              validator: (_) => null,
-                            ),
-                          const SizedBox(height: 16),
-
-                          _isBillingUnitedStates
-                              ? _FieldLabel.required('Zip Code')
-                              : _FieldLabel.normal('Zip Code'),
-                          const SizedBox(height: 6),
-                          _req(
-                            _isBillingUnitedStates,
-                            TextFormField(
-                              controller: _zipCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.number,
-                              decoration: _dec(
-                                'Zip Code',
-                                'Enter Billing Zip Code',
-                              ),
-                              validator: (v) => _zipValidator(
-                                v,
-                                enforceUsPattern: _isBillingUnitedStates,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          _FieldLabel.required('Country'),
-                          const SizedBox(height: 6),
-                          _typeAheadPicker(
-                            label: 'Country',
-                            hint: 'Type billing country',
-                            options: countries,
-                            selectedValue: _selectedCountry,
-                            required: true,
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() {
-                                _selectedCountry = v;
-                                if (_isBillingUnitedStates) {
-                                  _manualStateCtrl.clear();
-                                } else {
-                                  _selectedState = null;
-                                }
-                              });
-                            },
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Country is required'
-                                : null,
-                          ),
-                          const SizedBox(height: 6),
-
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.zero,
-                              border: Border.all(
-                                color: Colors.black.withValues(alpha: 0.06),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Is Shipping Address same as Billing Address',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.black.withValues(
-                                        alpha: 0.75,
+                                          onTap: () =>
+                                              _selectBillingStreetSuggestion(
+                                                _billingStreetSuggestions[i],
+                                              ),
+                                        ),
                                       ),
-                                    ),
+                                    );
+                                  },
+                                ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.required('City'),
+                              const SizedBox(height: 6),
+                              _req(
+                                true,
+                                TextFormField(
+                                  controller: _cityCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'City',
+                                    'Enter Billing City',
+                                  ),
+                                  validator: (v) =>
+                                      _requiredValidator(v, 'City'),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              _isBillingUnitedStates
+                                  ? _FieldLabel.required('State')
+                                  : _FieldLabel.normal('State / Region'),
+                              const SizedBox(height: 6),
+                              if (_isBillingUnitedStates)
+                                _typeAheadPicker(
+                                  label: 'State',
+                                  hint: 'Type billing state',
+                                  options: usStates,
+                                  selectedValue: _selectedState,
+                                  required: true,
+                                  onChanged: (v) =>
+                                      setState(() => _selectedState = v),
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                      ? 'State is required'
+                                      : null,
+                                )
+                              else
+                                TextFormField(
+                                  controller: _manualStateCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  decoration: _dec(
+                                    'State / Region',
+                                    'Enter Billing State / Region',
+                                  ),
+                                  validator: (_) => null,
+                                ),
+                              const SizedBox(height: 16),
+
+                              _isBillingUnitedStates
+                                  ? _FieldLabel.required('Zip Code')
+                                  : _FieldLabel.normal('Zip Code'),
+                              const SizedBox(height: 6),
+                              _req(
+                                _isBillingUnitedStates,
+                                TextFormField(
+                                  controller: _zipCtrl,
+                                  style: const TextStyle(fontSize: _inputFs),
+                                  keyboardType: TextInputType.number,
+                                  decoration: _dec(
+                                    'Zip Code',
+                                    'Enter Billing Zip Code',
+                                  ),
+                                  validator: (v) => _zipValidator(
+                                    v,
+                                    enforceUsPattern: _isBillingUnitedStates,
                                   ),
                                 ),
-                                Switch(
-                                  value: _shippingSameAsBilling,
-                                  activeThumbColor: AppColors.deepPlum,
-                                  inactiveThumbColor: AppColors.blackCatLight,
-                                  inactiveTrackColor: AppColors.blackCatLight
-                                      .withValues(alpha: 0.35),
-                                  onChanged: (v) => setState(
-                                    () => _shippingSameAsBilling = v,
+                              ),
+                              const SizedBox(height: 16),
+
+                              _FieldLabel.required('Country'),
+                              const SizedBox(height: 6),
+                              _typeAheadPicker(
+                                label: 'Country',
+                                hint: 'Type billing country',
+                                options: countries,
+                                selectedValue: _selectedCountry,
+                                required: true,
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  setState(() {
+                                    _selectedCountry = v;
+                                    if (_isBillingUnitedStates) {
+                                      _manualStateCtrl.clear();
+                                    } else {
+                                      _selectedState = null;
+                                    }
+                                  });
+                                },
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                    ? 'Country is required'
+                                    : null,
+                              ),
+                              const SizedBox(height: 6),
+
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.zero,
+                                  border: Border.all(
+                                    color: Colors.black.withValues(alpha: 0.06),
                                   ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Is Shipping Address same as Billing Address',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.black.withValues(
+                                            alpha: 0.75,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: _shippingSameAsBilling,
+                                      activeThumbColor: AppColors.deepPlum,
+                                      inactiveThumbColor:
+                                          AppColors.blackCatLight,
+                                      inactiveTrackColor: AppColors
+                                          .blackCatLight
+                                          .withValues(alpha: 0.35),
+                                      onChanged: (v) => setState(
+                                        () => _shippingSameAsBilling = v,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              if (!_shippingSameAsBilling) ...[
+                                const SizedBox(height: 16),
+                                const Divider(height: 1),
+                                const SizedBox(height: 16),
+                                _FieldLabel.required('Street Address'),
+                                const SizedBox(height: 6),
+                                _req(
+                                  true,
+                                  TextFormField(
+                                    controller: _shipStreetCtrl,
+                                    style: const TextStyle(fontSize: _inputFs),
+                                    decoration: _dec(
+                                      'Street Address',
+                                      'Enter Shipping Street Address',
+                                    ),
+                                    onChanged: (_) =>
+                                        _autofillShippingAddressFromStreet(),
+                                    validator: (v) => !_shippingSameAsBilling
+                                        ? _requiredValidator(
+                                            v,
+                                            'Street Address',
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                                if (_shippingStreetSuggestionsLoading)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: LinearProgressIndicator(
+                                      minHeight: 2,
+                                    ),
+                                  ),
+                                if (_shippingStreetSuggestions.isNotEmpty)
+                                  Builder(
+                                    builder: (context) {
+                                      final suggestionCount =
+                                          _shippingStreetSuggestions.length;
+                                      final menuHeight =
+                                          AutocompleteDropdownSizing.menuHeight(
+                                            itemCount: suggestionCount,
+                                            itemExtent: 40,
+                                          );
+                                      return Container(
+                                        margin: const EdgeInsets.only(top: 8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.zero,
+                                          border: Border.all(
+                                            color: Colors.black12,
+                                          ),
+                                        ),
+                                        constraints: BoxConstraints(
+                                          maxHeight: menuHeight,
+                                        ),
+                                        child: ListView.separated(
+                                          shrinkWrap:
+                                              AutocompleteDropdownSizing.shrinkWrap(
+                                                suggestionCount,
+                                              ),
+                                          physics:
+                                              AutocompleteDropdownSizing.scrollPhysics(
+                                                suggestionCount,
+                                              ),
+                                          itemCount: suggestionCount,
+                                          separatorBuilder: (_, _) =>
+                                              const Divider(height: 1),
+                                          itemBuilder: (_, i) => ListTile(
+                                            dense: true,
+                                            title: Text(
+                                              _shippingStreetSuggestions[i]
+                                                  .displayLabel,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            onTap: () =>
+                                                _selectShippingStreetSuggestion(
+                                                  _shippingStreetSuggestions[i],
+                                                ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                const SizedBox(height: 16),
+                                _FieldLabel.required('City'),
+                                const SizedBox(height: 6),
+                                _req(
+                                  true,
+                                  TextFormField(
+                                    controller: _shipCityCtrl,
+                                    style: const TextStyle(fontSize: _inputFs),
+                                    decoration: _dec(
+                                      'City',
+                                      'Enter Shipping City',
+                                    ),
+                                    validator: (v) => !_shippingSameAsBilling
+                                        ? _requiredValidator(v, 'Shipping City')
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                _isShippingUnitedStates
+                                    ? _FieldLabel.required('State')
+                                    : _FieldLabel.normal('State / Region'),
+                                const SizedBox(height: 6),
+                                if (_isShippingUnitedStates)
+                                  _typeAheadPicker(
+                                    label: 'State',
+                                    hint: 'Type shipping state',
+                                    options: usStates,
+                                    selectedValue: _shipSelectedState,
+                                    required: true,
+                                    onChanged: (v) =>
+                                        setState(() => _shipSelectedState = v),
+                                    validator: (v) =>
+                                        !_shippingSameAsBilling &&
+                                            (v == null || v.trim().isEmpty)
+                                        ? 'Shipping State is required'
+                                        : null,
+                                  )
+                                else
+                                  TextFormField(
+                                    controller: _shipManualStateCtrl,
+                                    style: const TextStyle(fontSize: _inputFs),
+                                    decoration: _dec(
+                                      'State / Region',
+                                      'Enter Shipping State / Region',
+                                    ),
+                                    validator: (_) => null,
+                                  ),
+                                const SizedBox(height: 16),
+                                _isShippingUnitedStates
+                                    ? _FieldLabel.required('Zip Code')
+                                    : _FieldLabel.normal('Zip Code'),
+                                const SizedBox(height: 6),
+                                _req(
+                                  _isShippingUnitedStates,
+                                  TextFormField(
+                                    controller: _shipZipCtrl,
+                                    style: const TextStyle(fontSize: _inputFs),
+                                    keyboardType: TextInputType.number,
+                                    decoration: _dec(
+                                      'Zip Code',
+                                      'Enter Shipping Zip Code',
+                                    ),
+                                    validator: (v) => !_shippingSameAsBilling
+                                        ? _zipValidator(
+                                            v,
+                                            enforceUsPattern:
+                                                _isShippingUnitedStates,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                _FieldLabel.required('Country'),
+                                const SizedBox(height: 6),
+                                _typeAheadPicker(
+                                  label: 'Country',
+                                  hint: 'Type shipping country',
+                                  options: countries,
+                                  selectedValue: _shipSelectedCountry,
+                                  required: true,
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    setState(() {
+                                      _shipSelectedCountry = v;
+                                      if (_isShippingUnitedStates) {
+                                        _shipManualStateCtrl.clear();
+                                      } else {
+                                        _shipSelectedState = null;
+                                      }
+                                    });
+                                  },
+                                  validator: (v) =>
+                                      !_shippingSameAsBilling &&
+                                          (v == null || v.trim().isEmpty)
+                                      ? 'Shipping Country is required'
+                                      : null,
                                 ),
                               ],
-                            ),
+                              const SizedBox(height: 4),
+                            ],
                           ),
+                        ),
 
-                          if (!_shippingSameAsBilling) ...[
-                            const SizedBox(height: 16),
-                            const Divider(height: 1),
-                            const SizedBox(height: 16),
-                            _FieldLabel.required('Street Address'),
-                            const SizedBox(height: 6),
-                            _req(
-                              true,
-                              TextFormField(
-                                controller: _shipStreetCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec(
-                                  'Street Address',
-                                  'Enter Shipping Street Address',
-                                ),
-                                onChanged: (_) =>
-                                    _autofillShippingAddressFromStreet(),
-                                validator: (v) => !_shippingSameAsBilling
-                                    ? _requiredValidator(v, 'Street Address')
-                                    : null,
-                              ),
-                            ),
-                            if (_shippingStreetSuggestionsLoading)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 8),
-                                child: LinearProgressIndicator(minHeight: 2),
-                              ),
-                            if (_shippingStreetSuggestions.isNotEmpty)
-                              Builder(
-                                builder: (context) {
-                                  final suggestionCount =
-                                      _shippingStreetSuggestions.length;
-                                  final menuHeight =
-                                      AutocompleteDropdownSizing.menuHeight(
-                                        itemCount: suggestionCount,
-                                        itemExtent: 40,
-                                      );
-                                  return Container(
-                                    margin: const EdgeInsets.only(top: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.zero,
-                                      border: Border.all(color: Colors.black12),
-                                    ),
-                                    constraints: BoxConstraints(
-                                      maxHeight: menuHeight,
-                                    ),
-                                    child: ListView.separated(
-                                      shrinkWrap:
-                                          AutocompleteDropdownSizing.shrinkWrap(
-                                            suggestionCount,
-                                          ),
-                                      physics:
-                                          AutocompleteDropdownSizing.scrollPhysics(
-                                            suggestionCount,
-                                          ),
-                                      itemCount: suggestionCount,
-                                      separatorBuilder: (_, _) =>
-                                          const Divider(height: 1),
-                                      itemBuilder: (_, i) => ListTile(
-                                        dense: true,
-                                        title: Text(
-                                          _shippingStreetSuggestions[i]
-                                              .displayLabel,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        onTap: () =>
-                                            _selectShippingStreetSuggestion(
-                                              _shippingStreetSuggestions[i],
-                                            ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            const SizedBox(height: 16),
-                            _FieldLabel.required('City'),
-                            const SizedBox(height: 6),
-                            _req(
-                              true,
-                              TextFormField(
-                                controller: _shipCityCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec('City', 'Enter Shipping City'),
-                                validator: (v) => !_shippingSameAsBilling
-                                    ? _requiredValidator(v, 'Shipping City')
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _isShippingUnitedStates
-                                ? _FieldLabel.required('State')
-                                : _FieldLabel.normal('State / Region'),
-                            const SizedBox(height: 6),
-                            if (_isShippingUnitedStates)
-                              _typeAheadPicker(
-                                label: 'State',
-                                hint: 'Type shipping state',
-                                options: usStates,
-                                selectedValue: _shipSelectedState,
-                                required: true,
-                                onChanged: (v) =>
-                                    setState(() => _shipSelectedState = v),
-                                validator: (v) =>
-                                    !_shippingSameAsBilling &&
-                                        (v == null || v.trim().isEmpty)
-                                    ? 'Shipping State is required'
-                                    : null,
-                              )
-                            else
-                              TextFormField(
-                                controller: _shipManualStateCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                decoration: _dec(
-                                  'State / Region',
-                                  'Enter Shipping State / Region',
-                                ),
-                                validator: (_) => null,
-                              ),
-                            const SizedBox(height: 16),
-                            _isShippingUnitedStates
-                                ? _FieldLabel.required('Zip Code')
-                                : _FieldLabel.normal('Zip Code'),
-                            const SizedBox(height: 6),
-                            _req(
-                              _isShippingUnitedStates,
-                              TextFormField(
-                                controller: _shipZipCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                keyboardType: TextInputType.number,
-                                decoration: _dec(
-                                  'Zip Code',
-                                  'Enter Shipping Zip Code',
-                                ),
-                                validator: (v) => !_shippingSameAsBilling
-                                    ? _zipValidator(
-                                        v,
-                                        enforceUsPattern:
-                                            _isShippingUnitedStates,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _FieldLabel.required('Country'),
-                            const SizedBox(height: 6),
-                            _typeAheadPicker(
-                              label: 'Country',
-                              hint: 'Type shipping country',
-                              options: countries,
-                              selectedValue: _shipSelectedCountry,
-                              required: true,
-                              onChanged: (v) {
-                                if (v == null) return;
-                                setState(() {
-                                  _shipSelectedCountry = v;
-                                  if (_isShippingUnitedStates) {
-                                    _shipManualStateCtrl.clear();
-                                  } else {
-                                    _shipSelectedState = null;
-                                  }
-                                });
-                              },
-                              validator: (v) =>
-                                  !_shippingSameAsBilling &&
-                                      (v == null || v.trim().isEmpty)
-                                  ? 'Shipping Country is required'
-                                  : null,
-                            ),
-                          ],
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    ),
+                        const SizedBox(height: 16),
 
-                    const SizedBox(height: 16),
-
-                    /*
+                        /*
                   // -----------------------
                   // âœ… REQUEST DEFAULTS (optional, helps modal autofill)
                   // -----------------------
@@ -3278,487 +3262,332 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                     ),
                   ],*/
                   */
-                    _SectionCard(
-                      title: 'Payment Method',
-                      subtitle: 'Enter your preferred payment method.',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          //_FieldLabel.required('Billing Method'),
-                          const SizedBox(height: 6),
-                          Column(
-                            children: _billingMethods.map((method) {
-                              final selected = _billingMethod == method;
-                              return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.fromLTRB(
-                                    10,
-                                    8,
-                                    10,
-                                    10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.zero,
-                                    border: Border.all(
-                                      color: selected
-                                          ? AppColors.deepPlum
-                                          : Colors.black.withValues(
-                                              alpha: 0.08,
-                                            ),
+                        _SectionCard(
+                          title: 'Payment Method',
+                          subtitle: 'Enter your preferred payment method.',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              //_FieldLabel.required('Billing Method'),
+                              const SizedBox(height: 6),
+                              Column(
+                                children: _billingMethods.map((method) {
+                                  final selected = _billingMethod == method;
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.fromLTRB(
+                                      10,
+                                      8,
+                                      10,
+                                      10,
                                     ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      InkWell(
-                                        onTap: () => setState(
-                                          () => _billingMethod = method,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Radio<String>(
-                                              value: method,
-                                              groupValue: _billingMethod,
-                                              onChanged: (value) {
-                                                if (value == null) return;
-                                                setState(
-                                                  () => _billingMethod = value,
-                                                );
-                                              },
-                                              activeColor: AppColors.deepPlum,
-                                            ),
-                                            Expanded(
-                                              child: Text(
-                                                method,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.zero,
+                                      border: Border.all(
+                                        color: selected
+                                            ? AppColors.deepPlum
+                                            : Colors.black.withValues(
+                                                alpha: 0.08,
+                                              ),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        InkWell(
+                                          onTap: () => setState(
+                                            () => _billingMethod = method,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                _billingMethod == method
+                                                    ? Icons.radio_button_checked
+                                                    : Icons
+                                                          .radio_button_unchecked,
+                                                color: AppColors.deepPlum,
+                                              ),
+                                              Expanded(
+                                                child: Text(
+                                                  method,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
                                                 ),
                                               ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (selected) ...[
+                                          const SizedBox(height: 6),
+                                          if (method ==
+                                              'Credit/Debit Card') ...[
+                                            TextFormField(
+                                              controller: _cardNameCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              decoration: _dec(
+                                                'Name on Card',
+                                                'Enter Name on Card',
+                                              ),
+                                              validator: (v) =>
+                                                  _billingRequiredIfSelected(
+                                                    v,
+                                                    method: method,
+                                                    fieldName: 'Name on Card',
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            TextFormField(
+                                              controller: _cardNumberCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                                LengthLimitingTextInputFormatter(
+                                                  19,
+                                                ),
+                                                CardNumberTextInputFormatter(),
+                                              ],
+                                              decoration: _dec(
+                                                'Card Number',
+                                                'Enter Card Number',
+                                              ),
+                                              validator: (v) =>
+                                                  _billingRequiredIfSelected(
+                                                    v,
+                                                    method: method,
+                                                    fieldName: 'Card Number',
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: TextFormField(
+                                                    controller: _cardExpiryCtrl,
+                                                    style: const TextStyle(
+                                                      fontSize: _inputFs,
+                                                    ),
+                                                    keyboardType:
+                                                        TextInputType.number,
+                                                    inputFormatters: [
+                                                      FilteringTextInputFormatter
+                                                          .digitsOnly,
+                                                      LengthLimitingTextInputFormatter(
+                                                        4,
+                                                      ),
+                                                      ExpiryDateTextInputFormatter(),
+                                                    ],
+                                                    decoration: _dec(
+                                                      'Expiration Date',
+                                                      'MM/YY',
+                                                    ),
+                                                    validator: (v) =>
+                                                        _billingRequiredIfSelected(
+                                                          v,
+                                                          method: method,
+                                                          fieldName:
+                                                              'Expiration Date',
+                                                        ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: TextFormField(
+                                                    controller: _cardCvvCtrl,
+                                                    style: const TextStyle(
+                                                      fontSize: _inputFs,
+                                                    ),
+                                                    keyboardType:
+                                                        TextInputType.number,
+                                                    inputFormatters: [
+                                                      FilteringTextInputFormatter
+                                                          .digitsOnly,
+                                                      LengthLimitingTextInputFormatter(
+                                                        4,
+                                                      ),
+                                                    ],
+                                                    decoration: _dec(
+                                                      'CVV',
+                                                      'CVV',
+                                                    ),
+                                                    validator: (v) =>
+                                                        _billingRequiredIfSelected(
+                                                          v,
+                                                          method: method,
+                                                          fieldName: 'CVV',
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
-                                        ),
-                                      ),
-                                      if (selected) ...[
-                                        const SizedBox(height: 6),
-                                        if (method == 'Credit/Debit Card') ...[
-                                          TextFormField(
-                                            controller: _cardNameCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            decoration: _dec(
-                                              'Name on Card',
-                                              'Enter Name on Card',
-                                            ),
-                                            validator: (v) =>
-                                                _billingRequiredIfSelected(
-                                                  v,
-                                                  method: method,
-                                                  fieldName: 'Name on Card',
-                                                ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          TextFormField(
-                                            controller: _cardNumberCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                              LengthLimitingTextInputFormatter(
-                                                19,
+                                          if (method == 'ACH Transfer') ...[
+                                            TextFormField(
+                                              controller: _achAccountNameCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
                                               ),
-                                              CardNumberTextInputFormatter(),
-                                            ],
-                                            decoration: _dec(
-                                              'Card Number',
-                                              'Enter Card Number',
-                                            ),
-                                            validator: (v) =>
-                                                _billingRequiredIfSelected(
-                                                  v,
-                                                  method: method,
-                                                  fieldName: 'Card Number',
-                                                ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _cardExpiryCtrl,
-                                                  style: const TextStyle(
-                                                    fontSize: _inputFs,
-                                                  ),
-                                                  keyboardType:
-                                                      TextInputType.number,
-                                                  inputFormatters: [
-                                                    FilteringTextInputFormatter
-                                                        .digitsOnly,
-                                                    LengthLimitingTextInputFormatter(
-                                                      4,
-                                                    ),
-                                                    ExpiryDateTextInputFormatter(),
-                                                  ],
-                                                  decoration: _dec(
-                                                    'Expiration Date',
-                                                    'MM/YY',
-                                                  ),
-                                                  validator: (v) =>
-                                                      _billingRequiredIfSelected(
-                                                        v,
-                                                        method: method,
-                                                        fieldName:
-                                                            'Expiration Date',
-                                                      ),
-                                                ),
+                                              decoration: _dec(
+                                                'Account Holder Name',
+                                                'Enter Account Holder Name',
                                               ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: TextFormField(
-                                                  controller: _cardCvvCtrl,
-                                                  style: const TextStyle(
-                                                    fontSize: _inputFs,
-                                                  ),
-                                                  keyboardType:
-                                                      TextInputType.number,
-                                                  inputFormatters: [
-                                                    FilteringTextInputFormatter
-                                                        .digitsOnly,
-                                                    LengthLimitingTextInputFormatter(
-                                                      4,
-                                                    ),
-                                                  ],
-                                                  decoration: _dec(
-                                                    'CVV',
-                                                    'CVV',
-                                                  ),
-                                                  validator: (v) =>
-                                                      _billingRequiredIfSelected(
-                                                        v,
-                                                        method: method,
-                                                        fieldName: 'CVV',
-                                                      ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                        if (method == 'ACH Transfer') ...[
-                                          TextFormField(
-                                            controller: _achAccountNameCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            decoration: _dec(
-                                              'Account Holder Name',
-                                              'Enter Account Holder Name',
-                                            ),
-                                            validator: (v) =>
-                                                _billingRequiredIfSelected(
-                                                  v,
-                                                  method: method,
-                                                  fieldName:
-                                                      'Account Holder Name',
-                                                ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          TextFormField(
-                                            controller: _achRoutingCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                            decoration: _dec(
-                                              'Routing Number',
-                                              'Enter Routing Number',
-                                            ),
-                                            validator: (v) =>
-                                                _billingRequiredIfSelected(
-                                                  v,
-                                                  method: method,
-                                                  fieldName: 'Routing Number',
-                                                ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          TextFormField(
-                                            controller: _achAccountCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                            decoration: _dec(
-                                              'Account Number',
-                                              'Enter Account Number',
-                                            ),
-                                            validator: (v) =>
-                                                _billingRequiredIfSelected(
-                                                  v,
-                                                  method: method,
-                                                  fieldName: 'Account Number',
-                                                ),
-                                          ),
-                                        ],
-                                        if (method == 'Apple Pay') ...[
-                                          TextFormField(
-                                            controller: _applePayEmailCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
-                                            ),
-                                            keyboardType:
-                                                TextInputType.emailAddress,
-                                            decoration: _dec(
-                                              'Apple Pay Email',
-                                              'Enter Apple Pay Email',
-                                            ),
-                                            validator: (v) {
-                                              final requiredErr =
+                                              validator: (v) =>
                                                   _billingRequiredIfSelected(
                                                     v,
                                                     method: method,
                                                     fieldName:
-                                                        'Apple Pay Email',
-                                                  );
-                                              if (requiredErr != null) {
-                                                return requiredErr;
-                                              }
-                                              if (_billingMethod == method) {
-                                                return _emailValidator(v);
-                                              }
-                                              return null;
-                                            },
-                                          ),
-                                        ],
-                                        if (method == 'Google Pay') ...[
-                                          TextFormField(
-                                            controller: _googlePayEmailCtrl,
-                                            style: const TextStyle(
-                                              fontSize: _inputFs,
+                                                        'Account Holder Name',
+                                                  ),
                                             ),
-                                            keyboardType:
-                                                TextInputType.emailAddress,
-                                            decoration: _dec(
-                                              'Google Pay Email',
-                                              'Enter Google Pay Email',
-                                            ),
-                                            validator: (v) {
-                                              final requiredErr =
+                                            const SizedBox(height: 6),
+                                            TextFormField(
+                                              controller: _achRoutingCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              decoration: _dec(
+                                                'Routing Number',
+                                                'Enter Routing Number',
+                                              ),
+                                              validator: (v) =>
                                                   _billingRequiredIfSelected(
                                                     v,
                                                     method: method,
-                                                    fieldName:
-                                                        'Google Pay Email',
-                                                  );
-                                              if (requiredErr != null) {
-                                                return requiredErr;
-                                              }
-                                              if (_billingMethod == method) {
-                                                return _emailValidator(v);
-                                              }
-                                              return null;
-                                            },
-                                          ),
+                                                    fieldName: 'Routing Number',
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            TextFormField(
+                                              controller: _achAccountCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              decoration: _dec(
+                                                'Account Number',
+                                                'Enter Account Number',
+                                              ),
+                                              validator: (v) =>
+                                                  _billingRequiredIfSelected(
+                                                    v,
+                                                    method: method,
+                                                    fieldName: 'Account Number',
+                                                  ),
+                                            ),
+                                          ],
+                                          if (method == 'Apple Pay') ...[
+                                            TextFormField(
+                                              controller: _applePayEmailCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              keyboardType:
+                                                  TextInputType.emailAddress,
+                                              decoration: _dec(
+                                                'Apple Pay Email',
+                                                'Enter Apple Pay Email',
+                                              ),
+                                              validator: (v) {
+                                                final requiredErr =
+                                                    _billingRequiredIfSelected(
+                                                      v,
+                                                      method: method,
+                                                      fieldName:
+                                                          'Apple Pay Email',
+                                                    );
+                                                if (requiredErr != null) {
+                                                  return requiredErr;
+                                                }
+                                                if (_billingMethod == method) {
+                                                  return _emailValidator(v);
+                                                }
+                                                return null;
+                                              },
+                                            ),
+                                          ],
+                                          if (method == 'Google Pay') ...[
+                                            TextFormField(
+                                              controller: _googlePayEmailCtrl,
+                                              style: const TextStyle(
+                                                fontSize: _inputFs,
+                                              ),
+                                              keyboardType:
+                                                  TextInputType.emailAddress,
+                                              decoration: _dec(
+                                                'Google Pay Email',
+                                                'Enter Google Pay Email',
+                                              ),
+                                              validator: (v) {
+                                                final requiredErr =
+                                                    _billingRequiredIfSelected(
+                                                      v,
+                                                      method: method,
+                                                      fieldName:
+                                                          'Google Pay Email',
+                                                    );
+                                                if (requiredErr != null) {
+                                                  return requiredErr;
+                                                }
+                                                if (_billingMethod == method) {
+                                                  return _emailValidator(v);
+                                                }
+                                                return null;
+                                              },
+                                            ),
+                                          ],
                                         ],
                                       ],
-                                    ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 6),
+                              CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                value: _saveBillingForFutureUse,
+                                onChanged: (v) => setState(
+                                  () => _saveBillingForFutureUse = v ?? false,
+                                ),
+                                activeColor: AppColors.deepPlum,
+                                title: const Text(
+                                  'Save for future use',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                              );
-                            }).toList(),
+                                ),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 6),
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            value: _saveBillingForFutureUse,
-                            onChanged: (v) => setState(
-                              () => _saveBillingForFutureUse = v ?? false,
-                            ),
-                            activeColor: AppColors.deepPlum,
-                            title: const Text(
-                              'Save for future use',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    _SectionCard(
-                      title: 'Payout',
-                      subtitle:
-                          'How your brand receives payouts or reimbursements.',
-                      child: Column(
-                        children: [
-                          _dropdownSemantics(
-                            label: 'Payout Method',
-                            value: _payoutMethod.name,
-                            required: true,
-                            child: DropdownButtonFormField<CompanyPayoutMethod>(
-                              initialValue: _payoutMethod,
-                              style: const TextStyle(
-                                fontSize: _inputFs,
-                                color: AppColors.blackCat,
-                              ),
-                              decoration: _dec(
-                                'Payout Method',
-                                'Select payout method',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: CompanyPayoutMethod.paypal,
-                                  child: Text('PayPal'),
-                                ),
-                                DropdownMenuItem(
-                                  value: CompanyPayoutMethod.venmo,
-                                  child: Text('Venmo'),
-                                ),
-                                DropdownMenuItem(
-                                  value: CompanyPayoutMethod.bankTransfer,
-                                  child: Text('Bank Transfer'),
-                                ),
-                                DropdownMenuItem(
-                                  value: CompanyPayoutMethod.applePay,
-                                  child: Text('Apple Pay'),
-                                ),
-                              ],
-                              onChanged: (value) => setState(
-                                () => _payoutMethod =
-                                    value ?? CompanyPayoutMethod.paypal,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          if (_payoutMethod == CompanyPayoutMethod.paypal ||
-                              _payoutMethod == CompanyPayoutMethod.venmo) ...[
-                            TextFormField(
-                              controller: _payoutLegalNameCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec('Legal Name', 'Legal Name'),
-                              validator: (v) =>
-                                  _payoutRequiredValidator(v, 'Legal Name'),
-                            ),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _payoutEmailCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: _dec(
-                                _payoutMethod == CompanyPayoutMethod.venmo
-                                    ? 'Venmo Email'
-                                    : 'PayPal Email',
-                                'Email',
-                              ),
-                              validator: _emailValidator,
-                            ),
-                          ],
-                          if (_payoutMethod ==
-                              CompanyPayoutMethod.bankTransfer) ...[
-                            TextFormField(
-                              controller: _payoutLegalNameCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec('Legal Name', 'Legal Name'),
-                              validator: (v) =>
-                                  _payoutRequiredValidator(v, 'Legal Name'),
-                            ),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _payoutBankNameCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec('Bank Name', 'Bank name'),
-                              validator: (v) =>
-                                  _payoutRequiredValidator(v, 'Bank Name'),
-                            ),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _payoutRoutingCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.number,
-                              decoration: _dec(
-                                'Routing Number',
-                                'Routing number',
-                              ),
-                              validator: (v) => _payoutRequiredValidator(
-                                v,
-                                'Routing Number',
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _payoutAccountNumberCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.number,
-                              decoration: _dec(
-                                'Account Number',
-                                'Account number',
-                              ),
-                              validator: (v) => _payoutRequiredValidator(
-                                v,
-                                'Account Number',
-                              ),
-                            ),
-                          ],
-                          if (_payoutMethod == CompanyPayoutMethod.applePay) ...[
-                            TextFormField(
-                              controller: _payoutApplePayNameCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              decoration: _dec('Full Name', 'Name on Apple Pay'),
-                              validator: (v) =>
-                                  _payoutRequiredValidator(v, 'Full Name'),
-                            ),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _payoutApplePayPhoneCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(10),
-                                UsPhoneTextInputFormatter(),
-                              ],
-                              decoration: _dec(
-                                'Phone Number',
-                                'Apple Pay phone',
-                              ),
-                              validator: _phoneValidator,
-                            ),
-                            const SizedBox(height: 6),
-                            TextFormField(
-                              controller: _payoutApplePayEmailCtrl,
-                              style: const TextStyle(fontSize: _inputFs),
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: _dec(
-                                'Apple ID Email',
-                                'Email linked to Apple Pay',
-                              ),
-                              validator: _emailValidator,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      _wizardNavButtons(),
                     ],
-                    const SizedBox(height: 18),
-                    _wizardNavButtons(),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -3836,7 +3665,9 @@ class _ProfileUpload extends StatelessWidget {
       onTap: onTap,
       imageProvider: image,
       label: label,
-      helperText: image == null ? 'Tap to upload company logo' : 'Tap to change company logo',
+      helperText: image == null
+          ? 'Tap to upload company logo'
+          : 'Tap to change company logo',
       focusNode: focusNode,
     );
   }

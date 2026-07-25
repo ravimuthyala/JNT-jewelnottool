@@ -13,8 +13,11 @@ import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
+import '../services/notifications_service.dart';
+import '../services/ambassador_role_service.dart';
 
 import 'notifications_page.dart';
+import 'artist_profile_page.dart' show ArtistPayoutSettingsPage;
 
 // Pages
 import 'edit_shipping_address_page.dart';
@@ -256,10 +259,94 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
   Future<void> _bootstrapFromSupabase() async {
     final data = await _readClientRowFromSupabase();
-    if (data == null || !mounted) return;
-    _applyProfileFromSupabase(data);
-    _applyCommunicationPreferences(data);
-    _applyAmbassadorStatus(data);
+    if (!mounted) return;
+    if (data != null) {
+      _applyProfileFromSupabase(data);
+      _applyCommunicationPreferences(data);
+    }
+
+    final isAmbassador =
+        (data != null && AmbassadorRoleService.isAmbassadorFromData(data)) ||
+        await AmbassadorRoleService.currentUserIsAmbassador(
+          fallbackEmail: _profile.basic.email,
+        );
+    if (!mounted) return;
+    setState(() => _isAmbassador = isAmbassador);
+    if (isAmbassador) {
+      unawaited(_ensureAmbassadorPayoutPrompt());
+    }
+  }
+
+  Future<void> _ensureAmbassadorPayoutPrompt() async {
+    final email = _firstNonEmpty([
+      Supabase.instance.client.auth.currentUser?.email,
+      _profile.basic.email,
+    ]).toLowerCase();
+    if (email.isEmpty) return;
+
+    const type = 'ambassador_payout_setup_required';
+    try {
+      final existing = await Supabase.instance.client
+          .from('user_notifications')
+          .select('id')
+          .eq('receiver_email', email)
+          .eq('type', type)
+          .limit(1);
+      if (existing.isNotEmpty) return;
+
+      await NotificationsService.createUserNotification(
+        receiverEmail: email,
+        title: 'Payout method required',
+        body: 'Please update your payout method in your profile.',
+        type: type,
+        sourceCollection: 'client',
+      );
+      await NotificationsService.queueEmail(
+        to: email,
+        subject: 'Update your payout method',
+        text:
+            'Please update your payout method in your profile to receive '
+            'payouts for Brand Campaign requests.',
+      );
+    } catch (e) {
+      debugPrint('AMBASSADOR PAYOUT PROMPT FAILED: $e');
+    }
+  }
+
+  Future<void> _openPayoutSettings() async {
+    if (!_isAmbassador) return;
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    final uid = (user?.id ?? '').trim();
+    final email = (user?.email ?? _profile.basic.email).trim().toLowerCase();
+    final table = await _targetTable();
+
+    Map<String, dynamic>? row;
+    if (uid.isNotEmpty) {
+      row = await supabase.from(table).select().eq('id', uid).maybeSingle();
+    }
+    if (row == null && email.isNotEmpty) {
+      row = await supabase
+          .from(table)
+          .select()
+          .eq('email', email)
+          .maybeSingle();
+    }
+    if (!mounted || row == null) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.9,
+        child: ArtistPayoutSettingsPage(
+          supabaseTable: table,
+          supabaseId: (row!['id'] ?? uid).toString(),
+          initialData: row,
+        ),
+      ),
+    );
   }
 
   void _applyProfileFromSupabase(Map<String, dynamic> data) {
@@ -365,7 +452,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     );
   }
 
-
   void _applyCommunicationPreferences(Map<String, dynamic> data) {
     final rootPrefs = _asMap(data['communicationPreferences']);
     final nestedPrefs = _asMap(
@@ -377,50 +463,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     setState(() {
       _communicationPreferences = CommunicationPreferences.fromMap(source);
     });
-  }
-
-  bool _docIsAmbassador(Map<String, dynamic> data) {
-    String normalized(Object? value) => value.toString().trim().toLowerCase();
-    bool isAmbassadorStatus(Object? raw) {
-      final status = normalized(raw).replaceAll('_', ' ').replaceAll('-', ' ');
-      return status == 'ambassador';
-    }
-
-    final ascension = (data['ascension'] as Map<String, dynamic>?) ?? const {};
-    final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-    final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-    final client = (data['client'] as Map<String, dynamic>?) ?? const {};
-    final profileAscension =
-        (profile['ascension'] as Map<String, dynamic>?) ?? const {};
-    final basicAscension =
-        (basic['ascension'] as Map<String, dynamic>?) ?? const {};
-    final clientAscension =
-        (client['ascension'] as Map<String, dynamic>?) ?? const {};
-
-    final statusCandidates = <Object?>[
-      data['status'],
-      data['partnerStatus'],
-      profile['status'],
-      profile['partnerStatus'],
-      basic['status'],
-      basic['partnerStatus'],
-      client['status'],
-      client['partnerStatus'],
-      ascension['status'],
-      ascension['partnerStatus'],
-      profileAscension['status'],
-      profileAscension['partnerStatus'],
-      basicAscension['status'],
-      basicAscension['partnerStatus'],
-      clientAscension['status'],
-      clientAscension['partnerStatus'],
-    ];
-
-    return statusCandidates.any(isAmbassadorStatus);
-  }
-
-  void _applyAmbassadorStatus(Map<String, dynamic> data) {
-    setState(() => _isAmbassador = _docIsAmbassador(data));
   }
 
   Future<void> _saveCommunicationPreferences(
@@ -926,6 +968,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
             ),
 
             _RowChevronTile(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Payout Settings',
+              onTap: _isAmbassador
+                  ? () => unawaited(_openPayoutSettings())
+                  : null,
+            ),
+
+            _RowChevronTile(
               icon: Icons.location_on_outlined,
               title: 'Shipping Address',
               onTap: _editAddress,
@@ -1165,12 +1215,13 @@ class _RowChevronTile extends StatelessWidget {
 
   final IconData icon;
   final String title;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      button: true,
+      button: onTap != null,
+      enabled: onTap != null,
       label: title,
       onTap: onTap,
       child: ExcludeSemantics(
@@ -1186,16 +1237,24 @@ class _RowChevronTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(icon, color: AppColors.blackCat, size: 18),
+                Icon(
+                  icon,
+                  color: AppColors.blackCat.withValues(
+                    alpha: onTap == null ? 0.35 : 1,
+                  ),
+                  size: 18,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 13,
                       fontFamily: 'Arial',
-                      color: AppColors.blackCat,
+                      color: AppColors.blackCat.withValues(
+                        alpha: onTap == null ? 0.35 : 1,
+                      ),
                     ),
                   ),
                 ),

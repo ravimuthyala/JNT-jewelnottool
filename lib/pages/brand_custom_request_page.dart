@@ -2,9 +2,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,6 +31,8 @@ const int _nfcBudgetSurcharge = 7;
 enum _ClientRecipientMode { pool, specificClient, groupClients }
 
 enum _DesignCreatorMode { pool, specificArtist }
+
+enum _ShippingDestination { clientDirectly, brandMailingAddress }
 
 String scenario21ClientReceiveOnSubmit({
   required String orderRef,
@@ -374,6 +376,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   bool _fallbackToPool = true;
   int _quantity = 1;
   bool _shippingAddressDifferentFromProfile = false;
+  _ShippingDestination _shippingDestination =
+      _ShippingDestination.clientDirectly;
   _ClientRecipientMode _clientRecipientMode = _ClientRecipientMode.pool;
   _DesignCreatorMode _designCreatorMode = _DesignCreatorMode.pool;
   List<String> _brandPartnerClients = <String>[];
@@ -422,7 +426,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   // -----------------------------
   // Budget
   // -----------------------------
-  RangeValues _clientBudget = const RangeValues(15, 5000);
+  RangeValues _clientBudget = const RangeValues(15, 50000);
   RangeValues _artistBudget = const RangeValues(15, 5000);
 
   // -----------------------------
@@ -535,7 +539,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   /// display text, not structured fields — resolve the full address before
   /// applying it. Nominatim-backed suggestions (placeId null) apply
   /// unchanged, synchronously.
-  Future<void> _selectShippingStreetSuggestion(AddressSuggestion selected) async {
+  Future<void> _selectShippingStreetSuggestion(
+    AddressSuggestion selected,
+  ) async {
     if (selected.placeId != null) {
       final resolved = await AddressValidationService.resolvePlaceDetails(
         selected.placeId!,
@@ -1044,8 +1050,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   }
 
   int _effectiveClientBudgetMin() {
-    final base = _clientBudget.start.round();
-    return _nfcRequest ? base + _nfcBudgetSurcharge : base;
+    return _clientBudget.start.round();
   }
 
   int _effectiveArtistBudgetMin() {
@@ -1261,9 +1266,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         final name = _artistDisplayName(data).trim();
         if (name.isEmpty) continue;
         artistNames.add(name);
-        artistAcceptsNfcByName[name.toLowerCase()] = isArtistNfcAccepting(
-          data,
-        );
+        artistAcceptsNfcByName[name.toLowerCase()] = isArtistNfcAccepting(data);
       }
       if (artistNames.isEmpty) {
         final artists = await ArtistDirectoryService.fetchAllArtists(
@@ -1606,20 +1609,32 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                 ? _profile.basic.name.trim()
                 : 'Brand Company');
       final shippingDifferent = _shippingAddressDifferentFromProfile;
+      final shipToClientDirectly =
+          _shippingDestination == _ShippingDestination.clientDirectly;
       final shippingStreet = shippingDifferent
           ? _shipStreetCtrl.text.trim()
+          : shipToClientDirectly
+          ? ''
           : _profile.address.street.trim();
       final shippingCity = shippingDifferent
           ? _shipCityCtrl.text.trim()
+          : shipToClientDirectly
+          ? ''
           : _profile.address.city.trim();
       final shippingState = shippingDifferent
           ? _shipStateCtrl.text.trim()
+          : shipToClientDirectly
+          ? ''
           : _profile.address.state.trim();
       final shippingZip = shippingDifferent
           ? _shipZipCtrl.text.trim()
+          : shipToClientDirectly
+          ? ''
           : _profile.address.zip.trim();
       final shippingCountry = shippingDifferent
           ? _shipCountryCtrl.text.trim()
+          : shipToClientDirectly
+          ? ''
           : _profile.address.country.trim();
       final campaign = _campaignNameCtrl.text.trim();
       final isOpenToClientPool =
@@ -1845,6 +1860,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         },
         'clientProfileImage': _profile.basic.profileImageUrl.trim(),
         'shippingAddressDifferentFromProfile': shippingDifferent,
+        'shipToClientDirectly': shipToClientDirectly,
+        'shippingDestination': shipToClientDirectly
+            ? 'client_directly'
+            : 'brand_mailing_address',
         'shippingStreet': shippingStreet,
         'shippingCity': shippingCity,
         'shippingState': shippingState,
@@ -1852,6 +1871,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         'shippingCountry': shippingCountry,
         'shipping': <String, dynamic>{
           'isDifferentFromProfile': shippingDifferent,
+          'shipToClientDirectly': shipToClientDirectly,
+          'destination': shipToClientDirectly
+              ? 'client_directly'
+              : 'brand_mailing_address',
           'street': shippingStreet,
           'city': shippingCity,
           'state': shippingState,
@@ -1968,6 +1991,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         },
         'shipping': <String, dynamic>{
           'isDifferentFromProfile': shippingDifferent,
+          'shipToClientDirectly': shipToClientDirectly,
+          'destination': shipToClientDirectly
+              ? 'client_directly'
+              : 'brand_mailing_address',
           'street': shippingStreet,
           'city': shippingCity,
           'state': shippingState,
@@ -2668,889 +2695,150 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       namesRoute: true,
       label: 'Brand custom request',
       child: Theme(
-      data: pageTheme,
-      child: Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: widget.showBottomNav && widget.companyName != null
-            ? CompanyHeader(
-                companyName: widget.companyName!,
-                imageUrl: widget.profile.basic.profileImageUrl,
-                onOpenProfile: widget.onOpenProfile,
-                onLogout: widget.onLogout,
-                autoFocusNotifications: true,
-              )
-            : AppBar(
-                backgroundColor: AppColors.alabaster,
-                surfaceTintColor: AppColors.alabaster,
-                elevation: 0,
-                centerTitle: true,
-                title: const Text(
-                  'Company Request',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        data: pageTheme,
+        child: Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: widget.showBottomNav && widget.companyName != null
+              ? CompanyHeader(
+                  companyName: widget.companyName!,
+                  imageUrl: widget.profile.basic.profileImageUrl,
+                  onOpenProfile: widget.onOpenProfile,
+                  onLogout: widget.onLogout,
+                  autoFocusNotifications: true,
+                )
+              : AppBar(
+                  backgroundColor: AppColors.alabaster,
+                  surfaceTintColor: AppColors.alabaster,
+                  elevation: 0,
+                  centerTitle: true,
+                  title: const Text(
+                    'Company Request',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  leading: IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                    ),
+                    onPressed:
+                        widget.onBackHome ?? () => Navigator.pop(context),
+                  ),
                 ),
-                leading: IconButton(
-                  tooltip: 'Back',
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                  onPressed: widget.onBackHome ?? () => Navigator.pop(context),
-                ),
-              ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-          children: [
-            const SizedBox(height: 2),
-            const Center(
-              child: Text(
-                'Create Brand Request',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'times-new-roman',
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                "Define your campaign and what you're looking for.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+            children: [
+              const SizedBox(height: 2),
+              const Center(
+                child: Text(
+                  'Create Brand Request',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'times-new-roman',
+                    color: AppColors.blackCat,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Campaign Details',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-                color: AppColors.blackCat,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _fieldLabel('Campaign / Collection Name *'),
-                  const SizedBox(height: 2),
-                  _InputField(
-                    controller: _campaignNameCtrl,
-                    hint: 'e.g. Spring 2025 Heritage Collection',
-                    minHeight: 52,
-                    verticalPadding: 14,
-                    focusNode: _campaignNameFocusNode,
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  "Define your campaign and what you're looking for.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
                   ),
-                  const SizedBox(height: 2),
-                  _fieldLabel('Need By Date *'),
-                  const SizedBox(height: 2),
-                  _DateField(
-                    controller: _dateCtrl,
-                    onCalendarTap: _pickDate,
-                    onChanged: (value) {
-                      final parsed = _tryParseMmDdYyyy(value);
-                      setState(() {
-                        _needBy = parsed;
-                        if (_jntRevealDate != null &&
-                            (_needBy == null ||
-                                !_jntRevealDate!.isAfter(_needBy!))) {
-                          _jntRevealDate = null;
-                          _revealDateCtrl.clear();
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 2),
-                  _fieldLabel(
-                    'JNT Reveal Date (Date aligned with your campaign)',
-                  ),
-                  const SizedBox(height: 2),
-                  _DateField(
-                    controller: _revealDateCtrl,
-                    onCalendarTap: _pickRevealDate,
-                    onChanged: (value) {
-                      setState(() {
-                        _jntRevealDate = _tryParseMmDdYyyy(value);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 2),
-                  _fieldLabel('Description *'),
-                  const SizedBox(height: 2),
-                  _TextArea(
-                    controller: _descCtrl,
-                    hint:
-                        'Describe your campaign vision, color palette, cultural references, and any specific design requirements...',
-                  ),
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Inspiration & References',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Upload mood board photos, artwork scans, or reference images.',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat.withValues(alpha: 0.60),
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _uploadReferenceImages,
-                          icon: const Icon(
-                            Icons.photo_library_outlined,
-                            size: 18,
-                          ),
-                          label: const Text('Gallery'),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(0, 52),
-                            backgroundColor: AppColors.blackCat.withValues(
-                              alpha: 0.12,
-                            ),
-                            foregroundColor: AppColors.blackCat,
-                            textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: 'Arial',
-                            ),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _captureReferenceImage,
-                          icon: const Icon(
-                            Icons.photo_camera_outlined,
-                            size: 18,
-                          ),
-                          label: const Text('Camera'),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(0, 52),
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                            textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: 'Arial',
-                            ),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo. Maximum 10 photos.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Arial',
-                        color: AppColors.blackCat.withValues(alpha: 0.58),
-                      ),
-                    ),
-                  ),
-                  if (_uploadedFiles.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _uploadedFiles
-                            .map((file) {
-                              return Stack(
-                                children: [
-                                  Container(
-                                    width: 74,
-                                    height: 74,
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: AppColors.blackCat.withValues(
-                                          alpha: 0.25,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Image.memory(
-                                      file.bytes,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 2,
-                                    top: 2,
-                                    child: Semantics(
-                                      button: true,
-                                      label: 'Remove photo',
-                                      onTap: () => setState(
-                                        () => _uploadedFiles.remove(file),
-                                      ),
-                                      child: ExcludeSemantics(
-                                        child: InkWell(
-                                      onTap: () => setState(
-                                        () => _uploadedFiles.remove(file),
-                                      ),
-                                      child: Container(
-                                        color: AppColors.snow,
-                                        padding: const EdgeInsets.all(2),
-                                        child: const Icon(
-                                          Icons.close,
-                                          size: 14,
-                                        ),
-                                      ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            })
-                            .toList(growable: false),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Who receives the order?',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                children: [
-                  CheckboxListTile(
-                    value: _nfcRequest,
-                    activeColor: AppColors.blackCat,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text(
-                      'NFC request',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Arial',
-                        color: AppColors.blackCat,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Only clients with one or more nail dimensions of 8 mm or more are eligible.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Arial',
-                        color: AppColors.blackCat.withValues(alpha: 0.62),
-                      ),
-                    ),
-                    onChanged: (v) => _setNfcRequest(v ?? false),
-                  ),
-                  const SizedBox(height: 8),
-                  _OptionCard(
-                    selected: _clientRecipientMode == _ClientRecipientMode.pool,
-                    title: 'Open to client pool',
-                    badge: 'POOL',
-                    subtitle:
-                        'Any client in the marketplace can claim this request. First to accept proceeds.',
-                    onTap: () => setState(
-                      () => _clientRecipientMode = _ClientRecipientMode.pool,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _OptionCard(
-                    selected:
-                        _clientRecipientMode ==
-                        _ClientRecipientMode.specificClient,
-                    title: 'Designate a specific client',
-                    badge: 'DIRECT',
-                    subtitle:
-                        'Only this client will see and be able to accept the request.',
-                    onTap: () {
-                      setState(
-                        () => _clientRecipientMode =
-                            _ClientRecipientMode.specificClient,
-                      );
-                      _focusAfterBuild(_requestedClientFocusNode);
-                      unawaited(_loadSelectionSources());
-                    },
-                  ),
-                  if (_clientRecipientMode ==
-                      _ClientRecipientMode.specificClient)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: _SearchableSelectField(
-                        value: _requestedClient ?? '',
-                        hint: 'Select Client',
-                        items: _nfcFilteredBrandPartnerClients,
-                        focusNode: _requestedClientFocusNode,
-                        onChanged: (v) => setState(
-                          () => _requestedClient = v.trim().isEmpty
-                              ? null
-                              : v.trim(),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 10),
-                  _OptionCard(
-                    selected:
-                        _clientRecipientMode ==
-                        _ClientRecipientMode.groupClients,
-                    title: 'Group clients (up to 15)',
-                    badge: 'DIRECT',
-                    subtitle:
-                        'Send to a curated list. Each client receives and accepts their own request.',
-                    onTap: () {
-                      setState(
-                        () => _clientRecipientMode =
-                            _ClientRecipientMode.groupClients,
-                      );
-                      _focusAfterBuild(_groupClientFocusNode);
-                      unawaited(_loadSelectionSources());
-                    },
-                  ),
-                  if (_clientRecipientMode ==
-                      _ClientRecipientMode.groupClients) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _SearchableSelectField(
-                            // Keyed only on the selected-count, not on the
-                            // in-progress query text: this field must reset
-                            // (clear its text) after "Add" changes the
-                            // selection, but must NOT be torn down and
-                            // recreated on every keystroke -- doing so
-                            // discarded and rebuilt the Autocomplete/
-                            // FocusNode wiring on every character typed,
-                            // which could leave duplicate stale focus
-                            // listeners registered on the shared external
-                            // FocusNode (a rebuild churn bug, not a text
-                            // filtering requirement).
-                            key: ValueKey<int>(_groupClientFieldResetTick),
-                            value: _groupClientToAdd,
-                            hint: 'Select clients',
-                            focusNode: _groupClientFocusNode,
-                            items: _nfcFilteredBrandPartnerClients
-                                .where(
-                                  (name) => !_groupSelectedClients.any(
-                                    (picked) =>
-                                        picked.toLowerCase() ==
-                                        name.toLowerCase(),
-                                  ),
-                                )
-                                .toList(growable: false),
-                            onChanged: (v) =>
-                                setState(() => _groupClientToAdd = v.trim()),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        SizedBox(
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed: _addGroupClientSelection,
-                            style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              textStyle: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                            child: const Text('Add'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_groupSelectedClients.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 8,
-                          children: _groupSelectedClients
-                              .map((name) {
-                                return MergeSemantics(
-                                  child: Semantics(
-                                    button: true,
-                                    label: 'Remove $name',
-                                    onTap: () => setState(
-                                      () => _groupSelectedClients.remove(name),
-                                    ),
-                                    child: ExcludeSemantics(
-                                      child: InkWell(
-                                  borderRadius: BorderRadius.zero,
-                                  onTap: () => setState(
-                                    () => _groupSelectedClients.remove(name),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            fontFamily: 'Arial',
-                                            color: AppColors.blackCat,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        const Icon(
-                                          Icons.close_rounded,
-                                          size: 14,
-                                          color: AppColors.blackCat,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                    ),
-                                    ),
-                                  ),
-                                );
-                              })
-                              .toList(growable: false),
-                        ),
-                      ),
-                    ],
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Who creates the design?',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                children: [
-                  _OptionCard(
-                    selected: _designCreatorMode == _DesignCreatorMode.pool,
-                    title: 'Open to artist pool',
-                    badge: 'POOL',
-                    subtitle:
-                        'Any qualified artist can accept and fulfill this request.',
-                    onTap: () => setState(
-                      () => _designCreatorMode = _DesignCreatorMode.pool,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _OptionCard(
-                    selected:
-                        _designCreatorMode == _DesignCreatorMode.specificArtist,
-                    title: 'Request a specific artist',
-                    badge: 'DIRECT',
-                    subtitle:
-                        'Only this artist will receive the request. If declined, it returns to the artist pool.',
-                    onTap: () {
-                      setState(
-                        () => _designCreatorMode =
-                            _DesignCreatorMode.specificArtist,
-                      );
-                      _focusAfterBuild(_requestedArtistFocusNode);
-                    },
-                  ),
-                  if (_designCreatorMode == _DesignCreatorMode.specificArtist)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SearchableSelectField(
-                            value: _requestedArtist ?? '',
-                            hint: 'Select Artist',
-                            items: _nfcFilteredDirectRequestArtists,
-                            focusNode: _requestedArtistFocusNode,
-                            onChanged: (v) => setState(
-                              () => _requestedArtist = v.trim().isEmpty
-                                  ? null
-                                  : v.trim(),
-                            ),
-                          ),
-                          if ((_requestedArtist ?? '').trim().isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            Text(
-                              'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.75,
-                                ),
-                                height: 1.2,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                ChoiceChip(
-                                  label: const Text(
-                                    'Yes',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  selected: _fallbackToPool == true,
-                                  selectedColor: AppColors.blackCat,
-                                  backgroundColor: _requestSnow,
-                                  checkmarkColor: AppColors.snow,
-                                  onSelected: (_) =>
-                                      setState(() => _fallbackToPool = true),
-                                  labelStyle: TextStyle(
-                                    fontWeight: FontWeight.w400,
-                                    color: _fallbackToPool == true
-                                        ? AppColors.snow
-                                        : AppColors.blackCat,
-                                  ),
-                                  side: BorderSide(
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.08,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                ChoiceChip(
-                                  label: const Text(
-                                    'No',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  selected: _fallbackToPool == false,
-                                  selectedColor: AppColors.blackCat,
-                                  backgroundColor: _requestSnow,
-                                  checkmarkColor: AppColors.snow,
-                                  onSelected: (_) =>
-                                      setState(() => _fallbackToPool = false),
-                                  labelStyle: TextStyle(
-                                    fontWeight: FontWeight.w400,
-                                    color: _fallbackToPool == false
-                                        ? AppColors.snow
-                                        : AppColors.blackCat,
-                                  ),
-                                  side: BorderSide(
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.08,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Client Budget Range',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Set the client budget range.',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat.withValues(alpha: 0.60),
-              ),
-            ),
-            const SizedBox(height: 10),
-            _BudgetCard(
-              minLabel: _nfcRequest ? '\$${15 + _nfcBudgetSurcharge}' : '\$15',
-              maxLabel: '\$5000',
-              values: _clientBudget,
-              displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
-              onChanged: (v) => setState(() => _clientBudget = v),
-              onChangeEnd: (_) {},
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Artist Budget Range',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Set the artist budget range.',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat.withValues(alpha: 0.60),
-              ),
-            ),
-            const SizedBox(height: 10),
-            _BudgetCard(
-              minLabel: _nfcRequest ? '\$${15 + _nfcBudgetSurcharge}' : '\$15',
-              maxLabel: '\$5000',
-              values: _artistBudget,
-              displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
-              onChanged: (v) => setState(() => _artistBudget = v),
-              onChangeEnd: (_) {},
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Quantity',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Number of sets',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Arial',
-                          ),
-                        ),
-                      ),
-                      _stepperBtn(
-                        icon: Icons.remove,
-                        onTap: () => setState(() {
-                          if (_quantity > 1) _quantity--;
-                        }),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          '$_quantity',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      _stepperBtn(
-                        icon: Icons.add,
-                        onTap: () => setState(() => _quantity++),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Each set includes 10 press-on nails (5 per hand). Minimum order: 1 set.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Arial',
-                      color: AppColors.blackCat.withValues(alpha: 0.58),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Shipping Address',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _shippingAddressDifferentFromProfile,
-                        activeColor: AppColors.blackCat,
-                        onChanged: (v) => setState(
-                          () =>
-                              _shippingAddressDifferentFromProfile = v ?? false,
-                        ),
-                      ),
-                      const Expanded(
-                        child: Text(
-                          'Shipping address different from profile address?',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Arial',
-                            color: AppColors.blackCat,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_shippingAddressDifferentFromProfile) ...[
-                    const SizedBox(height: 6),
-                    _fieldLabel('Shipping Address *'),
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipStreetCtrl,
-                      hint: 'Street',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      onChanged: (_) => _autofillShippingAddressFromStreet(),
-                    ),
-                    if (_shipStreetSuggestionsLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                    if (_shipStreetSuggestions.isNotEmpty)
-                      Builder(
-                        builder: (context) {
-                          final suggestionCount = _shipStreetSuggestions.length;
-                          final menuHeight =
-                              AutocompleteDropdownSizing.menuHeight(
-                                itemCount: suggestionCount,
-                                itemExtent: 40,
-                              );
-                          return Container(
-                            margin: const EdgeInsets.only(top: 8),
-                            decoration: BoxDecoration(
-                              color: _requestSnow,
-                              borderRadius: BorderRadius.zero,
-                              border: Border.all(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.20,
-                                ),
-                              ),
-                            ),
-                            constraints: BoxConstraints(maxHeight: menuHeight),
-                            child: ListView.separated(
-                              shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
-                                suggestionCount,
-                              ),
-                              physics: AutocompleteDropdownSizing.scrollPhysics(
-                                suggestionCount,
-                              ),
-                              itemCount: suggestionCount,
-                              separatorBuilder: (_, _) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (_, i) => ListTile(
-                                dense: true,
-                                title: Text(
-                                  _shipStreetSuggestions[i].displayLabel,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                onTap: () => _selectShippingStreetSuggestion(
-                                  _shipStreetSuggestions[i],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipCityCtrl,
-                      hint: 'City',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                    ),
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipStateCtrl,
-                      hint: 'State',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                    ),
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipZipCtrl,
-                      hint: 'Zip',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                    ),
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipCountryCtrl,
-                      hint: 'Country',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Center(
-              child: Text(
-                'Nail Specifications',
+              const SizedBox(height: 16),
+              const Text(
+                'Campaign Details',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  fontFamily: 'times-new-roman',
+                  fontFamily: 'Arialbold',
+                  color: AppColors.blackCat,
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                'Set dimensions, shape and length for the press-on kit.',
+              const SizedBox(height: 10),
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _fieldLabel('Campaign / Collection Name *'),
+                    const SizedBox(height: 2),
+                    _InputField(
+                      controller: _campaignNameCtrl,
+                      hint: 'e.g. Spring 2025 Heritage Collection',
+                      minHeight: 52,
+                      verticalPadding: 14,
+                      focusNode: _campaignNameFocusNode,
+                    ),
+                    const SizedBox(height: 2),
+                    _fieldLabel('Need By Date *'),
+                    const SizedBox(height: 2),
+                    _DateField(
+                      controller: _dateCtrl,
+                      onCalendarTap: _pickDate,
+                      onChanged: (value) {
+                        final parsed = _tryParseMmDdYyyy(value);
+                        setState(() {
+                          _needBy = parsed;
+                          if (_jntRevealDate != null &&
+                              (_needBy == null ||
+                                  !_jntRevealDate!.isAfter(_needBy!))) {
+                            _jntRevealDate = null;
+                            _revealDateCtrl.clear();
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 2),
+                    _fieldLabel(
+                      'JNT reveal Date (Date the artwork is published publicly)',
+                    ),
+                    const SizedBox(height: 2),
+                    _DateField(
+                      controller: _revealDateCtrl,
+                      onCalendarTap: _pickRevealDate,
+                      onChanged: (value) {
+                        final parsed = _tryParseMmDdYyyy(value);
+                        setState(() {
+                          _jntRevealDate =
+                              parsed != null &&
+                                  _needBy != null &&
+                                  parsed.isAfter(_needBy!)
+                              ? parsed
+                              : null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 2),
+                    _fieldLabel('Description *'),
+                    const SizedBox(height: 2),
+                    _TextArea(
+                      controller: _descCtrl,
+                      hint:
+                          'Describe your campaign vision, color palette, cultural references, and any specific design requirements...',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Inspiration & References',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Upload mood board photos, artwork scans, or reference images.',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -3558,69 +2846,776 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                   color: AppColors.blackCat.withValues(alpha: 0.60),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 16,
-                  color: AppColors.blackCat.withValues(alpha: 0.75),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'For brand orders: the Client’s dimensions will be provided when they accept the request.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Arial',
-                      color: AppColors.blackCat.withValues(alpha: 0.75),
-                      height: 1.3,
+              const SizedBox(height: 10),
+              _Card(
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _uploadReferenceImages,
+                            icon: const Icon(
+                              Icons.photo_library_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Gallery'),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 52),
+                              backgroundColor: AppColors.blackCat.withValues(
+                                alpha: 0.12,
+                              ),
+                              foregroundColor: AppColors.blackCat,
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Arial',
+                              ),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _captureReferenceImage,
+                            icon: const Icon(
+                              Icons.photo_camera_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Camera'),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 52),
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Arial',
+                              ),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo. Maximum 10 photos.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Arial',
+                          color: AppColors.blackCat.withValues(alpha: 0.58),
+                        ),
+                      ),
+                    ),
+                    if (_uploadedFiles.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _uploadedFiles
+                              .map((file) {
+                                return Stack(
+                                  children: [
+                                    Container(
+                                      width: 74,
+                                      height: 74,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.25,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Image.memory(
+                                        file.bytes,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 2,
+                                      top: 2,
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Remove photo',
+                                        onTap: () => setState(
+                                          () => _uploadedFiles.remove(file),
+                                        ),
+                                        child: ExcludeSemantics(
+                                          child: InkWell(
+                                            onTap: () => setState(
+                                              () => _uploadedFiles.remove(file),
+                                            ),
+                                            child: Container(
+                                              color: AppColors.snow,
+                                              padding: const EdgeInsets.all(2),
+                                              child: const Icon(
+                                                Icons.close,
+                                                size: 14,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              })
+                              .toList(growable: false),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.deepPlum,
-                  foregroundColor: AppColors.snow,
-                  textStyle: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Arial',
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Who receives the order?',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
                 ),
-                onPressed: _isSubmitting ? null : _submitRequest,
+              ),
+              const SizedBox(height: 10),
+              _Card(
+                child: Column(
+                  children: [
+                    CheckboxListTile(
+                      value: _nfcRequest,
+                      activeColor: AppColors.blackCat,
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: const Text(
+                        'NFC request',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Arial',
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Only clients with one or more nail dimensions of 8 mm or more are eligible.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Arial',
+                          color: AppColors.blackCat.withValues(alpha: 0.62),
+                        ),
+                      ),
+                      onChanged: (v) => _setNfcRequest(v ?? false),
+                    ),
+                    const SizedBox(height: 8),
+                    _OptionCard(
+                      selected:
+                          _clientRecipientMode == _ClientRecipientMode.pool,
+                      title: 'Open to client pool',
+                      badge: 'POOL',
+                      subtitle:
+                          'Any client in the marketplace can claim this request. First to accept proceeds.',
+                      onTap: () => setState(
+                        () => _clientRecipientMode = _ClientRecipientMode.pool,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _OptionCard(
+                      selected:
+                          _clientRecipientMode ==
+                          _ClientRecipientMode.specificClient,
+                      title: 'Designate a specific client',
+                      badge: 'DIRECT',
+                      subtitle:
+                          'Only this client will see and be able to accept the request.',
+                      onTap: () {
+                        setState(
+                          () => _clientRecipientMode =
+                              _ClientRecipientMode.specificClient,
+                        );
+                        _focusAfterBuild(_requestedClientFocusNode);
+                        unawaited(_loadSelectionSources());
+                      },
+                    ),
+                    if (_clientRecipientMode ==
+                        _ClientRecipientMode.specificClient)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: _SearchableSelectField(
+                          value: _requestedClient ?? '',
+                          hint: 'Select Client',
+                          items: _nfcFilteredBrandPartnerClients,
+                          focusNode: _requestedClientFocusNode,
+                          onChanged: (v) => setState(
+                            () => _requestedClient = v.trim().isEmpty
+                                ? null
+                                : v.trim(),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    _OptionCard(
+                      selected:
+                          _clientRecipientMode ==
+                          _ClientRecipientMode.groupClients,
+                      title: 'Group clients (up to 15)',
+                      badge: 'DIRECT',
+                      subtitle:
+                          'Send to a curated list. Each client receives and accepts their own request.',
+                      onTap: () {
+                        setState(
+                          () => _clientRecipientMode =
+                              _ClientRecipientMode.groupClients,
+                        );
+                        _focusAfterBuild(_groupClientFocusNode);
+                        unawaited(_loadSelectionSources());
+                      },
+                    ),
+                    if (_clientRecipientMode ==
+                        _ClientRecipientMode.groupClients) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SearchableSelectField(
+                              // Keyed only on the selected-count, not on the
+                              // in-progress query text: this field must reset
+                              // (clear its text) after "Add" changes the
+                              // selection, but must NOT be torn down and
+                              // recreated on every keystroke -- doing so
+                              // discarded and rebuilt the Autocomplete/
+                              // FocusNode wiring on every character typed,
+                              // which could leave duplicate stale focus
+                              // listeners registered on the shared external
+                              // FocusNode (a rebuild churn bug, not a text
+                              // filtering requirement).
+                              key: ValueKey<int>(_groupClientFieldResetTick),
+                              value: _groupClientToAdd,
+                              hint: 'Select clients',
+                              focusNode: _groupClientFocusNode,
+                              items: _nfcFilteredBrandPartnerClients
+                                  .where(
+                                    (name) => !_groupSelectedClients.any(
+                                      (picked) =>
+                                          picked.toLowerCase() ==
+                                          name.toLowerCase(),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                              onChanged: (v) =>
+                                  setState(() => _groupClientToAdd = v.trim()),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _addGroupClientSelection,
+                              style: ElevatedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                textStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                              child: const Text('Add'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_groupSelectedClients.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: _groupSelectedClients
+                                .map((name) {
+                                  return MergeSemantics(
+                                    child: Semantics(
+                                      button: true,
+                                      label: 'Remove $name',
+                                      onTap: () => setState(
+                                        () =>
+                                            _groupSelectedClients.remove(name),
+                                      ),
+                                      child: ExcludeSemantics(
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.zero,
+                                          onTap: () => setState(
+                                            () => _groupSelectedClients.remove(
+                                              name,
+                                            ),
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 2,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w500,
+                                                    fontFamily: 'Arial',
+                                                    color: AppColors.blackCat,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                const Icon(
+                                                  Icons.close_rounded,
+                                                  size: 14,
+                                                  color: AppColors.blackCat,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                })
+                                .toList(growable: false),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Who creates the design?',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 10),
+              _Card(
+                child: Column(
+                  children: [
+                    _OptionCard(
+                      selected: _designCreatorMode == _DesignCreatorMode.pool,
+                      title: 'Open to artist pool',
+                      badge: 'POOL',
+                      subtitle:
+                          'Any qualified artist can accept and fulfill this request.',
+                      onTap: () => setState(
+                        () => _designCreatorMode = _DesignCreatorMode.pool,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _OptionCard(
+                      selected:
+                          _designCreatorMode ==
+                          _DesignCreatorMode.specificArtist,
+                      title: 'Request a specific artist',
+                      badge: 'DIRECT',
+                      subtitle:
+                          'Only this artist will receive the request. If declined, it returns to the artist pool.',
+                      onTap: () {
+                        setState(
+                          () => _designCreatorMode =
+                              _DesignCreatorMode.specificArtist,
+                        );
+                        _focusAfterBuild(_requestedArtistFocusNode);
+                      },
+                    ),
+                    if (_designCreatorMode == _DesignCreatorMode.specificArtist)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SearchableSelectField(
+                              value: _requestedArtist ?? '',
+                              hint: 'Select Artist',
+                              items: _nfcFilteredDirectRequestArtists,
+                              focusNode: _requestedArtistFocusNode,
+                              onChanged: (v) => setState(
+                                () => _requestedArtist = v.trim().isEmpty
+                                    ? null
+                                    : v.trim(),
+                              ),
+                            ),
+                            if ((_requestedArtist ?? '').trim().isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              Text(
+                                'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.75,
+                                  ),
+                                  height: 1.2,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  ChoiceChip(
+                                    label: const Text(
+                                      'Yes',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                    selected: _fallbackToPool == true,
+                                    selectedColor: AppColors.blackCat,
+                                    backgroundColor: _requestSnow,
+                                    checkmarkColor: AppColors.snow,
+                                    onSelected: (_) =>
+                                        setState(() => _fallbackToPool = true),
+                                    labelStyle: TextStyle(
+                                      fontWeight: FontWeight.w400,
+                                      color: _fallbackToPool == true
+                                          ? AppColors.snow
+                                          : AppColors.blackCat,
+                                    ),
+                                    side: BorderSide(
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  ChoiceChip(
+                                    label: const Text(
+                                      'No',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                    selected: _fallbackToPool == false,
+                                    selectedColor: AppColors.blackCat,
+                                    backgroundColor: _requestSnow,
+                                    checkmarkColor: AppColors.snow,
+                                    onSelected: (_) =>
+                                        setState(() => _fallbackToPool = false),
+                                    labelStyle: TextStyle(
+                                      fontWeight: FontWeight.w400,
+                                      color: _fallbackToPool == false
+                                          ? AppColors.snow
+                                          : AppColors.blackCat,
+                                    ),
+                                    side: BorderSide(
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Client Budget Range',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Set the budget range for each client',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _BudgetCard(
+                values: _clientBudget,
+                maxValue: 50000,
+                onChanged: (v) => setState(() => _clientBudget = v),
+                onChangeEnd: (_) {},
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Artist Budget Range',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Set the artist budget range.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _BudgetCard(
+                values: _artistBudget,
+                maxValue: 5000,
+                displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
+                onChanged: (v) => setState(() => _artistBudget = v),
+                onChangeEnd: (_) {},
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Where you want the Art work to be Shipped?',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 10),
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _shippingDestinationOption(
+                      label: 'Ship to client directly',
+                      value: _ShippingDestination.clientDirectly,
+                    ),
+                    const SizedBox(height: 6),
+                    _shippingDestinationOption(
+                      label: 'Ship to Brand Mailing Address',
+                      value: _ShippingDestination.brandMailingAddress,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _shippingAddressDifferentFromProfile,
+                          activeColor: AppColors.blackCat,
+                          onChanged: (v) => setState(
+                            () => _shippingAddressDifferentFromProfile =
+                                v ?? false,
+                          ),
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'Shipping address is different from profile',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Arial',
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_shippingAddressDifferentFromProfile) ...[
+                      const SizedBox(height: 6),
+                      _fieldLabel('Shipping Address *'),
+                      const SizedBox(height: 4),
+                      _InputField(
+                        controller: _shipStreetCtrl,
+                        hint: 'Street',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                        onChanged: (_) => _autofillShippingAddressFromStreet(),
+                      ),
+                      if (_shipStreetSuggestionsLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (_shipStreetSuggestions.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            final suggestionCount =
+                                _shipStreetSuggestions.length;
+                            final menuHeight =
+                                AutocompleteDropdownSizing.menuHeight(
+                                  itemCount: suggestionCount,
+                                  itemExtent: 40,
+                                );
+                            return Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                color: _requestSnow,
+                                borderRadius: BorderRadius.zero,
+                                border: Border.all(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.20,
+                                  ),
+                                ),
+                              ),
+                              constraints: BoxConstraints(
+                                maxHeight: menuHeight,
+                              ),
+                              child: ListView.separated(
+                                shrinkWrap:
+                                    AutocompleteDropdownSizing.shrinkWrap(
+                                      suggestionCount,
+                                    ),
+                                physics:
+                                    AutocompleteDropdownSizing.scrollPhysics(
+                                      suggestionCount,
+                                    ),
+                                itemCount: suggestionCount,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (_, i) => ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    _shipStreetSuggestions[i].displayLabel,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () => _selectShippingStreetSuggestion(
+                                    _shipStreetSuggestions[i],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      const SizedBox(height: 4),
+                      _InputField(
+                        controller: _shipCityCtrl,
+                        hint: 'City',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                      ),
+                      const SizedBox(height: 4),
+                      _InputField(
+                        controller: _shipStateCtrl,
+                        hint: 'State',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                      ),
+                      const SizedBox(height: 4),
+                      _InputField(
+                        controller: _shipZipCtrl,
+                        hint: 'Zip',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                      ),
+                      const SizedBox(height: 4),
+                      _InputField(
+                        controller: _shipCountryCtrl,
+                        hint: 'Country',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Center(
                 child: Text(
-                  _isSubmitting ? 'Submitting...' : 'Submit Request',
+                  'Nail Specifications',
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.snow,
-                    fontFamily: 'Arial',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'times-new-roman',
                   ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Set dimensions, shape and length for the press-on kit.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'For brand orders: the Client’s dimensions will be provided when they accept the request.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Arial',
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                height: 54,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.deepPlum,
+                    foregroundColor: AppColors.snow,
+                    textStyle: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: _isSubmitting ? null : _submitRequest,
+                  child: Text(
+                    _isSubmitting ? 'Submitting...' : 'Submit Request',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.snow,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          bottomNavigationBar: widget.showBottomNav
+              ? CompanyBottomNav(
+                  currentIndex: widget.bottomNavIndex,
+                  onTap: (i) => widget.onNavTap?.call(i),
+                )
+              : null,
         ),
-        bottomNavigationBar: widget.showBottomNav
-            ? CompanyBottomNav(
-                currentIndex: widget.bottomNavIndex,
-                onTap: (i) => widget.onNavTap?.call(i),
-              )
-            : null,
       ),
-    ));
+    );
   }
 
   List<String> get _artistOptions {
@@ -3654,23 +3649,44 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     );
   }
 
-  Widget _stepperBtn({required IconData icon, required VoidCallback onTap}) {
+  Widget _shippingDestinationOption({
+    required String label,
+    required _ShippingDestination value,
+  }) {
+    final selected = _shippingDestination == value;
     return Semantics(
       button: true,
-      label: icon == Icons.add ? 'Increase quantity' : 'Decrease quantity',
+      selected: selected,
+      label: label,
       child: ExcludeSemantics(
         child: InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 34,
-        width: 34,
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.35)),
-          borderRadius: BorderRadius.zero,
+          onTap: () => setState(() => _shippingDestination = value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 20,
+                  color: AppColors.blackCat,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Icon(icon, size: 16),
-      ),
-      ),
       ),
     );
   }
@@ -3722,84 +3738,86 @@ class _OptionCard extends StatelessWidget {
         onTap: onTap,
         child: ExcludeSemantics(
           child: InkWell(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          border: Border.all(
-            color: AppColors.blackCat.withValues(alpha: 0.35),
-            width: selected ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.zero,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
+            onTap: onTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                  width: selected ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.zero,
+              ),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'Arial',
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: badge == 'POOL'
+                                    ? AppColors.blackCat.withValues(alpha: 0.14)
+                                    : AppColors.blackCat,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                badge,
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700,
+                                  color: badge == 'POOL'
+                                      ? AppColors.blackCat
+                                      : AppColors.snow,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: badge == 'POOL'
-                              ? AppColors.blackCat.withValues(alpha: 0.14)
-                              : AppColors.blackCat,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          badge,
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
                           style: TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                            color: badge == 'POOL'
-                                ? AppColors.blackCat
-                                : AppColors.snow,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Arial',
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Arial',
-                      color: AppColors.blackCat.withValues(alpha: 0.65),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }
@@ -3888,75 +3906,78 @@ class _SearchableSelectFieldState extends State<_SearchableSelectField> {
               label: widget.hint,
               textField: true,
               child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: (text) {
-                final normalizedText = text.trim();
-                final matchesExisting = normalizedItems.any(
-                  (item) => item.toLowerCase() == normalizedText.toLowerCase(),
-                );
-                if (normalizedText.isEmpty || !matchesExisting) {
-                  widget.onChanged('');
-                }
-              },
-              onTap: () async {
-                if (controller.text.trim().isEmpty &&
-                    normalizedItems.isNotEmpty) {
-                  // Autocomplete only calls optionsBuilder in response to a
-                  // real text change (empty -> empty is a no-op, so tapping
-                  // an already-empty field wouldn't otherwise populate the
-                  // options list at all). Mutating to ' ' and back to ''
-                  // forces that change so the full list populates before the
-                  // options overlay becomes visible.
-                  controller.value = const TextEditingValue(
-                    text: ' ',
-                    selection: TextSelection.collapsed(offset: 1),
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: (text) {
+                  final normalizedText = text.trim();
+                  final matchesExisting = normalizedItems.any(
+                    (item) =>
+                        item.toLowerCase() == normalizedText.toLowerCase(),
                   );
-                  await Future<void>.delayed(const Duration(milliseconds: 16));
-                  controller.value = const TextEditingValue(text: '');
-                }
-              },
-              onSubmitted: (_) => onSubmit(),
-              onTapOutside: (_) => focusNode.unfocus(),
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w400,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat,
-              ),
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                hintStyle: TextStyle(
+                  if (normalizedText.isEmpty || !matchesExisting) {
+                    widget.onChanged('');
+                  }
+                },
+                onTap: () async {
+                  if (controller.text.trim().isEmpty &&
+                      normalizedItems.isNotEmpty) {
+                    // Autocomplete only calls optionsBuilder in response to a
+                    // real text change (empty -> empty is a no-op, so tapping
+                    // an already-empty field wouldn't otherwise populate the
+                    // options list at all). Mutating to ' ' and back to ''
+                    // forces that change so the full list populates before the
+                    // options overlay becomes visible.
+                    controller.value = const TextEditingValue(
+                      text: ' ',
+                      selection: TextSelection.collapsed(offset: 1),
+                    );
+                    await Future<void>.delayed(
+                      const Duration(milliseconds: 16),
+                    );
+                    controller.value = const TextEditingValue(text: '');
+                  }
+                },
+                onSubmitted: (_) => onSubmit(),
+                onTapOutside: (_) => focusNode.unfocus(),
+                style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w400,
                   fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                  color: AppColors.blackCat,
                 ),
-                isDense: true,
-                filled: true,
-                fillColor: AppColors.snow,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
+                decoration: InputDecoration(
+                  hintText: widget.hint,
+                  hintStyle: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.snow,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  suffixIcon: Icon(
+                    Icons.search_rounded,
+                    size: 16,
+                    color: AppColors.blackCat.withValues(alpha: 0.45),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: _requestBorder,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: _requestBorder,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: _requestBorder,
+                  ),
                 ),
-                suffixIcon: Icon(
-                  Icons.search_rounded,
-                  size: 16,
-                  color: AppColors.blackCat.withValues(alpha: 0.45),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: _requestBorder,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: _requestBorder,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: _requestBorder,
-                ),
-              ),
               ),
             );
           },
@@ -3997,23 +4018,23 @@ class _SearchableSelectFieldState extends State<_SearchableSelectField> {
                           button: true,
                           child: ExcludeSemantics(
                             child: InkWell(
-                          onTap: () => onSelected(item),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            child: Text(
-                              item,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w400,
-                                fontFamily: 'Arial',
+                              onTap: () => onSelected(item),
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                child: Text(
+                                  item,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w400,
+                                    fontFamily: 'Arial',
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          ),
                           ),
                         );
                       },
@@ -4045,45 +4066,48 @@ class _DateField extends StatelessWidget {
       label: 'Date',
       textField: true,
       child: TextField(
-      controller: controller,
-      keyboardType: TextInputType.datetime,
-      onChanged: onChanged,
-      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
-      decoration: InputDecoration(
-        hintText: 'MM/DD/YYYY',
-        hintStyle: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w400,
-          fontFamily: 'Arial',
-          color: AppColors.blackCat.withValues(alpha: 0.35),
-        ),
-        isDense: true,
-        filled: true,
-        fillColor: _requestSnow,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        constraints: const BoxConstraints(minHeight: 52),
-        suffixIcon: IconButton(
-          tooltip: 'Pick date',
-          onPressed: onCalendarTap,
-          icon: Icon(
-            Icons.calendar_month_rounded,
-            size: 14,
-            color: AppColors.blackCat.withValues(alpha: 0.45),
+        controller: controller,
+        keyboardType: TextInputType.datetime,
+        onChanged: onChanged,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
+        decoration: InputDecoration(
+          hintText: 'MM/DD/YYYY',
+          hintStyle: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w400,
+            fontFamily: 'Arial',
+            color: AppColors.blackCat.withValues(alpha: 0.35),
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: _requestSnow,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 6,
+          ),
+          constraints: const BoxConstraints(minHeight: 52),
+          suffixIcon: IconButton(
+            tooltip: 'Pick date',
+            onPressed: onCalendarTap,
+            icon: Icon(
+              Icons.calendar_month_rounded,
+              size: 14,
+              color: AppColors.blackCat.withValues(alpha: 0.45),
+            ),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
           ),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-      ),
       ),
     );
   }
@@ -4100,35 +4124,38 @@ class _TextArea extends StatelessWidget {
       label: hint,
       textField: true,
       child: TextField(
-      controller: controller,
-      maxLines: 5,
-      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w400,
-          fontFamily: 'Arial',
-          color: AppColors.blackCat.withValues(alpha: 0.35),
+        controller: controller,
+        maxLines: 5,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w400,
+            fontFamily: 'Arial',
+            color: AppColors.blackCat.withValues(alpha: 0.35),
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: _requestSnow,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 6,
+          ),
+          constraints: const BoxConstraints(minHeight: 52),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
         ),
-        isDense: true,
-        filled: true,
-        fillColor: _requestSnow,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        constraints: const BoxConstraints(minHeight: 52),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-      ),
       ),
     );
   }
@@ -4156,39 +4183,39 @@ class _InputField extends StatelessWidget {
       label: hint,
       textField: true,
       child: TextField(
-      controller: controller,
-      focusNode: focusNode,
-      onChanged: onChanged,
-      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w400,
-          fontFamily: 'Arial',
-          color: AppColors.blackCat.withValues(alpha: 0.35),
+        controller: controller,
+        focusNode: focusNode,
+        onChanged: onChanged,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w400,
+            fontFamily: 'Arial',
+            color: AppColors.blackCat.withValues(alpha: 0.35),
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: _requestSnow,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: verticalPadding,
+          ),
+          constraints: BoxConstraints(minHeight: minHeight),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
         ),
-        isDense: true,
-        filled: true,
-        fillColor: _requestSnow,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: verticalPadding,
-        ),
-        constraints: BoxConstraints(minHeight: minHeight),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: _requestBorder,
-        ),
-      ),
       ),
     );
   }
@@ -4196,29 +4223,22 @@ class _InputField extends StatelessWidget {
 
 class _BudgetCard extends StatelessWidget {
   const _BudgetCard({
-    required this.minLabel,
-    required this.maxLabel,
     required this.values,
-    required this.displayStartOffset,
+    required this.maxValue,
+    this.displayStartOffset = 0,
     required this.onChanged,
     required this.onChangeEnd,
   });
 
-  final String minLabel;
-  final String maxLabel;
   final RangeValues values;
+  final double maxValue;
   final int displayStartOffset;
   final ValueChanged<RangeValues> onChanged;
   final ValueChanged<RangeValues> onChangeEnd;
 
-  String _fmtMoney(double v) => '\$${v.round()}';
-
   @override
   Widget build(BuildContext context) {
     final start = values.start;
-    final end = values.end;
-    final currentText =
-        '${_fmtMoney(start + displayStartOffset)} - ${_fmtMoney(end)}';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -4234,60 +4254,58 @@ class _BudgetCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            currentText,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 6),
-          Theme(
-            data: Theme.of(context).copyWith(
-              sliderTheme: SliderTheme.of(context).copyWith(
-                activeTrackColor: AppColors.blackCat,
-                inactiveTrackColor: AppColors.blackCat.withValues(alpha: 0.10),
-                thumbColor: AppColors.blackCat,
-                overlayColor: AppColors.blackCat.withValues(alpha: 0.10),
-                rangeThumbShape: const RoundRangeSliderThumbShape(
-                  enabledThumbRadius: 9,
-                ),
-                trackHeight: 3.2,
-                showValueIndicator: ShowValueIndicator.never,
+          Expanded(
+            child: TextFormField(
+              key: ValueKey<int>((start + displayStartOffset).round()),
+              initialValue: (start + displayStartOffset).round().toString(),
+              enabled: false,
+              decoration: const InputDecoration(
+                labelText: 'Min',
+                prefixText: '\$',
               ),
             ),
-            child: RangeSlider(
-              min: 15,
-              max: 5000,
-              divisions: 997,
-              values: values,
-              semanticFormatterCallback: (value) =>
-                  _fmtMoney(value + displayStartOffset),
-              onChanged: onChanged,
-              onChangeEnd: onChangeEnd,
-            ),
           ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                minLabel,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  initialValue: '',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(maxValue >= 50000 ? 5 : 4),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Max',
+                    prefixText: '\$',
+                  ),
+                  onChanged: (raw) {
+                    final parsed = double.tryParse(raw);
+                    if (parsed == null) return;
+                    final next = parsed.clamp(start, maxValue).toDouble();
+                    final range = RangeValues(start, next);
+                    onChanged(range);
+                    onChangeEnd(range);
+                  },
                 ),
-              ),
-              Text(
-                maxLabel,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                const SizedBox(height: 4),
+                Text(
+                  maxValue >= 50000
+                      ? 'Maximum allowed: \$50,000'
+                      : 'Maximum allowed: \$5,000',
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

@@ -91,11 +91,12 @@ class _HomePageState extends State<HomePage> {
     final dpr = mediaQuery?.devicePixelRatio ?? 1.0;
     final size = mediaQuery?.size ?? const Size(1080, 1920);
     final safeBgWidth = ((size.width <= 0 ? 1080 : size.width) * dpr).round();
-    final safeBgHeight = ((size.height <= 0 ? 1920 : size.height) * dpr).round();
+    final safeBgHeight = ((size.height <= 0 ? 1920 : size.height) * dpr)
+        .round();
     final safeLogoWidth = (350 * (dpr <= 0 ? 1.0 : dpr)).round();
 
     final bgProvider = ResizeImage(
-      const AssetImage('assets/images/jntlogo1.png'),
+      const AssetImage('assets/images/jntlogo2.png'),
       width: safeBgWidth,
       height: safeBgHeight,
     );
@@ -216,7 +217,7 @@ class _HomePageState extends State<HomePage> {
                   fit: BoxFit.contain,
                   alignment: Alignment.center,
                   child: Image.asset(
-                    'assets/images/jntlogo1.png',
+                    'assets/images/jntlogo2.png',
                     filterQuality: FilterQuality.high,
                   ),
                 ),
@@ -241,8 +242,10 @@ class _HomePageState extends State<HomePage> {
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final logoHeight =
-                      (constraints.maxHeight * 0.42).clamp(180.0, 300.0);
+                  final logoHeight = (constraints.maxHeight * 0.42).clamp(
+                    180.0,
+                    300.0,
+                  );
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
