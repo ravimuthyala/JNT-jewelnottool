@@ -153,7 +153,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       final birthYear = DateTime.now().year - 15 - rand.nextInt(30);
       _dateOfBirth = DateTime(birthYear, 1 + rand.nextInt(11), 1 + rand.nextInt(27));
       _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(_dateOfBirth!);
-
       final p1 = 500 + rand.nextInt(400);
       final p2 = 100 + rand.nextInt(899);
       final p3 = 1000 + rand.nextInt(8999);
