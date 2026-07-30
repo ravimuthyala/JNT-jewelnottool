@@ -139,6 +139,16 @@ class _ClientShellPageState extends State<ClientShellPage> {
     return '';
   }
 
+  bool? _readBool(Map<String, dynamic> source, String key) {
+    final raw = source[key];
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final text = (raw ?? '').toString().trim().toLowerCase();
+    if (text == 'true') return true;
+    if (text == 'false') return false;
+    return null;
+  }
+
   NailLength _parseNailLength(Object? raw) {
     final value = (raw ?? '').toString().trim();
     switch (value) {
@@ -241,6 +251,12 @@ class _ClientShellPageState extends State<ClientShellPage> {
     final basic = _asMap(data['basic']);
     final client = _asMap(data['client']);
     final clientProfile = _asMap(client['profile']);
+    final communicationPreferences =
+        _asMap(data['communication_preferences']).isNotEmpty
+        ? _asMap(data['communication_preferences'])
+        : _asMap(data['communicationPreferences']).isNotEmpty
+        ? _asMap(data['communicationPreferences'])
+        : _asMap(client['communicationPreferences']);
     final address = _asMap(data['address']);
     final clientAddress = _asMap(client['address']);
     final nail = _asMap(data['nailPreferences']).isNotEmpty
@@ -351,6 +367,11 @@ class _ClientShellPageState extends State<ClientShellPage> {
       basic: nextBasic,
       address: nextAddress,
       nail: nextNail,
+      emailNotifications: _readBool(
+        communicationPreferences,
+        'emailNotifications',
+      ),
+      smsNotifications: _readBool(communicationPreferences, 'smsNotifications'),
     );
   }
 

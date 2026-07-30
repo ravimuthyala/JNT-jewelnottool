@@ -387,16 +387,25 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
         r.artistImages.isNotEmpty;
   }
 
+  bool _isAscensionAcceptedOrder(ClientRequestV2 r) {
+    return r.status == RequestStatusV2.accepted ||
+        r.status == RequestStatusV2.designing ||
+        _isAscensionCompletedOrder(r);
+  }
+
   DateTime _ascensionOrderDate(ClientRequestV2 r) {
     return r.deliveredAt ?? r.shippedAt ?? r.neededBy;
   }
 
+  // Need By is when the order must reach the client, not when it must
+  // ship -- so "on time" is measured against deliveredAt, matching
+  // AscensionService.calculateForArtist's definition.
   bool _isOnTimeDelivery(ClientRequestV2 r) {
-    final shippedAt = r.shippedAt;
-    if (shippedAt == null) return false;
+    final deliveredAt = r.deliveredAt;
+    if (deliveredAt == null) return false;
     final due = r.neededBy;
     final dueEndOfDay = DateTime(due.year, due.month, due.day, 23, 59, 59);
-    return !shippedAt.isAfter(dueEndOfDay);
+    return !deliveredAt.isAfter(dueEndOfDay);
   }
 
   bool _isFiveStarReview(ClientRequestV2 r) {
@@ -415,13 +424,22 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
     final completed = requests
         .where(_isAscensionCompletedOrder)
         .toList(growable: false);
-    final completedSorted = List<ClientRequestV2>.from(
-      completed,
+
+    // Repeat-client-order points must fire as soon as the artist ACCEPTS a
+    // second order from a client they've already served, not wait until
+    // that order is completed -- so this is detected off every order the
+    // artist has ever accepted (accepted/designing/completed/shipped/
+    // delivered), not just the completed subset used for the other stats.
+    final accepted = requests
+        .where(_isAscensionAcceptedOrder)
+        .toList(growable: false);
+    final acceptedSorted = List<ClientRequestV2>.from(
+      accepted,
     )..sort((a, b) => _ascensionOrderDate(a).compareTo(_ascensionOrderDate(b)));
 
     final seenClients = <String>{};
     final repeatClientRequestIds = <String>{};
-    for (final request in completedSorted) {
+    for (final request in acceptedSorted) {
       final key = _repeatClientKey(request);
       if (key.isEmpty) continue;
       if (seenClients.contains(key)) {
@@ -431,9 +449,16 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
       }
     }
 
+    for (final r in completed) {
+      debugPrint(
+        'ASCENSION ON-TIME CHECK order=${r.orderNumber.isEmpty ? r.id : r.orderNumber} '
+        'status=${r.status} neededBy=${r.neededBy} deliveredAt=${r.deliveredAt} '
+        'shippedAt=${r.shippedAt} onTime=${_isOnTimeDelivery(r)}',
+      );
+    }
     final onTime = completed.where(_isOnTimeDelivery).toList(growable: false);
     final fiveStar = completed.where(_isFiveStarReview).toList(growable: false);
-    final repeat = completed
+    final repeat = accepted
         .where((request) => repeatClientRequestIds.contains(request.id))
         .toList(growable: false);
     final delivered = completed

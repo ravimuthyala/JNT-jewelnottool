@@ -14,6 +14,175 @@ import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
+// Real columns on client_custom_requests / company_custom_requests (verified
+// against supabase/uat_export/production_public_schema.sql). Merge-writes in
+// DocumentReference.set()/update() rebuild their payload from
+// _normalizeSupabaseRow(current), which flattens the whole `data`/`payload`
+// jsonb blob to the top level for read convenience -- if that blob ever
+// picked up a stray key that isn't a real column (e.g. a legacy
+// 'acceptedByArtistAt' nested field written by an older code path), blindly
+// re-sending every flattened key as a column throws PGRST204 and the entire
+// write -- including fields the update actually cares about -- fails. Known
+// jsonb/system columns not in this list (data/details/payload/summary/etc.)
+// are always kept explicitly in _toDbColumns below.
+const Set<String> _clientCustomRequestsColumns = <String>{
+  'id', 'client_id', 'client_email', 'client_name', 'selected_artist',
+  'selected_artist_email', 'status', 'summary', 'details',
+  'inspiration_photos', 'photo_count', 'has_inspiration_photos',
+  'photo_upload_status', 'photo_upload_error', 'photo_upload_attempt',
+  'created_at', 'updated_at', 'photo_upload_updated_at', 'client_status',
+  'artist_status', 'order_number', 'cancel_reason', 'cancelled_at',
+  'accepted_by_artist_email', 'accepted_by_artist_name',
+  'artist_profile_image', 'artist_final_amount', 'payment_status',
+  'payment_link', 'paid_at', 'design_approval_status',
+  'design_approved_at', 'design_submitted_at', 'design_approval_due_at',
+  'design_reminder_sent_at', 'design_preview_photos',
+  'artist_completed_photos', 'shipped_by_courier', 'tracking_number',
+  'shipped_at', 'delivered_at', 'data', 'source_collection',
+  'request_number', 'client_request_number', 'title', 'request_type',
+  'order_type', 'client_uid', 'artist_email', 'artist_name', 'description',
+  'description_preview', 'need_by', 'budget_min', 'budget_max',
+  'nail_shape', 'nail_length', 'nail_preferences', 'left_hand_dimensions',
+  'right_hand_dimensions', 'preview_image', 'preview_image_asset',
+  'completed_at', 'admin_notes', 'admin_note_count', 'latest_admin_note',
+  'latest_admin_note_at', 'payload', 'request_details', 'order_data',
+  'payment', 'payments', 'checkout', 'invoice', 'payment_method',
+  'payment_amount', 'paid_amount', 'amount', 'total_amount',
+  'final_amount_by_artist', 'currency', 'card_last4', 'transaction_id',
+  'invoice_number', 'payment_received_at', 'shipping_status',
+  'artist_shipped_at', 'order_shipped_at', 'order_delivered_at', 'review',
+  'client_review', 'brand_review', 'review_comment',
+  'client_review_comment', 'brand_review_comment', 'review_stars',
+  'client_review_stars', 'brand_review_stars', 'reviewed_at',
+  'review_submitted_at', 'tip_amount', 'tips_amount',
+  'estimated_delivery_at', 'shipping', 'tracking', 'need_by_display',
+  'is_direct_request', 'fallback_to_pool', 'allow_non_licensed',
+  'is_group_order', 'group_clients', 'group_client_count', 'nfc_eligible',
+  'eligible_for_nfc', 'nfc_requested', 'nfc_selected', 'nfc_count',
+  'photo_upload_completed_at', 'photo_upload_failed_at',
+  'payment_notified_artist', 'payment_notified_artist_at', 'expired_at',
+  'expired_notified_client', 'brand_status', 'artist_quote',
+  'artist_completed_at', 'declined_by_artist_emails',
+  'open_to_artist_pool', 'direct_artist_status', 'artist_pool_status',
+  'direct_request_released_to_pool_at',
+  'direct_request_released_by_artist_email', 'client_budget_min',
+  'client_budget_max', 'open_to_client_pool', 'declined_by_client_emails',
+  'accepted_by_client_email', 'client_review_prompt_sent_at',
+  'client_rating', 'client_review_text', 'client_review_submitted_at',
+  'client_tip_amount', 'client_tip_percent', 'client_tip_custom_amount',
+  'client_tip_submitted_at', 'client_response_status',
+  'direct_client_status', 'campaign_name', 'contact_name',
+  'request_accept_by', 'request_accept_by_display',
+  'completion_review_status', 'completion_decline_reason',
+  'completion_decline_description', 'completion_declined_at',
+  'shipping_label_qr_data', 'shipping_label_ready',
+  'shipping_label_pdf_url', 'shipping_label_carrier',
+  'shipping_label_tracking_number', 'shipping_label_created_at',
+  'artist_images', 'artist_uploaded_photos', 'completed_art',
+  'completed_photos', 'selected_client', 'selected_client_email',
+  'accepted_by_client_name', 'accepted_by_client_at', 'artist_accepted_at',
+  'accepted_at', 'cancelled_by', 'last_client_declined_at',
+  'released_to_artist_pool_at', 'released_to_client_pool_at',
+  'accepted_client_name', 'client_avatar_url',
+  'selected_client_avatar_url', 'client_tip', 'tip', 'nail_size',
+  'artist_completion_draft_photos', 'shipping_qr_code',
+  'declined_artist_name', 'declined_artist_email',
+};
+
+const Set<String> _companyCustomRequestsColumns = <String>{
+  'id', 'company_uid', 'requester_uid', 'created_by_uid', 'uid',
+  'company_email', 'client_email', 'requester_email', 'email',
+  'company_name', 'brand_name', 'client_name', 'requester_name',
+  'campaign_name', 'title', 'request_title', 'status', 'request_type',
+  'payload', 'details', 'created_at', 'updated_at',
+  'selected_client_email', 'selected_artist_email',
+  'selected_group_client_emails', 'order_number', 'request_type_label',
+  'request_type_display', 'brand_status', 'client_status', 'artist_status',
+  'description_preview', 'need_by', 'request_accept_by',
+  'request_accept_by_display', 'jnt_reveal_date', 'jnt_reveal_date_display',
+  'budget_min', 'budget_max', 'client_budget_min', 'client_budget_max',
+  'artist_budget_min', 'artist_budget_max', 'is_direct_request',
+  'fallback_to_pool', 'open_to_client_pool', 'open_to_artist_pool',
+  'nfc_requested', 'requires_nfc_eligible_client',
+  'eligible_nfc_client_emails', 'selected_artist', 'selected_client',
+  'order_type', 'order_type_label', 'who_receives_order',
+  'who_creates_design', 'quantity', 'number_of_sets',
+  'has_inspiration_photos', 'photo_count', 'photo_upload_status',
+  'photo_upload_error', 'photo_upload_completed_at',
+  'photo_upload_failed_at', 'brand_has_inspiration_photos',
+  'brand_photo_count', 'brand_inspiration_photos', 'inspiration_photos',
+  'preview_image', 'preview_image_asset', 'client_location', 'bio',
+  'company_bio', 'panel_company_bio', 'nail_shape', 'nail_length',
+  'nail_preferences', 'client_profile_image',
+  'shipping_address_different_from_profile', 'shipping_street',
+  'shipping_city', 'shipping_state', 'shipping_zip', 'shipping_country',
+  'shipping', 'admin', 'source_collection', 'accepted_by_artist_email',
+  'accepted_by_artist_name', 'accepted_by_client_email',
+  'artist_final_amount', 'payment_status', 'payment_link', 'paid_at',
+  'cancelled_at', 'cancel_reason', 'expired_at',
+  'expired_notified_client', 'expired_notified_brand_admin',
+  'expired_notified_accepted_client', 'group_clients',
+  'left_hand_dimensions', 'right_hand_dimensions', 'artist_profile_image',
+  'artist_completed_photos', 'completion_review_status',
+  'completion_decline_reason', 'completion_decline_description',
+  'completion_declined_at', 'design_approval_status',
+  'design_approved_at', 'design_submitted_at', 'design_approval_due_at',
+  'design_reminder_sent_at', 'design_preview_photos',
+  'direct_client_status', 'direct_artist_status', 'rating', 'review_text',
+  'review_submitted_at', 'shipped_by_courier', 'tracking_number',
+  'shipped_at', 'delivered_at', 'payment', 'payment_notified_artist',
+  'payment_notified_artist_at', 'client_budget', 'artist_budget',
+  'client_review', 'client_rating', 'client_review_text',
+  'client_review_submitted_at', 'client_review_prompt_sent_at',
+  'client_review_prompt_channel', 'tip_amount', 'tip_percent',
+  'custom_tip_amount', 'tipped_at', 'cancelled_by', 'cancelled_by_email',
+  'cancellation_reason', 'cancellation_notified_at',
+  'accepted_group_client_emails', 'declined_group_client_emails',
+  'declined_by_client_emails', 'declined_by_artist_emails',
+  'review_prompt', 'delivery_prompt', 'admin_notes', 'admin_note_count',
+  'latest_admin_note', 'latest_admin_note_at', 'accepted_client_name',
+  'accepted_by_client_name', 'artist_name', 'artist_email',
+  'request_number', 'brand_request_number', 'description',
+  'request_details', 'summary', 'order_data', 'completed_at',
+  'artist_completed_at', 'artist_shipped_at', 'delivery_date', 'payments',
+  'checkout', 'invoice', 'payment_method', 'payment_amount', 'paid_amount',
+  'amount', 'total_amount', 'final_amount_by_artist', 'currency',
+  'card_last4', 'transaction_id', 'invoice_number', 'payment_received_at',
+  'shipping_status', 'order_shipped_at', 'order_delivered_at', 'review',
+  'brand_review', 'review_comment', 'client_review_comment',
+  'brand_review_comment', 'review_stars', 'client_review_stars',
+  'brand_review_stars', 'reviewed_at', 'tips_amount',
+  'estimated_delivery_at', 'tracking', 'artist_quote',
+  'artist_pool_status', 'direct_request_released_to_pool_at',
+  'direct_request_released_by_artist_email', 'client_tip_amount',
+  'client_tip_percent', 'client_tip_custom_amount',
+  'client_tip_submitted_at', 'shipping_label_qr_data',
+  'shipping_label_ready', 'shipping_label_pdf_url',
+  'shipping_label_carrier', 'shipping_label_tracking_number',
+  'shipping_label_created_at', 'artist_images', 'artist_uploaded_photos',
+  'completed_art', 'completed_photos', 'accepted_by_client_at',
+  'client_avatar_url', 'selected_client_avatar_url', 'client_tip', 'tip',
+  'nail_size', 'artist_completion_draft_photos',
+};
+
+Set<String>? _knownColumnsForTable(String table) {
+  switch (table) {
+    case 'client_custom_requests':
+      return _clientCustomRequestsColumns;
+    case 'company_custom_requests':
+      return _companyCustomRequestsColumns;
+    default:
+      return null; // Unknown table: don't filter, keep prior behavior.
+  }
+}
+
+// Flip to true once a real payment processor (Stripe) is wired up: Edge
+// Functions `create-payment-intent` + `stripe-webhook` deployed (see
+// supabase/functions/) and STRIPE_SECRET_KEY configured as an Edge Function
+// secret. Until then, "Pay Now" only simulates completion for testing --
+// see _BaseOrderDetails._payNow / _simulatePayment below.
+const bool kPaymentLiveEnabled = false;
+
 dynamic _decodeJsonLike(dynamic value) {
   if (value is! String) return value;
   final trimmed = value.trim();
@@ -416,7 +585,7 @@ class DocumentReference<T extends Map<String, dynamic>> {
     }
     finalData['id'] = id;
 
-    await _db._client.from(table).upsert(_toDbColumns(finalData));
+    await _db._client.from(table).upsert(_toDbColumns(finalData, table));
   }
 
   Future<void> update(Map<String, dynamic> data) async {
@@ -428,7 +597,7 @@ class DocumentReference<T extends Map<String, dynamic>> {
     );
     await _db._client
         .from(table)
-        .update(_toDbColumns(finalData)..remove('id'))
+        .update(_toDbColumns(finalData, table)..remove('id'))
         .eq('id', id);
   }
 }
@@ -614,14 +783,18 @@ Map<String, dynamic> _toSupabaseWrite(Map<String, dynamic> data) {
   return out;
 }
 
-Map<String, dynamic> _toDbColumns(Map<String, dynamic> data) {
+Map<String, dynamic> _toDbColumns(Map<String, dynamic> data, [String? table]) {
+  final knownColumns = table == null ? null : _knownColumnsForTable(table);
   final out = <String, dynamic>{};
   data.forEach((key, value) {
-    if (key.contains(RegExp(r'[A-Z]'))) {
-      out[_columnFor(key)] = _encodeValue(value);
-    } else {
-      out[key] = _encodeValue(value);
-    }
+    final column = key.contains(RegExp(r'[A-Z]')) ? _columnFor(key) : key;
+    // Drop anything that isn't a real column on this table -- see
+    // _knownColumnsForTable's doc comment for why this matters: merge-write
+    // payloads are rebuilt from a flattened current-row snapshot that can
+    // contain stray non-column keys, and sending those throws PGRST204 for
+    // the whole write.
+    if (knownColumns != null && !knownColumns.contains(column)) return;
+    out[column] = _encodeValue(value);
   });
   if (!out.containsKey('updated_at'))
     out['updated_at'] = DateTime.now().toIso8601String();
@@ -2886,7 +3059,10 @@ class _BaseOrderDetails extends StatelessWidget {
         normalizedStatus == 'paid' || normalizedStatus == 'completed';
     final isPending =
         !isPaid &&
-        (statusPillText == 'In Progress' || order.artistAcceptedAmount != null);
+        (statusPillText == 'In Progress' ||
+            statusPillText == 'Shipped' ||
+            statusPillText == 'Delivered' ||
+            order.artistAcceptedAmount != null);
     final header = isPaid
         ? 'Payment Completed'
         : isPending
@@ -2971,16 +3147,22 @@ class _BaseOrderDetails extends StatelessWidget {
             fontSize: 13,
           ),
         ),
-        if (!isPaid && isPending && order.paymentLink.trim().isNotEmpty) ...[
+        // No real gateway exists yet to generate order.paymentLink (see
+        // PaymentService), so gating the button on it being non-empty meant
+        // it effectively never showed anywhere, including here on Delivered.
+        // Show it whenever payment is genuinely outstanding; PaymentService
+        // itself decides real-vs-simulated.
+        if (!isPaid && isPending) ...[
           const SizedBox(height: 8),
-          Text(
-            'Payment link has been sent to your notifications and email.',
-            style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.55),
-              fontWeight: FontWeight.w400,
-              fontSize: 12,
+          if (order.paymentLink.trim().isNotEmpty)
+            Text(
+              'Payment link has been sent to your notifications and email.',
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.55),
+                fontWeight: FontWeight.w400,
+                fontSize: 12,
+              ),
             ),
-          ),
           const SizedBox(height: 10),
           SizedBox(
             height: 44,
@@ -2991,10 +3173,13 @@ class _BaseOrderDetails extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                 elevation: 0,
               ),
-              onPressed: () => _simulatePayment(context),
-              child: const Text(
-                'Pay Now (Simulated)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              onPressed: () => _payNow(context),
+              child: Text(
+                kPaymentLiveEnabled ? 'Pay Now' : 'Pay Now (Simulated)',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -3438,6 +3623,72 @@ class _BaseOrderDetails extends StatelessWidget {
       errorBuilder: (_, _, _) => _artistProfilePlaceholder(),
     );
   }
+
+  /// Single entry point for the "Pay Now" button. Routes to the real charge
+  /// flow once kPaymentLiveEnabled is flipped on; simulates completion for
+  /// testing until then. Money never actually moves while this stays false.
+  Future<void> _payNow(BuildContext context) async {
+    if (kPaymentLiveEnabled) {
+      // await _payWithStripeLive(context);
+      return;
+    }
+    await _simulatePayment(context);
+  }
+
+  // ---------------------------------------------------------------------
+  // REAL PAYMENT INTEGRATION (Stripe) -- commented out until configured.
+  //
+  // Requires:
+  //  - `flutter_stripe` package + Stripe publishable key at app init.
+  //  - Two Supabase Edge Functions (see supabase/functions/):
+  //      create-payment-intent: server-side, creates a Stripe PaymentIntent
+  //        for this request's artistAcceptedAmount using the secret key
+  //        (never exposed to the client), returns its client_secret.
+  //      stripe-webhook: receives Stripe's payment_intent.succeeded event
+  //        and is the ONLY place allowed to set paymentStatus: 'paid' --
+  //        never the client. RLS should be tightened to match once this is
+  //        live, so a client can no longer flip paymentStatus itself the
+  //        way _simulatePayment does today.
+  //
+  // Future<void> _payWithStripeLive(BuildContext context) async {
+  //   try {
+  //     final res = await Supabase.instance.client.functions.invoke(
+  //       'create-payment-intent',
+  //       body: {
+  //         'requestId': order.id,
+  //         'sourceCollection': order.sourceCollection,
+  //       },
+  //     );
+  //     final clientSecret = (res.data as Map)['clientSecret'] as String;
+  //
+  //     await stripe.Stripe.instance.initPaymentSheet(
+  //       paymentSheetParameters: stripe.SetupPaymentSheetParameters(
+  //         paymentIntentClientSecret: clientSecret,
+  //         merchantDisplayName: 'JNT',
+  //       ),
+  //     );
+  //     await stripe.Stripe.instance.presentPaymentSheet();
+  //
+  //     if (!context.mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('Payment submitted.')),
+  //     );
+  //     // paymentStatus flips to 'paid' via the stripe-webhook Edge
+  //     // Function once Stripe confirms the charge -- not here.
+  //   } on stripe.StripeException catch (e) {
+  //     if (!context.mounted) return;
+  //     if (e.error.code == stripe.FailureCode.Canceled) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Payment failed: ${e.error.localizedMessage}')),
+  //     );
+  //   } catch (e) {
+  //     if (!context.mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Payment failed: $e')),
+  //     );
+  //   }
+  // }
+  // ---------------------------------------------------------------------
 
   Future<void> _simulatePayment(BuildContext context) async {
     final confirmed = await showDialog<bool>(

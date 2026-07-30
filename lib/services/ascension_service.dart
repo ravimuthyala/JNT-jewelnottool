@@ -104,8 +104,23 @@ class AscensionService {
 
     final supabase = Supabase.instance.client;
 
+    // Repeat-client detection must fire as soon as the artist ACCEPTS a
+    // second order from a client they've already served, not only once that
+    // order is completed -- so it's counted off every order the artist has
+    // ever accepted (any status from 'designing' onward), separately from
+    // the completed-only set used for the other stats below.
+    const acceptedStatuses = [
+      'accepted',
+      'designing',
+      'completed',
+      'shipped',
+      'delivered',
+    ];
+
     List<Map<String, dynamic>> clientRows;
     List<Map<String, dynamic>> companyRows;
+    List<Map<String, dynamic>> clientAcceptedRows;
+    List<Map<String, dynamic>> companyAcceptedRows;
     try {
       // client_custom_requests: client_rating and need_by are in summary JSONB
       clientRows = List<Map<String, dynamic>>.from(await supabase
@@ -120,6 +135,18 @@ class AscensionService {
           .select('status, client_rating, need_by, delivered_at, shipped_at, updated_at, created_at, client_email, payload')
           .eq('accepted_by_artist_email', email)
           .inFilter('status', ['completed', 'shipped', 'delivered']));
+
+      clientAcceptedRows = List<Map<String, dynamic>>.from(await supabase
+          .from('client_custom_requests')
+          .select('status, created_at, summary, details, client_email')
+          .eq('accepted_by_artist_email', email)
+          .inFilter('status', acceptedStatuses));
+
+      companyAcceptedRows = List<Map<String, dynamic>>.from(await supabase
+          .from('company_custom_requests')
+          .select('status, created_at, client_email, payload')
+          .eq('accepted_by_artist_email', email)
+          .inFilter('status', acceptedStatuses));
     } catch (e, st) {
       debugPrint('AscensionService.calculateForArtist fetch failed: $e');
       debugPrint(st.toString());
@@ -131,12 +158,32 @@ class AscensionService {
       for (final r in companyRows) _normalizeCompanyRequestRow(r),
     ];
 
+    final acceptedRows = <Map<String, dynamic>>[
+      for (final r in clientAcceptedRows) _normalizeClientRequestRow(r),
+      for (final r in companyAcceptedRows) _normalizeCompanyRequestRow(r),
+    ]..sort((a, b) {
+        DateTime parse(Object? raw) =>
+            (raw is String ? DateTime.tryParse(raw) : null) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final aDate = parse(a['createdAt'] ?? a['created_at']);
+        final bDate = parse(b['createdAt'] ?? b['created_at']);
+        return aDate.compareTo(bDate);
+      });
+
+    var repeatClientOrders = 0;
+    final clientOrderCounts = <String, int>{};
+    for (final data in acceptedRows) {
+      final clientKey = _resolveClientIdentityKey(data);
+      if (clientKey.isEmpty) continue;
+      final existing = clientOrderCounts[clientKey] ?? 0;
+      clientOrderCounts[clientKey] = existing + 1;
+      if (existing >= 1) repeatClientOrders += 1;
+    }
+
     var completedOrders = 0;
     var annualCompletedOrders = 0;
     var onTimeDeliveries = 0;
     var fiveStarReviews = 0;
-    var repeatClientOrders = 0;
-    final clientOrderCounts = <String, int>{};
     final annualWindowStart = DateTime.now().subtract(const Duration(days: 365));
 
     for (final data in allRows) {
@@ -144,13 +191,6 @@ class AscensionService {
       final completionDate = _resolveCompletionDate(data);
       if (completionDate != null && !completionDate.isBefore(annualWindowStart)) {
         annualCompletedOrders += 1;
-      }
-
-      final clientKey = _resolveClientIdentityKey(data);
-      if (clientKey.isNotEmpty) {
-        final existing = clientOrderCounts[clientKey] ?? 0;
-        clientOrderCounts[clientKey] = existing + 1;
-        if (existing >= 1) repeatClientOrders += 1;
       }
 
       final ratingRaw = data['clientRating'] ?? data['client_rating'];
@@ -538,6 +578,96 @@ class AscensionService {
     economics['margin'] = margin;
     next['economics'] = economics;
     return next;
+  }
+
+  /// Recomputes and persists one artist's ascension snapshot immediately.
+  /// calculateForArtist always aggregates full order history, so this is a
+  /// full recompute rather than an incremental add -- but the *points still
+  /// only ever come from real completed-order actions* (completion, on-time
+  /// delivery, five-star review, repeat client order, synced portfolio
+  /// upload), so calling this right after each of those actions is what
+  /// makes the score reflect that action promptly instead of waiting for
+  /// some unrelated page load to trigger the next full-page resync. Call
+  /// sites: artist marks an order completed
+  /// (artist_requests_page_redesign.dart _handleMarkCompleted), a client
+  /// submits a review (review_artist_page.dart), and completed art syncs
+  /// into the portfolio (artist_profile_page.dart backfill).
+  static const Set<String> qualifyingPortfolioSources = <String>{
+    'completedOrder',
+    'artist_completed_set',
+  };
+
+  /// Counts portfolio items eligible for ascension points: they must be
+  /// auto-synced completed-order art (never a manual upload -- see
+  /// ArtistPortfolioItem.source), AND -- if the order had a JNT Reveal Date
+  /// stamped on the item -- that date must have already passed. The photos
+  /// mirror into the portfolio immediately on completion so the design is
+  /// visible right away, but the *points* wait for the reveal date.
+  static int countQualifyingPortfolioUploads(Map<String, dynamic> currentData) {
+    final portfolioRaw = currentData['portfolio'];
+    final portfolioMap = portfolioRaw is Map
+        ? Map<String, dynamic>.from(portfolioRaw)
+        : const <String, dynamic>{};
+    final itemsRaw = portfolioMap['items'];
+    final portfolioItemMaps = itemsRaw is List ? itemsRaw : const <dynamic>[];
+    final now = DateTime.now();
+    return portfolioItemMaps.where((raw) {
+      if (raw is! Map) return false;
+      final source = (raw['source'] ?? '').toString().trim();
+      if (source.isNotEmpty && !qualifyingPortfolioSources.contains(source)) {
+        return false;
+      }
+      final revealRaw = (raw['jntRevealDate'] ?? '').toString().trim();
+      if (revealRaw.isEmpty) return true;
+      final revealDate = DateTime.tryParse(revealRaw);
+      if (revealDate == null) return true;
+      return !now.isBefore(revealDate);
+    }).length;
+  }
+
+  static Future<void> syncAndPersist({
+    required String artistEmail,
+    required String artistCollection,
+    required Map<String, dynamic> currentData,
+    required String artistName,
+  }) async {
+    try {
+      final previousPointsRaw =
+          (currentData['ascension'] as Map<String, dynamic>?)?['points'];
+      final previousPoints = previousPointsRaw is num
+          ? previousPointsRaw.toDouble()
+          : double.tryParse((previousPointsRaw ?? '').toString()) ?? 0;
+
+      final portfolioUploads = countQualifyingPortfolioUploads(currentData);
+
+      final snapshot = await calculateForArtist(
+        artistEmail: artistEmail,
+        portfolioUploads: portfolioUploads,
+      );
+      final computedPayload = buildAscensionPayload(snapshot);
+      final override = await readActiveOverride(
+        artistDocPath: '$artistCollection/$artistEmail',
+        artistEmail: artistEmail,
+      );
+      final finalPayload = applyOverrideToPayload(
+        payload: computedPayload,
+        override: override,
+      );
+      final stabilizedPayload = preserveExistingAdminOverride(
+        payload: finalPayload,
+        artistData: currentData,
+      );
+      await persistAdminCollections(
+        artistEmail: artistEmail,
+        artistCollection: artistCollection,
+        artistName: artistName,
+        ascensionPayload: stabilizedPayload,
+        previousPoints: previousPoints,
+      );
+    } catch (e, st) {
+      debugPrint('AscensionService.syncAndPersist failed: $e');
+      debugPrint(st.toString());
+    }
   }
 
   static Future<void> persistAdminCollections({

@@ -301,6 +301,12 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         request.artistImages.isNotEmpty;
   }
 
+  bool _isAscensionAcceptedOrder(ClientRequestV2 request) {
+    return request.status == RequestStatusV2.accepted ||
+        request.status == RequestStatusV2.designing ||
+        _isAscensionCompletedOrder(request);
+  }
+
   double _amount(ClientRequestV2 request) {
     final acceptedAmount = request.artistFinalAmount;
     if (acceptedAmount != null && acceptedAmount > 0) {
@@ -318,12 +324,15 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     return request.deliveredAt ?? request.shippedAt ?? request.neededBy;
   }
 
+  // Need By is when the order must reach the client, not when it must
+  // ship -- so "on time" is measured against deliveredAt, matching
+  // AscensionService.calculateForArtist's definition.
   bool _isOnTimeDelivery(ClientRequestV2 request) {
-    final shippedAt = request.shippedAt;
-    if (shippedAt == null) return false;
+    final deliveredAt = request.deliveredAt;
+    if (deliveredAt == null) return false;
     final due = request.neededBy;
     final dueEndOfDay = DateTime(due.year, due.month, due.day, 23, 59, 59);
-    return !shippedAt.isAfter(dueEndOfDay);
+    return !deliveredAt.isAfter(dueEndOfDay);
   }
 
   bool _isFiveStarReview(ClientRequestV2 request) {
@@ -342,12 +351,21 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     final completed = requests
         .where(_isAscensionCompletedOrder)
         .toList(growable: false);
-    final completedSorted = List<ClientRequestV2>.from(completed)
+
+    // Repeat-client-order points must fire as soon as the artist ACCEPTS a
+    // second order from a client they've already served, not wait until
+    // that order is completed -- so this is detected off every order the
+    // artist has ever accepted (accepted/designing/completed/shipped/
+    // delivered), not just the completed subset used for the other stats.
+    final accepted = requests
+        .where(_isAscensionAcceptedOrder)
+        .toList(growable: false);
+    final acceptedSorted = List<ClientRequestV2>.from(accepted)
       ..sort((a, b) => _orderDate(a).compareTo(_orderDate(b)));
 
     final seenClients = <String>{};
     final repeatIds = <String>{};
-    for (final request in completedSorted) {
+    for (final request in acceptedSorted) {
       final key = _repeatClientKey(request);
       if (key.isEmpty) continue;
       if (seenClients.contains(key)) {
@@ -359,7 +377,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
 
     final onTime = completed.where(_isOnTimeDelivery).toList(growable: false);
     final fiveStar = completed.where(_isFiveStarReview).toList(growable: false);
-    final repeat = completed
+    final repeat = accepted
         .where((request) => repeatIds.contains(request.id))
         .toList(growable: false);
     final delivered = completed
@@ -1277,14 +1295,37 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   }
 
   Widget _earnPointsTab() {
-    const earnItems = <_EarnRuleItem>[
-      _EarnRuleItem('Complete an order', '+25 pts', Icons.check),
-      _EarnRuleItem('On-time delivery', '+10 pts', Icons.timer_outlined),
-      _EarnRuleItem('5-star client review', '+15 pts', Icons.star),
-      _EarnRuleItem('Repeat client order', '+20 pts', Icons.refresh),
+    // These must mirror JntAscensionEngine's actual weighted constants --
+    // this tab used to hardcode different (unweighted) numbers than what
+    // the "Ascension stages" breakdown on this same page actually awards,
+    // e.g. showing +20 for a repeat client order when the real calculation
+    // only ever grants +6.
+    String pts(double value) =>
+        '+${value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(2)} pts';
+    final earnItems = <_EarnRuleItem>[
+      _EarnRuleItem(
+        'Complete an order',
+        pts(JntAscensionEngine.pointsCompleteOrder),
+        Icons.check,
+      ),
+      _EarnRuleItem(
+        'On-time delivery',
+        pts(JntAscensionEngine.pointsOnTimeDelivery),
+        Icons.timer_outlined,
+      ),
+      _EarnRuleItem(
+        '5-star client review',
+        pts(JntAscensionEngine.pointsFiveStarReview),
+        Icons.star,
+      ),
+      _EarnRuleItem(
+        'Repeat client order',
+        pts(JntAscensionEngine.pointsRepeatClientOrder),
+        Icons.refresh,
+      ),
       _EarnRuleItem(
         'Portfolio upload',
-        '+5 pts',
+        pts(JntAscensionEngine.pointsPortfolioUpload),
         Icons.arrow_upward_rounded,
       ),
     ];

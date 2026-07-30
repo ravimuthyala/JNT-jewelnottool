@@ -377,45 +377,8 @@ class _ClientArtistCommunicationPreferencePopupState
                         ),
                         const SizedBox(height: 14),
                         _sectionCard(
-                          title: 'Preferred Contact Method',
-                          child: RadioGroup<ClientArtistPreferredContactMethod>(
-                            groupValue: _preferredContact,
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _preferredContact = value);
-                            },
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _radioOption(
-                                        label: 'Email',
-                                        value: ClientArtistPreferredContactMethod.email,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: _radioOption(
-                                        label: 'Push',
-                                        value: ClientArtistPreferredContactMethod.push,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: _radioOption(
-                                        label: 'SMS',
-                                        value: ClientArtistPreferredContactMethod.sms,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                _divider(),
-                              const SizedBox(height: 10),
-                              _marketingConsentTile(),
-                              ],
-                            ),
-                          ),
+                          title: 'Marketing',
+                          child: _marketingConsentTile(),
                         ),
                         const SizedBox(height: 18),
                         Align(
@@ -577,44 +540,6 @@ class _ClientArtistCommunicationPreferencePopupState
                 value: value,
                 activeColor: AppColors.blackCat,
                 onChanged: (next) => onChanged(next ?? false),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _radioOption({
-    required String label,
-    required ClientArtistPreferredContactMethod value,
-  }) {
-    return MergeSemantics(
-      child: Semantics(
-        label: '$label contact method',
-        checked: _preferredContact == value,
-        inMutuallyExclusiveGroup: true,
-        child: InkWell(
-          onTap: () => setState(() => _preferredContact = value),
-          borderRadius: BorderRadius.zero,
-          child: Row(
-            children: [
-              Radio<ClientArtistPreferredContactMethod>(
-                value: value,
-                activeColor: AppColors.blackCat,
-              ),
-              Flexible(
-                child: ExcludeSemantics(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.blackCat,
-                      fontFamily: 'Arialbold',
-                    ),
-                  ),
-                ),
               ),
             ],
           ),

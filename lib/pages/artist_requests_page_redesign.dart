@@ -16,7 +16,6 @@ import 'client_campaign_details_page.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
-import '../services/shipping_qr_helper.dart';
 import 'artist_profile_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -289,13 +288,26 @@ class DocumentReference<T extends Map<String, dynamic>> {
         table == 'client_custom_requests_details' ||
         table == 'company_custom_requests_details';
     if (isFirestoreCompatDetailsTable) {
+      // client_custom_requests_details has a unique constraint on
+      // (request_id, detail_key) -- see
+      // client_custom_requests_details_request_key_uniq. The initial
+      // request-submission insert (client_custom_request_page.dart) creates
+      // that row with an auto-generated id, not the '$parentId:$id' this
+      // upserts with, so onConflict: 'id' never matched it: Postgres tried
+      // to INSERT a second row and hit the real (request_id, detail_key)
+      // constraint instead, surfacing as a raw 23505 duplicate-key error on
+      // "Mark as Shipped"/any other status write. Conflict on the columns
+      // that are actually unique instead.
+      final onConflictColumns = table == 'client_custom_requests_details'
+          ? 'request_id,detail_key'
+          : 'id';
       await Supabase.instance.client.from(table).upsert(<String, dynamic>{
         'id': '$parentId:$id',
         'request_id': parentId,
         'detail_key': id,
         'data': encoded,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'id');
+      }, onConflict: onConflictColumns);
       return;
     }
 
@@ -1126,13 +1138,26 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       final previousPoints = previousPointsRaw is num
           ? previousPointsRaw.toDouble()
           : double.tryParse((previousPointsRaw ?? '').toString()) ?? 0;
-      final portfolioUploads =
-          (currentData['portfolioItems'] as List<dynamic>?)?.length ??
-          (currentData['portfolioImages'] as List<dynamic>?)?.length ??
-          0;
+      // Ascension points only count portfolio items that are auto-synced
+      // completed-order art whose JNT Reveal Date has already passed -- see
+      // AscensionService.countQualifyingPortfolioUploads for the full rule
+      // (manual uploads never qualify; items synced before reveal-date
+      // tagging existed are treated as already-qualified).
+      final portfolioUploads = AscensionService.countQualifyingPortfolioUploads(
+        currentData,
+      );
       final snapshot = await AscensionService.calculateForArtist(
         artistEmail: artistEmail,
         portfolioUploads: portfolioUploads,
+      );
+      debugPrint(
+        'ASCENSION SYNC artist=$artistEmail collection=$artistCollection '
+        'completedOrders=${snapshot.completedOrders} '
+        'onTimeDeliveries=${snapshot.onTimeDeliveries} '
+        'fiveStarReviews=${snapshot.fiveStarReviews} '
+        'repeatClientOrders=${snapshot.repeatClientOrders} '
+        'portfolioUploads=$portfolioUploads points=${snapshot.points} '
+        'level=${snapshot.level}',
       );
       if (!mounted) return;
       setState(() {
@@ -1164,7 +1189,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         ascensionPayload: stabilizedPayload,
         previousPoints: previousPoints,
       );
-    } catch (_) {}
+      debugPrint(
+        'ASCENSION SYNC persisted artist=$artistEmail '
+        'previousPoints=$previousPoints newPoints=${snapshot.points}',
+      );
+    } catch (e, st) {
+      debugPrint('ASCENSION SYNC failed artist=$artistEmail: $e');
+      debugPrint(st.toString());
+    }
   }
 
   Future<void> _syncAscensionForCurrentArtist() async {
@@ -2905,13 +2937,17 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final detailTable = _detailsTableFor(table);
     try {
+      // client_custom_requests_details has a unique constraint on
+      // (request_id, detail_key), not on 'id' -- see the matching fix/comment
+      // in DocumentReference._writeDetails above for why onConflict: 'id'
+      // silently fails here with a 23505 duplicate-key error.
       await Supabase.instance.client.from(detailTable).upsert(<String, dynamic>{
         'id': '$rowId:payload',
         'request_id': rowId,
         'detail_key': 'payload',
         'data': nextDetails,
         'updated_at': nowIso,
-      }, onConflict: 'id');
+      }, onConflict: detailTable == 'client_custom_requests_details' ? 'request_id,detail_key' : 'id');
     } catch (e) {
       debugPrint('[Artist Accept] details status sync failed: $e');
     }
@@ -2937,6 +2973,12 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       );
 
       await _forcePersistArtistAcceptedDesigning(request, normalizedTotal);
+
+      // Repeat-client-order points must reflect the moment the artist
+      // accepts a second order from a client they've already served, not
+      // wait until that order is later completed -- see
+      // AscensionService.calculateForArtist's acceptedRows pass.
+      unawaited(_syncAscensionForCurrentArtist());
 
       try {
         final currentUser = Supabase.instance.client.auth.currentUser;
@@ -3682,13 +3724,17 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
 
     final detailTable = _detailsTableFor(table);
+    // client_custom_requests_details has a unique constraint on
+    // (request_id, detail_key), not on 'id' -- see the matching fix/comment
+    // in DocumentReference._writeDetails for why onConflict: 'id' silently
+    // fails here with a 23505 duplicate-key error.
     await Supabase.instance.client.from(detailTable).upsert(<String, dynamic>{
       'id': '${request.id}:payload',
       'request_id': request.id,
       'detail_key': 'payload',
       'data': updatedData,
       'updated_at': declinedAtIso,
-    }, onConflict: 'id');
+    }, onConflict: detailTable == 'client_custom_requests_details' ? 'request_id,detail_key' : 'id');
 
     if (releaseDirectBrandRequestToPool) {
       final rootSnap = await docRef.get();
@@ -4232,18 +4278,23 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       // before the sheet closes. Keep this parent handler for local UI movement
       // and best-effort notifications only, so a secondary write cannot make
       // the Mark as Completed flow spin or fail after the DB has already updated.
-      try {
-        debugPrint('========== MARK COMPLETED ==========');
-        debugPrint('Order: ${r.orderNumber}');
-        debugPrint('summaryPhotos count = ${summaryPhotos.length}');
-        debugPrint(summaryPhotos.toString());
-        await _mirrorCompletedPhotosToArtistPortfolio(r, summaryPhotos);
-      } catch (e, st) {
-        debugPrint(
-          'ARTIST REQUESTS portfolio mirror failed request=${r.id} order=$orderNumber: $e',
-        );
-        debugPrintStack(stackTrace: st);
-      }
+      debugPrint('========== MARK COMPLETED ==========');
+      debugPrint('Order: ${r.orderNumber}');
+      debugPrint('summaryPhotos count = ${summaryPhotos.length}');
+      debugPrint(summaryPhotos.toString());
+      // Completed art must not appear in the artist's public portfolio
+      // until the client/brand's JNT Reveal Date -- so it is deliberately
+      // NOT mirrored here at completion time. It's synced later, gated on
+      // that date, by _backfillCompletedPortfolioForCurrentArtist in
+      // artist_profile_page.dart, which also re-triggers the ascension
+      // recompute once the art actually lands in the portfolio (so the
+      // portfolio-upload points can never arrive before the photo does).
+
+      // Recompute ascension right away for the "completed" stage (order
+      // count / on-time / etc, none of which depend on the portfolio) --
+      // without this the score only updates on some later, unrelated page
+      // load.
+      unawaited(_syncAscensionForCurrentArtist());
 
       final clientEmail = r.clientEmail.trim().toLowerCase();
       final isBrandRequest =
@@ -4368,214 +4419,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to complete order: $e')));
-    }
-  }
-
-  Map<String, dynamic> _portfolioAsMap(Object? value) {
-    if (value is Map<String, dynamic>) return value;
-    if (value is Map) return Map<String, dynamic>.from(value);
-    return const <String, dynamic>{};
-  }
-
-  List<dynamic> _portfolioAsList(Object? value) {
-    if (value is List) return List<dynamic>.from(value);
-    return const <dynamic>[];
-  }
-
-  Object? _portfolioFirstPresent(
-    Map<String, dynamic> source,
-    String snakeKey,
-    String camelKey,
-  ) {
-    if (source.containsKey(snakeKey)) return source[snakeKey];
-    return source[camelKey];
-  }
-
-  List<dynamic> _mergeUniquePortfolioList(
-    List<dynamic> base,
-    List<dynamic> incoming,
-  ) {
-    final out = <dynamic>[...base];
-    final seen = out.map((e) => jsonEncode(e)).toSet();
-    for (final item in incoming) {
-      final key = jsonEncode(item);
-      if (seen.add(key)) out.add(item);
-    }
-    return out;
-  }
-
-  Future<List<Map<String, dynamic>>> _findArtistPortfolioRows({
-    required String id,
-    required String email,
-  }) async {
-    final normalizedId = id.trim();
-    final normalizedEmail = email.trim().toLowerCase();
-    final rows = <Map<String, dynamic>>[];
-    final seen = <String>{};
-
-    Future<void> addRow(String table, Map<dynamic, dynamic>? row) async {
-      if (row == null) return;
-      final mapped = Map<String, dynamic>.from(row);
-      final rowId = (mapped['id'] ?? '').toString().trim();
-      if (rowId.isEmpty) return;
-      final key = '$table:$rowId';
-      if (!seen.add(key)) return;
-      rows.add(<String, dynamic>{...mapped, '_table': table});
-    }
-
-    for (final table in const <String>['artist', 'client_artist']) {
-      if (normalizedId.isNotEmpty) {
-        try {
-          final byId = await Supabase.instance.client
-              .from(table)
-              .select()
-              .eq('id', normalizedId)
-              .maybeSingle();
-          await addRow(table, byId is Map ? byId : null);
-        } catch (_) {}
-
-        try {
-          final byUid = await Supabase.instance.client
-              .from(table)
-              .select()
-              .eq('uid', normalizedId)
-              .maybeSingle();
-          await addRow(table, byUid is Map ? byUid : null);
-        } catch (_) {}
-      }
-
-      if (normalizedEmail.isNotEmpty) {
-        try {
-          final byEmail = await Supabase.instance.client
-              .from(table)
-              .select()
-              .ilike('email', normalizedEmail)
-              .maybeSingle();
-          await addRow(table, byEmail is Map ? byEmail : null);
-        } catch (_) {}
-      }
-    }
-
-    return rows;
-  }
-
-  Future<void> _mirrorCompletedPhotosToArtistPortfolio(
-    ClientRequestV2 request,
-    List<String> photos,
-  ) async {
-    final cleaned = photos
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-
-    debugPrint('Portfolio mirror received ${cleaned.length} photos');
-    debugPrint(cleaned.toString());
-
-    if (cleaned.isEmpty) return;
-
-    final currentUser = Supabase.instance.client.auth.currentUser;
-    final artistId = (currentUser?.id ?? '').trim();
-    final artistEmail = (currentUser?.email ?? '').trim().toLowerCase();
-    final artistRows = await _findArtistPortfolioRows(
-      id: artistId,
-      email: artistEmail,
-    );
-    if (artistRows.isEmpty) return;
-
-    final nowIso = DateTime.now().toIso8601String();
-    final itemMaps = cleaned
-        .map(
-          (url) => <String, dynamic>{
-            'imageUrl': url,
-            'url': url,
-            'image': url,
-            'style': 'All',
-            'source': 'artist_completed_set',
-            'requestId': request.id,
-            'orderId': request.id,
-            'orderNumber': request.orderNumber,
-            'title': request.title,
-            'clientName': request.clientName,
-            'brandName': request.brandName,
-            'sourceCollection': request.sourceCollection,
-            'createdAt': nowIso,
-          },
-        )
-        .toList(growable: false);
-
-    for (final artistRow in artistRows) {
-      final table = (artistRow['_table'] ?? '').toString().trim();
-      final rowId = (artistRow['id'] ?? '').toString().trim();
-      if (table.isEmpty || rowId.isEmpty) continue;
-
-      final portfolio = _portfolioAsMap(artistRow['portfolio']);
-      final artist = _portfolioAsMap(artistRow['artist']);
-      final artistPortfolio = _portfolioAsMap(artist['portfolio']);
-      final nextPortfolioImages = _mergeUniquePortfolioList(
-        _portfolioAsList(
-          _portfolioFirstPresent(
-            artistRow,
-            'portfolio_images',
-            'portfolioImages',
-          ),
-        ),
-        cleaned,
-      );
-      final nextPortfolioItems = _mergeUniquePortfolioList(
-        _portfolioAsList(
-          _portfolioFirstPresent(
-            artistRow,
-            'portfolio_items',
-            'portfolioItems',
-          ),
-        ),
-        itemMaps,
-      );
-
-      debugPrint(
-        'ARTIST REQUESTS portfolio mirror request=${request.id} order=${request.orderNumber} '
-        'targetTable=$table targetRowId=$rowId photoCount=${cleaned.length}',
-      );
-
-      await Supabase.instance.client
-          .from(table)
-          .update({
-            'portfolio_images': nextPortfolioImages,
-            'panel_portfolio_images': nextPortfolioImages,
-            'panel_artist_portfolio_images': nextPortfolioImages,
-            'portfolio_items': nextPortfolioItems,
-            'portfolio': {
-              ...portfolio,
-              'images': _mergeUniquePortfolioList(
-                _portfolioAsList(portfolio['images']),
-                cleaned,
-              ),
-              'items': _mergeUniquePortfolioList(
-                _portfolioAsList(portfolio['items']),
-                itemMaps,
-              ),
-            },
-            'artist': {
-              ...artist,
-              'portfolioImages': nextPortfolioImages,
-              'portfolioItems': nextPortfolioItems,
-              'portfolio': {
-                ...artistPortfolio,
-                'images': _mergeUniquePortfolioList(
-                  _portfolioAsList(artistPortfolio['images']),
-                  cleaned,
-                ),
-                'items': _mergeUniquePortfolioList(
-                  _portfolioAsList(artistPortfolio['items']),
-                  itemMaps,
-                ),
-              },
-            },
-            'updated_at': nowIso,
-            'updatedAt': nowIso,
-          })
-          .eq('id', rowId);
-      debugPrint('Portfolio updated for $table : $rowId');
     }
   }
 

@@ -334,16 +334,21 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   Future<void> _pickShippedDate() async {
     final now = DateTime.now();
     final initial = _shippedDate ?? now;
+    DateTime tempSelected = initial;
+
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) {
+      builder: (sheetContext) {
         final baseTheme = Theme.of(context);
         final media = MediaQuery.of(context);
         return Align(
           alignment: Alignment.bottomCenter,
           child: Container(
             width: math.min(media.size.width * 0.84, 336),
+            constraints: BoxConstraints(
+              maxHeight: media.size.height * 0.8,
+            ),
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             decoration: const BoxDecoration(
               color: AppColors.snow,
@@ -381,18 +386,62 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               ),
               child: MediaQuery(
                 data: media.copyWith(textScaler: const TextScaler.linear(0.88)),
-                child: CalendarDatePicker(
-                  initialDate: initial,
-                  firstDate: now.subtract(const Duration(days: 30)),
-                  lastDate: now.add(const Duration(days: 30)),
-                  onDateChanged: (picked) {
-                    setState(() {
-                      _shippedDate = picked;
-                      _shippedDateCtrl.text =
-                          '${picked.month}/${picked.day}/${picked.year}';
-                    });
-                    Navigator.pop(context);
-                  },
+                // CalendarDatePicker's onDateChanged also fires when only a
+                // year is picked (keeping the previous month/day) -- closing
+                // immediately there would never let the user go on to pick
+                // the month/day. Track the latest pick and only commit it
+                // once Confirm is tapped.
+                child: StatefulBuilder(
+                  builder: (context, setSheetState) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: CalendarDatePicker(
+                            initialDate: tempSelected,
+                            firstDate: now.subtract(const Duration(days: 30)),
+                            lastDate: now.add(const Duration(days: 30)),
+                            onDateChanged: (picked) {
+                              setSheetState(() => tempSelected = picked);
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.blackCatLight,
+                              foregroundColor: AppColors.snow,
+                            ),
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _shippedDate = tempSelected;
+                                _shippedDateCtrl.text =
+                                    '${tempSelected.month}/${tempSelected.day}/${tempSelected.year}';
+                              });
+                              Navigator.pop(sheetContext);
+                            },
+                            child: const Text(
+                              'Confirm',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../helpers/artist_ascension.dart';
+import '../services/ascension_service.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_email_alias_service.dart';
 import '../services/supabase_auth_service.dart';
@@ -55,6 +56,154 @@ String _storageObjectPathForReference(String raw) {
   return value;
 }
 
+class _ArtistCommunicationPreferences {
+  const _ArtistCommunicationPreferences({
+    required this.emailNotifications,
+    required this.smsNotifications,
+  });
+
+  final bool emailNotifications;
+  final bool smsNotifications;
+
+  factory _ArtistCommunicationPreferences.defaults() {
+    return const _ArtistCommunicationPreferences(
+      emailNotifications: true,
+      smsNotifications: true,
+    );
+  }
+
+  factory _ArtistCommunicationPreferences.fromMap(Map<String, dynamic> map) {
+    bool asBool(dynamic raw, bool fallback) {
+      if (raw is bool) return raw;
+      if (raw is num) return raw != 0;
+      final text = (raw ?? '').toString().trim().toLowerCase();
+      if (text == 'true') return true;
+      if (text == 'false') return false;
+      return fallback;
+    }
+
+    final defaults = _ArtistCommunicationPreferences.defaults();
+    return _ArtistCommunicationPreferences(
+      emailNotifications: asBool(
+        map['emailNotifications'] ?? map['email_notifications'],
+        defaults.emailNotifications,
+      ),
+      smsNotifications: asBool(
+        map['smsNotifications'] ?? map['sms_notifications'],
+        defaults.smsNotifications,
+      ),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'emailNotifications': emailNotifications,
+      'smsNotifications': smsNotifications,
+    };
+  }
+}
+
+class _ArtistCommunicationPreferencesPopup extends StatefulWidget {
+  const _ArtistCommunicationPreferencesPopup({required this.initialValue});
+
+  final _ArtistCommunicationPreferences initialValue;
+
+  @override
+  State<_ArtistCommunicationPreferencesPopup> createState() =>
+      _ArtistCommunicationPreferencesPopupState();
+}
+
+class _ArtistCommunicationPreferencesPopupState
+    extends State<_ArtistCommunicationPreferencesPopup> {
+  late bool _emailNotifications;
+  late bool _smsNotifications;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailNotifications = widget.initialValue.emailNotifications;
+    _smsNotifications = widget.initialValue.smsNotifications;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        decoration: const BoxDecoration(color: AppColors.snow),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Communication Preferences',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close communication preferences',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _emailNotifications,
+              onChanged: (value) => setState(() {
+                _emailNotifications = value;
+              }),
+              title: const Text('Email Notifications'),
+              activeThumbColor: AppColors.blackCat,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _smsNotifications,
+              onChanged: (value) => setState(() {
+                _smsNotifications = value;
+              }),
+              title: const Text('SMS Notifications'),
+              activeThumbColor: AppColors.blackCat,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: () => Navigator.pop(
+                  context,
+                  _ArtistCommunicationPreferences(
+                    emailNotifications: _emailNotifications,
+                    smsNotifications: _smsNotifications,
+                  ),
+                ),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ArtistProfilePage extends StatefulWidget {
   const ArtistProfilePage({
     super.key,
@@ -91,6 +240,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   bool _savingAllClientRequestNotifications = false;
   bool _directRequestNotificationsEnabled = true;
   bool _savingDirectRequestNotifications = false;
+  _ArtistCommunicationPreferences _communicationPreferences =
+      _ArtistCommunicationPreferences.defaults();
   Map<String, dynamic> _artistData = const <String, dynamic>{};
   String _artistSupabaseTable = '';
   String _artistSupabaseId = '';
@@ -370,6 +521,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
               as Map<String, dynamic>?)?['directRequestNotificationsEnabled'],
         ) ??
         nextDirect;
+    final nextCommunicationPreferences = _communicationPreferencesFromData(
+      compatData,
+    );
 
     if (mounted) {
       setState(() {
@@ -378,8 +532,25 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         _nfcRequestsEnabled = nextNfc;
         _allClientRequestNotificationsEnabled = nextAllClientNotifications;
         _directRequestNotificationsEnabled = nextDirectRequestNotifications;
+        _communicationPreferences = nextCommunicationPreferences;
       });
     }
+  }
+
+  _ArtistCommunicationPreferences _communicationPreferencesFromData(
+    Map<String, dynamic> data,
+  ) {
+    final profile = _asMap(data['profile']);
+    final artist = _asMap(data['artist']);
+    final source = _asMap(profile['communicationPreferences']).isNotEmpty
+        ? _asMap(profile['communicationPreferences'])
+        : _asMap(profile['communication_preferences']).isNotEmpty
+        ? _asMap(profile['communication_preferences'])
+        : _asMap(artist['communicationPreferences']).isNotEmpty
+        ? _asMap(artist['communicationPreferences'])
+        : _asMap(artist['communication_preferences']);
+    if (source.isEmpty) return _ArtistCommunicationPreferences.defaults();
+    return _ArtistCommunicationPreferences.fromMap(source);
   }
 
   bool _readBool(Object? a, [Object? b, Object? c]) {
@@ -739,7 +910,10 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
             map['type'],
             fallbackStyle,
           ]);
-          items.add(ArtistPortfolioItem(image: image, style: style));
+          final source = _firstNonEmpty([map['source'], 'manual']);
+          items.add(
+            ArtistPortfolioItem(image: image, style: style, source: source),
+          );
         }
         for (final value in map.values) {
           if (value is List || value is Map) {
@@ -789,6 +963,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           'imageUrl': item.image,
           'style': item.style,
           'storagePath': item.storagePath ?? '',
+          'source': item.source,
           'createdAt': DateTime.now().toIso8601String(),
         });
       }
@@ -876,15 +1051,63 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     return candidates.any((value) => value.isNotEmpty && value == artistEmail);
   }
 
+  // The JNT Reveal Date is the date the client/brand chose, at submission
+  // time, for the finished set to become public. Completed art must not
+  // sync into the artist's portfolio (and therefore must not earn ascension
+  // points) before that date, even if the order itself finished earlier.
+  DateTime? _rowJntRevealDate(Map<String, dynamic> row) {
+    final data = _asMap(row['data']);
+    final details = _asMap(row['details']);
+    final summary = _asMap(row['summary']);
+    final payload = _asMap(row['payload']);
+    // client_custom_requests_details/company_custom_requests_details rows
+    // nest the original submission one level deeper under data.details /
+    // data.payload (see client_custom_request_page.dart's compactDetails ->
+    // *_details insert), so requestDetails can show up at any of these
+    // depths depending on which table/column this row came from.
+    final nestedDetails = _asMap(data['details']);
+    final nestedPayload = _asMap(data['payload']);
+    final requestDetails = _asMap(
+      data['requestDetails'] ??
+          details['requestDetails'] ??
+          summary['requestDetails'] ??
+          payload['requestDetails'] ??
+          nestedDetails['requestDetails'] ??
+          nestedPayload['requestDetails'] ??
+          row['requestDetails'] ??
+          row['request_details'],
+    );
+    final raw = _firstNonEmpty([
+      requestDetails['jntRevealDate'],
+      data['jntRevealDate'],
+      details['jntRevealDate'],
+      summary['jntRevealDate'],
+      payload['jntRevealDate'],
+      nestedDetails['jntRevealDate'],
+      nestedPayload['jntRevealDate'],
+      row['jntRevealDate'],
+      row['jnt_reveal_date'],
+    ]);
+    if (raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
   bool _rowLooksPostCompletion(Map<String, dynamic> row) {
     final status = _firstNonEmpty([
       row['status'],
       _asMap(row['data'])['status'],
     ]).trim().toLowerCase();
-    if (status == 'completed' || status == 'shipped' || status == 'delivered') {
-      return true;
+    final isCompletedStatus =
+        status == 'completed' || status == 'shipped' || status == 'delivered';
+    if (!isCompletedStatus && _collectCompletedPhotoRefs(row).isEmpty) {
+      return false;
     }
-    return _collectCompletedPhotoRefs(row).isNotEmpty;
+
+    final revealDate = _rowJntRevealDate(row);
+    if (revealDate != null && DateTime.now().isBefore(revealDate)) {
+      return false;
+    }
+    return true;
   }
 
   Future<void> _backfillCompletedPortfolioForCurrentArtist() async {
@@ -923,11 +1146,18 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
         'client_custom_requests',
         'company_custom_requests',
       ]) {
+        // company_custom_requests has no 'data' column (brand rows use
+        // payload/details/summary instead) -- selecting it for both tables
+        // with one shared column list throws "column not found" for the
+        // brand loop iteration.
+        final columns = sourceTable == 'client_custom_requests'
+            ? 'id,order_number,accepted_by_artist_email,artist_completed_photos,'
+                  'data,details,summary,payload,request_details,status,updated_at'
+            : 'id,order_number,accepted_by_artist_email,artist_completed_photos,'
+                  'details,summary,payload,request_details,status,updated_at';
         final rows = await client
             .from(sourceTable)
-            .select(
-              'id,order_number,accepted_by_artist_email,artist_completed_photos,data,status,updated_at',
-            )
+            .select(columns)
             .order('updated_at', ascending: false)
             .limit(200);
         for (final raw in rows) {
@@ -964,6 +1194,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           ArtistPortfolioItem(
             image: url,
             style: 'All',
+            source: 'completedOrder',
             storagePath: _storageObjectPathForReference(url),
           ),
         );
@@ -974,6 +1205,25 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       await _bindArtistProfile();
       debugPrint(
         'ARTIST PORTFOLIO BACKFILL success table=$table id=$id added=${nextItems.length}',
+      );
+
+      // Portfolio upload/sync is one of the ascension point stages --
+      // recompute immediately now that qualifying completed-order art has
+      // actually landed in the portfolio, rather than waiting for some
+      // unrelated page load.
+      final artistBasic = _asMap(_artistData['basic']);
+      final artistProfile = _asMap(_artistData['profile']);
+      final artistName = _firstNonEmpty([
+        artistBasic['name'],
+        artistProfile['name'],
+        _artistData['name'],
+        artistEmail,
+      ]);
+      await AscensionService.syncAndPersist(
+        artistEmail: artistEmail,
+        artistCollection: table,
+        currentData: _artistData,
+        artistName: artistName,
       );
     } catch (e, st) {
       debugPrint('ARTIST PORTFOLIO BACKFILL failed: $e');
@@ -1201,6 +1451,52 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     );
   }
 
+  Future<void> _openCommunicationPreferences() async {
+    if (_artistSupabaseId.isEmpty) await _bindArtistProfile();
+    if (_artistSupabaseId.isEmpty) return;
+
+    final updated = await showModalBottomSheet<_ArtistCommunicationPreferences>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ArtistCommunicationPreferencesPopup(
+        initialValue: _communicationPreferences,
+      ),
+    );
+    if (updated == null) return;
+
+    final currentProfile = _asMap(_artistData['profile']);
+    final currentArtist = _asMap(_artistData['artist']);
+    final payload = updated.toMap();
+    final nextProfile = <String, dynamic>{
+      ...currentProfile,
+      'communicationPreferences': payload,
+      'communication_preferences': payload,
+    };
+    final nextArtist = <String, dynamic>{
+      ...currentArtist,
+      'communicationPreferences': payload,
+      'communication_preferences': payload,
+    };
+
+    await _syncSupabaseArtistFields({
+      'profile': nextProfile,
+      'artist': nextArtist,
+    });
+    if (!mounted) return;
+    setState(() {
+      _communicationPreferences = updated;
+      _artistData = <String, dynamic>{
+        ..._artistData,
+        'profile': nextProfile,
+        'artist': nextArtist,
+      };
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Communication preferences saved.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
@@ -1259,6 +1555,13 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     ),
 
                     // ✅ Direct Requests section (after Availability)
+                    _menuTile(
+                      icon: Icons.notifications_active_outlined,
+                      title: 'Communication Preference',
+                      subtitle: 'Manage email and SMS notifications.',
+                      onTap: _openCommunicationPreferences,
+                    ),
+
                     _directRequestsCard(),
 
                     _nfcRequestsCard(),
@@ -2880,12 +3183,21 @@ class ArtistPortfolioItem {
     required this.style,
     this.docId,
     this.storagePath,
+    this.source = 'manual',
   });
 
   final String image;
   final String style;
   final String? docId;
   final String? storagePath;
+  // 'completedOrder' items are auto-synced finished-order art (see
+  // _backfillCompletedPortfolioForCurrentArtist); only those earn ascension
+  // points -- a manually uploaded design never should. See
+  // AscensionService.calculateForArtist / _syncAscensionForArtistDoc.
+  final String source;
+
+  bool get isFromCompletedOrder =>
+      source == 'completedOrder' || source == 'artist_completed_set';
 }
 
 const List<String> _artistServiceOptions = <String>[
@@ -3528,6 +3840,23 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
 
   @override
   Widget build(BuildContext context) {
+    // The details form (license info / social / portfolio link fields) used
+    // to sit in a fixed, non-scrolling Column above the grid's own Expanded.
+    // On shorter screens (or once autofill/keyboard shrinks the viewport)
+    // that fixed content alone can exceed the available height, which
+    // RenderFlex reports as an overflow with no way to scroll past it.
+    // Folding everything into one CustomScrollView (grid included, as a
+    // sliver) means the whole modal scrolls as a unit instead.
+    final displayItems = _pagedItems.isNotEmpty ? _pagedItems : _seedItems;
+    final showLoading =
+        _initialLoading && _pagedItems.isEmpty && _seedItems.isEmpty;
+    final showError =
+        !showLoading &&
+        _loadError != null &&
+        _pagedItems.isEmpty &&
+        _seedItems.isEmpty;
+    final showEmpty = !showLoading && !showError && displayItems.isEmpty;
+
     return Scaffold(
       backgroundColor: AppColors.snow,
       body: SafeArea(
@@ -3555,15 +3884,139 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
+            Expanded(
+              child: CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Showcase your nail art designs.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.6,
+                                    ),
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _detailsSection(),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Upload Design',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.blackCat,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                height: 38,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.blackCat,
+                                    foregroundColor: AppColors.snow,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ),
+                                  onPressed: _uploading
+                                      ? null
+                                      : () async {
+                                          final picker = ImagePicker();
+                                          final picked = await picker
+                                              .pickMultiImage(
+                                                imageQuality: 78,
+                                                maxWidth: 1600,
+                                                maxHeight: 1600,
+                                              );
+                                          if (picked.isEmpty) return;
+                                          setState(() => _uploading = true);
+                                          try {
+                                            setState(() {
+                                              _uploadCompleted = 0;
+                                              _uploadTotal = picked.length;
+                                            });
+                                            final uploaded = await widget
+                                                .onUploadTap(
+                                                  selectedFiles: picked,
+                                                  onProgress: (completed, total) {
+                                                    if (!mounted) return;
+                                                    setState(() {
+                                                      _uploadCompleted =
+                                                          completed;
+                                                      _uploadTotal = total;
+                                                    });
+                                                  },
+                                                );
+                                            if (!mounted) return;
+                                            if (uploaded.isNotEmpty) {
+                                              setState(() {
+                                                _seedItems = <ArtistPortfolioItem>[
+                                                  ...uploaded,
+                                                  ..._seedItems,
+                                                ];
+                                              });
+                                              await _loadInitialPage();
+                                            }
+                                          } finally {
+                                            if (mounted) {
+                                              setState(() {
+                                                _uploading = false;
+                                                _uploadCompleted = 0;
+                                                _uploadTotal = 0;
+                                              });
+                                            }
+                                          }
+                                        },
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: Text(
+                                    _uploading
+                                        ? (_uploadTotal > 0
+                                              ? 'Uploading $_uploadCompleted/$_uploadTotal'
+                                              : 'Uploading...')
+                                        : 'Upload Design',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      fontFamily: 'Arial',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                  if (showLoading)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (showError)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
                         child: Text(
-                          'Showcase your nail art designs.',
+                          'Unable to load portfolio. $_loadError',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.blackCat.withValues(alpha: 0.6),
@@ -3571,145 +4024,25 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _detailsSection(),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Expanded(
+                    )
+                  else if (showEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
                         child: Text(
-                          'Upload Design',
+                          'No portfolio designs available.',
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.blackCat,
+                            color: AppColors.blackCat.withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        height: 38,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                          onPressed: _uploading
-                              ? null
-                              : () async {
-                                  final picker = ImagePicker();
-                                  final picked = await picker.pickMultiImage(
-                                    imageQuality: 78,
-                                    maxWidth: 1600,
-                                    maxHeight: 1600,
-                                  );
-                                  if (picked.isEmpty) return;
-                                  setState(() => _uploading = true);
-                                  try {
-                                    setState(() {
-                                      _uploadCompleted = 0;
-                                      _uploadTotal = picked.length;
-                                    });
-                                    final uploaded = await widget.onUploadTap(
-                                      selectedFiles: picked,
-                                      onProgress: (completed, total) {
-                                        if (!mounted) return;
-                                        setState(() {
-                                          _uploadCompleted = completed;
-                                          _uploadTotal = total;
-                                        });
-                                      },
-                                    );
-                                    if (!mounted) return;
-                                    if (uploaded.isNotEmpty) {
-                                      setState(() {
-                                        _seedItems = <ArtistPortfolioItem>[
-                                          ...uploaded,
-                                          ..._seedItems,
-                                        ];
-                                      });
-                                      await _loadInitialPage();
-                                    }
-                                  } finally {
-                                    if (mounted) {
-                                      setState(() {
-                                        _uploading = false;
-                                        _uploadCompleted = 0;
-                                        _uploadTotal = 0;
-                                      });
-                                    }
-                                  }
-                                },
-                          icon: const Icon(Icons.add, size: 18),
-                          label: Text(
-                            _uploading
-                                ? (_uploadTotal > 0
-                                      ? 'Uploading $_uploadCompleted/$_uploadTotal'
-                                      : 'Uploading...')
-                                : 'Upload Design',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    )
+                  else
+                    _buildPortfolioGridSliver(displayItems),
                 ],
               ),
-            ),
-            const SizedBox(height: 4),
-            const SizedBox(height: 12),
-            Expanded(
-              child:
-                  _initialLoading && _pagedItems.isEmpty && _seedItems.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : Builder(
-                      builder: (context) {
-                        if (_loadError != null &&
-                            _pagedItems.isEmpty &&
-                            _seedItems.isEmpty) {
-                          return Center(
-                            child: Text(
-                              'Unable to load portfolio. $_loadError',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.6,
-                                ),
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          );
-                        }
-
-                        final displayItems = _pagedItems.isNotEmpty
-                            ? _pagedItems
-                            : _seedItems;
-                        if (displayItems.isEmpty) {
-                          return Center(
-                            child: Text(
-                              'No portfolio designs available.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.6,
-                                ),
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          );
-                        }
-                        return _buildPortfolioGrid(displayItems);
-                      },
-                    ),
             ),
           ],
         ),
@@ -3982,20 +4315,19 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     );
   }
 
-  Widget _buildPortfolioGrid(List<ArtistPortfolioItem> displayItems) {
+  Widget _buildPortfolioGridSliver(List<ArtistPortfolioItem> displayItems) {
     final items = _distinctPortfolioItems(displayItems);
     final showTailLoader = _loadingMore;
-    return GridView.builder(
-      controller: _scrollController,
+    return SliverPadding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-      itemCount: showTailLoader ? items.length + 1 : items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 0.92,
-      ),
-      itemBuilder: (_, i) {
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 0.92,
+        ),
+        delegate: SliverChildBuilderDelegate((_, i) {
         if (showTailLoader && i == items.length) {
           return Container(
             alignment: Alignment.center,
@@ -4061,7 +4393,8 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             ],
           ),
         );
-      },
+        }, childCount: showTailLoader ? items.length + 1 : items.length),
+      ),
     );
   }
 
@@ -6531,8 +6864,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
           const SizedBox(height: 6),
           PhoneCountryCodeField(
             areaCode: _phoneAreaCode,
-            onAreaCodeChanged: (code) =>
-                setState(() => _phoneAreaCode = code),
+            onAreaCodeChanged: (code) => setState(() => _phoneAreaCode = code),
             controller: _phoneCtrl,
             height: 46,
             fontSize: 12,

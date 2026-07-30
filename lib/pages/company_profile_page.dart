@@ -64,6 +64,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   late CompanyBusinessInfoDraft _businessInfo;
   late CompanyBillingDraft _billingInfo;
   late CompanyAddressesDraft _addressInfo;
+  CompanyCommunicationPreferences _communicationPreferences =
+      CompanyCommunicationPreferences.defaults();
   Map<String, dynamic> _companyRowData = const <String, dynamic>{};
   String _profileImageUrl = '';
   bool _uploadingPhoto = false;
@@ -127,6 +129,27 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       if (value.isNotEmpty) return value;
     }
     return '';
+  }
+
+  CompanyCommunicationPreferences _communicationPreferencesFromRow(
+    Map<String, dynamic> row,
+  ) {
+    final profile = _asMap(row['profile']);
+    final basic = _asMap(row['basic']);
+    final company = _asMap(row['company']);
+    final source = _asMap(profile['communicationPreferences']).isNotEmpty
+        ? _asMap(profile['communicationPreferences'])
+        : _asMap(profile['communication_preferences']).isNotEmpty
+        ? _asMap(profile['communication_preferences'])
+        : _asMap(basic['communicationPreferences']).isNotEmpty
+        ? _asMap(basic['communicationPreferences'])
+        : _asMap(basic['communication_preferences']).isNotEmpty
+        ? _asMap(basic['communication_preferences'])
+        : _asMap(company['communicationPreferences']).isNotEmpty
+        ? _asMap(company['communicationPreferences'])
+        : _asMap(company['communication_preferences']);
+    if (source.isEmpty) return CompanyCommunicationPreferences.defaults();
+    return CompanyCommunicationPreferences.fromMap(source);
   }
 
   String _normalizeStorageUrl(String raw) {
@@ -565,6 +588,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       _businessInfo = _businessInfoFromRow(row);
       _billingInfo = _billingInfoFromRow(row);
       _addressInfo = _addressesInfoFromRow(row);
+      _communicationPreferences = _communicationPreferencesFromRow(row);
     });
   }
 
@@ -802,6 +826,51 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       'panel_shippingCountry': addresses.shippingCountry,
       'panel_shipping_country': addresses.shippingCountry,
     });
+    await _hydrateDraftsFromCompanyRow();
+  }
+
+  Future<void> _editCommunicationPreferences() async {
+    final updated = await showModalBottomSheet<CompanyCommunicationPreferences>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CompanyCommunicationPreferencesPopup(
+        initial: _communicationPreferences,
+      ),
+    );
+    if (updated == null) return;
+
+    final payload = updated.toMap();
+    final currentProfile = _asMap(_companyRowData['profile']);
+    final currentBasic = _asMap(_companyRowData['basic']);
+    final currentCompany = _asMap(_companyRowData['company']);
+    try {
+      await _upsertCompanyRow({
+        'profile': {
+          ...currentProfile,
+          'communicationPreferences': payload,
+          'communication_preferences': payload,
+        },
+        'basic': {
+          ...currentBasic,
+          'communicationPreferences': payload,
+          'communication_preferences': payload,
+        },
+        'company': {
+          ...currentCompany,
+          'communicationPreferences': payload,
+          'communication_preferences': payload,
+        },
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save communication preferences: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _communicationPreferences = updated);
     await _hydrateDraftsFromCompanyRow();
   }
 
@@ -1100,6 +1169,11 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
               title: 'Addresses',
               onTap: widget.onOpenShippingAddresses ?? _editAddresses,
             ),
+            _RowChevronTile(
+              icon: Icons.notifications_active_outlined,
+              title: 'Communication Preference',
+              onTap: _editCommunicationPreferences,
+            ),
 
             const SizedBox(height: 22),
 
@@ -1221,6 +1295,157 @@ class _RowChevronTile extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class CompanyCommunicationPreferences {
+  const CompanyCommunicationPreferences({
+    required this.emailNotifications,
+    required this.smsNotifications,
+  });
+
+  final bool emailNotifications;
+  final bool smsNotifications;
+
+  factory CompanyCommunicationPreferences.defaults() {
+    return const CompanyCommunicationPreferences(
+      emailNotifications: true,
+      smsNotifications: true,
+    );
+  }
+
+  factory CompanyCommunicationPreferences.fromMap(Map<String, dynamic> map) {
+    bool asBool(dynamic raw, bool fallback) {
+      if (raw is bool) return raw;
+      if (raw is num) return raw != 0;
+      final text = (raw ?? '').toString().trim().toLowerCase();
+      if (text == 'true') return true;
+      if (text == 'false') return false;
+      return fallback;
+    }
+
+    final defaults = CompanyCommunicationPreferences.defaults();
+    return CompanyCommunicationPreferences(
+      emailNotifications: asBool(
+        map['emailNotifications'] ?? map['email_notifications'],
+        defaults.emailNotifications,
+      ),
+      smsNotifications: asBool(
+        map['smsNotifications'] ?? map['sms_notifications'],
+        defaults.smsNotifications,
+      ),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'emailNotifications': emailNotifications,
+      'smsNotifications': smsNotifications,
+    };
+  }
+}
+
+class CompanyCommunicationPreferencesPopup extends StatefulWidget {
+  const CompanyCommunicationPreferencesPopup({
+    super.key,
+    required this.initial,
+  });
+
+  final CompanyCommunicationPreferences initial;
+
+  @override
+  State<CompanyCommunicationPreferencesPopup> createState() =>
+      _CompanyCommunicationPreferencesPopupState();
+}
+
+class _CompanyCommunicationPreferencesPopupState
+    extends State<CompanyCommunicationPreferencesPopup> {
+  late bool _emailNotifications;
+  late bool _smsNotifications;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailNotifications = widget.initial.emailNotifications;
+    _smsNotifications = widget.initial.smsNotifications;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        decoration: const BoxDecoration(color: AppColors.snow),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Communication Preferences',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close communication preferences',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _emailNotifications,
+              onChanged: (value) => setState(() {
+                _emailNotifications = value;
+              }),
+              title: const Text('Email Notifications'),
+              activeThumbColor: AppColors.blackCat,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _smsNotifications,
+              onChanged: (value) => setState(() {
+                _smsNotifications = value;
+              }),
+              title: const Text('SMS Notifications'),
+              activeThumbColor: AppColors.blackCat,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onPressed: () => Navigator.pop(
+                  context,
+                  CompanyCommunicationPreferences(
+                    emailNotifications: _emailNotifications,
+                    smsNotifications: _smsNotifications,
+                  ),
+                ),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
         ),
       ),
     );

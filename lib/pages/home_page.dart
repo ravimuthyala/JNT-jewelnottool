@@ -213,13 +213,11 @@ class _HomePageState extends State<HomePage> {
                 width: double.infinity,
                 height: double.infinity,
                 color: const Color(0xFFE6E2DE),
-                child: FittedBox(
-                  fit: BoxFit.contain,
+                child: Image.asset(
+                  'assets/images/jntlogo2.png',
+                  fit: BoxFit.cover,
                   alignment: Alignment.center,
-                  child: Image.asset(
-                    'assets/images/jntlogo2.png',
-                    filterQuality: FilterQuality.high,
-                  ),
+                  filterQuality: FilterQuality.high,
                 ),
               ),
             ),

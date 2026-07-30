@@ -146,7 +146,9 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
           ),
         ],
       ),
-      child: Column(
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -300,6 +302,7 @@ class _PaymentMethodSectionState extends State<PaymentMethodSection> {
             activeColor: AppColors.blackCat,
           ),
         ],
+        ),
       ),
     );
   }

@@ -25,6 +25,7 @@ import '../widgets/direct_request_year_calendar.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/registration_date_of_birth_picker.dart';
+import '../widgets/communication_preference_section.dart';
 
 const Color _artistRegSnow = AppColors.snow;
 const Color _artistRegInk = AppColors.blackCat;
@@ -142,6 +143,8 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
       RegistrationInputUtils.normalizePhone(_phoneCtrl.text);
   String get _fullPhone => '$_normalizedAreaCode$_normalizedPhone';
   String _timeZone = 'America/New_York';
+  bool _emailNotifications = true;
+  bool _smsNotifications = true;
 
   // -----------------------
   // Services & Pricing
@@ -517,6 +520,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
           'timeZone': shippingTimeZone,
         },
         'nailTechType': _nailTechType.name,
+        'communicationPreferences': {
+          'emailNotifications': _emailNotifications,
+          'smsNotifications': _smsNotifications,
+        },
       },
       'languageSpoken': _languageSpokenCtrl.text.trim(),
       'currency': (_currency ?? '').trim(),
@@ -1919,7 +1926,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   }
 
   Future<void> _pickDateOfBirth() async {
-    final selected = await showRegistrationDateOfBirthPicker(context: context);
+    final selected = await showRegistrationDateOfBirthPicker(
+      context: context,
+      initialDate: _dateOfBirth,
+    );
     if (selected == null || !mounted) return;
     setState(() {
       _dateOfBirth = selected;
@@ -2610,6 +2620,17 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                         ),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  CommunicationPreferenceSection(
+                    emailNotifications: _emailNotifications,
+                    smsNotifications: _smsNotifications,
+                    onEmailChanged: (value) =>
+                        setState(() => _emailNotifications = value),
+                    onSmsChanged: (value) =>
+                        setState(() => _smsNotifications = value),
                   ),
 
                   const SizedBox(height: 6),

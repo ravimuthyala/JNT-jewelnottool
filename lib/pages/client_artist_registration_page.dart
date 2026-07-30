@@ -20,6 +20,7 @@ import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/full_hand_measurement_flow.dart';
 import '../widgets/registration_date_of_birth_picker.dart';
+import '../widgets/communication_preference_section.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../models/client_profile_models.dart';
@@ -167,6 +168,8 @@ class _ClientArtistRegistrationPageState
       RegistrationInputUtils.normalizePhone(_phoneCtrl.text);
   String get _fullPhone => '$_normalizedAreaCode$_normalizedPhone';
   String _timeZone = 'America/New_York';
+  bool _emailNotifications = true;
+  bool _smsNotifications = true;
 
   // ignore: unused_element
   void _registrationLog(String message) {
@@ -1130,6 +1133,10 @@ class _ClientArtistRegistrationPageState
         'kitPaid': _kitPaid,
         'bundlePaid': _bundlePaid,
       },
+      'communicationPreferences': {
+        'emailNotifications': _emailNotifications,
+        'smsNotifications': _smsNotifications,
+      },
       'portfolioImages': portfolioImageUrls,
       'portfolioItems': portfolioImageUrls
           .map((url) => <String, dynamic>{'imageUrl': url, 'style': 'All'})
@@ -1159,6 +1166,8 @@ class _ClientArtistRegistrationPageState
       ),
       payment: _payment,
       nail: _nailPrefs,
+      emailNotifications: _emailNotifications,
+      smsNotifications: _smsNotifications,
     );
   }
 
@@ -1694,7 +1703,10 @@ class _ClientArtistRegistrationPageState
   }
 
   Future<void> _pickDateOfBirth() async {
-    final selected = await showRegistrationDateOfBirthPicker(context: context);
+    final selected = await showRegistrationDateOfBirthPicker(
+      context: context,
+      initialDate: _dateOfBirth,
+    );
     if (selected == null || !mounted) return;
     setState(() {
       _dateOfBirth = selected;
@@ -3372,6 +3384,10 @@ class _ClientArtistRegistrationPageState
         'payout': payload['artist']['payout'],
         'agreements': payload['artist']['agreements'],
         'registration': registration,
+        'communication_preferences': payload['communicationPreferences'],
+        'client': {
+          'communicationPreferences': payload['communicationPreferences'],
+        },
         'updated_at': now,
       });
 
@@ -3385,6 +3401,10 @@ class _ClientArtistRegistrationPageState
         'payment': payload['payment'],
         'nail_preferences': payload['nailPreferences'],
         'registration': registration,
+        'communication_preferences': payload['communicationPreferences'],
+        'client': {
+          'communicationPreferences': payload['communicationPreferences'],
+        },
         'updated_at': now,
       });
 
@@ -5723,6 +5743,14 @@ class _ClientArtistRegistrationPageState
           _basicProfileSection(),
           const SizedBox(height: 8),
           _addressInfoSection(),
+          const SizedBox(height: 8),
+          CommunicationPreferenceSection(
+            emailNotifications: _emailNotifications,
+            smsNotifications: _smsNotifications,
+            onEmailChanged: (value) =>
+                setState(() => _emailNotifications = value),
+            onSmsChanged: (value) => setState(() => _smsNotifications = value),
+          ),
         ];
       case 1:
         return <Widget>[

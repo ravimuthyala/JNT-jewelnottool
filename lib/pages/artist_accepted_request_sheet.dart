@@ -470,39 +470,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     return null;
   }
 
-  Future<Map<String, dynamic>?> _findUserRowById(
-    List<String> tables,
-    String id,
-  ) async {
-    final normalizedId = id.trim();
-    if (normalizedId.isEmpty) return null;
-    for (final table in tables) {
-      final row = await _supabase
-          .from(table)
-          .select()
-          .eq('id', normalizedId)
-          .maybeSingle();
-      if (row != null) {
-        return <String, dynamic>{
-          ...Map<String, dynamic>.from(row),
-          '_table': table,
-        };
-      }
-      final byUid = await _supabase
-          .from(table)
-          .select()
-          .eq('uid', normalizedId)
-          .maybeSingle();
-      if (byUid != null) {
-        return <String, dynamic>{
-          ...Map<String, dynamic>.from(byUid),
-          '_table': table,
-        };
-      }
-    }
-    return null;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -1202,14 +1169,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       );
       debugPrintStack(stackTrace: st);
     }
-    try {
-      await _mirrorCompletedPhotosToArtistPortfolio(uploadedArtistPhotos);
-    } catch (e, st) {
-      debugPrint(
-        'POST COMPLETE artist portfolio mirror failed request=${widget.request.id} order=${widget.request.orderNumber}: $e',
-      );
-      debugPrintStack(stackTrace: st);
-    }
+    // Completed art must not appear in the artist's public portfolio until
+    // the client/brand's JNT Reveal Date -- so it is deliberately NOT
+    // mirrored here at completion time. It's synced later, gated on that
+    // date, by _backfillCompletedPortfolioForCurrentArtist in
+    // artist_profile_page.dart (which also re-triggers the ascension
+    // recompute once it actually lands in the portfolio).
   }
 
   Future<void> _notifyClientOrderCompleted() async {
@@ -1345,110 +1310,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           'updatedAt': nowIso,
         })
         .eq('id', rowId);
-  }
-
-  Future<void> _mirrorCompletedPhotosToArtistPortfolio(
-    List<String> photos,
-  ) async {
-    if (photos.isEmpty) return;
-    final currentArtistId = _currentUserId();
-    final artistEmail =
-        (widget.request.acceptedByArtistEmail.trim().isNotEmpty
-                ? widget.request.acceptedByArtistEmail
-                : _currentUserEmail())
-            .trim()
-            .toLowerCase();
-    Map<String, dynamic>? artistRow;
-    if (currentArtistId.isNotEmpty) {
-      artistRow = await _findUserRowById(const <String>[
-        'artist',
-        'client_artist',
-      ], currentArtistId);
-    }
-    if (artistRow == null) {
-      if (artistEmail.isEmpty) return;
-      artistRow = await _findUserRowByEmail(const <String>[
-        'artist',
-        'client_artist',
-      ], artistEmail);
-    }
-    if (artistRow == null) return;
-    final table = (artistRow['_table'] ?? '').toString().trim();
-    final rowId = (artistRow['id'] ?? '').toString().trim();
-    if (table.isEmpty || rowId.isEmpty) return;
-
-    final cleaned = photos
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-    if (cleaned.isEmpty) return;
-
-    final nowIso = DateTime.now().toIso8601String();
-    final itemMaps = cleaned
-        .map(
-          (url) => <String, dynamic>{
-            'imageUrl': url,
-            'url': url,
-            'image': url,
-            'style': 'All',
-            'source': 'artist_completed_set',
-            'requestId': widget.request.id,
-            'createdAt': nowIso,
-          },
-        )
-        .toList(growable: false);
-    final portfolio = _asMap(artistRow['portfolio']);
-    final artist = _asMap(artistRow['artist']);
-    final artistPortfolio = _asMap(artist['portfolio']);
-    final nextPortfolioImages = _mergeUniqueList(
-      _asList(_firstPresent(artistRow, 'portfolio_images', 'portfolioImages')),
-      cleaned,
-    );
-    final nextPortfolioItems = _mergeUniqueList(
-      _asList(_firstPresent(artistRow, 'portfolio_items', 'portfolioItems')),
-      itemMaps,
-    );
-    debugPrint(
-      'ARTIST PORTFOLIO MIRROR request=${widget.request.id} order=${widget.request.orderNumber} '
-      'targetTable=$table targetRowId=$rowId currentArtistId=$currentArtistId '
-      'photoCount=${cleaned.length}',
-    );
-    await _supabase
-        .from(table)
-        .update({
-          'portfolio_images': nextPortfolioImages,
-          'panel_portfolio_images': nextPortfolioImages,
-          'panel_artist_portfolio_images': nextPortfolioImages,
-          'portfolio_items': nextPortfolioItems,
-          'portfolio': {
-            ...portfolio,
-            'images': _mergeUniqueList(_asList(portfolio['images']), cleaned),
-            'items': _mergeUniqueList(_asList(portfolio['items']), itemMaps),
-          },
-          'artist': {
-            ...artist,
-            'portfolioImages': nextPortfolioImages,
-            'portfolioItems': nextPortfolioItems,
-            'portfolio': {
-              ...artistPortfolio,
-              'images': _mergeUniqueList(
-                _asList(artistPortfolio['images']),
-                cleaned,
-              ),
-              'items': _mergeUniqueList(
-                _asList(artistPortfolio['items']),
-                itemMaps,
-              ),
-            },
-          },
-          'updated_at': nowIso,
-          'updatedAt': nowIso,
-        })
-        .eq('id', rowId);
-    debugPrint(
-      'ARTIST PORTFOLIO MIRROR success request=${widget.request.id} order=${widget.request.orderNumber} '
-      'targetTable=$table targetRowId=$rowId',
-    );
   }
 
   Future<List<String>> _uploadArtistPhotos() async {
@@ -2081,6 +1942,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         sourceMaps.add(rootMap);
         sourceMaps.add(_asMap(rootMap['payload']));
         sourceMaps.add(_asMap(rootMap['data']));
+        // Client (non-brand) requests write nail dimensions into the root
+        // row's own `details` column (see client_custom_request_page.dart's
+        // `compactDetails['nailPreferences']`) -- without this source the
+        // lookup below never finds them for client requests, even though
+        // brand requests happen to store dims somewhere else already covered.
+        sourceMaps.add(_asMap(rootMap['details']));
         sourceMaps.add(
           _asMap(rootMap['requestDetails'] ?? rootMap['request_details']),
         );
@@ -2105,6 +1972,13 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         sourceMaps.add(
           _asMap(map['order'] ?? map['orderData'] ?? map['order_data']),
         );
+        // client_custom_requests_details stores its payload one level deeper
+        // (`data: {details: {...}, payload: {...}}`) than the loop above
+        // reaches -- descend into it explicitly for client requests.
+        final nestedData = _asMap(map['data']);
+        sourceMaps.add(_asMap(nestedData['details']));
+        sourceMaps.add(_asMap(nestedData['payload']));
+        sourceMaps.add(_asMap(nestedData['requestDetails']));
       }
 
       final nailSources = <Map<String, dynamic>>[];

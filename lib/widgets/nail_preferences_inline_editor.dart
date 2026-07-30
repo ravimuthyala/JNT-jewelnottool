@@ -506,7 +506,7 @@ class _NailPreferencesInlineEditorState
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 178,
+            height: 162,
             child: ScrollConfiguration(
               behavior: ScrollConfiguration.of(context).copyWith(
                 dragDevices: {
@@ -827,7 +827,7 @@ class _ShapeCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
-        width: 118,
+        width: 108,
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
         decoration: BoxDecoration(
           color: bg,
@@ -994,7 +994,7 @@ class _LengthImageCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.zero,
       child: Container(
-        width: 182,
+        width: 148,
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
         decoration: BoxDecoration(
           color: bg,
@@ -1015,12 +1015,12 @@ class _LengthImageCard extends StatelessWidget {
               borderRadius: BorderRadius.zero,
               child: Image.asset(
                 imageAsset,
-                height: 96,
+                height: 108,
                 width: double.infinity,
                 fit: BoxFit.contain,
                 cacheWidth: 400,
                 errorBuilder: (_, _, _) => Container(
-                  height: 96,
+                  height: 108,
                   decoration: BoxDecoration(
                     color: AppColors.blackCat.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.zero,
@@ -1033,14 +1033,19 @@ class _LengthImageCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat.withValues(alpha: 0.85),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Center(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
+                  ),
                 ),
               ),
             ),
