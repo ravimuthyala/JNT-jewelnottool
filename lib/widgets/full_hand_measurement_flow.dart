@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -174,6 +175,23 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _showSuccessSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.green,
+        duration: const Duration(milliseconds: 900),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _changeCoin() async {
     final next = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -246,7 +264,7 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
   }
 
   Future<void> _showRetakeDialog(TwoShotCheckResult check) async {
-    final coinDetected = check.coin?['detected'];
+    final coinDetected = check.coin?['ok'];
     final coinMsg = coinDetected == false
         ? 'Reference coin not detected. '
         : '';
@@ -257,12 +275,14 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
 
     setState(() => _lastIssues = issues);
     if (!mounted) return;
+    final handLabel = check.hand == 'left' ? 'Left' : 'Right';
+    final shotLabel = check.shotType == 'thumb' ? 'Thumb' : '4 Fingers';
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.snow,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Retake Photo'),
+        title: Text('Retake Photo — $handLabel Hand ($shotLabel)'),
         content: Text(message),
         actions: [
           ElevatedButton(
@@ -288,7 +308,9 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     try {
       _log('opening camera for ${step.key}');
       final image = await _picker.pickImage(
-        source: ImageSource.camera,
+        // ponytail: web has no reliable camera capture, use file upload so
+        // you can test with a demo image; native still opens the camera.
+        source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
         imageQuality: 70,
         maxWidth: 1024,
         maxHeight: 1024,
@@ -312,7 +334,13 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
       );
 
       if (check == null) {
-        _showSnack('Unable to reach measurement service. Please try again.');
+        final reason = FullHandMeasurementService.lastError;
+        _log('checkShot failed: $reason');
+        _showSnack(
+          reason == null
+              ? 'Unable to reach measurement service for ${step.bigTitle}. Please try again.'
+              : 'Unable to reach measurement service for ${step.bigTitle}: $reason',
+        );
         return;
       }
       if (!check.ok) {
@@ -325,6 +353,7 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
         _checkedOk.add(step.key);
         _lastIssues = const [];
       });
+      _showSuccessSnack('${step.bigTitle} captured');
 
       final handSteps = _steps.where((s) => s.hand == step.hand);
       final handComplete = handSteps.every((s) => _checkedOk.contains(s.key));
@@ -336,7 +365,9 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
       }
     } catch (e) {
       _log('capture failed for ${step.key}: $e');
-      _showSnack('Unable to capture photo. Please try again.');
+      _showSnack(
+        'Unable to capture photo for ${step.bigTitle}. Please try again.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -358,9 +389,23 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
         coinDiameterMm: _coinDiameterMm,
       );
 
-      if (result == null || !result.ok) {
+      if (result == null) {
+        final reason = FullHandMeasurementService.lastError;
+        _log('submitTwoShot failed: $reason');
         _showSnack(
-          result?.message ??
+          reason == null
+              ? 'Unable to reach measurement service for the $hand hand. Please try again.'
+              : 'Unable to reach measurement service for the $hand hand: $reason',
+        );
+        setState(() {
+          _checkedOk.removeWhere((k) => k.startsWith(prefix));
+          _stepIndex = _steps.indexWhere((s) => s.hand == hand);
+        });
+        return;
+      }
+      if (!result.ok) {
+        _showSnack(
+          result.message ??
               'Measurement failed for the $hand hand. Please retake both photos.',
         );
         setState(() {
@@ -549,196 +594,227 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     final step = _steps[_stepIndex];
     final progressLabel = '${_checkedOk.length}/${_steps.length}';
 
-    return SafeArea(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-        ),
-        padding: EdgeInsets.fromLTRB(
-          16,
-          14,
-          16,
-          16 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Measure Your Nail',
-                      style: TextStyle(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // Any dismissal path (system/browser back, not just the explicit
+        // close icon) must still return whatever was already captured —
+        // otherwise a partial single-hand result is silently discarded.
+        Navigator.of(context).pop(_measured);
+      },
+      child: SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+          ),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            14,
+            16,
+            16 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Measure Your Nail',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      progressLabel,
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 16,
+                        fontSize: 15,
                         color: AppColors.blackCat,
                       ),
                     ),
-                  ),
-                  Text(
-                    progressLabel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      color: AppColors.blackCat,
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.blackCat),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(_measured),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 40,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemBuilder: (_, i) {
-                    final s = _steps[i];
-                    final done = _checkedOk.contains(s.key);
-                    final current = i == _stepIndex;
-                    return InkWell(
-                      onTap: () => setState(() => _stepIndex = i),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: current
-                              ? AppColors.blackCat
-                              : (done
-                                    ? AppColors.balletSlippers
-                                    : AppColors.snow),
-                          border: Border.all(
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemBuilder: (_, i) {
+                      final s = _steps[i];
+                      final done = _checkedOk.contains(s.key);
+                      final current = i == _stepIndex;
+                      return InkWell(
+                        onTap: () => setState(() => _stepIndex = i),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
                             color: current
                                 ? AppColors.blackCat
-                                : AppColors.blackCat.withValues(alpha: 0.12),
+                                : (done
+                                      ? AppColors.balletSlippers
+                                      : AppColors.snow),
+                            border: Border.all(
+                              color: current
+                                  ? AppColors.blackCat
+                                  : AppColors.blackCat.withValues(alpha: 0.12),
+                            ),
+                            borderRadius: BorderRadius.zero,
                           ),
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        child: Text(
-                          s.tabLabel,
-                          style: TextStyle(
-                            color: current
-                                ? AppColors.snow
-                                : AppColors.blackCat,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (done) ...[
+                                const Icon(
+                                  Icons.check_circle,
+                                  size: 14,
+                                  color: Colors.green,
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Text(
+                                s.tabLabel,
+                                style: TextStyle(
+                                  color: current
+                                      ? AppColors.snow
+                                      : AppColors.blackCat,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    );
-                  },
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemCount: _steps.length,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                height: 320,
-                decoration: const BoxDecoration(
-                  color: AppColors.blackCat,
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.camera_alt_rounded,
-                        size: 70,
-                        color: AppColors.snow,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Scan your ${step.bigTitle}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.snow,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
+                      );
+                    },
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemCount: _steps.length,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Reference: $_coinName',
-                style: const TextStyle(
-                  color: AppColors.blackCat,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  height: 320,
+                  decoration: const BoxDecoration(
+                    color: AppColors.blackCat,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.camera_alt_rounded,
+                          size: 70,
+                          color: AppColors.snow,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Scan your ${step.bigTitle}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.snow,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                step.shotType == 'fourFinger'
-                    ? 'Line up index, middle, ring, and pinky together with the coin.'
-                    : 'Capture your thumb alone with the coin.',
-                style: const TextStyle(
-                  color: AppColors.blackCat,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (_lastIssues.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
-                  _lastIssues.join(', '),
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                  'Reference: $_coinName',
+                  style: const TextStyle(
+                    color: AppColors.blackCat,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  step.shotType == 'fourFinger'
+                      ? 'Line up index, middle, ring, and pinky together with the coin.'
+                      : 'Capture your thumb alone with the coin.',
+                  style: const TextStyle(
+                    color: AppColors.blackCat,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (_lastIssues.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _lastIssues.join(', '),
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  child: const Text(
+                    'Captured photos will upload with your account when you sign up.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _busy ? null : _captureCurrentStep,
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.camera_alt_outlined),
+                    label: Text(
+                      _busy
+                          ? 'Analyzing ${step.bigTitle}... up to 30s'
+                          : (_checkedOk.contains(step.key)
+                                ? 'Re-image'
+                                : 'Capture'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _busy ? null : _changeCoin,
+                  child: const Text('Change Coin/Currency'),
                 ),
               ],
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: const Text(
-                  'Captured photos will upload with your account when you sign up.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _busy ? null : _captureCurrentStep,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.camera_alt_outlined),
-                  label: Text(
-                    _busy
-                        ? 'Measuring...'
-                        : (_checkedOk.contains(step.key)
-                              ? 'Re-image'
-                              : 'Capture'),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                    backgroundColor: AppColors.blackCat,
-                    foregroundColor: AppColors.snow,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: _busy ? null : _changeCoin,
-                child: const Text('Change Coin/Currency'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

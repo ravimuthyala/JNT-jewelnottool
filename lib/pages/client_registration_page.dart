@@ -150,6 +150,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       _passCtrl.text = 'Password123!';
       _confirmPassCtrl.text = 'Password123!';
 
+      final birthYear = DateTime.now().year - 15 - rand.nextInt(30);
+      _dateOfBirth = DateTime(birthYear, 1 + rand.nextInt(11), 1 + rand.nextInt(27));
+      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(_dateOfBirth!);
+
       final p1 = 500 + rand.nextInt(400);
       final p2 = 100 + rand.nextInt(899);
       final p3 = 1000 + rand.nextInt(8999);
@@ -1496,6 +1500,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     String? Function(String?)? validator,
   }) {
     return FormField<String>(
+      key: ValueKey<String?>(selectedValue),
       initialValue: selectedValue,
       validator: validator,
       builder: (field) {

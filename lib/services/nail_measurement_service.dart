@@ -9,16 +9,19 @@ class NailMeasurementService {
     defaultValue:
         'https://uolyyyq9ih.execute-api.us-east-2.amazonaws.com/measure/single-finger',
   );
+  // ponytail: hardcoded test-only default so plain `flutter run` works
+  // without flags. MUST be overridden via --dart-define-from-file for any
+  // real release build — see docs/PLAYSTORE_API_COST_PRECAUTIONS.md.
   static const String _apiKey = String.fromEnvironment(
     'NAIL_MEASUREMENT_API_KEY',
-    defaultValue: '',
+    defaultValue: 'HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU',
   );
   static const bool _enabled = bool.fromEnvironment(
     'ENABLE_NAIL_MEASUREMENT_API',
-    defaultValue: false,
+    defaultValue: true,
   );
   static const int _maxPayloadBytes = 2 * 1024 * 1024;
-  static const Duration _requestTimeout = Duration(seconds: 8);
+  static const Duration _requestTimeout = Duration(seconds: 40);
   static const bool _allowLocalhostApi = bool.fromEnvironment(
     'ALLOW_LOCALHOST_NAIL_MEASUREMENT_API',
     defaultValue: false,
