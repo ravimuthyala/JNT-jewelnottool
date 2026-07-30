@@ -8,33 +8,33 @@
             "name": "JewelNotTool (dev)",
             "request": "launch",
             "type": "dart",
-            "args": ["--flavor", "dev", "--dart-define=ENV=dev"]
+            "args": ["--flavor", "dev", "--dart-define=ENV=dev", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
         },
         {
             "name": "JewelNotTool (uat)",
             "request": "launch",
             "type": "dart",
-            "args": ["--flavor", "uat", "--dart-define=ENV=uat"]
+            "args": ["--flavor", "uat", "--dart-define=ENV=uat", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
         },
         {
             "name": "JewelNotTool (production)",
             "request": "launch",
             "type": "dart",
-            "args": ["--flavor", "production", "--dart-define=ENV=production"]
+            "args": ["--flavor", "production", "--dart-define=ENV=production", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
         },
         {
             "name": "JewelNotTool (production, profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile",
-            "args": ["--flavor", "production", "--dart-define=ENV=production"]
+            "args": ["--flavor", "production", "--dart-define=ENV=production", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
         },
         {
             "name": "JewelNotTool (production, release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
-            "args": ["--flavor", "production", "--dart-define=ENV=production"]
+            "args": ["--flavor", "production", "--dart-define=ENV=production", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
         }
     ]
 }

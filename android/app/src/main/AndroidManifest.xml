@@ -13,6 +13,7 @@
 
     <!-- Required by image_picker when using ImageSource.camera -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <intent>
