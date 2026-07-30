@@ -938,7 +938,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         'panel_directRequestsEnabled': value,
         'availability': {'directRequestsEnabled': value},
         'profile': {'directRequestsEnabled': value},
-        'communicationPreferences': _communicationPreferences.toMap(),
+        'communication_preferences': _communicationPreferences.toMap(),
         'client': {
           'communicationPreferences': _communicationPreferences.toMap(),
         },
@@ -1295,6 +1295,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       if (!mounted || data == null) return;
 
       final topPrefs =
+          (data['communication_preferences'] as Map<String, dynamic>?) ??
           (data['communicationPreferences'] as Map<String, dynamic>?) ??
           const {};
       final nestedPrefs =
@@ -1325,7 +1326,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     if (uid.isEmpty) return;
 
     await _upsertArtistRow('client_artist', uid, {
-      'communicationPreferences': preferences.toMap(),
+      'communication_preferences': preferences.toMap(),
       'client': {'communicationPreferences': preferences.toMap()},
     }, email: identity.email);
   }

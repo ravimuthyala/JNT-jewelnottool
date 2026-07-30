@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/notification_bell_button.dart';
@@ -301,6 +302,16 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
             'panel_reviews': nextCount,
             'updated_at': nowIso,
           }).eq('id', artistRow['id']);
+
+          // A five-star review is one of the ascension point stages -- recompute
+          // immediately so it doesn't sit unreflected until some unrelated
+          // page load triggers the artist's own next resync.
+          await AscensionService.syncAndPersist(
+            artistEmail: artistEmail,
+            artistCollection: artistTable,
+            currentData: artistRow,
+            artistName: artistName,
+          );
         });
 
         await _bestEffort(() async {

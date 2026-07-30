@@ -586,6 +586,18 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
                       color: AppColors.blackCat,
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.blackCat,
+                    ),
+                    tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ],
               ),
               const SizedBox(height: 10),

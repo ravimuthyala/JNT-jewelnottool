@@ -957,12 +957,23 @@ class ArtistRequestsRepository {
         _asNullableBool(detailData['allow_non_licensed']) ??
         true;
 
+    // For client (non-brand) requests, _mergeRowWithDetails above replaces
+    // `row['details']` (== detailData here) with the details-table's payload
+    // doc, which nests the original details one level deeper under
+    // `details`/`payload` (see client_custom_request_page.dart's
+    // compactDetails -> client_custom_requests_details insert). Without
+    // these two extra fallbacks, nailPreferences -- and therefore the mm
+    // dimensions -- silently disappear for every client request post-merge.
     final nailPrefs = _asMap(detailData['nailPreferences']).isNotEmpty
         ? _asMap(detailData['nailPreferences'])
         : _asMap(
             _asMap(detailData['requestDetails'])['nailPreferences'],
           ).isNotEmpty
         ? _asMap(_asMap(detailData['requestDetails'])['nailPreferences'])
+        : _asMap(_asMap(detailData['details'])['nailPreferences']).isNotEmpty
+        ? _asMap(_asMap(detailData['details'])['nailPreferences'])
+        : _asMap(_asMap(detailData['payload'])['nailPreferences']).isNotEmpty
+        ? _asMap(_asMap(detailData['payload'])['nailPreferences'])
         : _asMap(data['nailPreferences']).isNotEmpty
         ? _asMap(data['nailPreferences'])
         : _asMap(_asMap(data['requestDetails'])['nailPreferences']);

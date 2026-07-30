@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/profile_table_columns.dart';
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
+import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart' as storage_resolver;
 import '../theme/app_colors.dart';
@@ -1167,10 +1168,47 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           'p_artist_amount': normalizedTotal,
         },
       );
+      // Repeat-client-order points must reflect the moment the artist
+      // accepts a second order from a client they've already served -- see
+      // AscensionService.calculateForArtist's acceptedRows pass. This is a
+      // separate accept path from artist_requests_page_redesign.dart's own
+      // _persistArtistAcceptance, so it needs its own trigger too.
+      unawaited(_syncAscensionForCurrentArtist());
       return true;
     } catch (e) {
       debugPrint('[ClientCampaignsPage] artist_accept_request failed: $e');
       return false;
+    }
+  }
+
+  Future<void> _syncAscensionForCurrentArtist() async {
+    final email = (_supabase.auth.currentUser?.email ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
+
+    for (final collection in const <String>['artist', 'client_artist']) {
+      try {
+        final row = await _supabase
+            .from(collection)
+            .select()
+            .eq('email', email)
+            .maybeSingle();
+        if (row == null) continue;
+        final currentData = Map<String, dynamic>.from(row);
+        final basic = (currentData['basic'] as Map?) ?? const <String, dynamic>{};
+        final profile = (currentData['profile'] as Map?) ?? const <String, dynamic>{};
+        final artistName = (basic['name'] ?? profile['name'] ?? currentData['name'] ?? email)
+            .toString()
+            .trim();
+        await AscensionService.syncAndPersist(
+          artistEmail: email,
+          artistCollection: collection,
+          currentData: currentData,
+          artistName: artistName.isEmpty ? email : artistName,
+        );
+        return;
+      } catch (e) {
+        debugPrint('[ClientCampaignsPage] ascension sync failed for $collection: $e');
+      }
     }
   }
 

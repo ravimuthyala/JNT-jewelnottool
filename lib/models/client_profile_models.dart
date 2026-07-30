@@ -145,12 +145,16 @@ class ClientProfileDraft {
   final AddressInfo address;
   final PaymentInfo payment;
   final NailPreferences nail;
+  final bool? emailNotifications;
+  final bool? smsNotifications;
 
   const ClientProfileDraft({
     required this.basic,
     required this.address,
     required this.payment,
     required this.nail,
+    this.emailNotifications,
+    this.smsNotifications,
   });
 
   ClientProfileDraft copyWith({
@@ -158,12 +162,16 @@ class ClientProfileDraft {
     AddressInfo? address,
     PaymentInfo? payment,
     NailPreferences? nail,
+    bool? emailNotifications,
+    bool? smsNotifications,
   }) {
     return ClientProfileDraft(
       basic: basic ?? this.basic,
       address: address ?? this.address,
       payment: payment ?? this.payment,
       nail: nail ?? this.nail,
+      emailNotifications: emailNotifications ?? this.emailNotifications,
+      smsNotifications: smsNotifications ?? this.smsNotifications,
     );
   }
 

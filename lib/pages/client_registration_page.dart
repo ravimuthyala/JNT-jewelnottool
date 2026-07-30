@@ -26,6 +26,7 @@ import 'client_shell_page.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../widgets/payment_method_section.dart';
+import '../widgets/communication_preference_section.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/full_hand_measurement_flow.dart';
@@ -126,6 +127,9 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     method: PaymentMethod.applePay,
     saveForFuture: true,
   );
+
+  bool _emailNotifications = true;
+  bool _smsNotifications = true;
 
   static const List<String> _registrationStepTitles = <String>[
     'Basic Info,\nAddress & Payment',
@@ -1009,6 +1013,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         'kitPurchased': _kitPurchased,
         'bypassCheckoutUsed': kAllowRegistrationWithoutCheckout,
       },
+      'communicationPreferences': {
+        'emailNotifications': _emailNotifications,
+        'smsNotifications': _smsNotifications,
+      },
     };
   }
 
@@ -1640,7 +1648,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   }
 
   Future<void> _pickDateOfBirth() async {
-    final selected = await showRegistrationDateOfBirthPicker(context: context);
+    final selected = await showRegistrationDateOfBirthPicker(
+      context: context,
+      initialDate: _dateOfBirth,
+    );
     if (selected == null || !mounted) return;
     setState(() {
       _dateOfBirth = selected;
@@ -1950,6 +1961,11 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       'payment': payload['payment'],
       'nail_preferences': payload['nailPreferences'],
       'registration': registration,
+      // Real column is snake_case -- see lib/constants/profile_table_columns.dart
+      // and the identical fix in client_profile_page.dart's
+      // _saveCommunicationPreferences. The camelCase key isn't a column, so
+      // PostgREST rejects the whole upsert (PGRST204) and nothing saves.
+      'communication_preferences': payload['communicationPreferences'],
 
       'panel_display_name': draft.basic.name,
       'panel_phone': draft.basic.phone,
@@ -2065,6 +2081,8 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       ),
       payment: _payment,
       nail: _nailPrefs.isComplete ? _nailPrefs : NailPreferences.empty(),
+      emailNotifications: _emailNotifications,
+      smsNotifications: _smsNotifications,
     );
 
     if (_submitting) return;
@@ -3041,6 +3059,16 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                           onChanged: (updated) =>
                               setState(() => _payment = updated),
                         ),
+
+                        const SizedBox(height: 16),
+                        CommunicationPreferenceSection(
+                          emailNotifications: _emailNotifications,
+                          smsNotifications: _smsNotifications,
+                          onEmailChanged: (value) =>
+                              setState(() => _emailNotifications = value),
+                          onSmsChanged: (value) =>
+                              setState(() => _smsNotifications = value),
+                        ),
                       ] else ...[
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -3072,18 +3100,21 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              CheckboxListTile(
-                                contentPadding: EdgeInsets.zero,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                value: _consentToStoreNailImages,
-                                onChanged: (value) => setState(
-                                  () => _consentToStoreNailImages =
-                                      value ?? false,
-                                ),
-                                title: const Text(
-                                  'Do you consent to store the nail image',
-                                  style: TextStyle(fontSize: 13),
+                              Material(
+                                type: MaterialType.transparency,
+                                child: CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  value: _consentToStoreNailImages,
+                                  onChanged: (value) => setState(
+                                    () => _consentToStoreNailImages =
+                                        value ?? false,
+                                  ),
+                                  title: const Text(
+                                    'Do you consent to store the nail image',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
                                 ),
                               ),
                               SizedBox(

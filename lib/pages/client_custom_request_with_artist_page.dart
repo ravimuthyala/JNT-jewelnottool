@@ -1134,6 +1134,7 @@ class _ClientCustomRequestWithArtistPageState
     final initialDate = _needBy != null && !_needBy!.isBefore(minDate)
         ? _needBy!
         : minDate;
+    DateTime tempSelected = initialDate;
 
     await showDialog<void>(
       context: context,
@@ -1148,7 +1149,7 @@ class _ClientCustomRequestWithArtistPageState
           child: Container(
             color: _requestSnow,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 330, maxHeight: 380),
+              constraints: const BoxConstraints(maxWidth: 330, maxHeight: 440),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 child: Theme(
@@ -1160,24 +1161,66 @@ class _ClientCustomRequestWithArtistPageState
                       onSurface: AppColors.blackCat,
                     ),
                   ),
-                  child: CalendarDatePicker(
-                    initialDate: initialDate,
-                    firstDate: minDate,
-                    lastDate: now.add(const Duration(days: 365)),
-                    onDateChanged: (picked) {
-                      setState(() {
-                        _needBy = picked;
-                        _dateCtrl.text =
-                            '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
-                        if (_jntRevealDate != null &&
-                            !_jntRevealDate!.isAfter(picked)) {
-                          _jntRevealDate = null;
-                          _revealDateCtrl.clear();
-                        }
-                        _fieldErrors.remove('needBy');
-                      });
-                      Navigator.of(ctx).pop();
-                    },
+                  // CalendarDatePicker's onDateChanged also fires when only a
+                  // year is picked (keeping the previous month/day) -- closing
+                  // immediately there would never let the user go on to pick
+                  // the month/day. Track the latest pick and only commit it
+                  // once Confirm is tapped.
+                  child: StatefulBuilder(
+                    builder: (context, setDialogState) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: CalendarDatePicker(
+                            initialDate: tempSelected,
+                            firstDate: minDate,
+                            lastDate: now.add(const Duration(days: 365)),
+                            onDateChanged: (picked) {
+                              setDialogState(() => tempSelected = picked);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.blackCatLight,
+                                foregroundColor: AppColors.snow,
+                              ),
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _needBy = tempSelected;
+                                  _dateCtrl.text =
+                                      '${tempSelected.month.toString().padLeft(2, '0')}/${tempSelected.day.toString().padLeft(2, '0')}/${tempSelected.year}';
+                                  if (_jntRevealDate != null &&
+                                      !_jntRevealDate!.isAfter(tempSelected)) {
+                                    _jntRevealDate = null;
+                                    _revealDateCtrl.clear();
+                                  }
+                                  _fieldErrors.remove('needBy');
+                                });
+                                Navigator.of(ctx).pop();
+                              },
+                              child: const Text(
+                                'Confirm',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1195,22 +1238,102 @@ class _ClientCustomRequestWithArtistPageState
       );
       return;
     }
-    final firstDate = _needBy!.add(const Duration(days: 1));
-    final picked = await showDatePicker(
+    final now = DateTime.now();
+    final firstDate = DateTime(
+      _needBy!.year,
+      _needBy!.month,
+      _needBy!.day,
+    ).add(const Duration(days: 1));
+    final initialDate =
+        _jntRevealDate != null && !_jntRevealDate!.isBefore(firstDate)
+        ? _jntRevealDate!
+        : firstDate;
+    DateTime tempSelected = initialDate;
+
+    await showDialog<void>(
       context: context,
-      initialDate:
-          _jntRevealDate != null && !_jntRevealDate!.isBefore(firstDate)
-          ? _jntRevealDate!
-          : firstDate,
-      firstDate: firstDate,
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      builder: (ctx) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Select JNT reveal date',
+        child: Dialog(
+          backgroundColor: _requestSnow,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          child: Container(
+            color: _requestSnow,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 330, maxHeight: 440),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: AppColors.blackCat,
+                      onPrimary: _requestSnow,
+                      surface: _requestSnow,
+                      onSurface: AppColors.blackCat,
+                    ),
+                  ),
+                  // CalendarDatePicker's onDateChanged also fires when only a
+                  // year is picked, so confirm explicitly after month/day.
+                  child: StatefulBuilder(
+                    builder: (context, setDialogState) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: CalendarDatePicker(
+                            initialDate: tempSelected,
+                            firstDate: firstDate,
+                            lastDate: now.add(const Duration(days: 730)),
+                            onDateChanged: (picked) {
+                              setDialogState(() => tempSelected = picked);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.blackCatLight,
+                                foregroundColor: AppColors.snow,
+                              ),
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _jntRevealDate = tempSelected;
+                                  _revealDateCtrl.text =
+                                      '${tempSelected.month.toString().padLeft(2, '0')}/${tempSelected.day.toString().padLeft(2, '0')}/${tempSelected.year}';
+                                });
+                                Navigator.of(ctx).pop();
+                              },
+                              child: const Text(
+                                'Confirm',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _jntRevealDate = picked;
-      _revealDateCtrl.text =
-          '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
-    });
   }
 
   CompletedClient? _findClient(String? id) {

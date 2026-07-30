@@ -26,6 +26,7 @@ import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../utils/registration_input_utils.dart';
 import '../widgets/registration_profile_upload.dart';
+import '../widgets/communication_preference_section.dart';
 
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
@@ -147,6 +148,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   bool get _isShippingUnitedStates => _shipSelectedCountry == 'United States';
   String _billingMethod = 'Credit/Debit Card';
   bool _saveBillingForFutureUse = true;
+  bool _emailNotifications = true;
+  bool _smsNotifications = true;
 
   final _cardNameCtrl = TextEditingController();
   final _cardNumberCtrl = TextEditingController();
@@ -1143,16 +1146,28 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         'profileImageUrl': safeProfilePhotoUrl,
         'photoUrl': safeProfilePhotoUrl,
         'avatarUrl': safeProfilePhotoUrl,
+        'communicationPreferences': {
+          'emailNotifications': _emailNotifications,
+          'smsNotifications': _smsNotifications,
+        },
       },
       'basic': {
         'profileImageUrl': safeProfilePhotoUrl,
         'photoUrl': safeProfilePhotoUrl,
         'avatarUrl': safeProfilePhotoUrl,
+        'communicationPreferences': {
+          'emailNotifications': _emailNotifications,
+          'smsNotifications': _smsNotifications,
+        },
       },
       'company': {
         'name': companyName,
         'contactName': contactName,
         'businessType': businessType,
+        'communicationPreferences': {
+          'emailNotifications': _emailNotifications,
+          'smsNotifications': _smsNotifications,
+        },
         'business_type': businessType,
         'website': companyWebsite,
         'companyWebsite': companyWebsite,
@@ -3577,6 +3592,15 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 18),
+                      CommunicationPreferenceSection(
+                        emailNotifications: _emailNotifications,
+                        smsNotifications: _smsNotifications,
+                        onEmailChanged: (value) =>
+                            setState(() => _emailNotifications = value),
+                        onSmsChanged: (value) =>
+                            setState(() => _smsNotifications = value),
+                      ),
                       const SizedBox(height: 18),
                       _wizardNavButtons(),
                     ],

@@ -62,12 +62,13 @@ Future<void> showRegistrationAgeIneligibleDialog({
 
 Future<DateTime?> showRegistrationDateOfBirthPicker({
   required BuildContext context,
+  DateTime? initialDate,
 }) async {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  DateTime? selected;
+  DateTime tempSelected = initialDate ?? today;
 
-  await showDialog<void>(
+  return showDialog<DateTime>(
     context: context,
     builder: (dialogContext) => Semantics(
       scopesRoute: true,
@@ -80,7 +81,7 @@ Future<DateTime?> showRegistrationDateOfBirthPicker({
         child: Container(
           color: AppColors.snow,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 330, maxHeight: 380),
+            constraints: const BoxConstraints(maxWidth: 330, maxHeight: 440),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Theme(
@@ -112,15 +113,58 @@ Future<DateTime?> showRegistrationDateOfBirthPicker({
                     ),
                   ),
                 ),
-                child: CalendarDatePicker(
-                  initialDate: today,
-                  currentDate: today,
-                  firstDate: DateTime(1900),
-                  lastDate: today,
-                  onDateChanged: (value) {
-                    selected = value;
-                    Navigator.of(dialogContext).pop();
-                  },
+                // CalendarDatePicker's onDateChanged also fires when the user
+                // only picks a year from the year grid (keeping today's
+                // month/day) -- popping immediately there would never let
+                // them go on to pick the month/day. So we just track the
+                // latest selection here and only return it once the user
+                // taps Confirm below.
+                child: StatefulBuilder(
+                  builder: (context, setDialogState) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: CalendarDatePicker(
+                          initialDate: tempSelected,
+                          currentDate: today,
+                          firstDate: DateTime(1900),
+                          lastDate: today,
+                          onDateChanged: (value) {
+                            setDialogState(() => tempSelected = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.blackCatLight,
+                              foregroundColor: AppColors.snow,
+                            ),
+                            onPressed: () =>
+                                Navigator.of(dialogContext).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                            ),
+                            onPressed: () => Navigator.of(
+                              dialogContext,
+                            ).pop(tempSelected),
+                            child: const Text(
+                              'Confirm',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -129,6 +173,4 @@ Future<DateTime?> showRegistrationDateOfBirthPicker({
       ),
     ),
   );
-
-  return selected;
 }

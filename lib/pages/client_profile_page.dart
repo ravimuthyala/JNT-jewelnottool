@@ -69,6 +69,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   void initState() {
     super.initState();
     _profile = widget.profile;
+    _applyCommunicationPreferencesFromProfile(_profile);
     unawaited(_bootstrapFromSupabase());
     if (widget.isActiveTab) {
       _requestNotificationFocus();
@@ -94,6 +95,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.profile != widget.profile) {
       _profile = widget.profile;
+      _applyCommunicationPreferencesFromProfile(_profile);
     }
 
     if (!oldWidget.isActiveTab && widget.isActiveTab) {
@@ -126,6 +128,17 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       if (value.isNotEmpty) return value;
     }
     return '';
+  }
+
+  void _applyCommunicationPreferencesFromProfile(ClientProfileDraft profile) {
+    final emailNotifications = profile.emailNotifications;
+    final smsNotifications = profile.smsNotifications;
+    if (emailNotifications == null && smsNotifications == null) return;
+
+    _communicationPreferences = _communicationPreferences.copyWith(
+      emailNotifications: emailNotifications,
+      smsNotifications: smsNotifications,
+    );
   }
 
   NailLength _parseNailLength(Object? raw) {
@@ -447,21 +460,51 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       ]),
     );
 
+    final communicationPreferences = _communicationPreferencesFromMap(data);
+
     _applyProfile(
-      _profile.copyWith(basic: nextBasic, address: nextAddress, nail: nextNail),
+      _profile.copyWith(
+        basic: nextBasic,
+        address: nextAddress,
+        nail: nextNail,
+        emailNotifications: communicationPreferences?.emailNotifications,
+        smsNotifications: communicationPreferences?.smsNotifications,
+      ),
     );
   }
 
-  void _applyCommunicationPreferences(Map<String, dynamic> data) {
-    final rootPrefs = _asMap(data['communicationPreferences']);
+  CommunicationPreferences? _communicationPreferencesFromMap(
+    Map<String, dynamic> data,
+  ) {
+    // The real column is snake_case ('communication_preferences' -- see
+    // lib/constants/profile_table_columns.dart), so that's the key Supabase
+    // actually returns. The camelCase lookups only existed as a leftover
+    // fallback from a prior write-path bug and never matched real rows,
+    // silently reverting reads back to CommunicationPreferences.defaults()
+    // (email on, sms off) regardless of what the user picked.
+    final rootPrefs = _asMap(data['communication_preferences']);
+    final legacyRootPrefs = _asMap(data['communicationPreferences']);
     final nestedPrefs = _asMap(
       _asMap(data['client'])['communicationPreferences'],
     );
-    final source = rootPrefs.isNotEmpty ? rootPrefs : nestedPrefs;
-    if (source.isEmpty) return;
+    final source = rootPrefs.isNotEmpty
+        ? rootPrefs
+        : (legacyRootPrefs.isNotEmpty ? legacyRootPrefs : nestedPrefs);
+    if (source.isEmpty) return null;
+
+    return CommunicationPreferences.fromMap(source);
+  }
+
+  void _applyCommunicationPreferences(Map<String, dynamic> data) {
+    final preferences = _communicationPreferencesFromMap(data);
+    if (preferences == null) return;
 
     setState(() {
-      _communicationPreferences = CommunicationPreferences.fromMap(source);
+      _communicationPreferences = preferences;
+      _profile = _profile.copyWith(
+        emailNotifications: preferences.emailNotifications,
+        smsNotifications: preferences.smsNotifications,
+      );
     });
   }
 
@@ -764,7 +807,15 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         return;
       }
       if (!mounted) return;
-      setState(() => _communicationPreferences = updatedPreference);
+      final updatedProfile = _profile.copyWith(
+        emailNotifications: updatedPreference.emailNotifications,
+        smsNotifications: updatedPreference.smsNotifications,
+      );
+      setState(() {
+        _communicationPreferences = updatedPreference;
+        _profile = updatedProfile;
+      });
+      widget.onProfileUpdated?.call(updatedProfile);
       SemanticsService.sendAnnouncement(
         View.of(context),
         'Communication preferences saved',
@@ -1478,35 +1529,10 @@ class _CommunicationPreferencePopupState
                         ),
                         const SizedBox(height: 14),
                         _sectionCard(
-                          title: 'Preferred Contact Method',
+                          title: 'Marketing',
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _radioOption(
-                                      label: 'Email',
-                                      value: _PreferredContactMethod.email,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _radioOption(
-                                      label: 'Push',
-                                      value: _PreferredContactMethod.push,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _radioOption(
-                                      label: 'SMS',
-                                      value: _PreferredContactMethod.sms,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              _divider(),
-                              const SizedBox(height: 10),
                               MergeSemantics(
                                 child: Semantics(
                                   label:
@@ -1741,52 +1767,6 @@ class _CommunicationPreferencePopupState
     );
   }
 
-  Widget _radioOption({
-    required String label,
-    required _PreferredContactMethod value,
-  }) {
-    return MergeSemantics(
-      child: Semantics(
-        label: '$label contact method',
-        checked: _preferredContact == value,
-        inMutuallyExclusiveGroup: true,
-        child: RadioGroup<_PreferredContactMethod>(
-          groupValue: _preferredContact,
-          onChanged: (next) {
-            if (next != null) {
-              setState(() => _preferredContact = next);
-            }
-          },
-          child: InkWell(
-            onTap: () => setState(() => _preferredContact = value),
-            borderRadius: BorderRadius.zero,
-            child: Row(
-              children: [
-                Radio<_PreferredContactMethod>(
-                  value: value,
-                  activeColor: AppColors.blackCat,
-                ),
-                Flexible(
-                  child: ExcludeSemantics(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.blackCat,
-                        fontFamily: 'Arialbold',
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _divider() => ExcludeSemantics(
     child: Divider(
       height: 18,
@@ -1902,5 +1882,31 @@ class CommunicationPreferences {
       'preferredContact': preferredContact.name,
       'marketingConsent': marketingConsent,
     };
+  }
+
+  CommunicationPreferences copyWith({
+    bool? emailNotifications,
+    bool? smsNotifications,
+    bool? pushNotifications,
+    bool? accountActivity,
+    bool? securityAlerts,
+    bool? promotionsOffers,
+    bool? reminders,
+    bool? newsUpdates,
+    _PreferredContactMethod? preferredContact,
+    bool? marketingConsent,
+  }) {
+    return CommunicationPreferences(
+      emailNotifications: emailNotifications ?? this.emailNotifications,
+      smsNotifications: smsNotifications ?? this.smsNotifications,
+      pushNotifications: pushNotifications ?? this.pushNotifications,
+      accountActivity: accountActivity ?? this.accountActivity,
+      securityAlerts: securityAlerts ?? this.securityAlerts,
+      promotionsOffers: promotionsOffers ?? this.promotionsOffers,
+      reminders: reminders ?? this.reminders,
+      newsUpdates: newsUpdates ?? this.newsUpdates,
+      preferredContact: preferredContact ?? this.preferredContact,
+      marketingConsent: marketingConsent ?? this.marketingConsent,
+    );
   }
 }
