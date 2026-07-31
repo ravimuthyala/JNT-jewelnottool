@@ -301,6 +301,46 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     );
   }
 
+  /// Blocking dialog for a failed [_submitHand] call — a snackbar isn't
+  /// reliable here since it can get raced/swallowed by the success snackbar
+  /// from the shot capture that just completed a moment earlier.
+  Future<void> _showSubmitFailureDialog(
+    String hand, {
+    String? message,
+    required List<String> issues,
+  }) async {
+    setState(() => _lastIssues = issues);
+    if (!mounted) return;
+    final handLabel = hand == 'left' ? 'Left' : 'Right';
+    final body = (message != null && message.trim().isNotEmpty)
+        ? message
+        : (issues.isNotEmpty
+              ? issues.join('\n')
+              : 'Measurement failed for the $handLabel hand. Please retake.');
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.snow,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text('$handLabel Hand Needs a Retake'),
+        content: Text(body),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.blackCat,
+              foregroundColor: AppColors.snow,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            child: const Text('Retake'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _captureCurrentStep() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -392,11 +432,17 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
       if (result == null) {
         final reason = FullHandMeasurementService.lastError;
         _log('submitTwoShot failed: $reason');
-        _showSnack(
-          reason == null
-              ? 'Unable to reach measurement service for the $hand hand. Please try again.'
-              : 'Unable to reach measurement service for the $hand hand: $reason',
+        await _showSubmitFailureDialog(
+          hand,
+          message: reason == null
+              ? 'Unable to reach the measurement service. Please try again.'
+              : 'Unable to reach the measurement service: $reason',
+          issues: const [],
         );
+        // A network/service failure isn't attributable to either specific
+        // shot, so (unlike a real ok:false rejection below) both photos for
+        // this hand need to be retaken.
+        if (!mounted) return;
         setState(() {
           _checkedOk.removeWhere((k) => k.startsWith(prefix));
           _stepIndex = _steps.indexWhere((s) => s.hand == hand);
@@ -404,13 +450,30 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
         return;
       }
       if (!result.ok) {
-        _showSnack(
-          result.message ??
-              'Measurement failed for the $hand hand. Please retake both photos.',
+        _log('submitTwoShot rejected for $hand: ${result.issues}');
+        await _showSubmitFailureDialog(
+          hand,
+          message: result.message,
+          issues: result.issues ?? const [],
         );
+        if (!mounted) return;
+
+        // The combined endpoint grades each shot separately (issues are
+        // prefixed "Four-finger photo:" / "Thumb photo:") — only clear the
+        // shot(s) actually implicated, so a shot that already passed isn't
+        // thrown away and doesn't need to be recaptured.
+        final fourBad = result.fourFingerHasIssue;
+        final thumbBad = result.thumbHasIssue;
         setState(() {
-          _checkedOk.removeWhere((k) => k.startsWith(prefix));
-          _stepIndex = _steps.indexWhere((s) => s.hand == hand);
+          if (fourBad || (!fourBad && !thumbBad)) {
+            _checkedOk.remove('${prefix}FourFinger');
+          }
+          if (thumbBad || (!fourBad && !thumbBad)) {
+            _checkedOk.remove('${prefix}Thumb');
+          }
+          _stepIndex = _steps.indexWhere(
+            (s) => s.hand == hand && !_checkedOk.contains(s.key),
+          );
         });
         return;
       }

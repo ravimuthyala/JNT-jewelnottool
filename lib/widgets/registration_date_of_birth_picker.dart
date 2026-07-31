@@ -67,6 +67,8 @@ Future<DateTime?> showRegistrationDateOfBirthPicker({
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   DateTime tempSelected = initialDate ?? today;
+  bool useTextInput = false;
+  final formKey = GlobalKey<FormState>();
 
   return showDialog<DateTime>(
     context: context,
@@ -123,16 +125,70 @@ Future<DateTime?> showRegistrationDateOfBirthPicker({
                   builder: (context, setDialogState) => Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Date of Birth',
+                              style: TextStyle(
+                                color: AppColors.blackCat,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: useTextInput
+                                ? 'Switch to calendar'
+                                : 'Switch to keyboard input',
+                            icon: Icon(
+                              useTextInput
+                                  ? Icons.calendar_month_outlined
+                                  : Icons.edit_outlined,
+                              color: AppColors.blackCat,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              setDialogState(
+                                () => useTextInput = !useTextInput,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                       Flexible(
-                        child: CalendarDatePicker(
-                          initialDate: tempSelected,
-                          currentDate: today,
-                          firstDate: DateTime(1900),
-                          lastDate: today,
-                          onDateChanged: (value) {
-                            setDialogState(() => tempSelected = value);
-                          },
-                        ),
+                        child: useTextInput
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Form(
+                                  key: formKey,
+                                  child: InputDatePickerFormField(
+                                    initialDate: tempSelected,
+                                    firstDate: DateTime(1900),
+                                    lastDate: today,
+                                    fieldLabelText: 'Date of birth',
+                                    fieldHintText: 'MM/DD/YYYY',
+                                    onDateSaved: (value) => tempSelected = value,
+                                    onDateSubmitted: (value) {
+                                      setDialogState(
+                                        () => tempSelected = value,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              )
+                            : CalendarDatePicker(
+                                initialDate: tempSelected,
+                                currentDate: today,
+                                firstDate: DateTime(1900),
+                                lastDate: today,
+                                onDateChanged: (value) {
+                                  setDialogState(() => tempSelected = value);
+                                },
+                              ),
                       ),
                       const SizedBox(height: 4),
                       Row(
@@ -153,9 +209,18 @@ Future<DateTime?> showRegistrationDateOfBirthPicker({
                               backgroundColor: AppColors.blackCat,
                               foregroundColor: AppColors.snow,
                             ),
-                            onPressed: () => Navigator.of(
-                              dialogContext,
-                            ).pop(tempSelected),
+                            onPressed: () {
+                              if (useTextInput) {
+                                final isValid =
+                                    formKey.currentState?.validate() ??
+                                    false;
+                                if (!isValid) return;
+                                formKey.currentState?.save();
+                              }
+                              Navigator.of(
+                                dialogContext,
+                              ).pop(tempSelected);
+                            },
                             child: const Text(
                               'Confirm',
                               style: TextStyle(fontWeight: FontWeight.w700),
