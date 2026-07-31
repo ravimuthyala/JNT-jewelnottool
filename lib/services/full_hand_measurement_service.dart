@@ -288,4 +288,17 @@ class TwoShotResult {
       message: json['message'] as String?,
     );
   }
+
+  /// Whether the four-finger shot is implicated in this failure — either its
+  /// own quality check failed, or one of [issues] is prefixed "Four-finger
+  /// photo:" (segmentation/measurement issues are only ever reported this
+  /// way, not via [fourFingerQuality]).
+  bool get fourFingerHasIssue =>
+      fourFingerQuality?['ok'] == false ||
+      (issues ?? const []).any((i) => i.startsWith('Four-finger photo:'));
+
+  /// Same as [fourFingerHasIssue], for the thumb shot.
+  bool get thumbHasIssue =>
+      thumbQuality?['ok'] == false ||
+      (issues ?? const []).any((i) => i.startsWith('Thumb photo:'));
 }
