@@ -1,0 +1,24 @@
+# Config for flutter_flavorizr, used only to generate the iOS Xcode
+# schemes/build configs for the dev/uat/production flavors that Android
+# already has via android/app/build.gradle.kts product flavors.
+#
+# Regenerate (iOS only) with:
+#   dart run flutter_flavorizr -p ios:podfile,ios:xcconfig,ios:buildTargets,ios:schema,ios:plist -f
+flavors:
+  dev:
+    app:
+      name: "JNT DEV"
+    ios:
+      bundleId: "com.ravimuthyala.jntmobileapp.dev"
+
+  uat:
+    app:
+      name: "JNT UAT"
+    ios:
+      bundleId: "com.ravimuthyala.jntmobileapp.uat"
+
+  production:
+    app:
+      name: "JNT"
+    ios:
+      bundleId: "com.ravimuthyala.jntmobileapp"
