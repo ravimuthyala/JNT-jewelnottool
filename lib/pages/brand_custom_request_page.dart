@@ -2942,6 +2942,19 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                       child: Image.memory(
                                         file.bytes,
                                         fit: BoxFit.cover,
+                                        // Cap decode resolution to the
+                                        // thumbnail's actual display size
+                                        // (74x74) instead of full native
+                                        // camera resolution — undecoded full
+                                        // resolution across several
+                                        // thumbnails at once is what drove an
+                                        // EXC_RESOURCE memory crash elsewhere
+                                        // in the app.
+                                        cacheWidth: 150,
+                                        cacheHeight: 150,
+                                        errorBuilder: (_, _, _) => const Icon(
+                                          Icons.broken_image_outlined,
+                                        ),
                                       ),
                                     ),
                                     Positioned(

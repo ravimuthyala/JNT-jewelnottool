@@ -3554,6 +3554,11 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
     return <String>{...collected, ...folderRefs}.toList(growable: false);
   }
 
+  // Cap decode resolution to the thumbnail's actual display size instead of
+  // the full native camera resolution — undecoded full resolution across
+  // several thumbnails at once is what drove an EXC_RESOURCE memory crash
+  // elsewhere in the app (see client_custom_request_with_artist_page.dart).
+  // kIsWeb skips ResizeImage since the browser handles image decoding itself.
   ImageProvider _providerFor(String p) {
     if (p.startsWith('data:image/')) {
       try {
@@ -3561,21 +3566,25 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
         if (comma > 0) {
           final b64 = p.substring(comma + 1).trim();
           final bytes = base64Decode(b64);
-          return MemoryImage(bytes);
+          return kIsWeb
+              ? MemoryImage(bytes)
+              : ResizeImage(MemoryImage(bytes), width: 300, height: 300);
         }
       } catch (_) {}
     }
     if (p.startsWith('http://') || p.startsWith('https://')) {
-      return NetworkImage(p);
+      return kIsWeb
+          ? NetworkImage(p)
+          : ResizeImage(NetworkImage(p), width: 300, height: 300);
     }
     if (p.startsWith('assets/')) return AssetImage(p);
     if (p.startsWith('file://')) {
       final localPath = p.replaceFirst('file://', '');
       if (kIsWeb) return NetworkImage(p);
-      return FileImage(File(localPath));
+      return ResizeImage(FileImage(File(localPath)), width: 300, height: 300);
     }
     if (kIsWeb) return NetworkImage(p);
-    return FileImage(File(p));
+    return ResizeImage(FileImage(File(p)), width: 300, height: 300);
   }
 
   Future<String> _resolveDisplayPath(String raw) async {

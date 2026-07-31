@@ -5815,7 +5815,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               builder: (_, bytesSnap) {
                 final bytes = bytesSnap.data;
                 if (bytes == null || bytes.isEmpty) return initialFallback();
-                return boxedImage(MemoryImage(bytes));
+                return boxedImage(
+                  ResizeImage(MemoryImage(bytes), width: 300, height: 300),
+                );
               },
             );
           },
@@ -5823,7 +5825,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       }
 
       if (dataBytes != null) {
-        return boxedImage(MemoryImage(dataBytes));
+        return boxedImage(
+          ResizeImage(MemoryImage(dataBytes), width: 300, height: 300),
+        );
       }
 
       if (isNetwork) {
