@@ -72,7 +72,7 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
-  default-flavor: dev
+  default-flavor: production
 
   assets:
     - assets/images/homepage.png
