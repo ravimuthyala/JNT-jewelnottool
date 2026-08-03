@@ -23,6 +23,7 @@ import '../utils/scenario_4_1.dart';
 import '../utils/scenario_4_3.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
+import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/company_client_request_card.dart';
 
@@ -676,6 +677,8 @@ class ArtistRequestsPageRedesign extends StatefulWidget {
     this.showOnlyCurrentClientRequests = false,
     this.showOnlyCompanyRequests = false,
     this.includeClientArtistBrandRequestsInRequestTab = false,
+    this.clientDisplayName = '',
+    this.clientProfileImageUrl = '',
   });
 
   final int initialBudgetMin;
@@ -697,6 +700,14 @@ class ArtistRequestsPageRedesign extends StatefulWidget {
   final VoidCallback? onSignOut;
   final bool clientArtistMenuStyle;
   final bool showProfileMenuItem;
+
+  /// Seed values for the header avatar when [clientArtistMenuStyle] is true
+  /// -- passed straight from the already-loaded client profile (the same
+  /// data Home/Design/Order already show correctly), instead of relying on
+  /// ClientProfileAvatarIcon's own DB lookup, which has been unreliable for
+  /// at least one real account.
+  final String clientDisplayName;
+  final String clientProfileImageUrl;
   final bool showOnlyCurrentClientRequests;
   final bool showOnlyCompanyRequests;
   final bool includeClientArtistBrandRequestsInRequestTab;
@@ -2027,9 +2038,24 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(
-            size: JntHeaderMetrics.avatarSize,
-          ),
+          // clientArtistMenuStyle means the signed-in user here is the
+          // client-artist (a client), not an artist -- ArtistProfileAvatarIcon
+          // looks up the `artist` table first and falls back to the literal
+          // name "Artist" when that lookup (correctly) finds nothing, which
+          // is why this showed a stray "A" instead of the client's own
+          // initial/photo. ClientProfileAvatarIcon checks `client_artist`
+          // first, matching how client_artist_profile_page.dart already
+          // renders this same user's avatar correctly.
+          child: widget.clientArtistMenuStyle
+              ? ClientProfileAvatarIcon(
+                  displayName: widget.clientDisplayName,
+                  imageUrl: widget.clientProfileImageUrl,
+                  size: JntHeaderMetrics.avatarSize,
+                  resolveCurrentUserFallback: true,
+                )
+              : const ArtistProfileAvatarIcon(
+                  size: JntHeaderMetrics.avatarSize,
+                ),
         ),
       ),
       itemBuilder: (_) => [

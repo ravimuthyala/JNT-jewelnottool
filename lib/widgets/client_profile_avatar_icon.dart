@@ -54,6 +54,11 @@ class _ClientProfileAvatarIconState extends State<ClientProfileAvatarIcon> {
     final User? user = Supabase.instance.client.auth.currentUser;
     final String uid = (user?.id ?? '').trim();
     final String email = (user?.email ?? '').trim().toLowerCase();
+    debugPrint(
+      '[ClientProfileAvatarIcon] hydrate: seedName="$seedName" '
+      'resolveCurrentUserFallback=${widget.resolveCurrentUserFallback} '
+      'uid="$uid" authEmail="$email"',
+    );
     final String resolvedSeedAvatar = _resolveAvatarUrlSync(seedAvatar);
     final String directPrimary =
         widget.resolveCurrentUserFallback && uid.isNotEmpty
@@ -92,17 +97,43 @@ class _ClientProfileAvatarIconState extends State<ClientProfileAvatarIcon> {
       return;
     }
 
-    if (resolvedSeedAvatar.isNotEmpty || directPrimary.isNotEmpty) return;
+    if (resolvedSeedAvatar.isNotEmpty || directPrimary.isNotEmpty) {
+      debugPrint(
+        '[ClientProfileAvatarIcon] skipping DB lookup: already have a seed/direct avatar',
+      );
+      return;
+    }
 
     try {
       if (uid.isEmpty && email.isEmpty) {
+        debugPrint(
+          '[ClientProfileAvatarIcon] no uid/email available -- not signed in? '
+          'Falling back to empty name (shows as the letter "A").',
+        );
         return;
       }
 
+      final Map<String, dynamic>? clientArtistRow = await _readUserRow(
+        table: 'client_artist',
+        uid: uid,
+        email: email,
+      );
+      debugPrint(
+        '[ClientProfileAvatarIcon] client_artist lookup: '
+        '${clientArtistRow == null ? 'no match' : 'found row id=${clientArtistRow['id']}'}',
+      );
+      final Map<String, dynamic>? clientRow = clientArtistRow != null
+          ? null
+          : await _readUserRow(table: 'client', uid: uid, email: email);
+      if (clientArtistRow == null) {
+        debugPrint(
+          '[ClientProfileAvatarIcon] client lookup: '
+          '${clientRow == null ? 'no match' : 'found row id=${clientRow['id']}'}',
+        );
+      }
+
       final Map<String, dynamic> clientData =
-          await _readUserRow(table: 'client_artist', uid: uid, email: email) ??
-          await _readUserRow(table: 'client', uid: uid, email: email) ??
-          const <String, dynamic>{};
+          clientArtistRow ?? clientRow ?? const <String, dynamic>{};
 
       final Map<String, dynamic> profile = _asMap(clientData['profile']);
       final Map<String, dynamic> basic = _asMap(clientData['basic']);
@@ -176,13 +207,19 @@ class _ClientProfileAvatarIconState extends State<ClientProfileAvatarIcon> {
         directSecondary,
       ]);
 
+      debugPrint(
+        '[ClientProfileAvatarIcon] resolved: name="$resolvedName" '
+        'avatarUrl="${resolvedAvatar.isEmpty ? '(none)' : resolvedAvatar}"',
+      );
       if (!mounted) return;
       setState(() {
         _displayName = resolvedName;
         _avatarUrl = resolvedAvatar;
         _secondaryAvatarUrl = '';
       });
-    } catch (_) {}
+    } catch (e, stack) {
+      debugPrint('[ClientProfileAvatarIcon] hydrate FAILED: $e\n$stack');
+    }
   }
 
   Future<Map<String, dynamic>?> _readUserRow({
@@ -192,14 +229,16 @@ class _ClientProfileAvatarIconState extends State<ClientProfileAvatarIcon> {
   }) async {
     final SupabaseClient supabase = Supabase.instance.client;
 
-    Future<Map<String, dynamic>?> tryEq(String column, String value) async {
+    Future<Map<String, dynamic>?> tryEq(
+      String column,
+      String value, {
+      bool caseInsensitive = false,
+    }) async {
       if (value.trim().isEmpty) return null;
       try {
-        final List<dynamic> rows = await supabase
-            .from(table)
-            .select()
-            .eq(column, value)
-            .limit(1);
+        final List<dynamic> rows = caseInsensitive
+            ? await supabase.from(table).select().ilike(column, value).limit(1)
+            : await supabase.from(table).select().eq(column, value).limit(1);
         if (rows.isNotEmpty) {
           return Map<String, dynamic>.from(rows.first as Map);
         }
@@ -207,13 +246,18 @@ class _ClientProfileAvatarIconState extends State<ClientProfileAvatarIcon> {
       return null;
     }
 
+    // Email columns use a case-insensitive match -- Supabase Auth always
+    // hands back a lowercased email, but the row may have been written with
+    // whatever casing the user originally typed at registration. An exact
+    // `eq` here silently misses the row and falls all the way through to
+    // the "A" placeholder fallback below.
     return await tryEq('id', uid) ??
         await tryEq('uid', uid) ??
         await tryEq('client_uid', uid) ??
         await tryEq('auth_uid', uid) ??
         await tryEq('user_id', uid) ??
-        await tryEq('email', email) ??
-        await tryEq('client_email', email);
+        await tryEq('email', email, caseInsensitive: true) ??
+        await tryEq('client_email', email, caseInsensitive: true);
   }
 
   Map<String, dynamic> _asMap(Object? raw) {

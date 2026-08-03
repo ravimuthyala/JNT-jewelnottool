@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/client_profile_models.dart';
 import 'artist_requests_page_redesign.dart';
 
 class ClientArtistRequestsPage extends StatelessWidget {
   const ClientArtistRequestsPage({
     super.key,
+    this.profile,
     this.onOpenProfile,
     this.onOpenHistory,
     this.onOpenCalendar,
@@ -16,6 +18,7 @@ class ClientArtistRequestsPage extends StatelessWidget {
     this.onLogout,
   });
 
+  final ClientProfileDraft? profile;
   final VoidCallback? onOpenProfile;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
@@ -29,6 +32,8 @@ class ClientArtistRequestsPage extends StatelessWidget {
     return ArtistRequestsPageRedesign(
       clientArtistMenuStyle: true,
       showProfileMenuItem: true,
+      clientDisplayName: profile?.basic.name ?? '',
+      clientProfileImageUrl: profile?.basic.profileImageUrl ?? '',
       onManageProfile: onOpenProfile,
       onOpenHistory: onOpenHistory,
       onOpenCalendar: onOpenCalendar,
