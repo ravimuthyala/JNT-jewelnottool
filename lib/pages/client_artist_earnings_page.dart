@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_profile_models.dart';
 import 'artist_earnings_page.dart';
@@ -97,18 +98,24 @@ class ClientArtistEarningsPage extends StatelessWidget {
   }
 
   Future<void> _logout(BuildContext context) async {
-    if (onLogout != null) {
-      await onLogout!.call();
-      return;
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('CLIENT+ARTIST SIGN OUT FAILED: $e');
     }
     if (!context.mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     return ArtistEarningsPage(
       clientArtistMenuStyle: true,
+      clientDisplayName: profile.basic.name,
+      clientProfileImageUrl: profile.basic.profileImageUrl,
       showBottomNav: showBottomNav,
       showCampaignsTab: showCampaignsTab,
       bottomNavCurrentIndex: showCampaignsTab ? 0 : 4,
@@ -231,18 +238,24 @@ class ClientArtistReviewsPage extends StatelessWidget {
   }
 
   Future<void> _logout(BuildContext context) async {
-    if (onLogout != null) {
-      await onLogout!.call();
-      return;
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('CLIENT+ARTIST SIGN OUT FAILED: $e');
     }
     if (!context.mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     return ArtistReviewsPage(
       clientArtistMenuStyle: true,
+      clientDisplayName: profile.basic.name,
+      clientProfileImageUrl: profile.basic.profileImageUrl,
       showBottomNav: true,
       showCampaignsTab: showCampaignsTab,
       bottomNavCurrentIndex: showCampaignsTab ? 0 : 4,

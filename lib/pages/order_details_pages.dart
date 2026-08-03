@@ -4705,22 +4705,24 @@ class _FingerNfcSelection {
       return dimensions['${key}Nfc'];
     }
 
-    // NFC is only ever eligible on the thumb -- never on index/middle/ring/
-    // pinky, regardless of what any stored per-finger flag says.
+    // Client requests: NFC follows whichever finger the client actually
+    // checked -- not thumb-only. (Brand requests are handled by the
+    // separate _FingerNfcSelection copies in brand_order_details_page.dart
+    // / _v2.dart, which intentionally stay thumb-only and are untouched.)
     return _FingerNfcSelection(
       left: <String, bool>{
         'thumb': truthy(nfcValue('lThumb')),
-        'index': false,
-        'middle': false,
-        'ring': false,
-        'pinky': false,
+        'index': truthy(nfcValue('lIndex')),
+        'middle': truthy(nfcValue('lMiddle')),
+        'ring': truthy(nfcValue('lRing')),
+        'pinky': truthy(nfcValue('lPinky')),
       },
       right: <String, bool>{
         'thumb': truthy(nfcValue('rThumb')),
-        'index': false,
-        'middle': false,
-        'ring': false,
-        'pinky': false,
+        'index': truthy(nfcValue('rIndex')),
+        'middle': truthy(nfcValue('rMiddle')),
+        'ring': truthy(nfcValue('rRing')),
+        'pinky': truthy(nfcValue('rPinky')),
       },
     );
   }
@@ -4741,21 +4743,22 @@ class _FingerNfcSelection {
       return parsed != null && parsed.isFinite && parsed >= 8;
     }
 
-    // Same rule: only the thumb can ever be NFC-eligible.
+    // Same rule as fromDimensions above: any finger can be NFC-eligible for
+    // a client request, not just the thumb.
     return _FingerNfcSelection(
       left: <String, bool>{
         'thumb': eligible('lThumb'),
-        'index': false,
-        'middle': false,
-        'ring': false,
-        'pinky': false,
+        'index': eligible('lIndex'),
+        'middle': eligible('lMiddle'),
+        'ring': eligible('lRing'),
+        'pinky': eligible('lPinky'),
       },
       right: <String, bool>{
         'thumb': eligible('rThumb'),
-        'index': false,
-        'middle': false,
-        'ring': false,
-        'pinky': false,
+        'index': eligible('rIndex'),
+        'middle': eligible('rMiddle'),
+        'ring': eligible('rRing'),
+        'pinky': eligible('rPinky'),
       },
     );
   }
@@ -6320,13 +6323,20 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       return false;
     }
 
+    debugPrint(
+      '[DeliveredReviewPanel] _submitReview starting: order=${widget.order.id} '
+      'collection=$_orderCollection rating=$_rating',
+    );
     setState(() => _saving = true);
 
     try {
-      Future<void> bestEffort(Future<void> Function() action) async {
+      Future<void> bestEffort(String label, Future<void> Function() action) async {
         try {
           await action();
-        } catch (_) {}
+          debugPrint('[DeliveredReviewPanel] $label succeeded');
+        } catch (e) {
+          debugPrint('[DeliveredReviewPanel] $label FAILED: $e');
+        }
       }
 
       final supabase = Supabase.instance.client;
@@ -6437,8 +6447,12 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
             },
           })
           .eq('id', widget.order.id);
+      debugPrint(
+        '[DeliveredReviewPanel] order row updated on $table '
+        '(client_rating=$_rating, artistEmail="$artistEmail")',
+      );
 
-      await bestEffort(() async {
+      await bestEffort('details table upsert', () async {
         final existingDetail = await supabase
             .from(detailsTable)
             .select()
@@ -6474,7 +6488,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       });
 
       if (artistEmail.isNotEmpty) {
-        await bestEffort(() async {
+        await bestEffort('artist stats update ($artistEmail)', () async {
           Map<String, dynamic>? artistRow = await supabase
               .from('artist')
               .select()
@@ -6483,17 +6497,16 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
           var artistTable = 'artist';
 
-          artistRow ??= await supabase
-              .from('client_artist')
-              .select()
-              .ilike('email', artistEmail)
-              .maybeSingle();
+          if (artistRow == null) {
+            artistRow = await supabase
+                .from('client_artist')
+                .select()
+                .ilike('email', artistEmail)
+                .maybeSingle();
+            artistTable = 'client_artist';
+          }
 
           if (artistRow != null && artistRow['id'] != null) {
-            if (artistRow.containsKey('account_type')) {
-              artistTable = 'client_artist';
-            }
-
             final stats =
                 (artistRow['stats'] as Map?)?.cast<String, dynamic>() ??
                 <String, dynamic>{};
@@ -6507,51 +6520,35 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                   artistRow['panel_reviews'],
             );
 
-            final currentRating =
-                _asDouble(
-                  stats['rating'] ??
-                      stats['averageRating'] ??
-                      artistRow['rating'] ??
-                      artistRow['average_rating'] ??
-                      artistRow['averageRating'] ??
-                      artistRow['panel_rating'],
-                ) ??
-                0.0;
-
             final hadPrevious = (previousRatingValue ?? 0) > 0;
             final safeCount = currentCount <= 0
                 ? (hadPrevious ? 1 : 0)
                 : currentCount;
             final nextCount = hadPrevious ? safeCount : (safeCount + 1);
-            final nextRating = currentRating >= _rating
-                ? currentRating
-                : _rating;
+            // The artist page shows the client's latest rating, not the
+            // highest one they've ever given -- always take the new value.
+            final nextRating = _rating;
 
-            await supabase
-                .from(artistTable)
-                .update({
-                  'stats': {
-                    ...stats,
-                    'rating': nextRating,
-                    'averageRating': nextRating,
-                    'reviewCount': nextCount,
-                    'reviews': nextCount,
-                  },
-                  'rating': nextRating,
-                  'average_rating': nextRating,
-                  'review_count': nextCount,
-                  'reviews': nextCount,
-                  'panel_rating': nextRating,
-                  'panel_reviews': nextCount,
-                  'updated_at': nowIso,
-                })
-                .eq('id', artistRow['id']);
+            // A plain client-side `.update()` here silently no-ops: RLS
+            // lets the client read the artist row (above) but not write to
+            // it -- Postgrest doesn't treat a zero-row UPDATE as an error,
+            // so this must go through a SECURITY DEFINER RPC instead. See
+            // migration 20260801002432_add_apply_client_review_to_artist_rpc.sql.
+            await supabase.rpc(
+              'apply_client_review_to_artist',
+              params: {
+                'p_table': artistTable,
+                'p_artist_id': artistRow['id'],
+                'p_rating': nextRating,
+                'p_review_count': nextCount,
+              },
+            );
           }
         });
       }
 
       if (tipAmount > 0) {
-        await bestEffort(() async {
+        await bestEffort('tip payout queue insert', () async {
           await supabase.from('tip_payout_queue').insert({
             'order_id': widget.order.id,
             'order_number': widget.order.orderNumber,
@@ -6572,7 +6569,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       }
 
       if (artistEmail.isNotEmpty) {
-        await bestEffort(() async {
+        await bestEffort('artist review notification', () async {
           await NotificationsService.createUserNotification(
             receiverEmail: artistEmail,
             title: 'New Client Review',
@@ -6585,7 +6582,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         });
 
         if (tipAmount > 0) {
-          await bestEffort(() async {
+          await bestEffort('artist tip notification', () async {
             await NotificationsService.createUserNotification(
               receiverEmail: artistEmail,
               title: 'New Client Tip',
@@ -6599,7 +6596,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         }
       }
 
-      await bestEffort(() async {
+      await bestEffort('admin notification', () async {
         await NotificationsService.notifyAdmins(
           title: 'Client Review Submitted',
           body:
@@ -6617,7 +6614,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
           .toLowerCase();
 
       if (clientEmail.isNotEmpty) {
-        await bestEffort(() async {
+        await bestEffort('client completion notification', () async {
           await NotificationsService.createUserNotification(
             receiverEmail: clientEmail,
             title: 'Order Completed',
@@ -6639,8 +6636,10 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       });
 
       _loadLatestReviewFromDb();
+      debugPrint('[DeliveredReviewPanel] _submitReview completed successfully');
       return true;
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[DeliveredReviewPanel] _submitReview FAILED: $e\n$stack');
       if (!mounted) return false;
       ScaffoldMessenger.of(
         context,

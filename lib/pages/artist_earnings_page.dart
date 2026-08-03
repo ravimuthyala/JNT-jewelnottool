@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/jnt_ascension_engine.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
+import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import 'jnt_ascension_page.dart';
 import 'artist_reviews_page.dart';
@@ -26,6 +27,8 @@ class ArtistEarningsPage extends StatefulWidget {
     this.onOpenArtist,
     this.onOpenReviews,
     this.clientArtistMenuStyle = false,
+    this.clientDisplayName = '',
+    this.clientProfileImageUrl = '',
     this.showBottomNav = false,
     this.showCampaignsTab = false,
     this.bottomNavCurrentIndex = 0,
@@ -41,6 +44,11 @@ class ArtistEarningsPage extends StatefulWidget {
   final VoidCallback? onOpenArtist;
   final VoidCallback? onOpenReviews;
   final bool clientArtistMenuStyle;
+
+  /// Seed values for the header avatar when [clientArtistMenuStyle] is true
+  /// -- see the matching fields on ArtistRequestsPageRedesign for why.
+  final String clientDisplayName;
+  final String clientProfileImageUrl;
   final bool showBottomNav;
   final bool showCampaignsTab;
   final int bottomNavCurrentIndex;
@@ -648,6 +656,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
             onOpenArtist: widget.onOpenArtist,
             onOpenReviews: widget.onOpenReviews,
             clientArtistMenuStyle: widget.clientArtistMenuStyle,
+            clientDisplayName: widget.clientDisplayName,
+            clientProfileImageUrl: widget.clientProfileImageUrl,
             onSignOut:
                 widget.onSignOut ??
                 () {
@@ -947,6 +957,8 @@ class _AvatarMenu extends StatelessWidget {
     this.onOpenArtist,
     this.onOpenReviews,
     this.clientArtistMenuStyle = false,
+    this.clientDisplayName = '',
+    this.clientProfileImageUrl = '',
   });
 
   final VoidCallback onSignOut;
@@ -956,6 +968,8 @@ class _AvatarMenu extends StatelessWidget {
   final VoidCallback? onOpenArtist;
   final VoidCallback? onOpenReviews;
   final bool clientArtistMenuStyle;
+  final String clientDisplayName;
+  final String clientProfileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -999,9 +1013,20 @@ class _AvatarMenu extends StatelessWidget {
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(
-            size: JntHeaderMetrics.avatarSize,
-          ),
+          // clientArtistMenuStyle means the signed-in user is the
+          // client-artist (a client), not an artist -- see the matching fix
+          // in artist_requests_page_redesign.dart for why ArtistProfileAvatarIcon
+          // shows a stray "A" for this case.
+          child: clientArtistMenuStyle
+              ? ClientProfileAvatarIcon(
+                  displayName: clientDisplayName,
+                  imageUrl: clientProfileImageUrl,
+                  size: JntHeaderMetrics.avatarSize,
+                  resolveCurrentUserFallback: true,
+                )
+              : const ArtistProfileAvatarIcon(
+                  size: JntHeaderMetrics.avatarSize,
+                ),
         ),
       ),
       itemBuilder: (_) => [

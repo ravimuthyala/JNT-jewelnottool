@@ -66,12 +66,16 @@ class ClientArtistClientViewTab extends StatelessWidget {
       showExtendedAvatarMenu: true,
       headerBottom: const ClientArtistViewTabs(),
       onLogout: () async {
-        if (onLogout != null) {
-          await onLogout!.call();
-          return;
+        try {
+          await Supabase.instance.client.auth.signOut();
+        } catch (e) {
+          debugPrint('CLIENT+ARTIST SIGN OUT FAILED: $e');
         }
         if (!context.mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        Navigator.of(
+          context,
+          rootNavigator: true,
+        ).pushNamedAndRemoveUntil('/', (route) => false);
       },
       onOpenProfile: () {
         if (onOpenProfile != null) {

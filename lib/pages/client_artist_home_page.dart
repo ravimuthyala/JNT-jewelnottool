@@ -415,12 +415,19 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
     } catch (e) {
       debugPrint('CLIENT+ARTIST SIGN OUT FAILED: $e');
     }
-    if (widget.onLogout != null) {
-      await widget.onLogout!.call();
-      return;
-    }
+    // Always navigate away using this instance's own (guaranteed-mounted)
+    // context instead of delegating to widget.onLogout -- that callback
+    // chains back to whichever ClientArtistHomePage instance originally
+    // captured it, which after a couple of bottom-nav round trips through
+    // Earnings/History/Reviews/Calendar (each rebuilding this page via
+    // pushReplacement) is a *different, already-disposed* State. Its
+    // `mounted` guard then silently no-ops the navigation -- Supabase gets
+    // signed out but the UI never leaves the screen.
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   Future<void> _openClientArtistRequestWithArtist(String artistName) async {
@@ -588,6 +595,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         onLogout: _logout,
       ),
       ClientArtistRequestsPage(
+        profile: _profile,
         onOpenProfile: _openUnifiedProfile,
         onOpenHistory: () {
           unawaited(_openClientArtistHistory());

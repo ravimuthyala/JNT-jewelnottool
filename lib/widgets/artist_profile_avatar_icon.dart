@@ -54,6 +54,9 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
     final user = Supabase.instance.client.auth.currentUser;
     final uid = (user?.id ?? '').trim();
     final email = (user?.email ?? '').trim().toLowerCase();
+    debugPrint(
+      '[ArtistProfileAvatarIcon] hydrate: seedName="$seedName" uid="$uid" authEmail="$email"',
+    );
     final directPrimary = uid.isEmpty
         ? ''
         : _publicStorageUrl(
@@ -178,6 +181,10 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
         directSecondary,
       ]);
 
+      debugPrint(
+        '[ArtistProfileAvatarIcon] resolved: name="$resolvedName" '
+        'avatarUrl="${resolvedAvatar.isEmpty ? '(none)' : resolvedAvatar}"',
+      );
       if (!mounted) return;
       setState(() {
         _displayName = resolvedName;
@@ -185,7 +192,8 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
         _secondaryAvatarUrl = '';
         _loading = false;
       });
-    } catch (_) {
+    } catch (e, stack) {
+      debugPrint('[ArtistProfileAvatarIcon] hydrate FAILED: $e\n$stack');
       if (!mounted) return;
       setState(() => _loading = false);
     }
@@ -198,14 +206,16 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
   }) async {
     final supabase = Supabase.instance.client;
 
-    Future<Map<String, dynamic>?> tryEq(String column, String value) async {
+    Future<Map<String, dynamic>?> tryEq(
+      String column,
+      String value, {
+      bool caseInsensitive = false,
+    }) async {
       if (value.trim().isEmpty) return null;
       try {
-        final rows = await supabase
-            .from(table)
-            .select()
-            .eq(column, value)
-            .limit(1);
+        final rows = caseInsensitive
+            ? await supabase.from(table).select().ilike(column, value).limit(1)
+            : await supabase.from(table).select().eq(column, value).limit(1);
         if (rows.isNotEmpty) {
           return Map<String, dynamic>.from(rows.first as Map);
         }
@@ -213,13 +223,15 @@ class _ArtistProfileAvatarIconState extends State<ArtistProfileAvatarIcon> {
       return null;
     }
 
+    // Email columns use a case-insensitive match -- see the matching
+    // comment in client_profile_avatar_icon.dart.
     return await tryEq('id', uid) ??
         await tryEq('uid', uid) ??
         await tryEq('artist_uid', uid) ??
         await tryEq('auth_uid', uid) ??
         await tryEq('user_id', uid) ??
-        await tryEq('email', email) ??
-        await tryEq('artist_email', email);
+        await tryEq('email', email, caseInsensitive: true) ??
+        await tryEq('artist_email', email, caseInsensitive: true);
   }
 
   Map<String, dynamic> _asMap(Object? raw) {

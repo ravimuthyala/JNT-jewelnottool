@@ -5,6 +5,7 @@ import '../utils/date_format_utils.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
+import 'notifications_page.dart';
 
 enum ArtistReviewType { client, brand }
 
@@ -36,10 +37,13 @@ class ArtistReviewsPage extends StatefulWidget {
   const ArtistReviewsPage({
     super.key,
     this.clientArtistMenuStyle = false,
+    this.clientDisplayName = '',
+    this.clientProfileImageUrl = '',
     this.showBottomNav = false,
     this.showCampaignsTab = false,
     this.bottomNavCurrentIndex = 0,
     this.onBottomNavTap,
+    this.onOpenNotifications,
     this.onManageProfile,
     this.onOpenHistory,
     this.onOpenCalendar,
@@ -50,10 +54,13 @@ class ArtistReviewsPage extends StatefulWidget {
   });
 
   final bool clientArtistMenuStyle;
+  final String clientDisplayName;
+  final String clientProfileImageUrl;
   final bool showBottomNav;
   final bool showCampaignsTab;
   final int bottomNavCurrentIndex;
   final ValueChanged<int>? onBottomNavTap;
+  final VoidCallback? onOpenNotifications;
   final VoidCallback? onManageProfile;
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
@@ -292,10 +299,15 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
     ]) {
       List<dynamic> rows;
       try {
+        // accepted_by_artist_email is the primary field written on accept,
+        // but a couple of fallback code paths (see artist_requests_page_redesign.dart's
+        // accept flow) only manage to write artist_email -- match either so
+        // a review isn't invisible just because that order took the
+        // fallback path.
         rows = await _supabase
             .from(entry.key)
             .select()
-            .ilike('accepted_by_artist_email', email);
+            .or('accepted_by_artist_email.ilike.$email,artist_email.ilike.$email');
       } catch (e) {
         debugPrint('ARTIST REVIEWS LOAD FAILED for ${entry.key}: $e');
         continue;
@@ -457,7 +469,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: JntStandardAppBar(
-          onNotifications: () {},
+          onNotifications:
+              widget.onOpenNotifications ??
+              () {
+                NotificationsPage.showAsModal(context);
+              },
           trailing: _ReviewsAvatarMenu(
             onManageProfile: widget.onManageProfile,
             onOpenHistory: widget.onOpenHistory,
@@ -468,6 +484,8 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
             onSignOut: widget.onSignOut,
             logoutOnly: !widget.clientArtistMenuStyle,
             useArtistAvatar: !widget.clientArtistMenuStyle,
+            clientDisplayName: widget.clientDisplayName,
+            clientProfileImageUrl: widget.clientProfileImageUrl,
           ),
         ),
         bottomNavigationBar: widget.showBottomNav
@@ -1033,6 +1051,8 @@ class _ReviewsAvatarMenu extends StatelessWidget {
     this.onSignOut,
     this.logoutOnly = false,
     this.useArtistAvatar = false,
+    this.clientDisplayName = '',
+    this.clientProfileImageUrl = '',
   });
 
   final VoidCallback? onManageProfile;
@@ -1044,6 +1064,8 @@ class _ReviewsAvatarMenu extends StatelessWidget {
   final VoidCallback? onSignOut;
   final bool logoutOnly;
   final bool useArtistAvatar;
+  final String clientDisplayName;
+  final String clientProfileImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -1064,7 +1086,9 @@ class _ReviewsAvatarMenu extends StatelessWidget {
       },
       child: useArtistAvatar
           ? const ArtistProfileAvatarIcon(size: 36)
-          : const ClientProfileAvatarIcon(
+          : ClientProfileAvatarIcon(
+              displayName: clientDisplayName,
+              imageUrl: clientProfileImageUrl,
               size: JntHeaderMetrics.avatarSize,
               resolveCurrentUserFallback: true,
             ),
@@ -1108,13 +1132,9 @@ class _ReviewsAvatarMenu extends StatelessWidget {
                   label: 'Artist',
                 ),
               ),
-              const PopupMenuItem<String>(
-                value: 'reviews',
-                child: _AvatarMenuRow(
-                  icon: Icons.star_border,
-                  label: 'Reviews',
-                ),
-              ),
+              // No "Reviews" item here -- this menu is rendered on the
+              // Reviews page itself, so a self-referential entry would be
+              // pointless (unlike the Home page's menu, which does need it).
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
                 value: 'logout',

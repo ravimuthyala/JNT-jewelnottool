@@ -13,6 +13,7 @@ import '../utlis/responsive_text.dart';
 import 'artist_profile_page.dart';
 import 'notifications_page.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
+import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 
 class ArtistCalendarPage extends StatefulWidget {
@@ -30,6 +31,8 @@ class ArtistCalendarPage extends StatefulWidget {
     this.onOpenEarnings,
     this.onSignOut,
     this.showExtendedAvatarMenu = false,
+    this.clientDisplayName = '',
+    this.clientProfileImageUrl = '',
     this.hideHistoryMenuItem = false,
     this.hideCalendarMenuItem = false,
     this.showBottomNav = false,
@@ -50,6 +53,8 @@ class ArtistCalendarPage extends StatefulWidget {
   final VoidCallback? onOpenEarnings;
   final VoidCallback? onSignOut;
   final bool showExtendedAvatarMenu;
+  final String clientDisplayName;
+  final String clientProfileImageUrl;
   final bool hideHistoryMenuItem;
   final bool hideCalendarMenuItem;
   final bool showBottomNav;
@@ -725,9 +730,20 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         width: JntHeaderMetrics.avatarSize,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: const ArtistProfileAvatarIcon(
-            size: JntHeaderMetrics.avatarSize,
-          ),
+          // showExtendedAvatarMenu means the signed-in user is the
+          // client-artist (a client), not an artist -- see the matching fix
+          // in artist_requests_page_redesign.dart for why ArtistProfileAvatarIcon
+          // shows a stray "A" for this case.
+          child: widget.showExtendedAvatarMenu
+              ? ClientProfileAvatarIcon(
+                  displayName: widget.clientDisplayName,
+                  imageUrl: widget.clientProfileImageUrl,
+                  size: JntHeaderMetrics.avatarSize,
+                  resolveCurrentUserFallback: true,
+                )
+              : const ArtistProfileAvatarIcon(
+                  size: JntHeaderMetrics.avatarSize,
+                ),
         ),
       ),
       itemBuilder: (_) {

@@ -70,7 +70,14 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
   Future<void> _bestEffort(Future<void> Function() action) async {
     try {
       await action();
-    } catch (_) {}
+    } catch (e) {
+      // Best-effort side effects (artist stats sync, ascension recompute,
+      // notification) shouldn't block the client's review from submitting,
+      // but swallowing this without a trace makes "the rating never shows
+      // up on the artist page" impossible to diagnose -- e.g. an RLS policy
+      // silently rejecting the client's update to the artist row.
+      debugPrint('[ReviewArtistPage] best-effort step failed: $e');
+    }
   }
 
   Future<Map<String, dynamic>?> _findRowByColumn(
@@ -104,14 +111,20 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
   }
 
   Future<void> _loadOrder() async {
+    debugPrint('[ReviewArtistPage] _loadOrder: orderId=${widget.orderId}');
     try {
       final order = await _resolveOrderRecord();
+      debugPrint(
+        '[ReviewArtistPage] _loadOrder: resolved '
+        '${order == null ? 'NULL (no matching row in any request table)' : 'table=${order.table} id=${order.row['id']}'}',
+      );
       if (!mounted) return;
       setState(() {
         _order = order;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e, stack) {
+      debugPrint('[ReviewArtistPage] _loadOrder FAILED: $e\n$stack');
       if (mounted) {
         setState(() => _loading = false);
       }
@@ -129,12 +142,12 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
         .maybeSingle();
     var artistTable = 'artist';
 
-    artistRow ??= await _supabase
-        .from('client_artist')
-        .select()
-        .ilike('email', normalizedEmail)
-        .maybeSingle();
-    if (artistRow != null && artistRow.containsKey('account_type')) {
+    if (artistRow == null) {
+      artistRow = await _supabase
+          .from('client_artist')
+          .select()
+          .ilike('email', normalizedEmail)
+          .maybeSingle();
       artistTable = 'client_artist';
     }
 
@@ -148,12 +161,20 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
   Future<void> _submitReview() async {
     final order = _order;
     if (order == null) {
+      debugPrint(
+        '[ReviewArtistPage] _submitReview aborted: _order is null '
+        '(orderId=${widget.orderId})',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order not found for this review link.')),
       );
       return;
     }
 
+    debugPrint(
+      '[ReviewArtistPage] _submitReview starting: table=${order.table} '
+      'id=${order.id} rating=$_rating',
+    );
     setState(() => _submitting = true);
 
     try {
@@ -203,6 +224,9 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
           'clientReview': clientReview,
         },
       }).eq('id', order.id);
+      debugPrint(
+        '[ReviewArtistPage] order row updated (client_rating=$_rating)',
+      );
 
       final existingDetail = await _supabase
           .from(order.detailsTable)
@@ -250,11 +274,26 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
           _asText(orderData['accepted_by_artist_name']).isNotEmpty
               ? _asText(orderData['accepted_by_artist_name'])
               : _asText(orderData['artist_name']);
+      debugPrint(
+        '[ReviewArtistPage] artistEmail="$artistEmail" artistName="$artistName" '
+        '(from accepted_by_artist_email/artist_email on the order row)',
+      );
 
       if (artistEmail.isNotEmpty) {
         await _bestEffort(() async {
           final artistRow = await _resolveArtistRow(artistEmail);
-          if (artistRow == null || artistRow['id'] == null) return;
+          if (artistRow == null || artistRow['id'] == null) {
+            debugPrint(
+              '[ReviewArtistPage] _resolveArtistRow found NO row for '
+              '"$artistEmail" in artist or client_artist -- artist stats will '
+              'not be updated',
+            );
+            return;
+          }
+          debugPrint(
+            '[ReviewArtistPage] resolved artist row: table=${artistRow['_table']} '
+            'id=${artistRow['id']}',
+          );
 
           final artistTable = _asText(artistRow['_table']).isEmpty
               ? 'artist'
@@ -270,38 +309,31 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
                 artistRow['panel_reviews'],
           );
 
-          final currentRating =
-              _asDouble(
-                stats['rating'] ??
-                    stats['averageRating'] ??
-                    artistRow['rating'] ??
-                    artistRow['average_rating'] ??
-                    artistRow['averageRating'] ??
-                    artistRow['panel_rating'],
-              ) ??
-              0.0;
-
           final hadPrevious = (previousRatingValue ?? 0) > 0;
           final safeCount = currentCount <= 0 ? (hadPrevious ? 1 : 0) : currentCount;
           final nextCount = hadPrevious ? safeCount : (safeCount + 1);
-          final nextRating = currentRating >= _rating ? currentRating : _rating.toDouble();
+          // The artist page shows the client's latest rating, not the
+          // highest one they've ever given -- always take the new value.
+          final nextRating = _rating.toDouble();
 
-          await _supabase.from(artistTable).update({
-            'stats': {
-              ...stats,
-              'rating': nextRating,
-              'averageRating': nextRating,
-              'reviewCount': nextCount,
-              'reviews': nextCount,
+          // A plain client-side `.update()` here silently no-ops: RLS lets
+          // the client read the artist row (above) but not write to it --
+          // Postgrest doesn't treat a zero-row UPDATE as an error, so this
+          // must go through a SECURITY DEFINER RPC instead. See migration
+          // 20260801002432_add_apply_client_review_to_artist_rpc.sql.
+          await _supabase.rpc(
+            'apply_client_review_to_artist',
+            params: {
+              'p_table': artistTable,
+              'p_artist_id': artistRow['id'],
+              'p_rating': nextRating,
+              'p_review_count': nextCount,
             },
-            'rating': nextRating,
-            'average_rating': nextRating,
-            'review_count': nextCount,
-            'reviews': nextCount,
-            'panel_rating': nextRating,
-            'panel_reviews': nextCount,
-            'updated_at': nowIso,
-          }).eq('id', artistRow['id']);
+          );
+          debugPrint(
+            '[ReviewArtistPage] artist $artistTable row ${artistRow['id']} '
+            'stats updated via RPC: rating=$nextRating reviewCount=$nextCount',
+          );
 
           // A five-star review is one of the ascension point stages -- recompute
           // immediately so it doesn't sit unreflected until some unrelated
@@ -340,6 +372,7 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
         );
       });
 
+      debugPrint('[ReviewArtistPage] _submitReview completed successfully');
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -347,11 +380,12 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
       );
 
       Navigator.pop(context);
-    } catch (_) {
+    } catch (e, stack) {
+      debugPrint('[ReviewArtistPage] _submitReview FAILED: $e\n$stack');
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to submit review.')),
+        SnackBar(content: Text('Failed to submit review: $e')),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_profile_models.dart';
 import '../services/ambassador_role_service.dart';
@@ -62,12 +63,16 @@ class _ClientArtistHistoryPageState extends State<ClientArtistHistoryPage> {
   }
 
   Future<void> _logout(BuildContext context) async {
-    if (widget.onLogout != null) {
-      await widget.onLogout!.call();
-      return;
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('CLIENT+ARTIST SIGN OUT FAILED: $e');
     }
     if (!context.mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
   void _openHomeTab(BuildContext context, int index) {
@@ -191,6 +196,8 @@ class _ClientArtistHistoryPageState extends State<ClientArtistHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return ArtistHistoryPage(
+      clientDisplayName: widget.profile.basic.name,
+      clientProfileImageUrl: widget.profile.basic.profileImageUrl,
       onManageProfile: () {
         unawaited(_openProfile(context));
       },
