@@ -51,18 +51,12 @@ Future<void> main() async {
 
 Future<void> _startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Show Flutter's own boot splash immediately instead of holding the native
-  // launch screen frozen for the duration of Supabase.initialize() (session
-  // restore + token refresh, which is network-bound and can take seconds on
-  // a slow connection). _AppBootstrapper renders a splash matching the
-  // native launch screen's background on the very first frame, then swaps
-  // to the real app (or the retry screen) once init settles.
   runApp(const _AppBootstrapper());
 }
 
-/// Renders instantly (matching the native launch screen) while
-/// [SupabaseBootstrap.ensureInitialized] runs in the background, then swaps
-/// to [JntApp] on success or [_SupabaseInitFailedApp] on failure.
+/// Renders initial app hierarchy while [SupabaseBootstrap.ensureInitialized]
+/// runs in the background, then swaps to [JntApp] on success or
+/// [_SupabaseInitFailedApp] on failure.
 class _AppBootstrapper extends StatefulWidget {
   const _AppBootstrapper();
 
@@ -85,7 +79,7 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
       future: _supabaseReady,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const _BootSplash();
+          return const HomePage();
         }
         if (snapshot.data != true) {
           debugPrint(
@@ -99,20 +93,6 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
   }
 }
 
-/// Matches the native launch screen's plain `#292222` background
-/// (ios/Runner/Base.lproj/LaunchScreen.storyboard) so the handoff from
-/// native splash to Flutter is seamless instead of a visible flash.
-class _BootSplash extends StatelessWidget {
-  const _BootSplash();
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(backgroundColor: AppColors.blackCat),
-    );
-  }
-}
 
 /// Restores Supabase's persisted session and sends every supported account
 /// role directly to its signed-in shell. The public landing page is only
@@ -135,6 +115,9 @@ class _SessionHomeGateState extends State<_SessionHomeGate> {
 
   Future<Widget> _resolveHome() async {
     final auth = Supabase.instance.client.auth;
+    if (auth.currentSession == null) {
+      return const HomePage();
+    }
     await _waitForSessionRestoration(auth);
 
     if (auth.currentSession == null) {
@@ -159,15 +142,10 @@ class _SessionHomeGateState extends State<_SessionHomeGate> {
     });
 
     try {
-      // Supabase.initialize creates the client before its persisted-session
-      // recovery operation completes. Re-check after subscribing so the
-      // session cannot be missed in between those two operations.
       if (auth.currentSession == null) {
-        await restored.future.timeout(const Duration(seconds: 8));
+        await restored.future.timeout(const Duration(seconds: 2));
       }
     } catch (_) {
-      // A logged-out user may have no delayed event to wait for. Re-check
-      // currentSession in _resolveHome and show public home if still null.
     } finally {
       await subscription.cancel();
     }
@@ -189,12 +167,7 @@ class _SessionHomeGateState extends State<_SessionHomeGate> {
       future: _home,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: AppColors.blackCat,
-            body: Center(
-              child: CircularProgressIndicator(color: AppColors.snow),
-            ),
-          );
+          return const HomePage();
         }
         if (snapshot.hasData) return snapshot.data!;
 
