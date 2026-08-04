@@ -36,6 +36,8 @@ class ClientCampaignDetailsPage extends StatefulWidget {
 
 class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   late final Future<_RequestDetailsVm> _vmFuture;
+  int _currentStep = 1;
+  bool _acceptedBrandCollaborationContract = false;
 
   @override
   void initState() {
@@ -120,93 +122,71 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                         ),
                         const SizedBox(height: 14),
                         _overviewCard(vm),
-                        const SizedBox(height: 16),
-                        _sectionContainer(
-                          child: _plainSection(
-                            title: vm.isBrandRequest
-                                ? 'Company Bio'
-                                : 'Client Bio',
-                            body: vm.bioSectionBody,
+                        const SizedBox(height: 12),
+                        Center(
+                          child: Text(
+                            _currentStep == 1 ? 'Step 1 of 2' : 'Step 2 of 2',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                              color: AppColors.blackCat.withValues(alpha: 0.45),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _sectionContainer(
-                          child: _plainSection(
-                            title: 'Custom Request Description',
-                            body: vm.customDescription,
+                        if (_currentStep == 1) ...[
+                          _sectionContainer(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _plainSection(
+                                  title: vm.isBrandRequest
+                                      ? 'Company Bio'
+                                      : 'Client Bio',
+                                  body: vm.bioSectionBody,
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  height: 1,
+                                  color: AppColors.blackCatBorderLight,
+                                ),
+                                const SizedBox(height: 12),
+                                _plainSection(
+                                  title: 'Custom Request Description',
+                                  body: vm.customDescription,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        _sectionContainer(child: _nailDimensionsSection(vm)),
-                        const SizedBox(height: 12),
-                        _sectionContainer(
-                          child: _numberOfSetsSection(vm.numberOfSets),
-                        ),
-                        const SizedBox(height: 12),
-                        _sectionContainer(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _sectionHeader(text: 'Inspiration Photos'),
-                              const SizedBox(height: 10),
-                              _photosStrip(vm.photos),
-                            ],
+                          const SizedBox(height: 12),
+                          _sectionContainer(child: _nailDimensionsSection(vm)),
+                          const SizedBox(height: 12),
+                          _sectionContainer(
+                            child: _numberOfSetsSection(vm.numberOfSets),
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          _sectionContainer(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _sectionHeader(text: 'Inspiration Photos'),
+                                const SizedBox(height: 10),
+                                _photosStrip(vm.photos),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          _brandCollaborationStepSection(vm),
+                        ],
                       ],
                     ),
                   ),
                   Padding(
                     padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 56,
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.snow,
-                                side: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.7,
-                                  ),
-                                ),
-                                backgroundColor: AppColors.blackCat.withValues(
-                                  alpha: 0.7,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                              ),
-                              onPressed: () async {
-                                try {
-                                  await widget.onDecline();
-                                } catch (e) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Unable to decline request: $e',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                              child: Text(
-                                widget.declineLabel,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.snow,
-                                  fontFamily: 'Arial',
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: SizedBox(
+                    child: _currentStep == 1
+                        ? SizedBox(
+                            width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
@@ -217,23 +197,10 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                   borderRadius: BorderRadius.zero,
                                 ),
                               ),
-                              onPressed: () async {
-                                try {
-                                  await widget.onAccept();
-                                } catch (e) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Unable to accept request: $e',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                              child: Text(
-                                widget.acceptLabel,
-                                style: const TextStyle(
+                              onPressed: () => setState(() => _currentStep = 2),
+                              child: const Text(
+                                'Next',
+                                style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   color: AppColors.snow,
@@ -241,10 +208,104 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                 ),
                               ),
                             ),
+                          )
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 56,
+                                  child: OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppColors.snow,
+                                      side: BorderSide(
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                      ),
+                                      backgroundColor: AppColors.blackCat
+                                          .withValues(alpha: 0.7),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                    ),
+                                    onPressed: () async {
+                                      try {
+                                        await widget.onDecline();
+                                      } catch (e) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Unable to decline request: $e',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: Text(
+                                      widget.declineLabel,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.snow,
+                                        fontFamily: 'Arial',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.blackCat,
+                                      foregroundColor: AppColors.snow,
+                                      disabledBackgroundColor: AppColors
+                                          .blackCat
+                                          .withValues(alpha: 0.35),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                    ),
+                                    onPressed:
+                                        (vm.hasBrandCollaboration &&
+                                            !_acceptedBrandCollaborationContract)
+                                        ? null
+                                        : () async {
+                                            try {
+                                              await widget.onAccept();
+                                            } catch (e) {
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Unable to accept request: $e',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                    child: Text(
+                                      widget.acceptLabel,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.snow,
+                                        fontFamily: 'Arial',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               );
@@ -334,7 +395,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                 child: _dimensionHandCard(
                   'Left Hand',
                   vm.leftHand,
-                  showNfcTags: vm.requiresNfc,
+                  // NFC chip requests are right-thumb only -- never tag the
+                  // left hand even when the order requires NFC.
+                  showNfcTags: false,
                 ),
               ),
               const SizedBox(width: 10),
@@ -912,6 +975,442 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
   }
 
+  Widget _bcHeader(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+        color: AppColors.blackCat.withValues(alpha: 0.5),
+      ),
+    );
+  }
+
+  Widget _bcChip(String text, {bool strikethrough = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.alabaster,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.blackCat.withValues(alpha: strikethrough ? 0.45 : 1),
+          decoration: strikethrough ? TextDecoration.lineThrough : null,
+        ),
+      ),
+    );
+  }
+
+  Widget _brandCollaborationStepSection(_RequestDetailsVm vm) {
+    final bc = vm.brandCollaboration;
+
+    if (!vm.hasBrandCollaboration) {
+      return _sectionContainer(
+        child: Text(
+          'No brand collaboration terms on this offer.',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.blackCat.withValues(alpha: 0.75),
+          ),
+        ),
+      );
+    }
+
+    final posts = _RequestDetailsVm.asMap(bc['posts']);
+    int postCount(String key) {
+      final v = posts[key];
+      if (v is num) return v.round();
+      return int.tryParse((v ?? '').toString()) ?? 0;
+    }
+
+    final postRows = <MapEntry<String, int>>[
+      MapEntry('Instagram Reel', postCount('instagramReel')),
+      MapEntry('Instagram Stories', postCount('instagramStories')),
+      MapEntry('Carousel post', postCount('carouselPost')),
+      MapEntry('TikTok', postCount('tiktok')),
+    ].where((e) => e.value > 0).toList(growable: false);
+
+    final nfcCardTapsEnabled = bc['nfcCardTapsEnabled'] == true;
+    final tapRateRaw = bc['tapRatePerTap'];
+    final tapRate = tapRateRaw is num ? tapRateRaw.toDouble() : null;
+    final tapCapRaw = bc['tapCap'];
+    final tapCap = tapCapRaw is num
+        ? tapCapRaw.round()
+        : int.tryParse((tapCapRaw ?? '').toString());
+
+    final links = (bc['links'] is List) ? bc['links'] as List : const [];
+
+    final wording = _RequestDetailsVm.asMap(bc['wording']);
+    final mustInclude = (wording['mustInclude'] is List)
+        ? List<String>.from(wording['mustInclude'] as List)
+        : const <String>[];
+    final doNotSay = (wording['doNotSay'] is List)
+        ? List<String>.from(wording['doNotSay'] as List)
+        : const <String>[];
+    final talkingPoints = (wording['talkingPoints'] ?? '').toString().trim();
+
+    final pricing = _RequestDetailsVm.asMap(bc['pricing']);
+    final dueRaw = pricing['dueOnSigning'];
+    final due = dueRaw is num
+        ? dueRaw.round()
+        : int.tryParse((dueRaw ?? '').toString()) ?? 0;
+    final maxTapBonus = (tapCap ?? 0) * (tapRate ?? 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          color: AppColors.blackCat,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _bcHeader("YOU'D BE PAID"),
+              const SizedBox(height: 8),
+              Text(
+                '\$$due',
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.snow,
+                ),
+              ),
+              if (nfcCardTapsEnabled && tapCap != null && tapRate != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Plus up to \$${maxTapBonus.toStringAsFixed(0)} in tap '
+                  'bonuses — $tapCap taps × \$${tapRate.toStringAsFixed(2)}, '
+                  'paid monthly.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.snow.withValues(alpha: 0.75),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionContainer(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _bcHeader("WHAT THEY'RE ASKING FOR"),
+              const SizedBox(height: 10),
+              if (postRows.isEmpty)
+                Text(
+                  'No posts requested.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
+                  ),
+                )
+              else
+                for (var i = 0; i < postRows.length; i++) ...[
+                  if (i > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(
+                        height: 1,
+                        color: AppColors.blackCatBorderLight,
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Text(
+                        '${postRows[i].value}× ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.blackCat.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      Text(
+                        postRows[i].key,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+            ],
+          ),
+        ),
+        if (nfcCardTapsEnabled) ...[
+          const SizedBox(height: 12),
+          _sectionContainer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _bcHeader('AT YOUR CHAIR'),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      color: AppColors.alabaster,
+                      child: Icon(
+                        Icons.nfc_rounded,
+                        size: 18,
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'NFC card tap',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Right thumb only. A client taps it, your page '
+                            'opens on their phone, the tap is credited to '
+                            'you.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _summaryValue(
+                        'Per tap',
+                        tapRate == null
+                            ? 'Flat'
+                            : '\$${tapRate.toStringAsFixed(2)}',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(width: 1, color: AppColors.blackCatBorderLight),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _summaryValue(
+                        'Paid up to',
+                        tapCap == null ? '-' : '$tapCap',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (links.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _sectionContainer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _bcHeader('LINKS TO USE'),
+                const SizedBox(height: 10),
+                for (var i = 0; i < links.length; i++) ...[
+                  if (i > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(
+                        height: 1,
+                        color: AppColors.blackCatBorderLight,
+                      ),
+                    ),
+                  Builder(
+                    builder: (_) {
+                      final link = _RequestDetailsVm.asMap(links[i]);
+                      final label = (link['label'] ?? '').toString().trim();
+                      final url = (link['url'] ?? '').toString().trim();
+                      final isTapDestination = link['isTapDestination'] == true;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  label.isEmpty ? 'Link' : label,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.blackCat,
+                                  ),
+                                ),
+                              ),
+                              if (isTapDestination)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  color: AppColors.blackCat,
+                                  child: const Text(
+                                    'TAP GOES HERE',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.5,
+                                      color: AppColors.snow,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            url.isEmpty ? '-' : url,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.blackCat.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        if (mustInclude.isNotEmpty ||
+            doNotSay.isNotEmpty ||
+            talkingPoints.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _sectionContainer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _bcHeader("WHAT THEY'D LIKE YOU TO SAY"),
+                if (mustInclude.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Must appear in your caption',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final phrase in mustInclude) _bcChip(phrase),
+                    ],
+                  ),
+                ],
+                if (talkingPoints.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'Talking points, if you want them',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    talkingPoints,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.blackCat.withValues(alpha: 0.85),
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+                if (doNotSay.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    "Please don't say",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final phrase in doNotSay)
+                        _bcChip(phrase, strikethrough: true),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        InkWell(
+          onTap: () => setState(
+            () => _acceptedBrandCollaborationContract =
+                !_acceptedBrandCollaborationContract,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Checkbox(
+                value: _acceptedBrandCollaborationContract,
+                activeColor: AppColors.blackCat,
+                onChanged: (v) => setState(
+                  () => _acceptedBrandCollaborationContract = v ?? false,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Text(
+                    'I accept the brand collaboration contract',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _sectionContainer({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -1139,6 +1638,7 @@ class _RequestDetailsVm {
     required this.nailLength,
     required this.requiresNfc,
     required this.requestAcceptByLabel,
+    this.brandCollaboration = const <String, dynamic>{},
   });
 
   final bool isBrandRequest;
@@ -1164,6 +1664,9 @@ class _RequestDetailsVm {
   final String nailLength;
   final bool requiresNfc;
   final String requestAcceptByLabel;
+  final Map<String, dynamic> brandCollaboration;
+
+  bool get hasBrandCollaboration => brandCollaboration['enabled'] == true;
 
   static Map<String, dynamic> asMap(dynamic v) {
     if (v is Map<String, dynamic>) return v;
@@ -2494,6 +2997,7 @@ class _RequestDetailsVm {
       nailLength: nailLength,
       requiresNfc: _requestRequiresNfcFromMaps(root, details, payload),
       requestAcceptByLabel: _dateLabel(requestAcceptBy),
+      brandCollaboration: asMap(details['brandCollaboration']),
     );
   }
 

@@ -1,8 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <!-- Styles are resolved per-API-level as whole definitions, not
+             merged with the base values/styles.xml LaunchTheme. Without
+             this, the Activity's window background falls back to
+             Theme.Material.NoActionBar's default (light) the instant the
+             splash-screen overlay below is dismissed, before Flutter's
+             first frame paints. That gap is the white screen. -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">#292222</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/transparent</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/transparent_icon</item>
         <item name="android:windowSplashScreenIconBackgroundColor">#292222</item>
+        <!-- The visible icon has survived three different "invisible icon"
+             attempts on this device, which points at Android's older,
+             separate "starting window" preview (shown while the Activity
+             cold-starts, independent of the API-31 SplashScreen attributes
+             above) rather than the SplashScreen icon itself. This flag
+             tells the system to skip that preview entirely. -->
+        <item name="android:windowDisablePreview">true</item>
     </style>
 </resources>

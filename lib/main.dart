@@ -79,7 +79,7 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
       future: _supabaseReady,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const HomePage();
+          return const _BootSplash();
         }
         if (snapshot.data != true) {
           debugPrint(
@@ -93,6 +93,23 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
   }
 }
 
+/// Matches the native launch screen's plain `#292222` background
+/// (ios/Runner/Base.lproj/LaunchScreen.storyboard, android LaunchTheme) so
+/// the handoff from native splash to Flutter's first frame has no visible
+/// flash. [HomePage] can't stand in for this: it builds a bare Scaffold
+/// with no MaterialApp/Theme/Directionality ancestor of its own, so
+/// rendering it directly as the app root (before [JntApp] mounts) throws.
+class _BootSplash extends StatelessWidget {
+  const _BootSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(backgroundColor: AppColors.blackCat),
+    );
+  }
+}
 
 /// Restores Supabase's persisted session and sends every supported account
 /// role directly to its signed-in shell. The public landing page is only
