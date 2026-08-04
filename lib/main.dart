@@ -79,7 +79,7 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
       future: _supabaseReady,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const ColoredBox(color: AppColors.blackCat);
+          return const _BootSplash();
         }
         if (snapshot.data != true) {
           debugPrint(
@@ -93,6 +93,23 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
   }
 }
 
+/// Matches the native launch screen's plain `#292222` background
+/// (ios/Runner/Base.lproj/LaunchScreen.storyboard, android LaunchTheme) so
+/// the handoff from native splash to Flutter's first frame has no visible
+/// flash. [HomePage] can't stand in for this: it builds a bare Scaffold
+/// with no MaterialApp/Theme/Directionality ancestor of its own, so
+/// rendering it directly as the app root (before [JntApp] mounts) throws.
+class _BootSplash extends StatelessWidget {
+  const _BootSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(backgroundColor: AppColors.blackCat),
+    );
+  }
+}
 
 /// Restores Supabase's persisted session and sends every supported account
 /// role directly to its signed-in shell. The public landing page is only
@@ -168,144 +185,6 @@ class _SessionHomeGateState extends State<_SessionHomeGate> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const HomePage();
-        }
-        if (snapshot.hasData) return snapshot.data!;
-
-        return Scaffold(
-          backgroundColor: AppColors.blackCat,
-          body: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.cloud_off_rounded,
-                      size: 48,
-                      color: AppColors.snow,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Unable to restore your account',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.snow,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Your login is still saved. Check your connection and '
-                      'try again.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.snow.withValues(alpha: 0.75),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _retry,
-                      child: const Text('Retry'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: _logout,
-                      child: const Text('Log out'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Restores Supabase's persisted session and sends every supported account
-/// role directly to its signed-in shell. The public landing page is only
-/// shown when there is no session (normally after an explicit logout).
-class _SessionHomeGate extends StatefulWidget {
-  const _SessionHomeGate();
-
-  @override
-  State<_SessionHomeGate> createState() => _SessionHomeGateState();
-}
-
-class _SessionHomeGateState extends State<_SessionHomeGate> {
-  late Future<Widget> _home;
-
-  @override
-  void initState() {
-    super.initState();
-    _home = _resolveHome();
-  }
-
-  Future<Widget> _resolveHome() async {
-    final auth = Supabase.instance.client.auth;
-    await _waitForSessionRestoration(auth);
-
-    if (auth.currentSession == null) {
-      return const HomePage();
-    }
-    return await LoginDialog.restoredSessionHome() ?? const HomePage();
-  }
-
-  Future<void> _waitForSessionRestoration(GoTrueClient auth) async {
-    if (auth.currentSession != null) return;
-
-    final restored = Completer<void>();
-    late final StreamSubscription<AuthState> subscription;
-    subscription = auth.onAuthStateChange.listen((state) {
-      final isInitialAuthEvent =
-          state.event == AuthChangeEvent.initialSession ||
-          state.event == AuthChangeEvent.signedIn ||
-          state.event == AuthChangeEvent.tokenRefreshed;
-      if (isInitialAuthEvent && !restored.isCompleted) {
-        restored.complete();
-      }
-    });
-
-    try {
-      // Supabase.initialize creates the client before its persisted-session
-      // recovery operation completes. Re-check after subscribing so the
-      // session cannot be missed in between those two operations.
-      if (auth.currentSession == null) {
-        await restored.future.timeout(const Duration(seconds: 8));
-      }
-    } catch (_) {
-      // A logged-out user may have no delayed event to wait for. Re-check
-      // currentSession in _resolveHome and show public home if still null.
-    } finally {
-      await subscription.cancel();
-    }
-  }
-
-  void _retry() {
-    setState(() => _home = _resolveHome());
-  }
-
-  Future<void> _logout() async {
-    await Supabase.instance.client.auth.signOut();
-    if (!mounted) return;
-    setState(() => _home = Future<Widget>.value(const HomePage()));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Widget>(
-      future: _home,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: AppColors.blackCat,
-            body: Center(
-              child: CircularProgressIndicator(color: AppColors.snow),
-            ),
-          );
         }
         if (snapshot.hasData) return snapshot.data!;
 

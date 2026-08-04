@@ -19,6 +19,7 @@ import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../utils/scenario_4_1.dart';
+import 'artist_registration/_widgets/step_progress_bar.dart';
 
 const Color _requestSnow = Color(0xFFFAF9F9);
 final BorderSide _requestBorder = BorderSide(
@@ -33,6 +34,30 @@ enum _ClientRecipientMode { pool, specificClient, groupClients }
 enum _DesignCreatorMode { pool, specificArtist }
 
 enum _ShippingDestination { clientDirectly, brandMailingAddress }
+
+enum _RepostDuration {
+  threeMonths('3 mo', 'Included', 0),
+  sixMonths('6 mo', '+15%', 15),
+  twelveMonths('12 mo', '+30%', 30),
+  forever('Forever', '+75%', 75);
+
+  const _RepostDuration(this.label, this.subLabel, this.percent);
+  final String label;
+  final String subLabel;
+  final int percent;
+}
+
+enum _CompetingBrandsWindow {
+  none('None', '+0%', 0),
+  fourteenDays('14 days', '+5%', 5),
+  thirtyDays('30 days', '+10%', 10),
+  sixtyDays('60 days', '+25%', 25);
+
+  const _CompetingBrandsWindow(this.label, this.subLabel, this.percent);
+  final String label;
+  final String subLabel;
+  final int percent;
+}
 
 String scenario21ClientReceiveOnSubmit({
   required String orderRef,
@@ -324,6 +349,25 @@ class _UploadedReferenceImage {
   final Uint8List bytes;
 }
 
+/// One row of the "Links you're giving her" section. Always live-editable
+/// (no separate add-then-commit step) -- creating a row and typing into it
+/// is the same interaction. `isTapDestination` marks which single link (if
+/// any) the NFC tap opens; setting it on one entry clears it on the rest.
+class _BrandLinkEntry {
+  _BrandLinkEntry()
+    : labelCtrl = TextEditingController(),
+      urlCtrl = TextEditingController();
+
+  final TextEditingController labelCtrl;
+  final TextEditingController urlCtrl;
+  bool isTapDestination = false;
+
+  void dispose() {
+    labelCtrl.dispose();
+    urlCtrl.dispose();
+  }
+}
+
 class BrandCustomRequestPage extends StatefulWidget {
   const BrandCustomRequestPage({
     super.key,
@@ -424,10 +468,61 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   String? _pendingRequestDocId;
 
   // -----------------------------
+  // 2-step wizard
+  // -----------------------------
+  // Step 1: Campaign Details, Inspiration & References, Who receives the
+  // order, Who creates the design -- Save persists a draft row.
+  // Step 2: Client/Artist Budget, Shipping, Nail Specifications -- Submit
+  // finalizes that same row (update, not a second insert).
+  int _currentStep = 1;
+  String? _draftRequestId;
+
+  // -----------------------------
+  // Brand Collaboration (optional, step 2, collapsed by default)
+  // -----------------------------
+  bool _brandCollaborationExpanded = false;
+  int _reelPostCount = 0;
+  int _storiesPostCount = 0;
+  int _carouselPostCount = 0;
+  int _tiktokPostCount = 0;
+  bool _nfcCardTapsEnabled = true;
+  // null = "Flat, no bonus"; otherwise the dollar rate paid per tap.
+  double? _tapRatePerTap = 1.0;
+  int _tapCap = 500;
+  // Links you're giving her -- shown for every request, NFC or not. Which
+  // link the NFC tap opens is expressed by that link's isTapDestination
+  // flag (set via its "Tap goes here" pill), not a separate free-text URL.
+  static const int _maxBrandLinks = 4;
+  final List<_BrandLinkEntry> _brandLinks = <_BrandLinkEntry>[];
+  // Wording -- shown for every request, NFC or not.
+  final List<String> _requiredPhrases = <String>[];
+  final TextEditingController _requiredPhraseCtrl = TextEditingController();
+  final TextEditingController _talkingPointsCtrl = TextEditingController();
+  final List<String> _forbiddenPhrases = <String>[];
+  final TextEditingController _forbiddenPhraseCtrl = TextEditingController();
+  // Pricing -- shown for every request, NFC or not. Repost/competing-brand
+  // fees and the paid-ads fee are all percentages of this base fee.
+  final TextEditingController _baseFeeCtrl = TextEditingController();
+  _RepostDuration _repostDuration = _RepostDuration.sixMonths;
+  _CompetingBrandsWindow _competingBrandsWindow =
+      _CompetingBrandsWindow.thirtyDays;
+  bool _runAsAd = false;
+
+  double get _baseFee =>
+      double.tryParse(_baseFeeCtrl.text.replaceAll(',', '').trim()) ?? 0;
+  double get _repostFeeAmount => _baseFee * _repostDuration.percent / 100;
+  double get _competingBrandsFeeAmount =>
+      _baseFee * _competingBrandsWindow.percent / 100;
+  double get _paidAdsFeeAmount => _runAsAd ? _baseFee * 0.60 : 0;
+
+  // -----------------------------
   // Budget
   // -----------------------------
   RangeValues _clientBudget = const RangeValues(15, 50000);
   RangeValues _artistBudget = const RangeValues(15, 5000);
+  // Blank until the brand either prices an offer in step 2 (Due on
+  // Delivery flows in automatically) or types a max in directly here.
+  bool _clientBudgetMaxIsSet = false;
 
   // -----------------------------
   // Nail selections (prefilled)
@@ -482,6 +577,13 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     _shipStateCtrl.dispose();
     _shipZipCtrl.dispose();
     _shipCountryCtrl.dispose();
+    for (final link in _brandLinks) {
+      link.dispose();
+    }
+    _requiredPhraseCtrl.dispose();
+    _talkingPointsCtrl.dispose();
+    _forbiddenPhraseCtrl.dispose();
+    _baseFeeCtrl.dispose();
     _campaignNameFocusNode.dispose();
     _requestedClientFocusNode.dispose();
     _groupClientFocusNode.dispose();
@@ -1500,7 +1602,11 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       ..remove('requiresNfcEligibleClient')
       ..remove('nfcMaxChipsTotal')
       ..remove('nfcMaxChipsPerHand')
-      ..remove('eligibleNfcClientEmails');
+      ..remove('eligibleNfcClientEmails')
+      // Shipping destination detail also lives inside the nested
+      // `shipping` map only (payload/details JSON). Not a physical column.
+      ..remove('shipToClientDirectly')
+      ..remove('shippingDestination');
     return columns;
   }
 
@@ -1625,8 +1731,66 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     });
   }
 
-  Future<void> _submitRequest() async {
-    if (_isSubmitting || _pendingRequestDocId != null) return;
+  void _addBrandLink() {
+    if (_brandLinks.length >= _maxBrandLinks) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You can add up to $_maxBrandLinks links only.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _brandLinks.add(_BrandLinkEntry()));
+  }
+
+  void _removeBrandLink(int index) {
+    _brandLinks[index].dispose();
+    setState(() => _brandLinks.removeAt(index));
+  }
+
+  void _setBrandLinkTapDestination(int index) {
+    setState(() {
+      for (var i = 0; i < _brandLinks.length; i++) {
+        _brandLinks[i].isTapDestination = i == index;
+      }
+    });
+  }
+
+  String? _tapDestinationUrl() {
+    for (final link in _brandLinks) {
+      if (link.isTapDestination) {
+        final url = link.urlCtrl.text.trim();
+        if (url.isNotEmpty) return url;
+      }
+    }
+    return null;
+  }
+
+  void _addPhrase(List<String> list, TextEditingController controller) {
+    final value = controller.text.trim();
+    if (value.isEmpty) return;
+    if (list.any((p) => p.toLowerCase() == value.toLowerCase())) {
+      controller.clear();
+      return;
+    }
+    setState(() {
+      list.add(value);
+      controller.clear();
+    });
+  }
+
+  void _removePhrase(List<String> list, int index) {
+    setState(() => list.removeAt(index));
+  }
+
+  /// Shared gate for both the step-1 draft Save and the step-2 final
+  /// Submit. `shippingOk` defaults to true while
+  /// `_shippingAddressDifferentFromProfile` is still false (its only
+  /// possible value on step 1, since that field's own toggle isn't
+  /// rendered until step 2) -- so calling this unchanged at both points
+  /// naturally validates "step 1's fields" on Save and "everything" on
+  /// Submit, with no separate step-1-only subset needed.
+  bool _validateForSubmit() {
     final campaignOk = _campaignNameCtrl.text.trim().isNotEmpty;
     final needByOk = _needBy != null;
     final descOk = _descCtrl.text.trim().isNotEmpty;
@@ -1670,8 +1834,22 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           ),
         ),
       );
-      return;
+      return false;
     }
+    return true;
+  }
+
+  /// Step 1's Save button (`isDraft: true`) and step 2's Submit button
+  /// (`isDraft: false`) both funnel through here so the complex payload
+  /// construction below (email resolution, budgets, shipping, nail
+  /// snapshot) is written and tested once. `_draftRequestId` doubles as
+  /// the "has step 1 already run" flag: null means this is the first
+  /// save (insert + upload inspiration photos); non-null means step 2 is
+  /// finalizing that same row (update only -- the photos are already
+  /// uploaded under that request id).
+  Future<void> _saveOrSubmitRequest({required bool isDraft}) async {
+    if (_isSubmitting || _pendingRequestDocId != null) return;
+    if (!_validateForSubmit()) return;
     _setsNeededCtrl.text = _quantity.toString();
 
     setState(() => _isSubmitting = true);
@@ -1778,7 +1956,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       final effectiveArtistBudgetMin = _effectiveArtistBudgetMin();
       final effectiveArtistBudgetMax = _artistBudget.end.round();
 
-      final requestId = _generateRequestId();
+      final requestId = _draftRequestId ?? _generateRequestId();
       _pendingRequestDocId = requestId;
       final selectedPhotoCount = _uploadedFiles.length;
       final safeUploadUid = uid.trim().isEmpty ? 'unknown' : uid.trim();
@@ -2138,45 +2316,149 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                 )
                 .toList(growable: false),
           },
+        'brandCollaboration': <String, dynamic>{
+          'enabled': _brandCollaborationExpanded,
+          'posts': <String, dynamic>{
+            'instagramReel': _reelPostCount,
+            'instagramStories': _storiesPostCount,
+            'carouselPost': _carouselPostCount,
+            'tiktok': _tiktokPostCount,
+          },
+          if (_nfcRequest) 'nfcCardTapsEnabled': _nfcCardTapsEnabled,
+          if (_nfcRequest && _nfcCardTapsEnabled) ...{
+            'tapGoesToUrl': _tapDestinationUrl(),
+            'tapRatePerTap': _tapRatePerTap,
+            'tapCap': _tapCap,
+          },
+          'links': _brandLinks
+              .where(
+                (l) =>
+                    l.labelCtrl.text.trim().isNotEmpty ||
+                    l.urlCtrl.text.trim().isNotEmpty,
+              )
+              .map(
+                (l) => <String, dynamic>{
+                  'label': l.labelCtrl.text.trim(),
+                  'url': l.urlCtrl.text.trim(),
+                  'isTapDestination': l.isTapDestination,
+                },
+              )
+              .toList(growable: false),
+          'wording': <String, dynamic>{
+            'mustInclude': List<String>.from(_requiredPhrases),
+            'talkingPoints': _talkingPointsCtrl.text.trim(),
+            'doNotSay': List<String>.from(_forbiddenPhrases),
+          },
+          'pricing': <String, dynamic>{
+            'baseFee': _baseFee,
+            'repostDuration': _repostDuration.name,
+            'repostDurationPercent': _repostDuration.percent,
+            'repostFeeAmount': _repostFeeAmount,
+            'competingBrandsWindow': _competingBrandsWindow.name,
+            'competingBrandsPercent': _competingBrandsWindow.percent,
+            'competingBrandsFeeAmount': _competingBrandsFeeAmount,
+            'runAsAd': _runAsAd,
+            'paidAdsFeeAmount': _paidAdsFeeAmount,
+            'dueOnSigning':
+                _baseFee + _repostFeeAmount + _competingBrandsFeeAmount,
+          },
+        },
       };
 
-      await _insertCompanyCustomRequestRow(
-        requestId: requestId,
-        summary: summary,
-        details: details,
-        companyUid: uid,
-      );
-      final uploadedPhotoUrls = await _uploadInspirationPhotos(
-        orderId: requestId,
-        companyUid: uid,
-      );
-      final photosUploadIncomplete =
-          selectedPhotoCount > 0 &&
-          uploadedPhotoUrls.length < selectedPhotoCount;
-      await _attachUploadedInspirationPhotos(
-        requestId: requestId,
-        photos: uploadedPhotoUrls,
-        summary: summary,
-        details: details,
-      );
-      if (photosUploadIncomplete) {
-        await _markPhotoUploadFailed(
+      if (isDraft) {
+        for (final key in const [
+          'status',
+          'brandStatus',
+          'clientStatus',
+          'artistStatus',
+        ]) {
+          summary[key] = 'draft';
+          details[key] = 'draft';
+        }
+      }
+
+      final isFirstSave = _draftRequestId == null;
+      if (isFirstSave) {
+        await _insertCompanyCustomRequestRow(
           requestId: requestId,
-          uploadedCount: uploadedPhotoUrls.length,
-          selectedCount: selectedPhotoCount,
+          summary: summary,
+          details: details,
+          companyUid: uid,
+        );
+      } else {
+        await _updateCompanyCustomRequestRow(
+          requestId: requestId,
+          summaryUpdate: summary,
+          detailsUpdate: details,
+        );
+      }
+
+      // Inspiration photos live only in step 1's section -- upload once,
+      // on whichever call is the first persistence of this row. Step 2's
+      // final submit reuses the same requestId, so the URLs already
+      // computed above (plannedInspirationPhotos) match what's already
+      // in storage; nothing left to upload.
+      if (isFirstSave) {
+        final uploadedPhotoUrls = await _uploadInspirationPhotos(
+          orderId: requestId,
+          companyUid: uid,
+        );
+        final photosUploadIncomplete =
+            selectedPhotoCount > 0 &&
+            uploadedPhotoUrls.length < selectedPhotoCount;
+        await _attachUploadedInspirationPhotos(
+          requestId: requestId,
+          photos: uploadedPhotoUrls,
           summary: summary,
           details: details,
         );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Only ${uploadedPhotoUrls.length} of $selectedPhotoCount inspiration photos uploaded. The request was submitted.',
-              ),
-            ),
+        if (photosUploadIncomplete) {
+          await _markPhotoUploadFailed(
+            requestId: requestId,
+            uploadedCount: uploadedPhotoUrls.length,
+            selectedCount: selectedPhotoCount,
+            summary: summary,
+            details: details,
           );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Only ${uploadedPhotoUrls.length} of $selectedPhotoCount inspiration photos uploaded.',
+                ),
+              ),
+            );
+          }
         }
       }
+
+      if (isDraft) {
+        _draftRequestId = requestId;
+        if (!mounted) return;
+        // Leaving step 2 (Brand Collaboration): if the brand actually
+        // priced the offer, use that as the starting point for step 3's
+        // client budget range instead of the generic $15-$50,000 default.
+        final leavingBrandCollaboration = _currentStep == 2;
+        setState(() {
+          if (leavingBrandCollaboration) {
+            final dueOnDelivery =
+                _baseFee + _repostFeeAmount + _competingBrandsFeeAmount;
+            if (dueOnDelivery > 0) {
+              _clientBudget = RangeValues(
+                _clientBudget.start,
+                dueOnDelivery.clamp(_clientBudget.start, 50000),
+              );
+              _clientBudgetMaxIsSet = true;
+            }
+          }
+          _currentStep += 1;
+        });
+        return;
+      }
+
+      // Notifications only fire on the final submit -- notifying an
+      // artist/client about a request that's still missing budget/
+      // shipping (still on step 1) would be premature.
       if (isOpenToClientPool) {
         unawaited(
           _notifyScenarioOneOnBrandSubmit(
@@ -2220,9 +2502,15 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       _closeAfterSuccessfulSubmit();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to submit request: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isDraft
+                ? 'Failed to save request: $e'
+                : 'Failed to submit request: $e',
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -2759,6 +3047,1251 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     return resolved;
   }
 
+  Widget _stepperButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _requestSnow,
+          border: Border.all(
+            color: AppColors.blackCat.withValues(alpha: enabled ? 0.35 : 0.15),
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: AppColors.blackCat.withValues(alpha: enabled ? 1 : 0.3),
+        ),
+      ),
+    );
+  }
+
+  Widget _postCountRow({
+    required String title,
+    required String subtitle,
+    required int count,
+    required ValueChanged<int> onChanged,
+    int step = 1,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          _stepperButton(
+            icon: Icons.remove,
+            onTap: count > 0
+                ? () => onChanged(count - step < 0 ? 0 : count - step)
+                : null,
+          ),
+          SizedBox(
+            width: count >= 100 ? 44 : 32,
+            child: Text(
+              '$count',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+            ),
+          ),
+          _stepperButton(icon: Icons.add, onTap: () => onChanged(count + step)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tapRateOption({
+    required String amountLabel,
+    required String subLabel,
+    required double? rate,
+  }) {
+    final selected = _tapRatePerTap == rate;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _tapRatePerTap = rate),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? AppColors.blackCat : _requestSnow,
+            border: Border.all(
+              color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                amountLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: selected ? AppColors.snow : AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Arial',
+                  color: (selected ? AppColors.snow : AppColors.blackCat)
+                      .withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tapGoesHerePill(int index) {
+    final selected = _brandLinks[index].isTapDestination;
+    return InkWell(
+      // Once a link is saved as the tap destination its pill locks in --
+      // no more tapping it away. Picking a different link's pill is what
+      // moves the destination instead.
+      onTap: selected ? null : () => _setBrandLinkTapDestination(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.blackCat : _requestSnow,
+          border: Border.all(
+            color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
+          ),
+        ),
+        child: Text(
+          'TAP GOES HERE',
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arial',
+            letterSpacing: 0.6,
+            color: selected
+                ? AppColors.snow
+                : AppColors.blackCat.withValues(alpha: 0.55),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _brandLinkRow(int index) {
+    final entry = _brandLinks[index];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: entry.labelCtrl,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                    color: AppColors.blackCat,
+                  ),
+                  decoration: const InputDecoration(
+                    isCollapsed: true,
+                    filled: false,
+                    border: InputBorder.none,
+                    hintText: 'Label, e.g. Shop the set',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _tapGoesHerePill(index),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+                onPressed: () => _removeBrandLink(index),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                splashRadius: 18,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: entry.urlCtrl,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Arial',
+              color: AppColors.blackCat.withValues(alpha: 0.6),
+            ),
+            decoration: const InputDecoration(
+              isCollapsed: true,
+              filled: false,
+              border: InputBorder.none,
+              hintText: 'yourbrand.com/…',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _brandLinksSection() {
+    final atMax = _brandLinks.length >= _maxBrandLinks;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                "Links you're giving her",
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+            Text(
+              '${_brandLinks.length}/$_maxBrandLinks links',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Arial',
+                color: AppColors.blackCat.withValues(alpha: 0.55),
+              ),
+            ),
+          ],
+        ),
+        if (_brandLinks.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: _requestSnow,
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < _brandLinks.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      color: AppColors.blackCat.withValues(alpha: 0.12),
+                      height: 1,
+                    ),
+                  _brandLinkRow(i),
+                ],
+              ],
+            ),
+          ),
+        ],
+        if (!atMax) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  letterSpacing: 0.4,
+                ),
+              ),
+              onPressed: _addBrandLink,
+              child: const Text(
+                '+ ADD A LINK',
+                style: TextStyle(color: AppColors.snow),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        Text(
+          "Every link is rewritten with her tracking code before it reaches "
+          "her, so clicks and taps land in the right column.",
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Arial',
+            color: AppColors.blackCat.withValues(alpha: 0.55),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _phraseChip(String text, VoidCallback onRemove) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _requestSnow,
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Arial',
+              color: AppColors.blackCat,
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: onRemove,
+            child: Icon(
+              Icons.close_rounded,
+              size: 14,
+              color: AppColors.blackCat.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _phraseChipInput({
+    required TextEditingController controller,
+    required VoidCallback onSubmit,
+  }) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.2)),
+    );
+    return TextField(
+      controller: controller,
+      style: const TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        fontFamily: 'Arial',
+        color: AppColors.blackCat,
+      ),
+      textInputAction: TextInputAction.done,
+      decoration: InputDecoration(
+        hintText: 'Type a phrase, press enter',
+        filled: true,
+        fillColor: _requestSnow,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
+        border: border,
+        enabledBorder: border,
+        focusedBorder: border.copyWith(
+          borderSide: const BorderSide(color: AppColors.blackCat),
+        ),
+      ),
+      onSubmitted: (_) => onSubmit(),
+    );
+  }
+
+  Widget _wordingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
+        const SizedBox(height: 14),
+        const Text(
+          'Wording',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'She must include',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_requiredPhrases.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < _requiredPhrases.length; i++)
+                _phraseChip(
+                  _requiredPhrases[i],
+                  () => _removePhrase(_requiredPhrases, i),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        _phraseChipInput(
+          controller: _requiredPhraseCtrl,
+          onSubmit: () => _addPhrase(_requiredPhrases, _requiredPhraseCtrl),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          "Talking points, if she wants them",
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _talkingPointsCtrl,
+          minLines: 3,
+          maxLines: 6,
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Arial',
+            color: AppColors.blackCat,
+          ),
+          decoration: InputDecoration(
+            hintText:
+                'e.g. Lasts 10+ days on natural nails. Reusable up to 4 '
+                'times with a fresh glue tab.',
+            filled: true,
+            fillColor: _requestSnow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(
+                color: AppColors.blackCat.withValues(alpha: 0.2),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          "Please don't say",
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_forbiddenPhrases.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < _forbiddenPhrases.length; i++)
+                _phraseChip(
+                  _forbiddenPhrases[i],
+                  () => _removePhrase(_forbiddenPhrases, i),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        _phraseChipInput(
+          controller: _forbiddenPhraseCtrl,
+          onSubmit: () => _addPhrase(_forbiddenPhrases, _forbiddenPhraseCtrl),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '#ad and the paid partnership label are required by law and '
+          'already in the agreement. Everything here is on top of that.',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            fontFamily: 'Arial',
+            color: AppColors.blackCat.withValues(alpha: 0.55),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pricingOptionTile({
+    required String label,
+    required String subLabel,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? AppColors.blackCat : _requestSnow,
+            border: Border.all(
+              color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: selected ? AppColors.snow : AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  color: (selected ? AppColors.snow : AppColors.blackCat)
+                      .withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pricingOptionRow<T>({
+    required List<T> options,
+    required T selectedValue,
+    required String Function(T) labelOf,
+    required String Function(T) subLabelOf,
+    required ValueChanged<T> onSelected,
+  }) {
+    return Row(
+      children: [
+        for (var i = 0; i < options.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          _pricingOptionTile(
+            label: labelOf(options[i]),
+            subLabel: subLabelOf(options[i]),
+            selected: options[i] == selectedValue,
+            onTap: () => setState(() => onSelected(options[i])),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _pricingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
+        const SizedBox(height: 14),
+        const Text(
+          'Pricing',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Base Fee',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _baseFeeCtrl,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+          decoration: InputDecoration(
+            prefixText: '\$ ',
+            prefixStyle: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              color: AppColors.blackCat,
+            ),
+            hintText: '0',
+            filled: true,
+            fillColor: _requestSnow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(
+                color: AppColors.blackCat.withValues(alpha: 0.2),
+              ),
+            ),
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'How long you can repost it',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+            Text(
+              'Standard',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Arial',
+                color: AppColors.blackCat.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _pricingOptionRow<_RepostDuration>(
+          options: _RepostDuration.values,
+          selectedValue: _repostDuration,
+          labelOf: (d) => d.label,
+          subLabelOf: (d) => d.subLabel,
+          onSelected: (d) => _repostDuration = d,
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'No competing brands for',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _pricingOptionRow<_CompetingBrandsWindow>(
+          options: _CompetingBrandsWindow.values,
+          selectedValue: _competingBrandsWindow,
+          labelOf: (w) => w.label,
+          subLabelOf: (w) => w.subLabel,
+          onSelected: (w) => _competingBrandsWindow = w,
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Paid Ads',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Arialbold',
+            color: AppColors.blackCat,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _requestSnow,
+            border: Border.all(
+              color: AppColors.blackCat.withValues(alpha: 0.15),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Run it as an ad',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Arialbold',
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Puts her face and handle behind your ad spend. "
+                      "Priced separately because it's a different deal.",
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Arial',
+                        color: AppColors.blackCat.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    if (_runAsAd) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '60% of base fee: \$${_paidAdsFeeAmount.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Arialbold',
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Switch(
+                value: _runAsAd,
+                activeThumbColor: AppColors.blackCat,
+                inactiveThumbColor: AppColors.blackCatLight,
+                inactiveTrackColor: AppColors.blackCatLight.withValues(
+                  alpha: 0.35,
+                ),
+                onChanged: (v) => setState(() => _runAsAd = v),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _costRow(String label, String amount, {bool isBase = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Arial',
+                color: AppColors.snow.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+          Text(
+            isBase ? '\$$amount' : '+\$$amount',
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              color: AppColors.snow,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _costBreakdownSection() {
+    final total = _baseFee + _repostFeeAmount + _competingBrandsFeeAmount;
+    final maxTapBonus = _tapCap * (_tapRatePerTap ?? 0);
+    final showTapBonus =
+        _nfcRequest &&
+        _nfcCardTapsEnabled &&
+        (_tapRatePerTap ?? 0) > 0 &&
+        _tapCap > 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: AppColors.blackCat,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'WHAT THIS COSTS YOU',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arial',
+              letterSpacing: 1,
+              color: AppColors.snow.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _costRow('Base fee', _baseFee.toStringAsFixed(0), isBase: true),
+          if (_repostFeeAmount > 0)
+            _costRow(
+              'Reposting, ${_repostDuration.label}',
+              _repostFeeAmount.toStringAsFixed(0),
+            ),
+          if (_competingBrandsFeeAmount > 0)
+            _costRow(
+              'Exclusivity, ${_competingBrandsWindow.label}',
+              _competingBrandsFeeAmount.toStringAsFixed(0),
+            ),
+          if (_runAsAd)
+            _costRow('Paid Ads Fee', _paidAdsFeeAmount.toStringAsFixed(0)),
+          Divider(color: AppColors.snow.withValues(alpha: 0.2), height: 22),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Text(
+                  'DUE ON DELIVERY',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arial',
+                    letterSpacing: 1,
+                    color: AppColors.snow.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+              Text(
+                '\$${total.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: AppColors.snow,
+                ),
+              ),
+            ],
+          ),
+          if (showTapBonus) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Plus up to \$${maxTapBonus.toStringAsFixed(0)} in tap '
+              'bonuses — $_tapCap taps × '
+              '\$${_tapRatePerTap!.toStringAsFixed(2)}, billed monthly as '
+              'they happen.',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Arial',
+                color: AppColors.snow.withValues(alpha: 0.6),
+                height: 1.3,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Arial',
+                color: AppColors.blackCat.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              color: AppColors.blackCat,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _repostDurationDisplay {
+    switch (_repostDuration) {
+      case _RepostDuration.threeMonths:
+        return '3 months';
+      case _RepostDuration.sixMonths:
+        return '6 months';
+      case _RepostDuration.twelveMonths:
+        return '12 months';
+      case _RepostDuration.forever:
+        return 'Forever';
+    }
+  }
+
+  Widget _whatSheSeesSection() {
+    final total = _baseFee + _repostFeeAmount + _competingBrandsFeeAmount;
+    final linksToUse = _brandLinks
+        .where(
+          (l) =>
+              l.labelCtrl.text.trim().isNotEmpty ||
+              l.urlCtrl.text.trim().isNotEmpty,
+        )
+        .length;
+    final postsDue = _revealDateCtrl.text.trim().isNotEmpty
+        ? _revealDateCtrl.text.trim()
+        : 'Not set';
+    final showPerTap = _nfcRequest && _nfcCardTapsEnabled;
+    final perTapValue = _tapRatePerTap == null
+        ? 'Flat'
+        : '\$${_tapRatePerTap!.toStringAsFixed(2)} · cap $_tapCap';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _requestSnow,
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "WHAT SHE'LL SEE",
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arial',
+              letterSpacing: 1,
+              color: AppColors.blackCat.withValues(alpha: 0.5),
+            ),
+          ),
+          const SizedBox(height: 6),
+          _summaryRow('Her fee', '\$${total.toStringAsFixed(0)}'),
+          _summaryRow('Posts due', postsDue),
+          if (showPerTap) _summaryRow('Per card tap', perTapValue),
+          _summaryRow('Links to use', '$linksToUse'),
+          _summaryRow('Required wording', '${_requiredPhrases.length} phrases'),
+          _summaryRow('You can repost for', _repostDurationDisplay),
+          _summaryRow('No competing brands', _competingBrandsWindow.label),
+          if (_runAsAd)
+            _summaryRow(
+              'Paid Ads Fee',
+              '\$${_paidAdsFeeAmount.toStringAsFixed(0)}',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _brandCollaborationSection() {
+    if (!_brandCollaborationExpanded) {
+      return SizedBox(
+        height: 46,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.blackCat,
+            foregroundColor: AppColors.snow,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero,
+            ),
+            textStyle: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Arial',
+            ),
+          ),
+          onPressed: () => setState(() => _brandCollaborationExpanded = true),
+          child: const Text(
+            'New Offer',
+            style: TextStyle(color: AppColors.snow),
+          ),
+        ),
+      );
+    }
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Posts',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
+              ),
+              Text(
+                '${_reelPostCount + _storiesPostCount + _carouselPostCount + _tiktokPostCount} posts',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Collapse',
+                icon: Icon(
+                  Icons.expand_less_rounded,
+                  size: 20,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+                onPressed: () =>
+                    setState(() => _brandCollaborationExpanded = false),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                splashRadius: 18,
+              ),
+            ],
+          ),
+          Divider(
+            color: AppColors.blackCat.withValues(alpha: 0.12),
+            height: 18,
+          ),
+          _postCountRow(
+            title: 'Instagram Reel',
+            subtitle: '30-60 sec, full application',
+            count: _reelPostCount,
+            onChanged: (v) => setState(() => _reelPostCount = v),
+          ),
+          Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
+          _postCountRow(
+            title: 'Instagram Stories',
+            subtitle: 'With link sticker',
+            count: _storiesPostCount,
+            onChanged: (v) => setState(() => _storiesPostCount = v),
+          ),
+          Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
+          _postCountRow(
+            title: 'Carousel post',
+            subtitle: '3-5 images',
+            count: _carouselPostCount,
+            onChanged: (v) => setState(() => _carouselPostCount = v),
+          ),
+          Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
+          _postCountRow(
+            title: 'TikTok',
+            subtitle: 'Cross-post allowed',
+            count: _tiktokPostCount,
+            onChanged: (v) => setState(() => _tiktokPostCount = v),
+          ),
+          if (_nfcRequest) ...[
+            const SizedBox(height: 6),
+            Divider(
+              color: AppColors.blackCat.withValues(alpha: 0.12),
+              height: 18,
+            ),
+            const Text(
+              'In Person',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _requestSnow,
+                    border: Border.all(
+                      color: AppColors.blackCat.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.nfc_rounded,
+                    size: 18,
+                    color: AppColors.blackCat.withValues(alpha: 0.75),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'NFC card taps',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Arialbold',
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'She keeps a card at her chair. A client taps it, '
+                        'your page opens on their phone, the tap is '
+                        'credited to her.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          fontFamily: 'Arial',
+                          color: AppColors.blackCat.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: _nfcCardTapsEnabled,
+                  activeThumbColor: AppColors.blackCat,
+                  inactiveThumbColor: AppColors.blackCatLight,
+                  inactiveTrackColor: AppColors.blackCatLight.withValues(
+                    alpha: 0.35,
+                  ),
+                  onChanged: (v) => setState(() => _nfcCardTapsEnabled = v),
+                ),
+              ],
+            ),
+            if (_nfcCardTapsEnabled) ...[
+              const SizedBox(height: 16),
+              Divider(
+                color: AppColors.blackCat.withValues(alpha: 0.12),
+                height: 1,
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                "How she's paid for taps",
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: AppColors.blackCat,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _tapRateOption(
+                    amountLabel: 'Flat',
+                    subLabel: 'No bonus',
+                    rate: null,
+                  ),
+                  const SizedBox(width: 8),
+                  _tapRateOption(
+                    amountLabel: '\$0.50',
+                    subLabel: 'Per tap',
+                    rate: 0.5,
+                  ),
+                  const SizedBox(width: 8),
+                  _tapRateOption(
+                    amountLabel: '\$1.00',
+                    subLabel: 'Per tap',
+                    rate: 1.0,
+                  ),
+                  const SizedBox(width: 8),
+                  _tapRateOption(
+                    amountLabel: '\$2.00',
+                    subLabel: 'Per tap',
+                    rate: 2.0,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              _postCountRow(
+                title: 'Tap cap',
+                subtitle: 'Protects you if a tap goes viral',
+                count: _tapCap,
+                step: 50,
+                onChanged: (v) => setState(() => _tapCap = v),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Taps are counted once per phone per day, so one client "
+                "can't run up the total.",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Arial',
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 18),
+          _brandLinksSection(),
+          const SizedBox(height: 18),
+          _wordingSection(),
+          const SizedBox(height: 18),
+          _pricingSection(),
+          const SizedBox(height: 18),
+          _costBreakdownSection(),
+          const SizedBox(height: 18),
+          _whatSheSeesSection(),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final baseTheme = Theme.of(context);
@@ -2839,811 +4372,100 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Campaign Details',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                  color: AppColors.blackCat,
-                ),
+              const SizedBox(height: 4),
+              StepProgressBar(
+                current: _currentStep,
+                total: 3,
+                stepLabels: const ['Details', 'Collaboration', 'Budget'],
+                sectionSubtitle: '',
               ),
-              const SizedBox(height: 10),
-              _Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _fieldLabel('Campaign / Collection Name *'),
-                    const SizedBox(height: 2),
-                    _InputField(
-                      controller: _campaignNameCtrl,
-                      hint: 'e.g. Spring 2025 Heritage Collection',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      focusNode: _campaignNameFocusNode,
-                    ),
-                    const SizedBox(height: 2),
-                    _fieldLabel('Need By Date *'),
-                    const SizedBox(height: 2),
-                    _DateField(
-                      controller: _dateCtrl,
-                      onCalendarTap: _pickDate,
-                      onChanged: (value) {
-                        final parsed = _tryParseMmDdYyyy(value);
-                        setState(() {
-                          _needBy = parsed;
-                          if (_jntRevealDate != null &&
-                              (_needBy == null ||
-                                  !_jntRevealDate!.isAfter(_needBy!))) {
-                            _jntRevealDate = null;
-                            _revealDateCtrl.clear();
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 2),
-                    _fieldLabel(
-                      'JNT reveal Date (Date the artwork is published publicly)',
-                    ),
-                    const SizedBox(height: 2),
-                    _DateField(
-                      controller: _revealDateCtrl,
-                      onCalendarTap: _pickRevealDate,
-                      onChanged: (value) {
-                        final parsed = _tryParseMmDdYyyy(value);
-                        setState(() {
-                          _jntRevealDate =
-                              parsed != null &&
-                                  _needBy != null &&
-                                  parsed.isAfter(_needBy!)
-                              ? parsed
-                              : null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 2),
-                    _fieldLabel('Description *'),
-                    const SizedBox(height: 2),
-                    _TextArea(
-                      controller: _descCtrl,
-                      hint:
-                          'Describe your campaign vision, color palette, cultural references, and any specific design requirements...',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Inspiration & References',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Upload mood board photos, artwork scans, or reference images.',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _Card(
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _uploadReferenceImages,
-                            icon: const Icon(
-                              Icons.photo_library_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Gallery'),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                              backgroundColor: AppColors.blackCat.withValues(
-                                alpha: 0.12,
-                              ),
-                              foregroundColor: AppColors.blackCat,
-                              textStyle: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Arial',
-                              ),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _captureReferenceImage,
-                            icon: const Icon(
-                              Icons.photo_camera_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Camera'),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              textStyle: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Arial',
-                              ),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo. Maximum 10 photos.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'Arial',
-                          color: AppColors.blackCat.withValues(alpha: 0.58),
-                        ),
-                      ),
-                    ),
-                    if (_uploadedFiles.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _uploadedFiles
-                              .map((file) {
-                                return Stack(
-                                  children: [
-                                    Container(
-                                      width: 74,
-                                      height: 74,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: AppColors.blackCat.withValues(
-                                            alpha: 0.25,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Image.memory(
-                                        file.bytes,
-                                        fit: BoxFit.cover,
-                                        // Cap decode resolution to the
-                                        // thumbnail's actual display size
-                                        // (74x74) instead of full native
-                                        // camera resolution — undecoded full
-                                        // resolution across several
-                                        // thumbnails at once is what drove an
-                                        // EXC_RESOURCE memory crash elsewhere
-                                        // in the app.
-                                        cacheWidth: 150,
-                                        cacheHeight: 150,
-                                        errorBuilder: (_, _, _) => const Icon(
-                                          Icons.broken_image_outlined,
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      right: 2,
-                                      top: 2,
-                                      child: Semantics(
-                                        button: true,
-                                        label: 'Remove photo',
-                                        onTap: () => setState(
-                                          () => _uploadedFiles.remove(file),
-                                        ),
-                                        child: ExcludeSemantics(
-                                          child: InkWell(
-                                            onTap: () => setState(
-                                              () => _uploadedFiles.remove(file),
-                                            ),
-                                            child: Container(
-                                              color: AppColors.snow,
-                                              padding: const EdgeInsets.all(2),
-                                              child: const Icon(
-                                                Icons.close,
-                                                size: 14,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              })
-                              .toList(growable: false),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Who receives the order?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
-              const SizedBox(height: 10),
-              _Card(
-                child: Column(
-                  children: [
-                    CheckboxListTile(
-                      value: _nfcRequest,
-                      activeColor: AppColors.blackCat,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: const Text(
-                        'NFC request',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'Arial',
-                          color: AppColors.blackCat,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Only clients with one or more nail dimensions of 8 mm or more are eligible.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'Arial',
-                          color: AppColors.blackCat.withValues(alpha: 0.62),
-                        ),
-                      ),
-                      onChanged: (v) => _setNfcRequest(v ?? false),
-                    ),
-                    const SizedBox(height: 8),
-                    _OptionCard(
-                      selected:
-                          _clientRecipientMode == _ClientRecipientMode.pool,
-                      title: 'Open to client pool',
-                      badge: 'POOL',
-                      subtitle:
-                          'Any client in the marketplace can claim this request. First to accept proceeds.',
-                      onTap: () => setState(
-                        () => _clientRecipientMode = _ClientRecipientMode.pool,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _OptionCard(
-                      selected:
-                          _clientRecipientMode ==
-                          _ClientRecipientMode.specificClient,
-                      title: 'Designate a specific client',
-                      badge: 'DIRECT',
-                      subtitle:
-                          'Only this client will see and be able to accept the request.',
-                      onTap: () {
-                        setState(
-                          () => _clientRecipientMode =
-                              _ClientRecipientMode.specificClient,
-                        );
-                        _focusAfterBuild(_requestedClientFocusNode);
-                        unawaited(_loadSelectionSources());
-                      },
-                    ),
-                    if (_clientRecipientMode ==
-                        _ClientRecipientMode.specificClient)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: _SearchableSelectField(
-                          value: _requestedClient ?? '',
-                          hint: 'Select Client',
-                          items: _nfcFilteredBrandPartnerClients,
-                          focusNode: _requestedClientFocusNode,
-                          onChanged: (v) => setState(
-                            () => _requestedClient = v.trim().isEmpty
-                                ? null
-                                : v.trim(),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 10),
-                    _OptionCard(
-                      selected:
-                          _clientRecipientMode ==
-                          _ClientRecipientMode.groupClients,
-                      title: 'Group clients (up to 15)',
-                      badge: 'DIRECT',
-                      subtitle:
-                          'Send to a curated list. Each client receives and accepts their own request.',
-                      onTap: () {
-                        setState(
-                          () => _clientRecipientMode =
-                              _ClientRecipientMode.groupClients,
-                        );
-                        _focusAfterBuild(_groupClientFocusNode);
-                        unawaited(_loadSelectionSources());
-                      },
-                    ),
-                    if (_clientRecipientMode ==
-                        _ClientRecipientMode.groupClients) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _SearchableSelectField(
-                              // Keyed only on the selected-count, not on the
-                              // in-progress query text: this field must reset
-                              // (clear its text) after "Add" changes the
-                              // selection, but must NOT be torn down and
-                              // recreated on every keystroke -- doing so
-                              // discarded and rebuilt the Autocomplete/
-                              // FocusNode wiring on every character typed,
-                              // which could leave duplicate stale focus
-                              // listeners registered on the shared external
-                              // FocusNode (a rebuild churn bug, not a text
-                              // filtering requirement).
-                              key: ValueKey<int>(_groupClientFieldResetTick),
-                              value: _groupClientToAdd,
-                              hint: 'Select clients',
-                              focusNode: _groupClientFocusNode,
-                              items: _nfcFilteredBrandPartnerClients
-                                  .where(
-                                    (name) => !_groupSelectedClients.any(
-                                      (picked) =>
-                                          picked.toLowerCase() ==
-                                          name.toLowerCase(),
-                                    ),
-                                  )
-                                  .toList(growable: false),
-                              onChanged: (v) =>
-                                  setState(() => _groupClientToAdd = v.trim()),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: _addGroupClientSelection,
-                              style: ElevatedButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                                backgroundColor: AppColors.blackCat,
-                                foregroundColor: AppColors.snow,
-                                textStyle: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Arial',
-                                ),
-                              ),
-                              child: const Text('Add'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_groupSelectedClients.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: _groupSelectedClients
-                                .map((name) {
-                                  return MergeSemantics(
-                                    child: Semantics(
-                                      button: true,
-                                      label: 'Remove $name',
-                                      onTap: () => setState(
-                                        () =>
-                                            _groupSelectedClients.remove(name),
-                                      ),
-                                      child: ExcludeSemantics(
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.zero,
-                                          onTap: () => setState(
-                                            () => _groupSelectedClients.remove(
-                                              name,
-                                            ),
-                                          ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 2,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  name,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w500,
-                                                    fontFamily: 'Arial',
-                                                    color: AppColors.blackCat,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                const Icon(
-                                                  Icons.close_rounded,
-                                                  size: 14,
-                                                  color: AppColors.blackCat,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                })
-                                .toList(growable: false),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Who creates the design?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
-              const SizedBox(height: 10),
-              _Card(
-                child: Column(
-                  children: [
-                    _OptionCard(
-                      selected: _designCreatorMode == _DesignCreatorMode.pool,
-                      title: 'Open to artist pool',
-                      badge: 'POOL',
-                      subtitle:
-                          'Any qualified artist can accept and fulfill this request.',
-                      onTap: () => setState(
-                        () => _designCreatorMode = _DesignCreatorMode.pool,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _OptionCard(
-                      selected:
-                          _designCreatorMode ==
-                          _DesignCreatorMode.specificArtist,
-                      title: 'Request a specific artist',
-                      badge: 'DIRECT',
-                      subtitle:
-                          'Only this artist will receive the request. If declined, it returns to the artist pool.',
-                      onTap: () {
-                        setState(
-                          () => _designCreatorMode =
-                              _DesignCreatorMode.specificArtist,
-                        );
-                        _focusAfterBuild(_requestedArtistFocusNode);
-                      },
-                    ),
-                    if (_designCreatorMode == _DesignCreatorMode.specificArtist)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _SearchableSelectField(
-                              value: _requestedArtist ?? '',
-                              hint: 'Select Artist',
-                              items: _nfcFilteredDirectRequestArtists,
-                              focusNode: _requestedArtistFocusNode,
-                              onChanged: (v) => setState(
-                                () => _requestedArtist = v.trim().isEmpty
-                                    ? null
-                                    : v.trim(),
-                              ),
-                            ),
-                            if ((_requestedArtist ?? '').trim().isNotEmpty) ...[
-                              const SizedBox(height: 14),
-                              Text(
-                                'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w400,
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.75,
-                                  ),
-                                  height: 1.2,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  ChoiceChip(
-                                    label: const Text(
-                                      'Yes',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                    selected: _fallbackToPool == true,
-                                    selectedColor: AppColors.blackCat,
-                                    backgroundColor: _requestSnow,
-                                    checkmarkColor: AppColors.snow,
-                                    onSelected: (_) =>
-                                        setState(() => _fallbackToPool = true),
-                                    labelStyle: TextStyle(
-                                      fontWeight: FontWeight.w400,
-                                      color: _fallbackToPool == true
-                                          ? AppColors.snow
-                                          : AppColors.blackCat,
-                                    ),
-                                    side: BorderSide(
-                                      color: AppColors.blackCat.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  ChoiceChip(
-                                    label: const Text(
-                                      'No',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                    selected: _fallbackToPool == false,
-                                    selectedColor: AppColors.blackCat,
-                                    backgroundColor: _requestSnow,
-                                    checkmarkColor: AppColors.snow,
-                                    onSelected: (_) =>
-                                        setState(() => _fallbackToPool = false),
-                                    labelStyle: TextStyle(
-                                      fontWeight: FontWeight.w400,
-                                      color: _fallbackToPool == false
-                                          ? AppColors.snow
-                                          : AppColors.blackCat,
-                                    ),
-                                    side: BorderSide(
-                                      color: AppColors.blackCat.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Client Budget Range',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Set the budget range for each client',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _BudgetCard(
-                values: _clientBudget,
-                maxValue: 50000,
-                onChanged: (v) => setState(() => _clientBudget = v),
-                onChangeEnd: (_) {},
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Artist Budget Range',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Set the artist budget range.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                ),
-              ),
-              const SizedBox(height: 10),
-              _BudgetCard(
-                values: _artistBudget,
-                maxValue: 5000,
-                displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
-                onChanged: (v) => setState(() => _artistBudget = v),
-                onChangeEnd: (_) {},
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Where you want the Art work to be Shipped?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
-              const SizedBox(height: 10),
-              _Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _shippingDestinationOption(
-                      label: 'Ship to client directly',
-                      value: _ShippingDestination.clientDirectly,
-                    ),
-                    const SizedBox(height: 6),
-                    _shippingDestinationOption(
-                      label: 'Ship to Brand Mailing Address',
-                      value: _ShippingDestination.brandMailingAddress,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _shippingAddressDifferentFromProfile,
-                          activeColor: AppColors.blackCat,
-                          onChanged: (v) => setState(
-                            () => _shippingAddressDifferentFromProfile =
-                                v ?? false,
-                          ),
-                        ),
-                        const Expanded(
-                          child: Text(
-                            'Shipping address is different from profile',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Arial',
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_shippingAddressDifferentFromProfile) ...[
-                      const SizedBox(height: 6),
-                      _fieldLabel('Shipping Address *'),
-                      const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipStreetCtrl,
-                        hint: 'Street',
-                        minHeight: 52,
-                        verticalPadding: 14,
-                        onChanged: (_) => _autofillShippingAddressFromStreet(),
-                      ),
-                      if (_shipStreetSuggestionsLoading)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: LinearProgressIndicator(minHeight: 2),
-                        ),
-                      if (_shipStreetSuggestions.isNotEmpty)
-                        Builder(
-                          builder: (context) {
-                            final suggestionCount =
-                                _shipStreetSuggestions.length;
-                            final menuHeight =
-                                AutocompleteDropdownSizing.menuHeight(
-                                  itemCount: suggestionCount,
-                                  itemExtent: 40,
-                                );
-                            return Container(
-                              margin: const EdgeInsets.only(top: 8),
-                              decoration: BoxDecoration(
-                                color: _requestSnow,
-                                borderRadius: BorderRadius.zero,
-                                border: Border.all(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.20,
-                                  ),
-                                ),
-                              ),
-                              constraints: BoxConstraints(
-                                maxHeight: menuHeight,
-                              ),
-                              child: ListView.separated(
-                                shrinkWrap:
-                                    AutocompleteDropdownSizing.shrinkWrap(
-                                      suggestionCount,
-                                    ),
-                                physics:
-                                    AutocompleteDropdownSizing.scrollPhysics(
-                                      suggestionCount,
-                                    ),
-                                itemCount: suggestionCount,
-                                separatorBuilder: (_, _) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (_, i) => ListTile(
-                                  dense: true,
-                                  title: Text(
-                                    _shipStreetSuggestions[i].displayLabel,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  onTap: () => _selectShippingStreetSuggestion(
-                                    _shipStreetSuggestions[i],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipCityCtrl,
-                        hint: 'City',
-                        minHeight: 52,
-                        verticalPadding: 14,
-                      ),
-                      const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipStateCtrl,
-                        hint: 'State',
-                        minHeight: 52,
-                        verticalPadding: 14,
-                      ),
-                      const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipZipCtrl,
-                        hint: 'Zip',
-                        minHeight: 52,
-                        verticalPadding: 14,
-                      ),
-                      const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipCountryCtrl,
-                        hint: 'Country',
-                        minHeight: 52,
-                        verticalPadding: 14,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Center(
-                child: Text(
-                  'Nail Specifications',
+              if (_currentStep == 1) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Campaign Details',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    fontFamily: 'times-new-roman',
+                    fontFamily: 'Arialbold',
+                    color: AppColors.blackCat,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Set dimensions, shape and length for the press-on kit.',
+                const SizedBox(height: 10),
+                _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _fieldLabel('Campaign / Collection Name *'),
+                      const SizedBox(height: 2),
+                      _InputField(
+                        controller: _campaignNameCtrl,
+                        hint: 'e.g. Spring 2025 Heritage Collection',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                        focusNode: _campaignNameFocusNode,
+                      ),
+                      const SizedBox(height: 2),
+                      _fieldLabel('Need By Date *'),
+                      const SizedBox(height: 2),
+                      _DateField(
+                        controller: _dateCtrl,
+                        onCalendarTap: _pickDate,
+                        onChanged: (value) {
+                          final parsed = _tryParseMmDdYyyy(value);
+                          setState(() {
+                            _needBy = parsed;
+                            if (_jntRevealDate != null &&
+                                (_needBy == null ||
+                                    !_jntRevealDate!.isAfter(_needBy!))) {
+                              _jntRevealDate = null;
+                              _revealDateCtrl.clear();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 2),
+                      _fieldLabel(
+                        'JNT reveal Date (Date the artwork is published publicly)',
+                      ),
+                      const SizedBox(height: 2),
+                      _DateField(
+                        controller: _revealDateCtrl,
+                        onCalendarTap: _pickRevealDate,
+                        onChanged: (value) {
+                          final parsed = _tryParseMmDdYyyy(value);
+                          setState(() {
+                            _jntRevealDate =
+                                parsed != null &&
+                                    _needBy != null &&
+                                    parsed.isAfter(_needBy!)
+                                ? parsed
+                                : null;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 2),
+                      _fieldLabel('Description *'),
+                      const SizedBox(height: 2),
+                      _TextArea(
+                        controller: _descCtrl,
+                        hint:
+                            'Describe your campaign vision, color palette, cultural references, and any specific design requirements...',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Inspiration & References',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Upload mood board photos, artwork scans, or reference images.',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -3651,59 +4473,985 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                     color: AppColors.blackCat.withValues(alpha: 0.60),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: AppColors.blackCat.withValues(alpha: 0.75),
+                const SizedBox(height: 10),
+                _Card(
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _uploadReferenceImages,
+                              icon: const Icon(
+                                Icons.photo_library_outlined,
+                                size: 18,
+                              ),
+                              label: const Text('Gallery'),
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(0, 52),
+                                backgroundColor: AppColors.blackCat.withValues(
+                                  alpha: 0.12,
+                                ),
+                                foregroundColor: AppColors.blackCat,
+                                textStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Arial',
+                                ),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _captureReferenceImage,
+                              icon: const Icon(
+                                Icons.photo_camera_outlined,
+                                size: 18,
+                              ),
+                              label: const Text('Camera'),
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(0, 52),
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                textStyle: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Arial',
+                                ),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo. Maximum 10 photos.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Arial',
+                            color: AppColors.blackCat.withValues(alpha: 0.58),
+                          ),
+                        ),
+                      ),
+                      if (_uploadedFiles.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _uploadedFiles
+                                .map((file) {
+                                  return Stack(
+                                    children: [
+                                      Container(
+                                        width: 74,
+                                        height: 74,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.25),
+                                          ),
+                                        ),
+                                        child: Image.memory(
+                                          file.bytes,
+                                          fit: BoxFit.cover,
+                                          // Cap decode resolution to the
+                                          // thumbnail's actual display size
+                                          // (74x74) instead of full native
+                                          // camera resolution — undecoded full
+                                          // resolution across several
+                                          // thumbnails at once is what drove an
+                                          // EXC_RESOURCE memory crash elsewhere
+                                          // in the app.
+                                          cacheWidth: 150,
+                                          cacheHeight: 150,
+                                          errorBuilder: (_, _, _) => const Icon(
+                                            Icons.broken_image_outlined,
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 2,
+                                        top: 2,
+                                        child: Semantics(
+                                          button: true,
+                                          label: 'Remove photo',
+                                          onTap: () => setState(
+                                            () => _uploadedFiles.remove(file),
+                                          ),
+                                          child: ExcludeSemantics(
+                                            child: InkWell(
+                                              onTap: () => setState(
+                                                () =>
+                                                    _uploadedFiles.remove(file),
+                                              ),
+                                              child: Container(
+                                                color: AppColors.snow,
+                                                padding: const EdgeInsets.all(
+                                                  2,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  size: 14,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                })
+                                .toList(growable: false),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'For brand orders: the Client’s dimensions will be provided when they accept the request.',
-                      style: TextStyle(
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Who receives the order?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _Card(
+                  child: Column(
+                    children: [
+                      CheckboxListTile(
+                        value: _nfcRequest,
+                        activeColor: AppColors.blackCat,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: const Text(
+                          'NFC request',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Arial',
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Only clients with one or more nail dimensions of 8 mm or more are eligible.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Arial',
+                            color: AppColors.blackCat.withValues(alpha: 0.62),
+                          ),
+                        ),
+                        onChanged: (v) => _setNfcRequest(v ?? false),
+                      ),
+                      const SizedBox(height: 8),
+                      _OptionCard(
+                        selected:
+                            _clientRecipientMode == _ClientRecipientMode.pool,
+                        title: 'Open to client pool',
+                        badge: 'POOL',
+                        subtitle:
+                            'Any client in the marketplace can claim this request. First to accept proceeds.',
+                        onTap: () => setState(
+                          () =>
+                              _clientRecipientMode = _ClientRecipientMode.pool,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _OptionCard(
+                        selected:
+                            _clientRecipientMode ==
+                            _ClientRecipientMode.specificClient,
+                        title: 'Designate a specific client',
+                        badge: 'DIRECT',
+                        subtitle:
+                            'Only this client will see and be able to accept the request.',
+                        onTap: () {
+                          setState(
+                            () => _clientRecipientMode =
+                                _ClientRecipientMode.specificClient,
+                          );
+                          _focusAfterBuild(_requestedClientFocusNode);
+                          unawaited(_loadSelectionSources());
+                        },
+                      ),
+                      if (_clientRecipientMode ==
+                          _ClientRecipientMode.specificClient)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: _SearchableSelectField(
+                            value: _requestedClient ?? '',
+                            hint: 'Select Client',
+                            items: _nfcFilteredBrandPartnerClients,
+                            focusNode: _requestedClientFocusNode,
+                            onChanged: (v) => setState(
+                              () => _requestedClient = v.trim().isEmpty
+                                  ? null
+                                  : v.trim(),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 10),
+                      _OptionCard(
+                        selected:
+                            _clientRecipientMode ==
+                            _ClientRecipientMode.groupClients,
+                        title: 'Group clients (up to 15)',
+                        badge: 'DIRECT',
+                        subtitle:
+                            'Send to a curated list. Each client receives and accepts their own request.',
+                        onTap: () {
+                          setState(
+                            () => _clientRecipientMode =
+                                _ClientRecipientMode.groupClients,
+                          );
+                          _focusAfterBuild(_groupClientFocusNode);
+                          unawaited(_loadSelectionSources());
+                        },
+                      ),
+                      if (_clientRecipientMode ==
+                          _ClientRecipientMode.groupClients) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SearchableSelectField(
+                                // Keyed only on the selected-count, not on the
+                                // in-progress query text: this field must reset
+                                // (clear its text) after "Add" changes the
+                                // selection, but must NOT be torn down and
+                                // recreated on every keystroke -- doing so
+                                // discarded and rebuilt the Autocomplete/
+                                // FocusNode wiring on every character typed,
+                                // which could leave duplicate stale focus
+                                // listeners registered on the shared external
+                                // FocusNode (a rebuild churn bug, not a text
+                                // filtering requirement).
+                                key: ValueKey<int>(_groupClientFieldResetTick),
+                                value: _groupClientToAdd,
+                                hint: 'Select clients',
+                                focusNode: _groupClientFocusNode,
+                                items: _nfcFilteredBrandPartnerClients
+                                    .where(
+                                      (name) => !_groupSelectedClients.any(
+                                        (picked) =>
+                                            picked.toLowerCase() ==
+                                            name.toLowerCase(),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                                onChanged: (v) => setState(
+                                  () => _groupClientToAdd = v.trim(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: _addGroupClientSelection,
+                                style: ElevatedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  backgroundColor: AppColors.blackCat,
+                                  foregroundColor: AppColors.snow,
+                                  textStyle: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Arial',
+                                  ),
+                                ),
+                                child: const Text('Add'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_groupSelectedClients.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 12,
+                              runSpacing: 8,
+                              children: _groupSelectedClients
+                                  .map((name) {
+                                    return MergeSemantics(
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Remove $name',
+                                        onTap: () => setState(
+                                          () => _groupSelectedClients.remove(
+                                            name,
+                                          ),
+                                        ),
+                                        child: ExcludeSemantics(
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.zero,
+                                            onTap: () => setState(
+                                              () => _groupSelectedClients
+                                                  .remove(name),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 2,
+                                                  ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    name,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      fontFamily: 'Arial',
+                                                      color: AppColors.blackCat,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  const Icon(
+                                                    Icons.close_rounded,
+                                                    size: 14,
+                                                    color: AppColors.blackCat,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  })
+                                  .toList(growable: false),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Who creates the design?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _Card(
+                  child: Column(
+                    children: [
+                      _OptionCard(
+                        selected: _designCreatorMode == _DesignCreatorMode.pool,
+                        title: 'Open to artist pool',
+                        badge: 'POOL',
+                        subtitle:
+                            'Any qualified artist can accept and fulfill this request.',
+                        onTap: () => setState(
+                          () => _designCreatorMode = _DesignCreatorMode.pool,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _OptionCard(
+                        selected:
+                            _designCreatorMode ==
+                            _DesignCreatorMode.specificArtist,
+                        title: 'Request a specific artist',
+                        badge: 'DIRECT',
+                        subtitle:
+                            'Only this artist will receive the request. If declined, it returns to the artist pool.',
+                        onTap: () {
+                          setState(
+                            () => _designCreatorMode =
+                                _DesignCreatorMode.specificArtist,
+                          );
+                          _focusAfterBuild(_requestedArtistFocusNode);
+                        },
+                      ),
+                      if (_designCreatorMode ==
+                          _DesignCreatorMode.specificArtist)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SearchableSelectField(
+                                value: _requestedArtist ?? '',
+                                hint: 'Select Artist',
+                                items: _nfcFilteredDirectRequestArtists,
+                                focusNode: _requestedArtistFocusNode,
+                                onChanged: (v) => setState(
+                                  () => _requestedArtist = v.trim().isEmpty
+                                      ? null
+                                      : v.trim(),
+                                ),
+                              ),
+                              if ((_requestedArtist ?? '')
+                                  .trim()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                Text(
+                                  'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w400,
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.75,
+                                    ),
+                                    height: 1.2,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    ChoiceChip(
+                                      label: const Text(
+                                        'Yes',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      selected: _fallbackToPool == true,
+                                      selectedColor: AppColors.blackCat,
+                                      backgroundColor: _requestSnow,
+                                      checkmarkColor: AppColors.snow,
+                                      onSelected: (_) => setState(
+                                        () => _fallbackToPool = true,
+                                      ),
+                                      labelStyle: TextStyle(
+                                        fontWeight: FontWeight.w400,
+                                        color: _fallbackToPool == true
+                                            ? AppColors.snow
+                                            : AppColors.blackCat,
+                                      ),
+                                      side: BorderSide(
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    ChoiceChip(
+                                      label: const Text(
+                                        'No',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      selected: _fallbackToPool == false,
+                                      selectedColor: AppColors.blackCat,
+                                      backgroundColor: _requestSnow,
+                                      checkmarkColor: AppColors.snow,
+                                      onSelected: (_) => setState(
+                                        () => _fallbackToPool = false,
+                                      ),
+                                      labelStyle: TextStyle(
+                                        fontWeight: FontWeight.w400,
+                                        color: _fallbackToPool == false
+                                            ? AppColors.snow
+                                            : AppColors.blackCat,
+                                      ),
+                                      side: BorderSide(
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  height: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.deepPlum,
+                      foregroundColor: AppColors.snow,
+                      textStyle: const TextStyle(
                         fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         fontFamily: 'Arial',
-                        color: AppColors.blackCat.withValues(alpha: 0.75),
-                        height: 1.3,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => _saveOrSubmitRequest(isDraft: true),
+                    child: Text(
+                      _isSubmitting ? 'Saving...' : 'Save',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.snow,
+                        fontFamily: 'Arial',
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                height: 54,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.deepPlum,
-                    foregroundColor: AppColors.snow,
-                    textStyle: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: 'Arial',
+                ),
+              ] else if (_currentStep == 2) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Brand Collaboration',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Arialbold',
+                          color: AppColors.blackCat,
+                        ),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
+                    if (_brandCollaborationExpanded)
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.blackCat.withValues(
+                            alpha: 0.6,
+                          ),
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () =>
+                            setState(() => _brandCollaborationExpanded = false),
+                        child: const Text(
+                          "Skip this, don't collaborate",
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Optional — add posting and in-person collaboration details for this offer.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
                   ),
-                  onPressed: _isSubmitting ? null : _submitRequest,
+                ),
+                const SizedBox(height: 10),
+                _brandCollaborationSection(),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 54,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCatLight,
+                            foregroundColor: AppColors.snow,
+                            textStyle: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => setState(() => _currentStep = 1),
+                          child: const Text(
+                            'Back',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.snow,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 54,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            textStyle: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => _saveOrSubmitRequest(isDraft: true),
+                          child: Text(
+                            _isSubmitting ? 'Saving...' : 'Next',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.snow,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Client Budget Range',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Set the budget range for each client',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _BudgetCard(
+                  values: _clientBudget,
+                  maxValue: 50000,
+                  maxIsSet: _clientBudgetMaxIsSet,
+                  onChanged: (v) => setState(() {
+                    _clientBudget = v;
+                    _clientBudgetMaxIsSet = true;
+                  }),
+                  onChangeEnd: (_) {},
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Artist Budget Range',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Set the artist budget range.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Arial',
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _BudgetCard(
+                  values: _artistBudget,
+                  maxValue: 5000,
+                  displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
+                  onChanged: (v) => setState(() => _artistBudget = v),
+                  onChangeEnd: (_) {},
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Where you want the Art work to be Shipped?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _shippingDestinationOption(
+                        label: 'Ship to client directly',
+                        value: _ShippingDestination.clientDirectly,
+                      ),
+                      const SizedBox(height: 6),
+                      _shippingDestinationOption(
+                        label: 'Ship to Brand Mailing Address',
+                        value: _ShippingDestination.brandMailingAddress,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _shippingAddressDifferentFromProfile,
+                            activeColor: AppColors.blackCat,
+                            onChanged: (v) => setState(
+                              () => _shippingAddressDifferentFromProfile =
+                                  v ?? false,
+                            ),
+                          ),
+                          const Expanded(
+                            child: Text(
+                              'Shipping address is different from profile',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Arial',
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_shippingAddressDifferentFromProfile) ...[
+                        const SizedBox(height: 6),
+                        _fieldLabel('Shipping Address *'),
+                        const SizedBox(height: 4),
+                        _InputField(
+                          controller: _shipStreetCtrl,
+                          hint: 'Street',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          onChanged: (_) =>
+                              _autofillShippingAddressFromStreet(),
+                        ),
+                        if (_shipStreetSuggestionsLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          ),
+                        if (_shipStreetSuggestions.isNotEmpty)
+                          Builder(
+                            builder: (context) {
+                              final suggestionCount =
+                                  _shipStreetSuggestions.length;
+                              final menuHeight =
+                                  AutocompleteDropdownSizing.menuHeight(
+                                    itemCount: suggestionCount,
+                                    itemExtent: 40,
+                                  );
+                              return Container(
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: _requestSnow,
+                                  borderRadius: BorderRadius.zero,
+                                  border: Border.all(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.20,
+                                    ),
+                                  ),
+                                ),
+                                constraints: BoxConstraints(
+                                  maxHeight: menuHeight,
+                                ),
+                                child: ListView.separated(
+                                  shrinkWrap:
+                                      AutocompleteDropdownSizing.shrinkWrap(
+                                        suggestionCount,
+                                      ),
+                                  physics:
+                                      AutocompleteDropdownSizing.scrollPhysics(
+                                        suggestionCount,
+                                      ),
+                                  itemCount: suggestionCount,
+                                  separatorBuilder: (_, _) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (_, i) => ListTile(
+                                    dense: true,
+                                    title: Text(
+                                      _shipStreetSuggestions[i].displayLabel,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    onTap: () =>
+                                        _selectShippingStreetSuggestion(
+                                          _shipStreetSuggestions[i],
+                                        ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 4),
+                        _InputField(
+                          controller: _shipCityCtrl,
+                          hint: 'City',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                        ),
+                        const SizedBox(height: 4),
+                        _InputField(
+                          controller: _shipStateCtrl,
+                          hint: 'State',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                        ),
+                        const SizedBox(height: 4),
+                        _InputField(
+                          controller: _shipZipCtrl,
+                          hint: 'Zip',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                        ),
+                        const SizedBox(height: 4),
+                        _InputField(
+                          controller: _shipCountryCtrl,
+                          hint: 'Country',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Center(
                   child: Text(
-                    _isSubmitting ? 'Submitting...' : 'Submit Request',
+                    'Nail Specifications',
                     style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.snow,
-                      fontFamily: 'Arial',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'times-new-roman',
                     ),
                   ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    'Set dimensions, shape and length for the press-on kit.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Arial',
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'For brand orders: the Client’s dimensions will be provided when they accept the request.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Arial',
+                          color: AppColors.blackCat.withValues(alpha: 0.75),
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 54,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCatLight,
+                            foregroundColor: AppColors.snow,
+                            textStyle: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => setState(() => _currentStep = 2),
+                          child: const Text(
+                            'Back',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.snow,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 54,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            textStyle: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => _saveOrSubmitRequest(isDraft: false),
+                          child: Text(
+                            _isSubmitting ? 'Submitting...' : 'Submit Request',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.snow,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
           bottomNavigationBar: widget.showBottomNav
@@ -4327,6 +6075,7 @@ class _BudgetCard extends StatelessWidget {
     this.displayStartOffset = 0,
     required this.onChanged,
     required this.onChangeEnd,
+    this.maxIsSet = true,
   });
 
   final RangeValues values;
@@ -4334,6 +6083,11 @@ class _BudgetCard extends StatelessWidget {
   final int displayStartOffset;
   final ValueChanged<RangeValues> onChanged;
   final ValueChanged<RangeValues> onChangeEnd;
+  // False shows the Max field blank (nothing entered yet) even though
+  // `values.end` already holds a numeric default -- used by the client
+  // budget card, whose max should stay empty until either the brand prices
+  // an offer in step 2 or the brand types a value in directly.
+  final bool maxIsSet;
 
   @override
   Widget build(BuildContext context) {
@@ -4373,7 +6127,10 @@ class _BudgetCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextFormField(
-                  initialValue: '',
+                  key: ValueKey<String>(
+                    maxIsSet ? 'set-${values.end.round()}' : 'unset',
+                  ),
+                  initialValue: maxIsSet ? values.end.round().toString() : '',
                   keyboardType: TextInputType.number,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
@@ -4383,6 +6140,7 @@ class _BudgetCard extends StatelessWidget {
                     labelText: 'Max',
                     prefixText: '\$',
                   ),
+                  textInputAction: TextInputAction.done,
                   onChanged: (raw) {
                     final parsed = double.tryParse(raw);
                     if (parsed == null) return;
@@ -4391,6 +6149,10 @@ class _BudgetCard extends StatelessWidget {
                     onChanged(range);
                     onChangeEnd(range);
                   },
+                  onEditingComplete: () =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  onFieldSubmitted: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
                 ),
                 const SizedBox(height: 4),
                 Text(
