@@ -1466,6 +1466,14 @@ class _BaseOrderDetails extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _orderDetailsWithRightNailDimensions(),
+                    if (_hasBrandCollaboration) ...[
+                      const SizedBox(height: 14),
+                      Divider(
+                        color: AppColors.blackCat.withValues(alpha: 0.08),
+                      ),
+                      const SizedBox(height: 5),
+                      _brandCollaborationSummarySection(),
+                    ],
                     const SizedBox(height: 14),
                     Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
                     const SizedBox(height: 5),

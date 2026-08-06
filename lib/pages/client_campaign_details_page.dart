@@ -1521,6 +1521,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       final link = _RequestDetailsVm.asMap(links[i]);
                       final label = (link['label'] ?? '').toString().trim();
                       final url = (link['url'] ?? '').toString().trim();
+                      final isTapDestination = link['isTapDestination'] == true;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1537,6 +1538,25 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                   ),
                                 ),
                               ),
+                              if (isTapDestination)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  color: AppColors.blackCat,
+                                  child: const Text(
+                                    'TAP GOES HERE',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.5,
+                                      color: AppColors.snow,
+                                    ),
+                                  ),
+                                ),
+                              if (isTapDestination && url.isNotEmpty)
+                                const SizedBox(width: 8),
                               if (url.isNotEmpty)
                                 SizedBox(
                                   height: 30,
