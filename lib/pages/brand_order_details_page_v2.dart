@@ -437,7 +437,14 @@ class _OrderSafe {
       shippedAt: dt(o?.shippedAt),
       deliveredAt: dt(o?.deliveredAt),
       nfcRequested: tryRead(() => (o as dynamic).nfcRequested) == true,
-      brandCollaboration: asMap(detailMap?['brandCollaboration']),
+      // `o` is normally a typed ClientOrder (dot-notation getter), not a
+      // raw Map -- the `o['details']`-based detailMap above is null in
+      // that case, so try the typed field first and only fall back to
+      // the map-based path if `o` really is a raw row somewhere.
+      brandCollaboration: asMap(
+        tryRead(() => (o as dynamic).brandCollaboration) ??
+            detailMap?['brandCollaboration'],
+      ),
     );
   }
 
@@ -1459,14 +1466,6 @@ class _BaseOrderDetails extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _orderDetailsWithRightNailDimensions(),
-                    if (_hasBrandCollaboration) ...[
-                      const SizedBox(height: 14),
-                      Divider(
-                        color: AppColors.blackCat.withValues(alpha: 0.08),
-                      ),
-                      const SizedBox(height: 5),
-                      _brandCollaborationSummarySection(),
-                    ],
                     const SizedBox(height: 14),
                     Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
                     const SizedBox(height: 5),
@@ -1474,6 +1473,10 @@ class _BaseOrderDetails extends StatelessWidget {
                   ],
                 ),
               ),
+              if (_hasBrandCollaboration) ...[
+                const SizedBox(height: 14),
+                _brandCollaborationSummarySection(),
+              ],
             ] else ...[
               if (statusPillText == 'Completed' ||
                   statusPillText == 'Shipped' ||
@@ -1512,7 +1515,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
               const SizedBox(height: 14),
               if (_hasBrandCollaboration) ...[
-                _Card(child: _brandCollaborationSummarySection()),
+                _brandCollaborationSummarySection(),
                 const SizedBox(height: 14),
               ],
               if (statusPillText == 'Shipped' ||
@@ -2697,8 +2700,49 @@ class _BaseOrderDetails extends StatelessWidget {
     );
   }
 
-  bool get _hasBrandCollaboration =>
-      order.brandCollaboration['enabled'] == true;
+  bool get _hasBrandCollaboration {
+    final bc = order.brandCollaboration;
+    if (bc['enabled'] != true) return false;
+    return _hasSubmittedBrandCollaborationOffer(bc);
+  }
+
+  bool _hasSubmittedBrandCollaborationOffer(Map<String, dynamic> bc) {
+    final posts = _asMap(bc['posts']);
+    final hasPosts = const [
+      'instagramReel',
+      'instagramStories',
+      'carouselPost',
+      'tiktok',
+    ].any((key) => (_asIntValue(posts[key]) ?? 0) > 0);
+    if (hasPosts) return true;
+
+    if (bc['nfcCardTapsEnabled'] == true) return true;
+
+    final links = (bc['links'] is List) ? bc['links'] as List : const [];
+    final hasLinks = links.any((raw) {
+      final link = _asMap(raw);
+      return (link['label'] ?? '').toString().trim().isNotEmpty ||
+          (link['url'] ?? '').toString().trim().isNotEmpty;
+    });
+    if (hasLinks) return true;
+
+    final wording = _asMap(bc['wording']);
+    final hasWording =
+        ((wording['mustInclude'] is List) &&
+            (wording['mustInclude'] as List).isNotEmpty) ||
+        ((wording['doNotSay'] is List) &&
+            (wording['doNotSay'] as List).isNotEmpty) ||
+        (wording['talkingPoints'] ?? '').toString().trim().isNotEmpty;
+    if (hasWording) return true;
+
+    final pricing = _asMap(bc['pricing']);
+    return (pricing['runAsAd'] == true) ||
+        (_asIntValue(pricing['baseFee']) ?? 0) > 0 ||
+        (_asIntValue(pricing['repostFeeAmount']) ?? 0) > 0 ||
+        (_asIntValue(pricing['competingBrandsFeeAmount']) ?? 0) > 0 ||
+        (_asIntValue(pricing['paidAdsFeeAmount']) ?? 0) > 0 ||
+        (_asIntValue(pricing['dueOnSigning']) ?? 0) > 0;
+  }
 
   Widget _brandCollaborationSummarySection() {
     final bc = order.brandCollaboration;
@@ -2743,39 +2787,111 @@ class _BaseOrderDetails extends StatelessWidget {
     final paidAdsFee = _asIntValue(pricing['paidAdsFeeAmount']) ?? 0;
     final dueOnDelivery = _asIntValue(pricing['dueOnSigning']) ?? 0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Brand Collaboration',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+    Widget subHeader(String title) {
+      return Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+          fontFamily: 'ArialBold',
+          color: AppColors.blackCat,
         ),
-        const SizedBox(height: 10),
-        _bullet(
-          'Posts requested',
-          postLines.isEmpty ? '-' : postLines.join(', '),
+      );
+    }
+
+    Widget sectionDivider() {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Divider(
+          height: 1,
+          color: AppColors.blackCat.withValues(alpha: 0.12),
         ),
-        _bullet(
-          'NFC card taps',
-          nfcCardTapsEnabled
-              ? '${tapRate == null ? 'Flat' : '\$${(tapRate as num).toStringAsFixed(2)}'}'
-                    '${tapCap != null ? ' · cap $tapCap' : ''}'
-                    '${tapGoesToUrl.isNotEmpty ? ' · opens $tapGoesToUrl' : ''}'
-              : 'Not requested',
-        ),
-        _bullet('Links to use', linkLines.isEmpty ? '-' : linkLines.join('\n')),
-        _bullet(
-          'Must include',
-          mustInclude.isEmpty ? '-' : mustInclude.join(', '),
-        ),
-        if (talkingPoints.isNotEmpty) _bullet('Talking points', talkingPoints),
-        _bullet("Don't say", doNotSay.isEmpty ? '-' : doNotSay.join(', ')),
-        _bullet('Base fee', '\$$baseFee'),
-        if (repostFee > 0) _bullet('Reposting fee', '+\$$repostFee'),
-        if (competingFee > 0) _bullet('Exclusivity fee', '+\$$competingFee'),
-        if (runAsAd) _bullet('Paid ads fee', '+\$$paidAdsFee'),
-        _bullet('Due on delivery', '\$$dueOnDelivery'),
-      ],
+      );
+    }
+
+    final hasWording =
+        mustInclude.isNotEmpty ||
+        doNotSay.isNotEmpty ||
+        talkingPoints.isNotEmpty;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Brand Collaboration',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 12),
+          subHeader('Posts'),
+          const SizedBox(height: 8),
+          if (postLines.isEmpty)
+            Text(
+              'No posts requested.',
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.75),
+              ),
+            )
+          else
+            for (final line in postLines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  line,
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          if (nfcCardTapsEnabled) ...[
+            sectionDivider(),
+            subHeader('NFC Card Taps'),
+            const SizedBox(height: 8),
+            _bullet(
+              'Per tap',
+              tapRate == null
+                  ? 'Flat'
+                  : '\$${(tapRate as num).toStringAsFixed(2)}',
+            ),
+            _bullet('Paid up to', tapCap == null ? '-' : '$tapCap'),
+            if (tapGoesToUrl.isNotEmpty) _bullet('Tap opens', tapGoesToUrl),
+          ],
+          if (linkLines.isNotEmpty) ...[
+            sectionDivider(),
+            subHeader('Links'),
+            const SizedBox(height: 8),
+            for (final line in linkLines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  line,
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          ],
+          if (hasWording) ...[
+            sectionDivider(),
+            subHeader('Wording'),
+            const SizedBox(height: 8),
+            if (mustInclude.isNotEmpty)
+              _bullet('Must include', mustInclude.join(', ')),
+            if (talkingPoints.isNotEmpty)
+              _bullet('Talking points', talkingPoints),
+            if (doNotSay.isNotEmpty) _bullet("Don't say", doNotSay.join(', ')),
+          ],
+          sectionDivider(),
+          subHeader('Pricing'),
+          const SizedBox(height: 8),
+          _bullet('Base fee', '\$$baseFee'),
+          if (repostFee > 0) _bullet('Reposting fee', '+\$$repostFee'),
+          if (competingFee > 0) _bullet('Exclusivity fee', '+\$$competingFee'),
+          if (runAsAd) _bullet('Paid ads fee', '+\$$paidAdsFee'),
+          Divider(color: AppColors.blackCat.withValues(alpha: 0.1)),
+          _bullet('Due on delivery', '\$$dueOnDelivery'),
+        ],
+      ),
     );
   }
 

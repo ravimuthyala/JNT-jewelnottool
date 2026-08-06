@@ -11,15 +11,10 @@ extension _CompletedRequestDetailsTab on _CompletedRequestSheetState {
         16 + math.max(0, bottomInset),
       ),
       children: [
-        _topHeroCentered(context, widget.request, widget.onClose),
-        const SizedBox(height: 12),
-        _completedStatusBanner(),
-        const SizedBox(height: 12),
-        const Divider(height: 1, color: AppColors.blackCatBorderLight),
-        const SizedBox(height: 12),
-        _completedTabsBar(),
-        const SizedBox(height: 12),
-        _descriptionAndCompanyBioSection(),
+        Focus(
+          focusNode: _detailsContentFocusNode,
+          child: _descriptionAndCompanyBioSection(),
+        ),
         const SizedBox(height: 12),
         if (_isBrandRequest(widget.request)) ...[
           _acceptedClientDetailsSection(widget.request),

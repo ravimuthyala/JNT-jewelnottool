@@ -68,6 +68,11 @@ class ArtistHistoryPage extends StatefulWidget {
 }
 
 class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
+  final FocusNode _historyTabsFocusNode = FocusNode(
+    debugLabel: 'artistHistoryFilters',
+  );
+  bool _didRequestInitialA11yFocus = false;
+
   ArtistHistoryFilter _filter = ArtistHistoryFilter.all;
   bool _isLoadingDb = true;
 
@@ -83,8 +88,30 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didRequestInitialA11yFocus || !_accessibleNavigation(context)) return;
+    _didRequestInitialA11yFocus = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _historyTabsFocusNode.requestFocus();
+    });
+  }
+
+  bool _accessibleNavigation(BuildContext context) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
+  }
+
+  @override
   void dispose() {
     _requestsChannel?.unsubscribe();
+    _historyTabsFocusNode.dispose();
     super.dispose();
   }
 
@@ -1319,7 +1346,9 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
           children: [
-            _HistoryTabs(
+            Focus(
+              focusNode: _historyTabsFocusNode,
+              child: _HistoryTabs(
               selected: _filter,
               onChanged: (f) => setState(() => _filter = f),
               allCount: _countForFilter(ArtistHistoryFilter.all),
@@ -1328,6 +1357,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
               expiredCount: _countForFilter(ArtistHistoryFilter.expired),
               cancelledCount: _countForFilter(ArtistHistoryFilter.cancelled),
             ),
+            ),
             const SizedBox(height: 16),
             if (_isLoadingDb && filtered.isEmpty)
               const Padding(
@@ -1335,33 +1365,40 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (filtered.isEmpty)
-              _Card(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.history_rounded,
-                      size: 46,
-                      color: AppColors.blackCat.withValues(alpha: 0.35),
+              Semantics(
+                container: true,
+                label:
+                    'No history found. Only real-time delivered, declined, expired, and cancelled orders appear here.',
+                child: ExcludeSemantics(
+                  child: _Card(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.history_rounded,
+                          size: 46,
+                          color: AppColors.blackCat.withValues(alpha: 0.35),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'No history found',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Only real-time delivered, declined, expired, and cancelled orders appear here.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
+                            fontWeight: FontWeight.w400,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'No history found',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Only real-time delivered, declined, expired, and cancelled orders appear here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.60),
-                        fontWeight: FontWeight.w400,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               )
             else ...[
@@ -1441,6 +1478,7 @@ class _HistoryTabs extends StatelessWidget {
     required this.expiredCount,
     required this.cancelledCount,
   });
+
   final ArtistHistoryFilter selected;
   final ValueChanged<ArtistHistoryFilter> onChanged;
   final int allCount;
@@ -1457,22 +1495,58 @@ class _HistoryTabs extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _tab('All', allCount, ArtistHistoryFilter.all),
-            _tab('Delivered', deliveredCount, ArtistHistoryFilter.delivered),
-            _tab('Declined', declinedCount, ArtistHistoryFilter.declined),
-            _tab('Expired', expiredCount, ArtistHistoryFilter.expired),
-            _tab('Cancelled', cancelledCount, ArtistHistoryFilter.cancelled),
+            _tab(
+              label: 'All',
+              count: allCount,
+              value: ArtistHistoryFilter.all,
+              position: 1,
+            ),
+            _tab(
+              label: 'Delivered',
+              count: deliveredCount,
+              value: ArtistHistoryFilter.delivered,
+              position: 2,
+            ),
+            _tab(
+              label: 'Declined',
+              count: declinedCount,
+              value: ArtistHistoryFilter.declined,
+              position: 3,
+            ),
+            _tab(
+              label: 'Expired',
+              count: expiredCount,
+              value: ArtistHistoryFilter.expired,
+              position: 4,
+            ),
+            _tab(
+              label: 'Cancelled',
+              count: cancelledCount,
+              value: ArtistHistoryFilter.cancelled,
+              position: 5,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _tab(String label, int count, ArtistHistoryFilter value) {
+  Widget _tab({
+    required String label,
+    required int count,
+    required ArtistHistoryFilter value,
+    required int position,
+  }) {
     final isSelected = selected == value;
+    final requestWord = count == 1 ? 'request' : 'requests';
+
     return Semantics(
       button: true,
       selected: isSelected,
+      label: '$label tab, $position of 5',
+      value: '$count $requestWord',
+      hint: isSelected ? null : 'Double tap to show $label requests',
+      onTap: () => onChanged(value),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: () => onChanged(value),
@@ -1497,7 +1571,7 @@ class _HistoryTabs extends StatelessWidget {
                   duration: const Duration(milliseconds: 200),
                   height: 2.5,
                   width: isSelected ? 24 : 0,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.blackCat,
                     borderRadius: BorderRadius.zero,
                   ),
@@ -1513,80 +1587,110 @@ class _HistoryTabs extends StatelessWidget {
 
 class _HistoryCard extends StatelessWidget {
   const _HistoryCard({required this.order, required this.onTap});
+
   final ArtistOrderLite order;
   final VoidCallback onTap;
 
+  String get _statusLabel {
+    switch (order.status) {
+      case ArtistOrderLiteStatus.delivered:
+        return 'Delivered';
+      case ArtistOrderLiteStatus.declined:
+        return 'Declined';
+      case ArtistOrderLiteStatus.expired:
+        return 'Expired';
+      case ArtistOrderLiteStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final clientName = order.clientName.trim().isEmpty
+        ? 'Client'
+        : order.clientName.trim();
+    final requestDetails = order.subtitle.trim();
+    final statusDate = order.statusText.trim();
+
+    final labelParts = <String>[
+      clientName,
+      if (requestDetails.isNotEmpty) requestDetails,
+      'Status, $_statusLabel',
+      if (statusDate.isNotEmpty &&
+          statusDate.toLowerCase() != _statusLabel.toLowerCase())
+        statusDate,
+    ];
+
     return _Card(
-      child: MergeSemantics(
-        child: Semantics(
-          button: true,
-          onTap: onTap,
-          child: ExcludeSemantics(
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.zero,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Thumb(
-                    imageAsset: order.imageAsset,
-                    clientEmail: order.clientEmail,
-                    clientName: order.clientName,
-                    fallbackLetter: order.clientName.trim().isEmpty
-                        ? 'C'
-                        : order.clientName.trim()[0].toUpperCase(),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                order.clientName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.blackCat,
-                                ),
+      child: Semantics(
+        container: true,
+        button: true,
+        label: labelParts.join('. '),
+        hint: 'Double tap to open request details',
+        onTap: onTap,
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.zero,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Thumb(
+                  imageAsset: order.imageAsset,
+                  clientEmail: order.clientEmail,
+                  clientName: order.clientName,
+                  fallbackLetter: order.clientName.trim().isEmpty
+                      ? 'C'
+                      : order.clientName.trim()[0].toUpperCase(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              order.clientName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: AppColors.blackCat,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            _HistoryStatusChip(status: order.status),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          order.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppColors.blackCat,
-                            fontWeight: FontWeight.w400,
-                            fontSize: 13.5,
                           ),
+                          const SizedBox(width: 8),
+                          _HistoryStatusChip(status: order.status),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        order.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13.5,
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          order.statusText,
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.72),
-                            fontWeight: FontWeight.w400,
-                            fontSize: 13.5,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        order.statusText,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.blackCat.withValues(alpha: 0.72),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13.5,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -2018,27 +2122,40 @@ class _HistorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final countLabel = requests.length == 1 ? 'request' : 'requests';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$title (${requests.length})',
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            color: AppColors.blackCat,
+        Semantics(
+          header: true,
+          label: '$title, ${requests.length} $countLabel',
+          child: ExcludeSemantics(
+            child: Text(
+              '$title (${requests.length})',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.blackCat,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
         if (requests.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              'No $title found.',
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.55),
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
+          Semantics(
+            label: 'No $title found',
+            child: ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'No $title found.',
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
               ),
             ),
           )

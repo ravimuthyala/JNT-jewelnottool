@@ -38,6 +38,21 @@ class _DeliveredRequestSheet extends StatefulWidget {
 class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   static const int _decodeMax = 1024;
   int _selectedTab = 2; // Open Delivered tab first for delivered history.
+  final ScrollController _sheetScrollController = ScrollController();
+
+  final FocusNode _closeFocusNode = FocusNode(
+    debugLabel: 'deliveredRequestClose',
+  );
+  final FocusNode _detailsContentFocusNode = FocusNode(
+    debugLabel: 'deliveredDetailsContent',
+  );
+  final FocusNode _photosContentFocusNode = FocusNode(
+    debugLabel: 'deliveredPhotosContent',
+  );
+  final FocusNode _deliveredContentFocusNode = FocusNode(
+    debugLabel: 'deliveredDeliveryContent',
+  );
+  bool _didRequestInitialFocus = false;
 
   ClientRequestV2 get request => widget.request;
 
@@ -235,6 +250,64 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
+  bool _accessibleNavigation(BuildContext context) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didRequestInitialFocus || !_accessibleNavigation(context)) return;
+    _didRequestInitialFocus = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _closeFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeFocusNode.dispose();
+    _detailsContentFocusNode.dispose();
+    _photosContentFocusNode.dispose();
+    _deliveredContentFocusNode.dispose();
+    _sheetScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollSheetToTop() {
+    if (!_sheetScrollController.hasClients) return;
+    _sheetScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _selectTab(int index) {
+    if (_selectedTab == index) {
+      if (_accessibleNavigation(context)) _scrollSheetToTop();
+      return;
+    }
+    setState(() => _selectedTab = index);
+    _scrollSheetToTop();
+    if (!_accessibleNavigation(context)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final node = switch (index) {
+        0 => _detailsContentFocusNode,
+        1 => _photosContentFocusNode,
+        _ => _deliveredContentFocusNode,
+      };
+      node.requestFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
@@ -266,6 +339,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                     _topHero(context),
                     Expanded(
                       child: ListView(
+                        controller: _sheetScrollController,
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                         children: [
                           _infoChips(),
@@ -274,8 +348,13 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                           const SizedBox(height: 18),
                           _tabBar(),
                           const SizedBox(height: 14),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 180),
+                          // Keep the active tab content in the same semantic
+                          // traversal group as the three tab controls. AnimatedSwitcher
+                          // can temporarily remove the incoming child's semantics,
+                          // causing TalkBack to leave the modal after the last tab.
+                          Semantics(
+                            container: true,
+                            explicitChildNodes: true,
                             child: KeyedSubtree(
                               key: ValueKey<int>(_selectedTab),
                               child: _selectedTab == 0
@@ -294,23 +373,31 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                       child: Center(
                         child: SizedBox(
                           height: 52,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 18),
-                              child: Text(
-                                'Close',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                          child: Semantics(
+                            button: true,
+                            label: 'Close delivered request details',
+                            hint: 'Double tap to close',
+                            onTap: () => Navigator.pop(context),
+                            child: ExcludeSemantics(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.blackCat,
+                                  foregroundColor: AppColors.snow,
+                                  elevation: 0,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                                onPressed: () => Navigator.pop(context),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 18),
+                                  child: Text(
+                                    'Close',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -324,11 +411,21 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               Positioned(
                 right: 6,
                 top: 6,
-                child: IconButton(
-                  tooltip: 'Close',
-                  icon: const Icon(Icons.close_rounded, size: 30),
-                  color: AppColors.blackCat.withValues(alpha: 0.72),
-                  onPressed: () => Navigator.pop(context),
+                child: Semantics(
+                  button: true,
+                  label: 'Close delivered request details',
+                  hint: 'Double tap to close',
+                  onDidGainAccessibilityFocus: _scrollSheetToTop,
+                  onTap: () => Navigator.pop(context),
+                  child: ExcludeSemantics(
+                    child: IconButton(
+                      focusNode: _closeFocusNode,
+                      tooltip: 'Close delivered request details',
+                      icon: const Icon(Icons.close_rounded, size: 30),
+                      color: AppColors.blackCat.withValues(alpha: 0.72),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -686,60 +783,67 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _infoChips() {
-    final courier = (request.shippedByCourier ?? '').trim().isEmpty
-        ? '-'
-        : (request.shippedByCourier ?? '').trim();
-    return Container(
-      height: 1,
-      color: AppColors.blackCatBorderLight,
-      margin: const EdgeInsets.only(top: 2),
-      child: Semantics(label: 'Shipped with $courier'),
+    return ExcludeSemantics(
+      child: Container(
+        height: 1,
+        color: AppColors.blackCatBorderLight,
+        margin: const EdgeInsets.only(top: 2),
+      ),
     );
   }
 
   Widget _deliveredBanner() {
-    return _borderBox(
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 26,
-            width: 26,
-            decoration: const BoxDecoration(
-              color: Color(0xFFDBF4E6),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: const Icon(Icons.check, color: Color(0xFF1E8E5A), size: 16),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Delivered!',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
+    return Semantics(
+      label: 'Delivered. The order has been delivered to the client.',
+      child: ExcludeSemantics(
+        child: _borderBox(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 26,
+                width: 26,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDBF4E6),
+                  shape: BoxShape.circle,
                 ),
-                SizedBox(height: 6),
-                Text(
-                  'The order has been delivered to the client.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.blackCat,
-                  ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.check,
+                  color: Color(0xFF1E8E5A),
+                  size: 16,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Delivered!',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'The order has been delivered to the client.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
     );
   }
 
@@ -759,9 +863,12 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       child: Semantics(
         button: true,
         selected: selected,
+        label: '$label tab, ${index + 1} of 3',
+        hint: selected ? null : 'Double tap to show $label',
+        onTap: () => _selectTab(index),
         child: ExcludeSemantics(
           child: InkWell(
-            onTap: () => setState(() => _selectedTab = index),
+            onTap: () => _selectTab(index),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -790,10 +897,21 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _detailsTab() {
+    final description = request.bio.trim().isEmpty
+        ? 'No description provided'
+        : request.bio.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _descriptionAndCompanyBioSection(request),
+        Focus(
+          focusNode: _detailsContentFocusNode,
+          child: Semantics(
+            label: 'Description. $description',
+            child: ExcludeSemantics(
+              child: _descriptionAndCompanyBioSection(request),
+            ),
+          ),
+        ),
         const SizedBox(height: 14),
         if (_isBrandRequest(request)) ...[
           _acceptedClientDetailsSection(request),
@@ -807,10 +925,28 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _photosTab() {
+    final clientCount = request.clientImages
+        .where((e) => e.trim().isNotEmpty)
+        .length;
+    final artistCount = request.artistImages
+        .where((e) => e.trim().isNotEmpty)
+        .length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _photosSection('Uploaded Photos (Client)', request.clientImages),
+        Focus(
+          focusNode: _photosContentFocusNode,
+          child: Semantics(
+            container: true,
+            explicitChildNodes: true,
+            label:
+                'Photos. $clientCount client ${clientCount == 1 ? 'photo' : 'photos'} and $artistCount artist ${artistCount == 1 ? 'photo' : 'photos'}.',
+            child: _photosSection(
+              'Uploaded Photos (Client)',
+              request.clientImages,
+            ),
+          ),
+        ),
         const SizedBox(height: 14),
         _photosSection('Uploaded Photos (Artist)', request.artistImages),
       ],
@@ -818,44 +954,67 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _deliveredTab() {
-    return _borderBox(
-      Column(
-        children: [
-          _deliveryInfoRow(
-            icon: Icons.person_outline_rounded,
-            label: 'Client Name',
-            value: request.clientName.trim().isEmpty
-                ? '-'
-                : request.clientName.trim(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Focus(
+          focusNode: _deliveredContentFocusNode,
+          child: Semantics(
+            header: true,
+            label: 'Delivered information',
+            child: const ExcludeSemantics(
+              child: Text(
+                'Delivered Information',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
           ),
-          _deliveryInfoRow(
-            icon: Icons.local_shipping_outlined,
-            label: 'Shipped By',
-            value: (request.shippedByCourier ?? '').trim().isEmpty
-                ? '-'
-                : (request.shippedByCourier ?? '').trim(),
+        ),
+        const SizedBox(height: 10),
+        _borderBox(
+          Column(
+            children: [
+              _deliveryInfoRow(
+                icon: Icons.person_outline_rounded,
+                label: 'Client Name',
+                value: request.clientName.trim().isEmpty
+                    ? '-'
+                    : request.clientName.trim(),
+              ),
+              _deliveryInfoRow(
+                icon: Icons.local_shipping_outlined,
+                label: 'Shipped By',
+                value: (request.shippedByCourier ?? '').trim().isEmpty
+                    ? '-'
+                    : (request.shippedByCourier ?? '').trim(),
+              ),
+              _deliveryInfoRow(
+                icon: Icons.qr_code_2_rounded,
+                label: 'Tracking number',
+                value: (request.trackingNumber?.trim() ?? '').isEmpty
+                    ? '-'
+                    : (request.trackingNumber?.trim() ?? ''),
+              ),
+              _deliveryInfoRow(
+                icon: Icons.event_available_outlined,
+                label: 'Shipped Date',
+                value: _fmtDateLong(request.shippedAt),
+              ),
+              _deliveryInfoRow(
+                icon: Icons.event_available_outlined,
+                label: 'Delivered Date',
+                value: _fmtDateLong(request.deliveredAt),
+                bottomPadding: 0,
+              ),
+            ],
           ),
-          _deliveryInfoRow(
-            icon: Icons.qr_code_2_rounded,
-            label: 'Tracking #',
-            value: (request.trackingNumber?.trim() ?? '').isEmpty
-                ? '-'
-                : (request.trackingNumber?.trim() ?? ''),
-          ),
-          _deliveryInfoRow(
-            icon: Icons.event_available_outlined,
-            label: 'Shipped Date',
-            value: _fmtDateLong(request.shippedAt),
-          ),
-          _deliveryInfoRow(
-            icon: Icons.event_available_outlined,
-            label: 'Delivered Date',
-            value: _fmtDateLong(request.deliveredAt),
-            bottomPadding: 0,
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+        ),
+      ],
     );
   }
 
@@ -865,41 +1024,49 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     required String value,
     double bottomPadding = 22,
   }) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomPadding),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 34,
-            child: Icon(icon, size: 18, color: AppColors.blackCat),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat,
-                  ),
+    final semanticValue = value.trim().isEmpty || value.trim() == '-'
+        ? 'Not provided'
+        : value.trim();
+    return Semantics(
+      label: '$label, $semanticValue',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomPadding),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 34,
+                child: Icon(icon, size: 18, color: AppColors.blackCat),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value.trim().isEmpty ? '-' : value.trim(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  value.trim().isEmpty ? '-' : value.trim(),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -909,17 +1076,6 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Order Details',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: AppColors.blackCat,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _detailRow('Need by', _needByLabel(request.neededBy)),
-          const SizedBox(height: 14),
           const Text(
             'Nail Dimensions',
             style: TextStyle(
@@ -1058,9 +1214,15 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                 separatorBuilder: (_, _) => const SizedBox(width: 10),
                 itemBuilder: (_, i) => SizedBox(
                   width: 112,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.zero,
-                    child: _imageForPath(renderable[i]),
+                  child: Semantics(
+                    image: true,
+                    label: '$title photo ${i + 1} of ${renderable.length}',
+                    child: ExcludeSemantics(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.zero,
+                        child: _imageForPath(renderable[i]),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1095,68 +1257,107 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           );
         }
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _dimsCard(
-                      'Left Hand',
-                      request.leftHand,
-                      nfc: nfc.main.left,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(width: 1, color: AppColors.blackCatBorderLight),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _dimsCard(
-                      'Right Hand',
-                      request.rightHand,
-                      nfc: nfc.main.right,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(height: 1, color: AppColors.blackCatBorderLight),
-            const SizedBox(height: 12),
-            Row(
+        final left = request.leftHand;
+        final right = request.rightHand;
+        String spoken(String raw) {
+          final value = raw.trim();
+          if (value.isEmpty || value == '-') return 'not provided';
+          final cleaned = value.replaceAll(RegExp(r'[^0-9.]'), '');
+          final parsed = double.tryParse(cleaned);
+          if (parsed == null) return value;
+          return '${parsed.toStringAsFixed(2)} millimeters';
+        }
+
+        String nfcText(bool requested) => requested ? ', NFC requested' : '';
+        final shape = request.nailShape.trim().isEmpty
+            ? 'not provided'
+            : request.nailShape.trim();
+        final length = request.nailLength.trim().isEmpty
+            ? 'not provided'
+            : request.nailLength.trim();
+        final dimensionsLabel =
+            'Nail dimensions. '
+            'Left hand: thumb ${spoken(left.thumb)}${nfcText(nfc.main.left['thumb'] == true)}, '
+            'index ${spoken(left.index)}${nfcText(nfc.main.left['index'] == true)}, '
+            'middle ${spoken(left.middle)}${nfcText(nfc.main.left['middle'] == true)}, '
+            'ring ${spoken(left.ring)}${nfcText(nfc.main.left['ring'] == true)}, '
+            'pinky ${spoken(left.pinky)}${nfcText(nfc.main.left['pinky'] == true)}. '
+            'Right hand: thumb ${spoken(right.thumb)}${nfcText(nfc.main.right['thumb'] == true)}, '
+            'index ${spoken(right.index)}${nfcText(nfc.main.right['index'] == true)}, '
+            'middle ${spoken(right.middle)}${nfcText(nfc.main.right['middle'] == true)}, '
+            'ring ${spoken(right.ring)}${nfcText(nfc.main.right['ring'] == true)}, '
+            'pinky ${spoken(right.pinky)}${nfcText(nfc.main.right['pinky'] == true)}. '
+            'Shape, $shape. Length, $length.';
+
+        return Semantics(
+          label: dimensionsLabel,
+          child: ExcludeSemantics(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _metaValueCard(
-                    'Shape',
-                    request.nailShape.trim().isEmpty ? '-' : request.nailShape,
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _dimsCard(
+                          'Left Hand',
+                          request.leftHand,
+                          nfc: nfc.main.left,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(width: 1, color: AppColors.blackCatBorderLight),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _dimsCard(
+                          'Right Hand',
+                          request.rightHand,
+                          nfc: nfc.main.right,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: SizedBox(
-                    height: 42,
-                    child: VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: AppColors.blackCatBorderLight,
+                const SizedBox(height: 12),
+                Container(height: 1, color: AppColors.blackCatBorderLight),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _metaValueCard(
+                        'Shape',
+                        request.nailShape.trim().isEmpty
+                            ? '-'
+                            : request.nailShape,
+                      ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: _metaValueCard(
-                    'Length',
-                    request.nailLength.trim().isEmpty
-                        ? '-'
-                        : request.nailLength,
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: SizedBox(
+                        height: 42,
+                        child: VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _metaValueCard(
+                        'Length',
+                        request.nailLength.trim().isEmpty
+                            ? '-'
+                            : request.nailLength,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         );
       },
     );
@@ -1201,28 +1402,36 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     String value, {
     FontWeight valueWeight = FontWeight.w700,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            color: AppColors.blackCat,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value.trim().isEmpty ? '-' : value.trim(),
-            style: TextStyle(
-              color: AppColors.blackCat,
-              fontWeight: valueWeight,
-              fontSize: 14,
+    final spokenValue = value.trim().isEmpty || value.trim() == '-'
+        ? 'Not provided'
+        : value.trim();
+    return Semantics(
+      label: '$label, $spokenValue',
+      child: ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$label: ',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.blackCat,
+              ),
             ),
-          ),
+            Expanded(
+              child: Text(
+                value.trim().isEmpty ? '-' : value.trim(),
+                style: TextStyle(
+                  color: AppColors.blackCat,
+                  fontWeight: valueWeight,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -1245,34 +1454,37 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
-            Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.60),
-                        fontWeight: FontWeight.w400,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  if (nfcRequested) ...[const SizedBox(width: 6), _nfcChip()],
-                ],
+            SizedBox(
+              width: 54,
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.60),
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                ),
               ),
             ),
-            const SizedBox(width: 10),
-            Text(
-              withMm(value),
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: AppColors.blackCat,
+            if (nfcRequested) ...[const SizedBox(width: 3), _nfcChip()],
+            const SizedBox(width: 6),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  withMm(value),
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
           ],
@@ -1305,7 +1517,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
   Widget _nfcChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: const BoxDecoration(
         color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
@@ -1313,7 +1525,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       child: const Text(
         'NFC',
         style: TextStyle(
-          fontSize: 9.5,
+          fontSize: 8,
           fontWeight: FontWeight.w700,
           color: AppColors.blackCat,
           height: 1.0,
@@ -1324,29 +1536,35 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
   Widget _metaValueCard(String label, String value) {
     final v = value.trim().isEmpty ? '-' : value.trim();
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.blackCat,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
+    final spokenValue = v == '-' ? 'Not provided' : v;
+    return Semantics(
+      label: '$label, $spokenValue',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.blackCat,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
             ),
-          ),
+            Text(
+              v,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.blackCat,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
-        Text(
-          v,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            color: AppColors.blackCat,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+      ),
     );
   }
 
@@ -1823,7 +2041,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
-  String _needByLabel(DateTime d) => formatDateMdy(d);
+  String _needByLabel(DateTime d) => formatDateMdyShortYear(d);
 
-  String _fmtDateLong(DateTime? d) => formatDateMdyOrDash(d);
+  String _fmtDateLong(DateTime? d) => formatDateMdyShortYearOrDash(d);
 }

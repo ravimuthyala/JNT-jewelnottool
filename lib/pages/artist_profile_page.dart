@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -194,12 +195,47 @@ class _ArtistCommunicationPreferencesPopupState
                     smsNotifications: _smsNotifications,
                   ),
                 ),
-                child: const Text('Save'),
+                child: const Text('Save communication preferences'),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AccessibilityCloseLoopTarget extends StatelessWidget {
+  const _AccessibilityCloseLoopTarget({
+    required this.label,
+    required this.onClose,
+  });
+
+  final String label;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    void scrollToTop() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final scrollable = Scrollable.maybeOf(context);
+        if (scrollable == null || !scrollable.position.hasPixels) return;
+        scrollable.position.animateTo(
+          scrollable.position.minScrollExtent,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+
+    return Semantics(
+      container: true,
+      button: true,
+      label: label,
+      hint: 'Double tap to close without saving',
+      onTap: onClose,
+      onDidGainAccessibilityFocus: scrollToTop,
+      child: const SizedBox(width: 1, height: 1),
     );
   }
 }
@@ -1451,6 +1487,25 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     );
   }
 
+  Future<void> _openReviews() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: ClipRRect(
+          borderRadius: BorderRadius.zero,
+          child: ArtistReviewsPage(
+            showTopChrome: false,
+            showTitleHeader: false,
+            onModalClose: () => Navigator.pop(sheetContext),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openCommunicationPreferences() async {
     if (_artistSupabaseId.isEmpty) await _bindArtistProfile();
     if (_artistSupabaseId.isEmpty) return;
@@ -1527,8 +1582,10 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
-                child: Column(
-                  children: [
+                child: Semantics(
+                  explicitChildNodes: true,
+                  child: Column(
+                    children: [
                     _menuTile(
                       icon: Icons.photo_library_outlined,
                       title: 'Portfolio',
@@ -1552,6 +1609,12 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       title: 'Availability',
                       subtitle: 'Update your schedule & turnaround.',
                       onTap: _openAvailability,
+                    ),
+                    _menuTile(
+                      icon: Icons.star_border_rounded,
+                      title: 'Reviews',
+                      subtitle: 'View all artist reviews.',
+                      onTap: _openReviews,
                     ),
 
                     // ✅ Direct Requests section (after Availability)
@@ -1598,7 +1661,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -1670,29 +1734,46 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
           ),
         ],
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Row(
-            children: [
-              NotificationBellButton(
-                onTap: _onNotifications,
-                iconSize: JntHeaderMetrics.notificationIconSize,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Center(
-                  child: Image.asset(
-                    'assets/images/jnt_logo_black.png',
-                    height: JntHeaderMetrics.logoHeight,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      child: SizedBox(
+        height: JntHeaderMetrics.avatarSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Decorative only. Keeping the logo in its own positioned layer
+            // prevents the notification control from inheriting its bounds or
+            // semantics.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: Center(
+                    child: Image.asset(
+                      'assets/images/jnt_logo_black.png',
+                      height: JntHeaderMetrics.logoHeight,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ),
-            ],
-          ),
-        ],
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                container: true,
+                button: true,
+                label: 'Notifications',
+                hint: 'Double tap to open notifications',
+                onTap: _onNotifications,
+                child: ExcludeSemantics(
+                  child: NotificationBellButton(
+                    onTap: _onNotifications,
+                    iconSize: JntHeaderMetrics.notificationIconSize,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1703,23 +1784,44 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   Widget _profileHeroCard() {
     final w = MediaQuery.of(context).size.width;
     final avatarSize = w < 380 ? 110.0 : 126.0;
+    final ratingText = _rating == null
+        ? 'Rating not available'
+        : '${_rating!.toStringAsFixed(1)} out of 5 stars';
+    final reviewsText = _reviews == 1 ? '1 review' : '$_reviews reviews';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-      child: Stack(
+      child: Column(
         children: [
-          Column(
-            children: [
-              SizedBox(
-                height: avatarSize,
-                width: avatarSize,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: _avatarImage(),
-                ),
+          // Each item is a separate semantic stop. The profile image is
+          // decorative and is intentionally skipped by TalkBack.
+          Semantics(
+            container: true,
+            label: '${_heroTierLabel()} tier',
+            child: ExcludeSemantics(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _heroTierTag(),
               ),
-              const SizedBox(height: 12),
-              Text(
+            ),
+          ),
+          const SizedBox(height: 8),
+          ExcludeSemantics(
+            child: SizedBox(
+              height: avatarSize,
+              width: avatarSize,
+              child: ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: _avatarImage(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Semantics(
+            container: true,
+            label: 'Artist name, $_artistName',
+            child: ExcludeSemantics(
+              child: Text(
                 _artistName,
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -1728,25 +1830,27 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   color: AppColors.blackCat.withValues(alpha: 0.90),
                 ),
               ),
-              const SizedBox(height: 10),
-              Row(
+            ),
+          ),
+          const SizedBox(height: 10),
+          Semantics(
+            container: true,
+            label: ratingText,
+            child: ExcludeSemantics(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (_rating != null) ...[
-                    _stars(_rating!),
-                    const SizedBox(width: 10),
-                  ] else ...[
+                  if (_rating != null)
+                    _stars(_rating!)
+                  else
                     Icon(
                       Icons.star_border_rounded,
                       size: 18,
                       color: AppColors.blackCat.withValues(alpha: 0.45),
                     ),
-                    const SizedBox(width: 8),
-                  ],
+                  const SizedBox(width: 10),
                   Text(
-                    _rating != null
-                        ? '${_rating!.toStringAsFixed(1)} | $_reviews Reviews'
-                        : 'N/A',
+                    _rating != null ? _rating!.toStringAsFixed(1) : 'N/A',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
@@ -1755,36 +1859,46 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Semantics(
-                button: true,
-                label: 'View all reviews',
-                child: ExcludeSemantics(
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ArtistReviewsPage(),
-                        ),
-                      );
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: Text(
-                        'View all reviews',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat,
-                        ),
-                      ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Semantics(
+            container: true,
+            button: true,
+            label: reviewsText,
+            hint: 'Double tap to view all artist reviews',
+            onTap: _openReviews,
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: _openReviews,
+                borderRadius: BorderRadius.zero,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    reviewsText,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.blackCat.withValues(alpha: 0.70),
+                      decoration: TextDecoration.underline,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 14),
-              SizedBox(
+            ),
+          ),
+          const SizedBox(height: 14),
+          Semantics(
+            container: true,
+            button: true,
+            label: 'Edit Profile',
+            hint: 'Double tap to edit your profile',
+            onTap: _onEditProfile,
+            child: ExcludeSemantics(
+              child: SizedBox(
                 height: 46,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -1797,28 +1911,29 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     padding: const EdgeInsets.symmetric(horizontal: 18),
                   ),
                   onPressed: _onEditProfile,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Edit Profile',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          fontSize: 14,
-                          fontFamily: 'Arial',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
+                  child: const Text(
+                    'Edit Profile',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
+                      fontFamily: 'Arial',
+                    ),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
-          Positioned(top: 0, right: 0, child: _heroTierTag()),
         ],
       ),
     );
+  }
+
+  String _heroTierLabel() {
+    return switch (_ascensionState.tier) {
+      ArtistAscensionTier.maker => 'Maker',
+      ArtistAscensionTier.goldsmith => 'Goldsmith',
+      ArtistAscensionTier.crowned => 'Crowned',
+    };
   }
 
   Widget _heroTierTag() {
@@ -1865,56 +1980,61 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        onTap: onTap,
-        child: ExcludeSemantics(
-          child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: onTap,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: AppColors.blackCatBorderLight),
+    return Semantics(
+      container: true,
+      explicitChildNodes: false,
+      button: true,
+      label: title,
+      hint: '$subtitle Double tap to open.',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: InkWell(
+          borderRadius: BorderRadius.zero,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.blackCatBorderLight),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: AppColors.blackCat.withValues(alpha: 0.75),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 22,
-                    color: AppColors.blackCat.withValues(alpha: 0.75),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                            color: AppColors.blackCat,
-                          ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.blackCat,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.60),
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14,
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: AppColors.blackCat.withValues(alpha: 0.60),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 14,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Icon(Icons.chevron_right_rounded, color: AppColors.blackCat),
-                ],
-              ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.blackCat,
+                ),
+              ],
             ),
           ),
         ),
@@ -1926,193 +2046,241 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   // DIRECT REQUESTS CARD
   // =========================
   Widget _directRequestsCard() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.blackCatBorderLight),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.mark_email_unread_outlined,
-            size: 22,
-            color: AppColors.blackCat.withValues(alpha: 0.75),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Direct Requests',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _directRequestsEnabled
-                      ? 'Accepting requests now 😊'
-                      : 'Not accepting requests',
-                  style: TextStyle(
-                    color: AppColors.blackCat.withValues(alpha: 0.60),
-                    fontWeight: FontWeight.w400,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+    final enabled = _directRequestsEnabled;
+    final stateLabel = enabled
+        ? 'Accepting requests now'
+        : 'Not accepting requests';
+
+    return Semantics(
+      container: true,
+      toggled: enabled,
+      enabled: !_savingDirectRequestPref,
+      label: 'Direct Requests',
+      value: stateLabel,
+      hint: _savingDirectRequestPref
+          ? 'Updating'
+          : 'Double tap to ${enabled ? 'turn off' : 'turn on'} direct requests',
+      onTap: _savingDirectRequestPref
+          ? null
+          : () => _setDirectRequestsEnabled(!enabled),
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: AppColors.blackCatBorderLight),
             ),
           ),
-          Switch(
-            value: _directRequestsEnabled,
-            activeThumbColor: AppColors.blackCat,
-            inactiveThumbColor: AppColors.blackCatLight,
-            inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
-            onChanged: _savingDirectRequestPref
-                ? null
-                : (v) => _setDirectRequestsEnabled(v),
+          child: Row(
+            children: [
+              Icon(
+                Icons.mark_email_unread_outlined,
+                size: 22,
+                color: AppColors.blackCat.withValues(alpha: 0.75),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Direct Requests',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      enabled
+                          ? 'Accepting requests now 😊'
+                          : 'Not accepting requests',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: enabled,
+                activeThumbColor: AppColors.blackCat,
+                inactiveThumbColor: AppColors.blackCatLight,
+                inactiveTrackColor:
+                    AppColors.blackCatLight.withValues(alpha: 0.35),
+                onChanged: _savingDirectRequestPref
+                    ? null
+                    : _setDirectRequestsEnabled,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _nfcRequestsCard() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.blackCatBorderLight),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.nfc_rounded,
-            size: 22,
-            color: AppColors.blackCat.withValues(alpha: 0.75),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'NFC Request',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _nfcRequestsEnabled
-                      ? 'Accepting NFC upgrade requests'
-                      : 'Not accepting NFC upgrade requests',
-                  style: TextStyle(
-                    color: AppColors.blackCat.withValues(alpha: 0.60),
-                    fontWeight: FontWeight.w400,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+    final enabled = _nfcRequestsEnabled;
+    final stateLabel = enabled
+        ? 'Accepting NFC upgrade requests'
+        : 'Not accepting NFC upgrade requests';
+
+    return Semantics(
+      container: true,
+      toggled: enabled,
+      enabled: !_savingNfcRequestPref,
+      label: 'NFC Request',
+      value: stateLabel,
+      hint: _savingNfcRequestPref
+          ? 'Updating'
+          : 'Double tap to ${enabled ? 'turn off' : 'turn on'} NFC requests',
+      onTap: _savingNfcRequestPref
+          ? null
+          : () => _setNfcRequestsEnabled(!enabled),
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: AppColors.blackCatBorderLight),
             ),
           ),
-          Switch(
-            value: _nfcRequestsEnabled,
-            activeThumbColor: AppColors.blackCat,
-            inactiveThumbColor: AppColors.blackCatLight,
-            inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
-            onChanged: _savingNfcRequestPref
-                ? null
-                : (v) => _setNfcRequestsEnabled(v),
+          child: Row(
+            children: [
+              Icon(
+                Icons.nfc_rounded,
+                size: 22,
+                color: AppColors.blackCat.withValues(alpha: 0.75),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'NFC Request',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      stateLabel,
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: enabled,
+                activeThumbColor: AppColors.blackCat,
+                inactiveThumbColor: AppColors.blackCatLight,
+                inactiveTrackColor:
+                    AppColors.blackCatLight.withValues(alpha: 0.35),
+                onChanged: _savingNfcRequestPref ? null : _setNfcRequestsEnabled,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _requestNotificationsCard() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.blackCatBorderLight),
+    return Semantics(
+      explicitChildNodes: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(2, 14, 2, 14),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppColors.blackCatBorderLight),
+          ),
+        ),
+        child: Column(
+          children: [
+            _notificationToggleRow(
+              icon: Icons.message_outlined,
+              label: 'Client Notifications',
+              value: _allClientRequestNotificationsEnabled,
+              saving: _savingAllClientRequestNotifications,
+              onChanged: _setAllClientRequestNotificationsEnabled,
+            ),
+            const SizedBox(height: 8),
+            ExcludeSemantics(
+              child: Divider(
+                color: AppColors.blackCat.withValues(alpha: 0.08),
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _notificationToggleRow(
+              icon: Icons.alternate_email_rounded,
+              label: 'Direct Request Notifications',
+              value: _directRequestNotificationsEnabled,
+              saving: _savingDirectRequestNotifications,
+              onChanged: _setDirectRequestNotificationsEnabled,
+            ),
+          ],
         ),
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.message_outlined,
-                size: 22,
-                color: AppColors.blackCat.withValues(alpha: 0.75),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Client Notifications',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.blackCat,
-                  ),
+    );
+  }
+
+  Widget _notificationToggleRow({
+    required IconData icon,
+    required String label,
+    required bool value,
+    required bool saving,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Semantics(
+      container: true,
+      toggled: value,
+      enabled: !saving,
+      label: label,
+      value: value ? 'On' : 'Off',
+      hint: saving
+          ? 'Updating'
+          : 'Double tap to turn ${value ? 'off' : 'on'}',
+      onTap: saving ? null : () => onChanged(!value),
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: AppColors.blackCat.withValues(alpha: 0.75),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
                 ),
               ),
-              Switch(
-                value: _allClientRequestNotificationsEnabled,
-                activeThumbColor: AppColors.blackCat,
-                inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withValues(
-                  alpha: 0.35,
-                ),
-                onChanged: _savingAllClientRequestNotifications
-                    ? null
-                    : (v) => _setAllClientRequestNotificationsEnabled(v),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Divider(color: AppColors.blackCat.withValues(alpha: 0.08), height: 1),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                Icons.alternate_email_rounded,
-                size: 22,
-                color: AppColors.blackCat.withValues(alpha: 0.75),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Direct Request Notifications',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-              Switch(
-                value: _directRequestNotificationsEnabled,
-                activeThumbColor: AppColors.blackCat,
-                inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withValues(
-                  alpha: 0.35,
-                ),
-                onChanged: _savingDirectRequestNotifications
-                    ? null
-                    : (v) => _setDirectRequestNotificationsEnabled(v),
-              ),
-            ],
-          ),
-        ],
+            ),
+            Switch(
+              value: value,
+              activeThumbColor: AppColors.blackCat,
+              inactiveThumbColor: AppColors.blackCatLight,
+              inactiveTrackColor:
+                  AppColors.blackCatLight.withValues(alpha: 0.35),
+              onChanged: saving ? null : onChanged,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2136,6 +2304,8 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     return MergeSemantics(
       child: Semantics(
         button: true,
+        label: 'JNT Ascension',
+        hint: 'Double tap to view ascension details',
         onTap: _openAscension,
         child: ExcludeSemantics(
           child: InkWell(
@@ -2891,7 +3061,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: 'Close payout settings',
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -2991,6 +3161,10 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                 ),
               ),
             ),
+            _AccessibilityCloseLoopTarget(
+              label: 'Close payout settings',
+              onClose: () => Navigator.pop(context),
+            ),
           ],
         ),
       ),
@@ -3017,6 +3191,9 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
             child: Semantics(
               button: true,
               selected: open,
+              label: title,
+              value: open ? 'Expanded' : 'Collapsed',
+              hint: open ? 'Double tap to collapse' : 'Double tap to expand',
               onTap: onTap,
               child: ExcludeSemantics(
                 child: InkWell(
@@ -3877,7 +4054,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Close',
+                    tooltip: 'Close portfolio',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),
@@ -3955,22 +4132,24 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                                             final uploaded = await widget
                                                 .onUploadTap(
                                                   selectedFiles: picked,
-                                                  onProgress: (completed, total) {
-                                                    if (!mounted) return;
-                                                    setState(() {
-                                                      _uploadCompleted =
-                                                          completed;
-                                                      _uploadTotal = total;
-                                                    });
-                                                  },
+                                                  onProgress:
+                                                      (completed, total) {
+                                                        if (!mounted) return;
+                                                        setState(() {
+                                                          _uploadCompleted =
+                                                              completed;
+                                                          _uploadTotal = total;
+                                                        });
+                                                      },
                                                 );
                                             if (!mounted) return;
                                             if (uploaded.isNotEmpty) {
                                               setState(() {
-                                                _seedItems = <ArtistPortfolioItem>[
-                                                  ...uploaded,
-                                                  ..._seedItems,
-                                                ];
+                                                _seedItems =
+                                                    <ArtistPortfolioItem>[
+                                                      ...uploaded,
+                                                      ..._seedItems,
+                                                    ];
                                               });
                                               await _loadInitialPage();
                                             }
@@ -4185,6 +4364,10 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     return Semantics(
       button: true,
       selected: selected,
+      label: label,
+      value: selected ? 'Selected' : 'Not selected',
+      hint: selected ? null : 'Double tap to select',
+      onTap: () => setState(() => _nailTechType = value),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: () => setState(() => _nailTechType = value),
@@ -4328,71 +4511,74 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           childAspectRatio: 0.92,
         ),
         delegate: SliverChildBuilderDelegate((_, i) {
-        if (showTailLoader && i == items.length) {
-          return Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.zero,
-              color: AppColors.blackCat.withValues(alpha: 0.03),
-            ),
-            child: _loadingMore
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const SizedBox.shrink(),
-          );
-        }
-        final item = items[i];
-        final deleting = _deletingImages.contains(item.image.trim());
-        return ClipRRect(
-          borderRadius: BorderRadius.zero,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _portfolioImage(item.image),
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Semantics(
-                  button: true,
-                  label: 'Delete portfolio image',
-                  onTap: deleting ? null : () => _deletePortfolioItem(item),
-                  child: ExcludeSemantics(
-                    child: InkWell(
-                      onTap: deleting ? null : () => _deletePortfolioItem(item),
-                      borderRadius: BorderRadius.zero,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: AppColors.blackCat.withValues(alpha: 0.65),
-                          shape: BoxShape.circle,
-                        ),
-                        child: deleting
-                            ? const Padding(
-                                padding: EdgeInsets.all(5),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.snow,
+          if (showTailLoader && i == items.length) {
+            return Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.zero,
+                color: AppColors.blackCat.withValues(alpha: 0.03),
+              ),
+              child: _loadingMore
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const SizedBox.shrink(),
+            );
+          }
+          final item = items[i];
+          final deleting = _deletingImages.contains(item.image.trim());
+          return ClipRRect(
+            borderRadius: BorderRadius.zero,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _portfolioImage(item.image),
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Semantics(
+                    button: true,
+                    label: 'Delete portfolio image',
+                    hint: 'Double tap to remove this image',
+                    onTap: deleting ? null : () => _deletePortfolioItem(item),
+                    child: ExcludeSemantics(
+                      child: InkWell(
+                        onTap: deleting
+                            ? null
+                            : () => _deletePortfolioItem(item),
+                        borderRadius: BorderRadius.zero,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
+                            shape: BoxShape.circle,
+                          ),
+                          child: deleting
+                              ? const Padding(
+                                  padding: EdgeInsets.all(5),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.snow,
+                                    ),
                                   ),
+                                )
+                              : const Icon(
+                                  Icons.close_rounded,
+                                  size: 16,
+                                  color: AppColors.snow,
                                 ),
-                              )
-                            : const Icon(
-                                Icons.close_rounded,
-                                size: 16,
-                                color: AppColors.snow,
-                              ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        );
+              ],
+            ),
+          );
         }, childCount: showTailLoader ? items.length + 1 : items.length),
       ),
     );
@@ -5052,7 +5238,7 @@ class _ArtistSpecializationServiceAreaModalState
                   ),
                   Semantics(
                     button: true,
-                    label: 'Close',
+                    label: 'Close specialization and service area',
                     onTap: () => Navigator.pop(context),
                     child: ExcludeSemantics(
                       child: InkWell(
@@ -5098,6 +5284,20 @@ class _ArtistSpecializationServiceAreaModalState
                       return Semantics(
                         button: true,
                         selected: selected,
+                        label: service,
+                        value: selected ? 'Selected' : 'Not selected',
+                        hint: selected
+                            ? 'Double tap to remove'
+                            : 'Double tap to add',
+                        onTap: () {
+                          setState(() {
+                            if (selected) {
+                              _services.remove(service);
+                            } else {
+                              _services.add(service);
+                            }
+                          });
+                        },
                         child: ExcludeSemantics(
                           child: InkWell(
                             onTap: () {
@@ -5259,6 +5459,10 @@ class _ArtistSpecializationServiceAreaModalState
                     ),
                   ),
                 ),
+              ),
+              _AccessibilityCloseLoopTarget(
+                label: 'Close specialization and service area',
+                onClose: () => Navigator.pop(context),
               ),
             ],
           ),
@@ -5600,7 +5804,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: 'Close availability',
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -5750,8 +5954,9 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                           constraints.maxHeight,
                         );
                         return Semantics(
-                          label:
-                              'Availability calendar. Drag to select multiple days.',
+                          container: true,
+                          explicitChildNodes: true,
+                          label: 'Availability calendar',
                           child: GestureDetector(
                             behavior: HitTestBehavior.translucent,
                             onPanStart: (details) => _startDrag(
@@ -5997,6 +6202,9 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
   final _stateCtrl = TextEditingController();
   final _instagramCtrl = TextEditingController();
   final _tiktokCtrl = TextEditingController();
+  final ScrollController _editProfileScrollController = ScrollController();
+  final GlobalKey _editProfileCloseSemanticsKey = GlobalKey();
+  bool _movingAccessibilityFocusToClose = false;
   bool _saving = false;
   bool _pickingPhoto = false;
   String _selectedCountry = 'United States';
@@ -6400,7 +6608,33 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
     _stateCtrl.dispose();
     _instagramCtrl.dispose();
     _tiktokCtrl.dispose();
+    _editProfileScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _moveAccessibilityFocusToClose() async {
+    if (_movingAccessibilityFocusToClose || !mounted) return;
+    _movingAccessibilityFocusToClose = true;
+
+    try {
+      if (_editProfileScrollController.hasClients) {
+        await _editProfileScrollController.animateTo(
+          _editProfileScrollController.position.minScrollExtent,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      }
+
+      if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+
+      final closeContext = _editProfileCloseSemanticsKey.currentContext;
+      final renderObject = closeContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    } finally {
+      _movingAccessibilityFocusToClose = false;
+    }
   }
 
   Future<void> _save() async {
@@ -6580,6 +6814,7 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
         child: SafeArea(
           top: false,
           child: ListView(
+            controller: _editProfileScrollController,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
             children: [
               Row(
@@ -6599,8 +6834,10 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                     ),
                   ),
                   Semantics(
+                    key: _editProfileCloseSemanticsKey,
+                    container: true,
                     button: true,
-                    label: 'Close',
+                    label: 'Close edit profile',
                     onTap: () => Navigator.pop(context),
                     child: ExcludeSemantics(
                       child: InkWell(
@@ -6682,6 +6919,15 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                     ),
                   ),
                 ),
+              ),
+              Semantics(
+                container: true,
+                button: true,
+                label: 'Close edit profile',
+                hint: 'Double tap to close without saving',
+                onTap: () => Navigator.pop(context),
+                onDidGainAccessibilityFocus: _moveAccessibilityFocusToClose,
+                child: const SizedBox(width: 1, height: 1),
               ),
             ],
           ),
@@ -6885,38 +7131,44 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-              color: AppColors.blackCat.withValues(alpha: 0.7),
+          ExcludeSemantics(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                color: AppColors.blackCat.withValues(alpha: 0.7),
+              ),
             ),
           ),
           const SizedBox(height: 6),
-          TextField(
-            controller: c,
-            maxLines: maxLines,
-            keyboardType: keyboardType,
-            style: const TextStyle(fontSize: 12),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.snow,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: AppColors.blackCatBorderLight,
+          Semantics(
+            label: label,
+            textField: true,
+            child: TextField(
+              controller: c,
+              maxLines: maxLines,
+              keyboardType: keyboardType,
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.snow,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: const BorderSide(
+                    color: AppColors.blackCatBorderLight,
+                  ),
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: AppColors.blackCatBorderLight,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: const BorderSide(
+                    color: AppColors.blackCatBorderLight,
+                  ),
                 ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
               ),
             ),
           ),
@@ -6925,51 +7177,217 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
     );
   }
 
+  Future<void> _showAccessibleChoicePicker({
+    required String title,
+    required List<String> items,
+    required String? currentValue,
+    required ValueChanged<String> onSelected,
+  }) async {
+    final searchController = TextEditingController();
+    var query = '';
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.snow,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final filtered = items
+                .where(
+                  (item) => item.toLowerCase().contains(query.toLowerCase()),
+                )
+                .toList(growable: false);
+            return SafeArea(
+              child: FractionallySizedBox(
+                heightFactor: 0.82,
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'Select $title',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Semantics(
+                          button: true,
+                          label: 'Close $title list',
+                          onTap: () => Navigator.pop(sheetContext),
+                          child: ExcludeSemantics(
+                            child: IconButton(
+                              onPressed: () => Navigator.pop(sheetContext),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Semantics(
+                        label: 'Search $title',
+                        textField: true,
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: (value) =>
+                              setSheetState(() => query = value),
+                          decoration: InputDecoration(
+                            hintText: 'Search $title',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            border: const OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          final selected = item == currentValue;
+                          return Semantics(
+                            button: true,
+                            selected: selected,
+                            label: item,
+                            onTap: () {
+                              onSelected(item);
+                              Navigator.pop(sheetContext);
+                            },
+                            child: ExcludeSemantics(
+                              child: ListTile(
+                                title: Text(item),
+                                trailing: selected
+                                    ? const Icon(Icons.check_rounded)
+                                    : null,
+                                onTap: () {
+                                  onSelected(item);
+                                  Navigator.pop(sheetContext);
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    searchController.dispose();
+  }
+
   Widget _countryDropdown() {
+    final value = _selectedCountry.trim().isEmpty
+        ? 'Not selected'
+        : _selectedCountry.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: SearchableDropdownField(
+      child: Semantics(
+        container: true,
+        button: true,
         label: 'Country',
-        value: _selectedCountry,
-        items: _countries,
-        fillColor: AppColors.snow,
-        borderColor: AppColors.blackCatBorderLight,
-        onChanged: (value) {
-          setState(() {
-            _selectedCountry = value;
-            if (_selectedCountry == _usCountry) {
-              _selectedUsState = _matchUsState(_stateCtrl.text);
-              if (_selectedUsState != null) {
-                _stateCtrl.text = _selectedUsState!;
+        value: value,
+        hint: 'Double tap to select country',
+        onTap: () => _showAccessibleChoicePicker(
+          title: 'Country',
+          items: _countries,
+          currentValue: _selectedCountry,
+          onSelected: (selected) {
+            setState(() {
+              _selectedCountry = selected;
+              if (_selectedCountry == _usCountry) {
+                _selectedUsState = _matchUsState(_stateCtrl.text);
+                if (_selectedUsState != null) {
+                  _stateCtrl.text = _selectedUsState!;
+                }
+              } else {
+                _selectedUsState = null;
               }
-            } else {
-              if (_selectedUsState != null && _stateCtrl.text.trim().isEmpty) {
-                _stateCtrl.text = _selectedUsState!;
-              }
-              _selectedUsState = null;
-            }
-          });
-        },
+            });
+          },
+        ),
+        child: ExcludeSemantics(
+          child: SearchableDropdownField(
+            label: 'Country',
+            value: _selectedCountry,
+            items: _countries,
+            fillColor: AppColors.snow,
+            borderColor: AppColors.blackCatBorderLight,
+            onChanged: (selected) {
+              setState(() {
+                _selectedCountry = selected;
+                if (_selectedCountry == _usCountry) {
+                  _selectedUsState = _matchUsState(_stateCtrl.text);
+                  if (_selectedUsState != null) {
+                    _stateCtrl.text = _selectedUsState!;
+                  }
+                } else {
+                  _selectedUsState = null;
+                }
+              });
+            },
+          ),
+        ),
       ),
     );
   }
 
   Widget _usStateDropdown() {
+    final value = (_selectedUsState ?? '').trim().isEmpty
+        ? 'Not selected'
+        : _selectedUsState!.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: SearchableDropdownField(
+      child: Semantics(
+        container: true,
+        button: true,
         label: 'State',
-        value: _selectedUsState,
-        items: _usStates,
-        hint: 'Select state',
-        fillColor: AppColors.snow,
-        borderColor: AppColors.blackCatBorderLight,
-        onChanged: (value) {
-          setState(() {
-            _selectedUsState = value;
-            _stateCtrl.text = value;
-          });
-        },
+        value: value,
+        hint: 'Double tap to select state',
+        onTap: () => _showAccessibleChoicePicker(
+          title: 'State',
+          items: _usStates,
+          currentValue: _selectedUsState,
+          onSelected: (selected) {
+            setState(() {
+              _selectedUsState = selected;
+              _stateCtrl.text = selected;
+            });
+          },
+        ),
+        child: ExcludeSemantics(
+          child: SearchableDropdownField(
+            label: 'State',
+            value: _selectedUsState,
+            items: _usStates,
+            hint: 'Select state',
+            fillColor: AppColors.snow,
+            borderColor: AppColors.blackCatBorderLight,
+            onChanged: (selected) {
+              setState(() {
+                _selectedUsState = selected;
+                _stateCtrl.text = selected;
+              });
+            },
+          ),
+        ),
       ),
     );
   }

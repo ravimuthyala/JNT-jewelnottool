@@ -97,6 +97,18 @@ class _CompletedRequestSheet extends StatefulWidget {
 class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   final SupabaseClient _supabase = Supabase.instance.client;
   final _trackingCtrl = TextEditingController();
+  final FocusNode _closeFocusNode = FocusNode(
+    debugLabel: 'completedRequestClose',
+  );
+  final FocusNode _detailsContentFocusNode = FocusNode(
+    debugLabel: 'completedDetailsContent',
+  );
+  final FocusNode _photosContentFocusNode = FocusNode(
+    debugLabel: 'completedPhotosContent',
+  );
+  final FocusNode _shippingContentFocusNode = FocusNode(
+    debugLabel: 'completedShippingContent',
+  );
 
   // ✅ NEW (optional, but helps keep formatting consistent)
   final _shippedDateCtrl = TextEditingController();
@@ -153,6 +165,41 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     return const <dynamic>[];
   }
 
+  bool _accessibleNavigation(BuildContext context) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
+  }
+
+  void _requestAccessibleFocus(FocusNode node) {
+    if (!_accessibleNavigation(context)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      node.requestFocus();
+    });
+  }
+
+  void _selectCompletedTab(int index) {
+    if (_completedTabIndex == index) return;
+    setState(() => _completedTabIndex = index);
+    final target = switch (index) {
+      0 => _detailsContentFocusNode,
+      1 => _photosContentFocusNode,
+      _ => _shippingContentFocusNode,
+    };
+    _requestAccessibleFocus(target);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _requestAccessibleFocus(_closeFocusNode);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -171,6 +218,10 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   void dispose() {
     _trackingCtrl.dispose();
     _shippedDateCtrl.dispose(); // ✅ NEW
+    _closeFocusNode.dispose();
+    _detailsContentFocusNode.dispose();
+    _photosContentFocusNode.dispose();
+    _shippingContentFocusNode.dispose();
     super.dispose();
   }
 
@@ -346,9 +397,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           alignment: Alignment.bottomCenter,
           child: Container(
             width: math.min(media.size.width * 0.84, 336),
-            constraints: BoxConstraints(
-              maxHeight: media.size.height * 0.8,
-            ),
+            constraints: BoxConstraints(maxHeight: media.size.height * 0.8),
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             decoration: const BoxDecoration(
               color: AppColors.snow,
@@ -490,6 +539,33 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                     ),
                   ),
                   const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _topHeroCentered(
+                      context,
+                      widget.request,
+                      widget.onClose,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _completedStatusBanner(),
+                  ),
+                  const SizedBox(height: 12),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Divider(
+                      height: 1,
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _completedTabsBar(),
+                  ),
+                  const SizedBox(height: 12),
                   Expanded(
                     child: IndexedStack(
                       index: _completedTabIndex,
@@ -566,10 +642,13 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       child: Semantics(
         button: true,
         selected: selected,
+        label: '$label tab, ${index + 1} of 3',
+        hint: selected ? 'Selected tab' : 'Double tap to show the $label tab',
+        onTap: () => _selectCompletedTab(index),
         child: ExcludeSemantics(
           child: InkWell(
             borderRadius: BorderRadius.zero,
-            onTap: () => setState(() => _completedTabIndex = index),
+            onTap: () => _selectCompletedTab(index),
             child: Container(
               height: 44,
               decoration: BoxDecoration(
@@ -734,10 +813,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           top: 6,
           child: Semantics(
             button: true,
-            label: 'Close',
+            label: 'Close completed request details',
+            hint: 'Double tap to close',
             onTap: onClose,
             child: ExcludeSemantics(
               child: InkWell(
+                focusNode: _closeFocusNode,
                 borderRadius: BorderRadius.zero,
                 onTap: onClose,
                 child: Padding(
@@ -1220,34 +1301,37 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    k,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.fade,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.65),
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                if (nfcRequested) ...[
-                  const SizedBox(width: 6),
-                  _nfcDimensionChip(),
-                ],
-              ],
+          SizedBox(
+            width: 54,
+            child: Text(
+              k,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.65),
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          Text(
-            formatMm(v),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          if (nfcRequested) ...[const SizedBox(width: 3), _nfcDimensionChip()],
+          const SizedBox(width: 6),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                formatMm(v),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1256,7 +1340,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
   static Widget _nfcDimensionChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: const BoxDecoration(
         color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
@@ -1264,7 +1348,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       child: const Text(
         'NFC',
         style: TextStyle(
-          fontSize: 9.5,
+          fontSize: 8,
           fontWeight: FontWeight.w700,
           color: AppColors.blackCat,
           height: 1.0,
@@ -1307,89 +1391,132 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Widget _shippingLabelSection() {
+    final clientName = _firstNameOnly(widget.request.clientName);
+    final cityState = widget.request.clientLocation.trim().isEmpty
+        ? 'Not provided'
+        : widget.request.clientLocation.trim();
+    final carrier = _shippingCarrierValue.trim().isEmpty
+        ? 'Not provided'
+        : _shippingCarrierValue.trim();
+    final tracking = _shippingTrackingValue.trim().isEmpty
+        ? 'Auto-filled on label'
+        : _shippingTrackingValue.trim();
+
+    final shippingLabelSummary = _isShippingLabelReady
+        ? 'Shipping label. Label is ready. '
+              'Client, $clientName. '
+              'City and state, $cityState. '
+              'Carrier, $carrier. '
+              'Tracking, $tracking.'
+        : 'Shipping label. Label is being prepared. '
+              'Download, print, and QR code options will be available when the label is ready.';
+
+    Widget shippingAction({
+      required String label,
+      required String hint,
+      required IconData icon,
+      required VoidCallback onPressed,
+    }) {
+      return Semantics(
+        button: true,
+        label: label,
+        hint: hint,
+        onTap: onPressed,
+        child: ExcludeSemantics(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppColors.blackCat,
+              foregroundColor: AppColors.snow,
+              side: const BorderSide(color: AppColors.blackCat),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            onPressed: onPressed,
+            icon: Icon(icon, size: 16),
+            label: Text(label),
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('Shipping Label'),
-        const SizedBox(height: 10),
+        Focus(
+          focusNode: _shippingContentFocusNode,
+          child: Semantics(
+            container: true,
+            label: shippingLabelSummary,
+            child: ExcludeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionTitle('Shipping Label'),
+                  const SizedBox(height: 10),
+                  if (_isShippingLabelReady) ...[
+                    _kv('Client', clientName),
+                    _kv(
+                      'City/State',
+                      cityState == 'Not provided' ? '-' : cityState,
+                    ),
+                    _kv('Carrier', carrier),
+                    _kv('Tracking', tracking),
+                  ] else
+                    Text(
+                      'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.68),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
         if (_isShippingLabelReady) ...[
-          _kv('Client', _firstNameOnly(widget.request.clientName)),
-          _kv(
-            'City/State',
-            widget.request.clientLocation.trim().isEmpty
-                ? '-'
-                : widget.request.clientLocation.trim(),
-          ),
-          _kv('Carrier', _shippingCarrierValue),
-          _kv(
-            'Tracking',
-            _shippingTrackingValue.isEmpty
-                ? 'Auto-filled on label'
-                : _shippingTrackingValue,
-          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  side: const BorderSide(color: AppColors.blackCat),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
+              shippingAction(
+                label: 'Download Label',
+                hint: 'Double tap to open the shipping label for download',
+                icon: Icons.download_rounded,
                 onPressed: () => _openLabelPreview(_shippingPdfValue),
-                icon: const Icon(Icons.download_rounded, size: 16),
-                label: const Text('Download Label'),
               ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  side: const BorderSide(color: AppColors.blackCat),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
+              shippingAction(
+                label: 'Print Label',
+                hint: 'Double tap to open the shipping label for printing',
+                icon: Icons.print_rounded,
                 onPressed: () => _openLabelPreview(_shippingPdfValue),
-                icon: const Icon(Icons.print_rounded, size: 16),
-                label: const Text('Print Label'),
               ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  side: const BorderSide(color: AppColors.blackCat),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
+              shippingAction(
+                label: 'QR Code',
+                hint:
+                    'Double tap to show the shipping QR code for scan and print drop-off',
+                icon: Icons.qr_code_2_rounded,
                 onPressed: _openQrDialog,
-                icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                label: const Text('QR Code'),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'Use Download/Print to attach the label, or show the QR at the carrier counter for scan-and-print drop-off.',
-            style: TextStyle(
-              color: AppColors.blackCat.withValues(alpha: 0.62),
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-              height: 1.25,
-            ),
-          ),
-        ] else ...[
-          Text(
-            'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
-            style: TextStyle(
-              color: AppColors.blackCat.withValues(alpha: 0.68),
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
+          Semantics(
+            label:
+                'Use Download or Print to attach the label, or show the QR code at the carrier counter for scan and print drop-off.',
+            child: ExcludeSemantics(
+              child: Text(
+                'Use Download/Print to attach the label, or show the QR at the carrier counter for scan-and-print drop-off.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.62),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  height: 1.25,
+                ),
+              ),
             ),
           ),
         ],
@@ -1450,9 +1577,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                       nfc: nfc.main.left,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Container(width: 1, color: AppColors.blackCatBorderLight),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _handCardCentered(
                       'Right Hand',
@@ -1499,7 +1626,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: SizedBox(
                     height: 20,
                     child: VerticalDivider(
@@ -2016,7 +2143,11 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     }
   }
 
-  Widget _photosGrid(List<String> images) {
+  Widget _photosGrid(
+    List<String> images, {
+    required String ownerLabel,
+    FocusNode? firstItemFocusNode,
+  }) {
     final renderable = images
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
@@ -2031,16 +2162,22 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           final path = renderable[i];
           return SizedBox(
             width: 112,
-            child: Semantics(
-              button: true,
-              label: 'View photo ${i + 1} full screen',
-              onTap: () => _openImagePreview(path),
-              child: ExcludeSemantics(
-                child: InkWell(
-                  onTap: () => _openImagePreview(path),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.zero,
-                    child: _imageForPath(path),
+            child: Focus(
+              focusNode: i == 0 ? firstItemFocusNode : null,
+              child: Semantics(
+                button: true,
+                image: true,
+                label:
+                    '$ownerLabel uploaded photo ${i + 1} of ${renderable.length}',
+                hint: 'Double tap to open full-screen preview',
+                onTap: () => _openImagePreview(path),
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    onTap: () => _openImagePreview(path),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.zero,
+                      child: _imageForPath(path),
+                    ),
                   ),
                 ),
               ),
@@ -2052,28 +2189,65 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Future<void> _openImagePreview(String path) async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: AppColors.snow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          children: [
-            AspectRatio(aspectRatio: 1, child: _imageForPath(path)),
-            Positioned(
-              right: 6,
-              top: 6,
-              child: IconButton(
-                tooltip: 'Close image preview',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
-              ),
+    final closeFocusNode = FocusNode(debugLabel: 'completedPhotoPreviewClose');
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          if (_accessibleNavigation(dialogContext)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (closeFocusNode.canRequestFocus) {
+                closeFocusNode.requestFocus();
+              }
+            });
+          }
+
+          return Dialog(
+            backgroundColor: AppColors.blackCat,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            insetPadding: const EdgeInsets.all(12),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ExcludeSemantics(
+                    child: InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4,
+                      child: Center(child: _imageForPath(path)),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Semantics(
+                    button: true,
+                    label: 'Close image preview',
+                    hint: 'Double tap to close',
+                    onTap: () => Navigator.of(dialogContext).pop(),
+                    child: ExcludeSemantics(
+                      child: IconButton(
+                        focusNode: closeFocusNode,
+                        tooltip: 'Close image preview',
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.snow,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          );
+        },
+      );
+    } finally {
+      closeFocusNode.dispose();
+    }
   }
 
   static Widget _kv(String label, String value) {
@@ -2152,7 +2326,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     await showSimpleQrPrintDialog(context, qr);
   }
 
-  static String _needByLabel(DateTime d) => formatDateMdy(d);
+  static String _needByLabel(DateTime d) => formatDateMdyShortYear(d);
 
   static String _lengthLabel(String len) {
     final v = len.trim().toLowerCase();

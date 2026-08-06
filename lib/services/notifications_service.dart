@@ -246,7 +246,9 @@ class NotificationsService {
       try {
         await _supabase.removeChannel(channel);
       } catch (e) {
-        debugPrint('NotificationsService.watchUnreadCount removeChannel failed: $e');
+        debugPrint(
+          'NotificationsService.watchUnreadCount removeChannel failed: $e',
+        );
       }
     };
 
@@ -277,7 +279,10 @@ class NotificationsService {
 
       await _supabase
           .from('user_notifications')
-          .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
+          .update({
+            'read': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .inFilter('id', unreadIds);
 
       await trimUserNotifications(receiverEmail: normalized, maxKeep: 25);
@@ -299,7 +304,10 @@ class NotificationsService {
     try {
       await _supabase
           .from('user_notifications')
-          .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
+          .update({
+            'read': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .eq('receiver_email', normalized)
           .eq('id', id);
 
@@ -364,7 +372,9 @@ class NotificationsService {
           .delete()
           .inFilter('id', idsToDelete);
     } catch (e) {
-      debugPrint('NotificationsService.trimUserNotifications delete failed: $e');
+      debugPrint(
+        'NotificationsService.trimUserNotifications delete failed: $e',
+      );
     }
   }
 
@@ -392,7 +402,7 @@ class NotificationsService {
     final name = clientName.trim().isEmpty ? 'Client' : clientName.trim();
     for (final email in targets) {
       final body = isDirectRequest
-          ? 'You’ve received a direct request from $name (ID: $orderId).'
+          ? 'You’ve received a direct request from $name.'
           : 'Great news! $name has submitted a new nail request';
       await createUserNotification(
         receiverEmail: email,
@@ -544,7 +554,10 @@ class NotificationsService {
     Iterable<String> excludeEmails = const <String>[],
   }) async {
     String norm(Object? v) => (v ?? '').toString().trim().toLowerCase();
-    final excluded = excludeEmails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+    final excluded = excludeEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
     final out = <String>{};
 
     void addEmail(Object? v) {
@@ -732,7 +745,10 @@ class NotificationsService {
     final targets = <String>{};
     final normalizedSelected = selectedArtistEmail.trim().toLowerCase();
     final normalizedSelectedName = selectedArtistName.trim().toLowerCase();
-    final excluded = excludeArtistEmails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet();
+    final excluded = excludeArtistEmails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
 
     bool isLicensedArtist(Map<String, dynamic> data) {
       final profile = _map(data['profile']);
@@ -774,7 +790,10 @@ class NotificationsService {
         }
       }
       if (type.isEmpty) return true;
-      final isUnlicensed = type.contains('student') || type.contains('non-licensed') || type.contains('unlicensed');
+      final isUnlicensed =
+          type.contains('student') ||
+          type.contains('non-licensed') ||
+          type.contains('unlicensed');
       return !isUnlicensed;
     }
 
@@ -811,7 +830,12 @@ class NotificationsService {
         data['tier'],
       ];
       for (final raw in tierCandidates) {
-        final tier = (raw ?? '').toString().trim().toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
+        final tier = (raw ?? '')
+            .toString()
+            .trim()
+            .toLowerCase()
+            .replaceAll('_', ' ')
+            .replaceAll('-', ' ');
         if (tier == 'goldsmith' || tier == 'crowned') return true;
         if (tier.contains('goldsmith') || tier.contains('crowned')) return true;
       }
@@ -945,7 +969,9 @@ class NotificationsService {
               .trim()
               .toLowerCase();
       if (role.contains('admin')) return true;
-      final roles = (data['roles'] is List) ? (data['roles'] as List) : const <dynamic>[];
+      final roles = (data['roles'] is List)
+          ? (data['roles'] as List)
+          : const <dynamic>[];
       for (final raw in roles) {
         if (raw.toString().trim().toLowerCase().contains('admin')) return true;
       }

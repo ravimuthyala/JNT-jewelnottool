@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../constants/profile_table_columns.dart';
 import '../models/client_request_v2.dart';
@@ -38,6 +39,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   late final Future<_RequestDetailsVm> _vmFuture;
   int _currentStep = 1;
   bool _acceptedBrandCollaborationContract = false;
+  final Set<int> _expandedTerms = {1, 2, 3, 4, 5, 6};
 
   @override
   void initState() {
@@ -987,11 +989,220 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
   }
 
+  Widget _atYourChairBox(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.alabaster,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: AppColors.blackCat.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _termRow({
+    required int number,
+    required String title,
+    required String body,
+  }) {
+    final expanded = _expandedTerms.contains(number);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() {
+            if (expanded) {
+              _expandedTerms.remove(number);
+            } else {
+              _expandedTerms.add(number);
+            }
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '§${number.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+                Icon(
+                  expanded ? Icons.remove : Icons.add,
+                  size: 18,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.only(left: 32, bottom: 12),
+            child: Text(
+              body,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.blackCat.withValues(alpha: 0.7),
+                height: 1.35,
+              ),
+            ),
+          ),
+        Divider(height: 1, color: AppColors.blackCatBorderLight),
+      ],
+    );
+  }
+
+  Widget _termsSection(_RequestDetailsVm vm) {
+    final bc = vm.brandCollaboration;
+    final pricing = _RequestDetailsVm.asMap(bc['pricing']);
+    final brandName = vm.brandName.trim().isEmpty
+        ? 'The brand'
+        : vm.brandName.trim();
+
+    String repostDurationDisplay() {
+      switch ((pricing['repostDuration'] ?? '').toString()) {
+        case 'threeMonths':
+          return '3 months';
+        case 'twelveMonths':
+          return '12 months';
+        case 'forever':
+          return 'forever';
+        case 'sixMonths':
+        default:
+          return '6 months';
+      }
+    }
+
+    final runAsAd = pricing['runAsAd'] == true;
+    final paidAdsFeeRaw = pricing['paidAdsFeeAmount'];
+    final paidAdsFee = paidAdsFeeRaw is num
+        ? paidAdsFeeRaw.round()
+        : int.tryParse((paidAdsFeeRaw ?? '').toString()) ?? 0;
+    final paidAdText = runAsAd
+        ? 'Included in this offer as a paid ad, priced separately at '
+              '\$$paidAdsFee.'
+        : "Not included. If they want to put ad money behind your face, "
+              "that's a separate offer and a separate fee.";
+
+    final competingWindowName = (pricing['competingBrandsWindow'] ?? '')
+        .toString();
+    String competingDurationDisplay() {
+      switch (competingWindowName) {
+        case 'fourteenDays':
+          return '14 days';
+        case 'sixtyDays':
+          return '60 days';
+        case 'thirtyDays':
+        default:
+          return '30 days';
+      }
+    }
+
+    final competingText = competingWindowName == 'none'
+        ? "No exclusivity required — you're free to promote other "
+              "press-on or nail-tip brands right away."
+        : 'No promoting other press-on or nail-tip brands for '
+              '${competingDurationDisplay()} after your first post. Gel, '
+              'polish, and tools are fine.';
+
+    final terms = <(String, String)>[
+      (
+        'Payment',
+        'Half within 3 days of signing, half within 15 days of your '
+            "last post going live. Tap bonuses are paid monthly as "
+            "they're earned.",
+      ),
+      (
+        'How they reuse your content',
+        '$brandName can repost it on their own channels for '
+            '${repostDurationDisplay()}. After that it comes down unless '
+            'you agree to extend.',
+      ),
+      ('Running it as a paid ad', paidAdText),
+      ('Competing brands', competingText),
+      (
+        'Your clients',
+        'Anyone who taps your card decides for themselves about photos '
+            'and texts. You never have to ask on their behalf, and their '
+            'details stay with the platform, not with $brandName.',
+      ),
+      (
+        'Ending it early',
+        "Either side can walk with 10 days' written notice. Anything "
+            "you've already delivered still gets paid.",
+      ),
+    ];
+
+    return _sectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _bcHeader('THE TERMS')),
+              Text(
+                '${_expandedTerms.length} of ${terms.length} opened',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: AppColors.blackCatBorderLight),
+          for (var i = 0; i < terms.length; i++)
+            _termRow(number: i + 1, title: terms[i].$1, body: terms[i].$2),
+        ],
+      ),
+    );
+  }
+
   Widget _bcChip(String text, {bool strikethrough = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.alabaster,
+        color: AppColors.balletSlippers,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: Text(
@@ -1029,12 +1240,28 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       return int.tryParse((v ?? '').toString()) ?? 0;
     }
 
-    final postRows = <MapEntry<String, int>>[
-      MapEntry('Instagram Reel', postCount('instagramReel')),
-      MapEntry('Instagram Stories', postCount('instagramStories')),
-      MapEntry('Carousel post', postCount('carouselPost')),
-      MapEntry('TikTok', postCount('tiktok')),
-    ].where((e) => e.value > 0).toList(growable: false);
+    final postRows = <({String label, String subtitle, int count})>[
+      (
+        label: 'Instagram Reel',
+        subtitle: '30-60 sec, full application',
+        count: postCount('instagramReel'),
+      ),
+      (
+        label: 'Instagram Stories',
+        subtitle: 'With link sticker',
+        count: postCount('instagramStories'),
+      ),
+      (
+        label: 'Carousel post',
+        subtitle: '3-5 images',
+        count: postCount('carouselPost'),
+      ),
+      (
+        label: 'TikTok',
+        subtitle: 'Cross-post allowed',
+        count: postCount('tiktok'),
+      ),
+    ].where((e) => e.count > 0).toList(growable: false);
 
     final nfcCardTapsEnabled = bc['nfcCardTapsEnabled'] == true;
     final tapRateRaw = bc['tapRatePerTap'];
@@ -1104,7 +1331,21 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _bcHeader("WHAT THEY'RE ASKING FOR"),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _bcHeader("WHAT THEY'RE ASKING FOR")),
+                  if (vm.jntRevealDateLabel.trim().isNotEmpty)
+                    Text(
+                      'Live by ${vm.jntRevealDateLabel}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.blackCat.withValues(alpha: 0.6),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 10),
               if (postRows.isEmpty)
                 Text(
@@ -1126,21 +1367,41 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       ),
                     ),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${postRows[i].value}× ',
+                        '${postRows[i].count}×',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: AppColors.blackCat.withValues(alpha: 0.6),
                         ),
                       ),
-                      Text(
-                        postRows[i].key,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              postRows[i].label,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              postRows[i].subtitle,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.55,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -1204,22 +1465,22 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: _summaryValue(
-                        'Per tap',
+                      child: _atYourChairBox(
+                        'PER TAP',
                         tapRate == null
                             ? 'Flat'
                             : '\$${tapRate.toStringAsFixed(2)}',
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Container(width: 1, color: AppColors.blackCatBorderLight),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: _summaryValue(
-                        'Paid up to',
+                      child: _atYourChairBox(
+                        'PAID UP TO',
                         tapCap == null ? '-' : '$tapCap',
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(child: _atYourChairBox('COUNTED', '1×/phone')),
                   ],
                 ),
               ],
@@ -1232,7 +1493,19 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _bcHeader('LINKS TO USE'),
+                Row(
+                  children: [
+                    Expanded(child: _bcHeader('LINKS TO USE')),
+                    Text(
+                      'Already tagged to you',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.blackCat.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 for (var i = 0; i < links.length; i++) ...[
                   if (i > 0)
@@ -1244,15 +1517,15 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       ),
                     ),
                   Builder(
-                    builder: (_) {
+                    builder: (context) {
                       final link = _RequestDetailsVm.asMap(links[i]);
                       final label = (link['label'] ?? '').toString().trim();
                       final url = (link['url'] ?? '').toString().trim();
-                      final isTapDestination = link['isTapDestination'] == true;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Expanded(
                                 child: Text(
@@ -1264,20 +1537,44 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                   ),
                                 ),
                               ),
-                              if (isTapDestination)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  color: AppColors.blackCat,
-                                  child: const Text(
-                                    'TAP GOES HERE',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.5,
-                                      color: AppColors.snow,
+                              if (url.isNotEmpty)
+                                SizedBox(
+                                  height: 30,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.blackCat,
+                                      foregroundColor: AppColors.snow,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                    ),
+                                    onPressed: () async {
+                                      await Clipboard.setData(
+                                        ClipboardData(text: url),
+                                      );
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Link copied'),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Copy',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.snow,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1329,6 +1626,50 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                     ],
                   ),
                 ],
+                if (mustInclude.isNotEmpty || talkingPoints.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (context) {
+                      return SizedBox(
+                        height: 30,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: () async {
+                            final parts = <String>[
+                              if (mustInclude.isNotEmpty) mustInclude.join(' '),
+                              if (talkingPoints.isNotEmpty) talkingPoints,
+                            ];
+                            await Clipboard.setData(
+                              ClipboardData(text: parts.join('\n\n')),
+                            );
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Copied')),
+                            );
+                          },
+                          child: const Text(
+                            'Copy All',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.snow,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
                 if (talkingPoints.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   Text(
@@ -1370,10 +1711,26 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                     ],
                   ),
                 ],
+                const SizedBox(height: 14),
+                Divider(height: 1, color: AppColors.blackCatBorderLight),
+                const SizedBox(height: 10),
+                Text(
+                  'Everything past the required tags is yours to reword. '
+                  'They can ask for changes on product facts only — not on '
+                  'your voice.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    height: 1.35,
+                  ),
+                ),
               ],
             ),
           ),
         ],
+        const SizedBox(height: 12),
+        _termsSection(vm),
         const SizedBox(height: 14),
         InkWell(
           onTap: () => setState(

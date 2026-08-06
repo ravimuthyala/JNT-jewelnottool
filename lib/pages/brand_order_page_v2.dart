@@ -626,6 +626,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           : req.descriptionPreview,
       cancelReason: req.cancelReason,
       nfcRequested: req.nfcRequested,
+      brandCollaboration: req.brandCollaboration,
       inspirationPhotos: req.inspirationPhotos,
       needByDisplay: req.needByDisplay,
       jntRevealDateDisplay: req.jntRevealDateDisplay,
@@ -1962,6 +1963,7 @@ class ClientOrder {
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
   final bool nfcRequested;
+  final Map<String, dynamic> brandCollaboration;
 
   /// 0..1 progress for in-progress only
   final double? progress;
@@ -2032,6 +2034,7 @@ class ClientOrder {
     this.shippedAt,
     this.deliveredAt,
     this.nfcRequested = false,
+    this.brandCollaboration = const <String, dynamic>{},
     this.progress,
     this.rating,
     this.reviewText = '',

@@ -716,7 +716,7 @@ class _DeliveredHistorySheet extends StatelessWidget {
     );
   }
 
-  static String _fmt(DateTime d) => formatDateMdy(d);
+  static String _fmt(DateTime d) => formatDateMdyShortYear(d);
 }
 
 /// ==============================

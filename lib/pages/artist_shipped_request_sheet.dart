@@ -1243,7 +1243,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-  static String _needByLabel(DateTime d) => formatDateMdy(d);
+  static String _needByLabel(DateTime d) => formatDateMdyShortYear(d);
 
   static String _prettyLength(String raw) {
     final value = raw.trim();
@@ -1403,7 +1403,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: VerticalDivider(
                   width: 1,
                   thickness: 1,
@@ -1432,7 +1432,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: SizedBox(
                 height: 24,
                 child: VerticalDivider(
@@ -1496,34 +1496,37 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.fade,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                ),
-                if (nfcRequested) ...[
-                  const SizedBox(width: 6),
-                  _nfcDimensionChip(),
-                ],
-              ],
+          SizedBox(
+            width: 54,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.60),
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          Text(
-            formatMm(raw),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+          if (nfcRequested) ...[const SizedBox(width: 3), _nfcDimensionChip()],
+          const SizedBox(width: 6),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                formatMm(raw),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1532,7 +1535,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
   Widget _nfcDimensionChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: const BoxDecoration(
         color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
@@ -1540,7 +1543,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       child: const Text(
         'NFC',
         style: TextStyle(
-          fontSize: 9.5,
+          fontSize: 8,
           fontWeight: FontWeight.w700,
           color: AppColors.blackCat,
           height: 1.0,
@@ -2192,5 +2195,5 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     );
   }
 
-  static String _fmtDate(DateTime d) => formatDateMdy(d);
+  static String _fmtDate(DateTime d) => formatDateMdyShortYear(d);
 }

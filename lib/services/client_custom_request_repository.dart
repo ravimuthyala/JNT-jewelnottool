@@ -208,7 +208,8 @@ class ClientCustomRequestRepository {
         summary['fallbackToPool'] ?? details['fallbackToPool'],
         fallback: true,
       ),
-      'is_group_order': textFrom([
+      'is_group_order':
+          textFrom([
             summary['orderType'],
             details['orderType'],
             order['type'],
@@ -274,9 +275,10 @@ class ClientCustomRequestRepository {
   }) {
     final email = clientEmail.trim().toLowerCase();
     final alternateEmail = (alternateClientEmail ?? '').trim().toLowerCase();
-    final candidateEmails = <String>{email, alternateEmail}
-        .where((e) => e.isNotEmpty)
-        .toSet();
+    final candidateEmails = <String>{
+      email,
+      alternateEmail,
+    }.where((e) => e.isNotEmpty).toSet();
     final name = (clientName ?? '').trim().toLowerCase();
     final uid = (userUid ?? '').trim();
     final controller = StreamController<List<SubmittedClientRequestSummary>>();
@@ -413,11 +415,26 @@ class ClientCustomRequestRepository {
         }
       }
 
-      ingestClients((data['group_clients'] as List?)?.cast<dynamic>() ?? const []);
-      ingestClients((data['groupClients'] as List?)?.cast<dynamic>() ?? const []);
-      ingestClients((asMap(data['groupOrder'])['clients'] as List?)?.cast<dynamic>() ?? const []);
-      ingestClients((asMap(asMap(data['details'])['groupOrder'])['clients'] as List?)?.cast<dynamic>() ?? const []);
-      ingestClients((asMap(asMap(data['payload'])['groupOrder'])['clients'] as List?)?.cast<dynamic>() ?? const []);
+      ingestClients(
+        (data['group_clients'] as List?)?.cast<dynamic>() ?? const [],
+      );
+      ingestClients(
+        (data['groupClients'] as List?)?.cast<dynamic>() ?? const [],
+      );
+      ingestClients(
+        (asMap(data['groupOrder'])['clients'] as List?)?.cast<dynamic>() ??
+            const [],
+      );
+      ingestClients(
+        (asMap(asMap(data['details'])['groupOrder'])['clients'] as List?)
+                ?.cast<dynamic>() ??
+            const [],
+      );
+      ingestClients(
+        (asMap(asMap(data['payload'])['groupOrder'])['clients'] as List?)
+                ?.cast<dynamic>() ??
+            const [],
+      );
 
       return (uid.isNotEmpty && docUid == uid) ||
           candidateEmails.contains(docEmail) ||
@@ -445,10 +462,7 @@ class ClientCustomRequestRepository {
           if (data.isEmpty) continue;
           final detailKey = (row['detail_key'] ?? '').toString().trim();
           final existing = result[requestId] ?? <String, dynamic>{};
-          final merged = <String, dynamic>{
-            ...existing,
-            ...data,
-          };
+          final merged = <String, dynamic>{...existing, ...data};
           if (detailKey.isNotEmpty) {
             merged[detailKey] = <String, dynamic>{
               ..._asMap(existing[detailKey]),
@@ -466,15 +480,22 @@ class ClientCustomRequestRepository {
       loading = true;
       try {
         final candidateClientIds = await resolveCandidateClientIds();
-        final clientDetails = await loadDetails('client_custom_requests_details');
-        final companyDetails = await loadDetails('company_custom_requests_details');
+        final clientDetails = await loadDetails(
+          'client_custom_requests_details',
+        );
+        final companyDetails = await loadDetails(
+          'company_custom_requests_details',
+        );
 
         Future<List<Map<String, dynamic>>> fetchRows(
           String table,
           String sourceCollection,
           Map<String, Map<String, dynamic>> detailsById,
         ) async {
-          final rows = await supabase.from(table).select().order('updated_at', ascending: false);
+          final rows = await supabase
+              .from(table)
+              .select()
+              .order('updated_at', ascending: false);
           final out = <Map<String, dynamic>>[];
           for (final raw in rows) {
             final row = Map<String, dynamic>.from(raw);
@@ -522,8 +543,10 @@ class ClientCustomRequestRepository {
           } catch (_) {}
         }
         items.sort((a, b) {
-          final ad = a.clientSubmittedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bd = b.clientSubmittedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final ad =
+              a.clientSubmittedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bd =
+              b.clientSubmittedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
           return bd.compareTo(ad);
         });
         if (!disposed) controller.add(items);
@@ -557,7 +580,9 @@ class ClientCustomRequestRepository {
     ]) {
       channels.add(
         supabase
-            .channel('client-requests-watch-$table-${identityHashCode(controller)}')
+            .channel(
+              'client-requests-watch-$table-${identityHashCode(controller)}',
+            )
             .onPostgresChanges(
               event: PostgresChangeEvent.all,
               schema: 'public',
@@ -619,7 +644,9 @@ class ClientCustomRequestRepository {
         }
         if (path.trim().isEmpty) continue;
         try {
-          final url = Supabase.instance.client.storage.from(bucket).getPublicUrl(path);
+          final url = Supabase.instance.client.storage
+              .from(bucket)
+              .getPublicUrl(path);
           if (url.trim().isNotEmpty && await _storageObjectExists(url)) {
             _resolvedPhotoRefCache[ref] = url;
             return url;
@@ -760,7 +787,8 @@ Future<List<String>> _recoverBrandRequestPhotos({
         final listed = await supabase.storage.from(bucket).list(path: basePath);
         for (final item in listed) {
           final name = item.name.toLowerCase();
-          final isImage = name.endsWith('.jpg') ||
+          final isImage =
+              name.endsWith('.jpg') ||
               name.endsWith('.jpeg') ||
               name.endsWith('.png') ||
               name.endsWith('.webp') ||
@@ -842,6 +870,7 @@ class SubmittedClientRequestSummary {
     this.nfcRequested = false,
     this.acceptedClientName = '',
     this.openToClientPool = true,
+    this.brandCollaboration = const <String, dynamic>{},
   });
 
   final String id;
@@ -907,8 +936,11 @@ class SubmittedClientRequestSummary {
   final DateTime? deliveredAt;
   final bool nfcRequested;
   final bool openToClientPool;
+  final Map<String, dynamic> brandCollaboration;
 
-  static Future<SubmittedClientRequestSummary> fromDocWithDetails(dynamic doc) async {
+  static Future<SubmittedClientRequestSummary> fromDocWithDetails(
+    dynamic doc,
+  ) async {
     final data = doc.data();
     final sourceCollection = doc.reference.parent.id;
     final submittedRaw = data['clientSubmittedAtLocal'];
@@ -1435,6 +1467,7 @@ class SubmittedClientRequestSummary {
 
     return SubmittedClientRequestSummary(
       id: doc.id,
+      brandCollaboration: _asMap(detailData['brandCollaboration']),
       sourceCollection: sourceCollection,
       orderNumber: canonicalOrderNumber([
         (data['admin'] is Map ? (data['admin'] as Map)['orderNumber'] : null),
@@ -2170,6 +2203,7 @@ class SubmittedClientRequestSummary {
     return SubmittedClientRequestSummary(
       id: data['id']?.toString() ?? '',
       nfcRequested: nfcRequested,
+      brandCollaboration: _asMap(detailData['brandCollaboration']),
       sourceCollection: sourceCollection,
       orderNumber: canonicalOrderNumber([
         (data['admin'] is Map ? (data['admin'] as Map)['orderNumber'] : null),

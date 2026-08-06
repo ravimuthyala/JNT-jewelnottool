@@ -62,6 +62,8 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   bool _isLoading = true;
   _EarningsRange _range = _EarningsRange.allTime;
   final List<ClientRequestV2> _allVisible = <ClientRequestV2>[];
+  final FocusNode _earningsSummaryFocusNode = FocusNode(debugLabel: 'earningsSummary');
+  bool _requestedInitialAdaFocus = false;
 
   RealtimeChannel? _requestsChannel;
   int _portfolioUploads = 0;
@@ -84,6 +86,7 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   @override
   void dispose() {
     _requestsChannel?.unsubscribe();
+    _earningsSummaryFocusNode.dispose();
     super.dispose();
   }
 
@@ -636,6 +639,13 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
+    final isAdaUser = MediaQuery.of(context).accessibleNavigation;
+    if (isAdaUser && !_isLoading && !_requestedInitialAdaFocus) {
+      _requestedInitialAdaFocus = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _earningsSummaryFocusNode.requestFocus();
+      });
+    }
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -719,9 +729,12 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                   physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
                   children: [
-                    _TotalEarningsCard(
-                      total: summary.totalEarnings,
-                      deltaLabel: '${_money(summary.monthEarnings)} this month',
+                    Focus(
+                      focusNode: _earningsSummaryFocusNode,
+                      child: _TotalEarningsCard(
+                        total: summary.totalEarnings,
+                        deltaLabel: '${_money(summary.monthEarnings)} this month',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _AscensionSummaryCard(
@@ -749,11 +762,16 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
+                          child: Semantics(
+                            label: 'Earnings date range, ${summary.rangeLabel}',
+                            child: ExcludeSemantics(
+                              child: Text(
                             summary.rangeLabel,
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: AppColors.blackCat.withValues(alpha: 0.70),
+                            ),
+                              ),
                             ),
                           ),
                         ),
@@ -866,11 +884,14 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+    return Semantics(
+      header: true,
+      label: title,
+      child: ExcludeSemantics(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        ),
       ),
     );
   }
@@ -882,67 +903,64 @@ class _PerformanceTrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxValue = points.fold<double>(
-      0,
-      (max, p) => p.value > max ? p.value : max,
-    );
+    final maxValue = points.fold<double>(0, (max, p) => p.value > max ? p.value : max);
     final safeMax = maxValue <= 0 ? 1.0 : maxValue;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Last 6 months',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: points
-                  .map(
-                    (p) => Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Container(
-                              height: ((p.value / safeMax) * 84)
-                                  .clamp(6.0, 84.0)
-                                  .toDouble(),
-                              decoration: BoxDecoration(
-                                color: AppColors.balletSlippers,
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              p.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.65,
+    final summary = points.map((p) => '${p.label}, ${p.value.toStringAsFixed(2)} dollars').join('. ');
+    return Semantics(
+      container: true,
+      label: 'Paid earnings for the last 6 months. $summary.',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Last 6 months', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 120,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: points
+                      .map(
+                        (p) => Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Container(
+                                  height: ((p.value / safeMax) * 84)
+                                      .clamp(6.0, 84.0)
+                                      .toDouble(),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.balletSlippers,
+                                    borderRadius: BorderRadius.zero,
+                                  ),
                                 ),
-                                fontWeight: FontWeight.w700,
-                              ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  p.label,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.65,
+                                    ),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1106,54 +1124,39 @@ class _TotalEarningsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.zero,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.blackCat, AppColors.blackCatLight],
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Total Earnings',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.snow.withValues(alpha: 0.92),
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '\$${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.snow,
-                    fontSize: 30,
-                    height: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  deltaLabel,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.snow.withValues(alpha: 0.90),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+    final totalText = total.toStringAsFixed(2);
+    return Semantics(
+      container: true,
+      label: 'Total earnings, $totalText dollars. $deltaLabel.',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.zero,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.blackCat, AppColors.blackCatLight],
             ),
           ),
-        ],
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total Earnings', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.snow.withValues(alpha: 0.92), fontSize: 12)),
+                    const SizedBox(height: 10),
+                    Text('\$$totalText', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.snow, fontSize: 30, height: 1.0)),
+                    const SizedBox(height: 10),
+                    Text(deltaLabel, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.snow.withValues(alpha: 0.90), fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1246,140 +1249,44 @@ class _AscensionStageSummary {
 
 class _AscensionStagesCard extends StatelessWidget {
   const _AscensionStagesCard({required this.summary});
-
   final _AscensionStageSummary summary;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
+      decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Ascension stages',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-              Text(
-                'This month: +${summary.thisMonthPoints.toStringAsFixed(2)} pts',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11.5,
-                  color: AppColors.blackCat.withValues(alpha: 0.58),
-                ),
-              ),
-            ],
-          ),
+          Semantics(header: true, label: 'Ascension stages. This month, plus ${summary.thisMonthPoints.toStringAsFixed(2)} points.', child: ExcludeSemantics(child: Row(children: [const Expanded(child: Text('Ascension stages', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.blackCat))), Text('This month: +${summary.thisMonthPoints.toStringAsFixed(2)} pts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: AppColors.blackCat.withValues(alpha: 0.58)))]))),
           const SizedBox(height: 10),
-          _stageRow(
-            icon: Icons.check_circle_outline_rounded,
-            title: 'Completed orders',
-            subtitle: '${summary.completedOrders} order(s) × 25 pts',
-            points: summary.completedOrderPoints,
-          ),
-          _stageRow(
-            icon: Icons.local_shipping_outlined,
-            title: 'On-time shipments',
-            subtitle: '${summary.onTimeDeliveries} shipment(s) × 8.5 pts',
-            points: summary.onTimeDeliveryPoints,
-          ),
-          _stageRow(
-            icon: Icons.star_outline_rounded,
-            title: '5-star client reviews',
-            subtitle: '${summary.fiveStarReviews} review(s) × 9 pts',
-            points: summary.fiveStarReviewPoints,
-          ),
-          _stageRow(
-            icon: Icons.repeat_rounded,
-            title: 'Repeat client orders',
-            subtitle: '${summary.repeatClientOrders} repeat order(s) × 6 pts',
-            points: summary.repeatClientOrderPoints,
-          ),
-          _stageRow(
-            icon: Icons.person_pin_outlined,
-            title: 'Profile / portfolio upload',
-            subtitle: '${summary.portfolioUploads} upload(s) × 0.3 pts',
-            points: summary.portfolioUploadPoints,
-            isLast: true,
-          ),
+          _stageRow(icon: Icons.check_circle_outline_rounded, title: 'Completed orders', subtitle: '${summary.completedOrders} orders times 25 points', points: summary.completedOrderPoints),
+          _stageRow(icon: Icons.local_shipping_outlined, title: 'On-time shipments', subtitle: '${summary.onTimeDeliveries} shipments times 8.5 points', points: summary.onTimeDeliveryPoints),
+          _stageRow(icon: Icons.star_outline_rounded, title: '5-star client reviews', subtitle: '${summary.fiveStarReviews} reviews times 9 points', points: summary.fiveStarReviewPoints),
+          _stageRow(icon: Icons.repeat_rounded, title: 'Repeat client orders', subtitle: '${summary.repeatClientOrders} repeat orders times 6 points', points: summary.repeatClientOrderPoints),
+          _stageRow(icon: Icons.person_pin_outlined, title: 'Profile or portfolio upload', subtitle: '${summary.portfolioUploads} uploads times 0.3 points', points: summary.portfolioUploadPoints, isLast: true),
         ],
       ),
     );
   }
 
-  Widget _stageRow({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required double points,
-    bool isLast = false,
-  }) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 9),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.blackCat),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11.5,
-                    color: AppColors.blackCat.withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '+${points.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: Color(0xFF14823A),
-            ),
-          ),
-        ],
+  Widget _stageRow({required IconData icon, required String title, required String subtitle, required double points, bool isLast = false}) {
+    return Semantics(
+      container: true,
+      label: '$title. $subtitle. Plus ${points.toStringAsFixed(2)} points.',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: isLast ? 0 : 9),
+          child: Row(children: [Icon(icon, size: 18, color: AppColors.blackCat), const SizedBox(width: 9), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: AppColors.blackCat)), const SizedBox(height: 1), Text(subtitle, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5, color: AppColors.blackCat.withValues(alpha: 0.55)))])), Text('+${points.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF14823A)))]),
+        ),
       ),
     );
   }
 }
 
 class _AscensionSummaryCard extends StatelessWidget {
-  const _AscensionSummaryCard({
-    required this.tier,
-    required this.points,
-    required this.pointsToNextTier,
-    required this.nextTierLabel,
-    required this.onViewAscension,
-  });
-
+  const _AscensionSummaryCard({required this.tier, required this.points, required this.pointsToNextTier, required this.nextTierLabel, required this.onViewAscension});
   final String tier;
   final double points;
   final double pointsToNextTier;
@@ -1388,117 +1295,49 @@ class _AscensionSummaryCard extends StatelessWidget {
 
   String get _tierLabel {
     switch (tier.trim().toLowerCase()) {
-      case 'goldsmith':
-        return 'Goldsmith';
-      case 'crowned':
-        return 'Crowned';
-      default:
-        return 'Maker';
+      case 'goldsmith': return 'Goldsmith';
+      case 'crowned': return 'Crowned';
+      default: return 'Maker';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = pointsToNextTier == 0
-        ? 'You have reached the highest JNT Ascension tier.'
-        : '${pointsToNextTier.toStringAsFixed(2)} pts to $nextTierLabel';
+    final subtitle = pointsToNextTier == 0 ? 'You have reached the highest JNT Ascension tier.' : '${pointsToNextTier.toStringAsFixed(2)} points to $nextTierLabel';
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.star_rounded, color: AppColors.blackCat, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'JNT Ascension',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '$_tierLabel · ${points.toStringAsFixed(2)} pts',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                    color: AppColors.blackCat.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: onViewAscension,
-            style: TextButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: AppColors.blackCat,
-              textStyle: const TextStyle(fontWeight: FontWeight.w700),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            ),
-            child: const Text('View Ascension'),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        ExcludeSemantics(child: const Icon(Icons.star_rounded, color: AppColors.blackCat, size: 20)),
+        const SizedBox(width: 10),
+        Expanded(child: Semantics(container: true, label: 'JNT Ascension. Tier, $_tierLabel. ${points.toStringAsFixed(2)} points. $subtitle.', child: ExcludeSemantics(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('JNT Ascension', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)), const SizedBox(height: 5), Text('$_tierLabel · ${points.toStringAsFixed(2)} pts', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.blackCat)), const SizedBox(height: 4), Text(subtitle, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.6)))])))),
+        const SizedBox(width: 8),
+        Semantics(button: true, label: 'View Ascension', hint: 'Double tap to open Ascension details', onTap: onViewAscension, child: ExcludeSemantics(child: TextButton(onPressed: onViewAscension, style: TextButton.styleFrom(backgroundColor: Colors.transparent, foregroundColor: AppColors.blackCat, textStyle: const TextStyle(fontWeight: FontWeight.w700), shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)), child: const Text('View Ascension')))),
+      ]),
     );
   }
 }
 
 class _RangeDropdown extends StatelessWidget {
   const _RangeDropdown({required this.value, required this.onChanged});
-
   final _EarningsRange value;
   final ValueChanged<_EarningsRange> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<_EarningsRange>(
-      onSelected: onChanged,
-      color: AppColors.snow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      itemBuilder: (_) => _EarningsRange.values
-          .map(
-            (v) =>
-                PopupMenuItem<_EarningsRange>(value: v, child: Text(v.label)),
-          )
-          .toList(growable: false),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatBorderLight),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              value.label,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: AppColors.blackCat.withValues(alpha: 0.55),
-            ),
-          ],
+    return Semantics(
+      button: true,
+      label: 'Earnings date range',
+      value: value.label,
+      hint: 'Double tap to select a date range',
+      child: PopupMenuButton<_EarningsRange>(
+        tooltip: 'Select earnings date range',
+        onSelected: onChanged,
+        color: AppColors.snow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        itemBuilder: (_) => _EarningsRange.values.map((v) => PopupMenuItem<_EarningsRange>(value: v, child: Semantics(selected: v == value, label: '${v.label}${v == value ? ', selected' : ''}', child: ExcludeSemantics(child: Text(v.label))))).toList(growable: false),
+        child: ExcludeSemantics(
+          child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)), child: Row(mainAxisSize: MainAxisSize.min, children: [Text(value.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)), const SizedBox(width: 6), Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.blackCat.withValues(alpha: 0.55))])),
         ),
       ),
     );
@@ -1506,13 +1345,7 @@ class _RangeDropdown extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.icon,
-  });
-
+  const _StatCard({required this.title, required this.value, required this.subtitle, required this.icon});
   final String title;
   final String value;
   final String subtitle;
@@ -1520,51 +1353,15 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              color: AppColors.blackCat.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 24),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: AppColors.blackCat.withValues(alpha: 0.55),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat.withValues(alpha: 0.55),
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+    return Semantics(
+      container: true,
+      label: '$title, $value. $subtitle.',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+          decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.85))), const SizedBox(height: 10), Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 24)), const SizedBox(height: 10), Row(children: [Icon(icon, size: 16, color: AppColors.blackCat.withValues(alpha: 0.55)), const SizedBox(width: 8), Expanded(child: Text(subtitle, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.blackCat.withValues(alpha: 0.55), fontSize: 12)))])]),
+        ),
       ),
     );
   }
@@ -1572,7 +1369,6 @@ class _StatCard extends StatelessWidget {
 
 class _BreakdownCard extends StatelessWidget {
   const _BreakdownCard({required this.paidAmount, required this.unpaidAmount});
-
   final double paidAmount;
   final double unpaidAmount;
 
@@ -1581,114 +1377,38 @@ class _BreakdownCard extends StatelessWidget {
     final total = paidAmount + unpaidAmount;
     final paidPct = total <= 0 ? 0.0 : paidAmount / total;
     final unpaidPct = total <= 0 ? 0.0 : unpaidAmount / total;
-
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Earnings Breakdown',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              color: AppColors.blackCat.withValues(alpha: 0.90),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _row('Paid', paidAmount),
-          const SizedBox(height: 8),
-          _bar(paidPct, AppColors.blackCat),
-          const SizedBox(height: 12),
-          _row('Pending', unpaidAmount),
-          const SizedBox(height: 8),
-          _bar(unpaidPct, AppColors.balletSlippers),
-        ],
-      ),
+      decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Semantics(header: true, label: 'Earnings Breakdown', child: const ExcludeSemantics(child: Text('Earnings Breakdown', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)))),
+        const SizedBox(height: 12),
+        Semantics(label: 'Paid, ${paidAmount.toStringAsFixed(2)} dollars, ${(paidPct * 100).round()} percent.', child: ExcludeSemantics(child: Column(children: [_row('Paid', paidAmount), const SizedBox(height: 8), _bar(paidPct, AppColors.blackCat)]))),
+        const SizedBox(height: 12),
+        Semantics(label: 'Pending, ${unpaidAmount.toStringAsFixed(2)} dollars, ${(unpaidPct * 100).round()} percent.', child: ExcludeSemantics(child: Column(children: [_row('Pending', unpaidAmount), const SizedBox(height: 8), _bar(unpaidPct, AppColors.balletSlippers)]))),
+      ]),
     );
   }
 
-  Widget _row(String label, double amount) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-        ),
-        Text(
-          '\$${amount.toStringAsFixed(2)}',
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-      ],
-    );
-  }
-
-  Widget _bar(double pct, Color color) {
-    return Container(
-      height: 10,
-      decoration: BoxDecoration(
-        color: AppColors.alabaster,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: pct.clamp(0.0, 1.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.zero,
-          ),
-        ),
-      ),
-    );
-  }
+  static Widget _row(String label, double amount) => Row(children: [Expanded(child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))), Text('\$${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))]);
+  static Widget _bar(double pct, Color color) => Container(height: 10, decoration: const BoxDecoration(color: AppColors.alabaster, borderRadius: BorderRadius.zero), child: FractionallySizedBox(alignment: Alignment.centerLeft, widthFactor: pct.clamp(0.0, 1.0), child: Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.zero))));
 }
 
 class _RecentPayoutsCard extends StatelessWidget {
   const _RecentPayoutsCard({required this.items});
-
   final List<_PayoutItem> items;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Recent Paid Orders',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              color: AppColors.blackCat.withValues(alpha: 0.90),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (items.isEmpty)
-            Text(
-              'No paid orders in this range.',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-                color: AppColors.blackCat.withValues(alpha: 0.60),
-              ),
-            ),
-          ...items.map((e) => _PayoutTile(item: e)),
-        ],
-      ),
+      decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Semantics(header: true, label: 'Recent Paid Orders, ${items.length} ${items.length == 1 ? 'order' : 'orders'}', child: ExcludeSemantics(child: Text('Recent Paid Orders', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.90))))),
+        const SizedBox(height: 12),
+        if (items.isEmpty) Semantics(label: 'No paid orders in this range.', child: ExcludeSemantics(child: Text('No paid orders in this range.', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.60))))),
+        ...items.map((e) => _PayoutTile(item: e)),
+      ]),
     );
   }
 }
@@ -1699,62 +1419,17 @@ class _PayoutTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatBorderLight),
-        ),
-        child: Row(
-          children: [
-            Container(
-              height: 44,
-              width: 44,
-              decoration: BoxDecoration(
-                color: AppColors.balletSlippers,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.attach_money_rounded,
-                color: AppColors.blackCat.withValues(alpha: 0.75),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '\$${item.amount.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${item.dateLabel} - ${item.note}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              item.statusLabel,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-                color: AppColors.blackCat.withValues(alpha: 0.65),
-              ),
-            ),
-          ],
+    return Semantics(
+      container: true,
+      label: 'Paid order ${item.note}. Amount, ${item.amount.toStringAsFixed(2)} dollars. Date, ${item.dateLabel}. Status, ${item.statusLabel}.',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)),
+            child: Row(children: [Container(height: 44, width: 44, decoration: const BoxDecoration(color: AppColors.balletSlippers, shape: BoxShape.circle), child: Icon(Icons.attach_money_rounded, color: AppColors.blackCat.withValues(alpha: 0.75))), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('\$${item.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)), const SizedBox(height: 4), Text('${item.dateLabel} - ${item.note}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.60)))])), Text(item.statusLabel, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.65)))]),
+          ),
         ),
       ),
     );

@@ -1636,4 +1636,4 @@ Widget _kv(String k, String v) {
   );
 }
 
-String _fmtDate(DateTime d) => formatDateMdy(d);
+String _fmtDate(DateTime d) => formatDateMdyShortYear(d);

@@ -733,7 +733,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
     }
   }
 
-  static String _formatDate(DateTime d) => formatDateMdy(d);
+  static String _formatDate(DateTime d) => formatDateMdyShortYear(d);
 
   List<GroupClientMeasurementData> _buildGroupMeasurementClients(
     ClientRequestV2 request,

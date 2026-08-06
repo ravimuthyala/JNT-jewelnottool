@@ -69,6 +69,9 @@ class ArtistCalendarPage extends StatefulWidget {
 class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
+  final FocusNode _monthlyTabFocusNode = FocusNode(debugLabel: 'monthlyTab');
+  final FocusNode _scheduleTabFocusNode = FocusNode(debugLabel: 'scheduleTab');
+  bool _initialAdaFocusRequested = false;
 
   DateTime _focusedMonth = _startOfMonth(DateTime.now());
   DateTime _selectedDay = _dateOnly(DateTime.now());
@@ -80,6 +83,11 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl.addListener(() {
+      if (!_tabCtrl.indexIsChanging && mounted) {
+        setState(() {});
+      }
+    });
     if (widget.enableSupabaseAutoload) {
       unawaited(_loadCalendarRequestsFromSupabase());
       _listenCalendarRequestsFromSupabase();
@@ -90,7 +98,34 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   void dispose() {
     _calendarSub?.cancel();
     _tabCtrl.dispose();
+    _monthlyTabFocusNode.dispose();
+    _scheduleTabFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialAdaFocusRequested || !_isAdaEnabled(context)) return;
+    _initialAdaFocusRequested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _monthlyTabFocusNode.requestFocus();
+    });
+  }
+
+  bool _isAdaEnabled(BuildContext context) {
+    final media = MediaQuery.maybeOf(context);
+    return (media?.accessibleNavigation ?? false) ||
+        WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
+            .accessibleNavigation;
+  }
+
+  String _spokenDate(DateTime date) {
+    const months = <String>[
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   List<ClientRequest> get _calendarRequests {
@@ -549,6 +584,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
                                 ),
                                 Semantics(
                                   button: true,
+                                  label: 'Today',
+                                  hint: 'Double tap to show today',
                                   child: GestureDetector(
                                     onTap: () => setState(() {
                                       final now = _dateOnly(DateTime.now());
@@ -817,9 +854,23 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   }
 
   Widget _tabPill() {
+    final monthlySelected = _tabCtrl.index == 0;
+    final scheduleSelected = _tabCtrl.index == 1;
+
     return TabBar(
       controller: _tabCtrl,
-      onTap: (_) => setState(() {}),
+      onTap: (index) {
+        setState(() {});
+        if (!_isAdaEnabled(context)) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (index == 0) {
+            _monthlyTabFocusNode.requestFocus();
+          } else {
+            _scheduleTabFocusNode.requestFocus();
+          }
+        });
+      },
       labelPadding: EdgeInsets.zero,
       indicatorSize: TabBarIndicatorSize.tab,
       dividerColor: Colors.transparent,
@@ -834,9 +885,29 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         fontWeight: FontWeight.w700,
         fontSize: 12 * fontScale(context),
       ),
-      tabs: const [
-        Tab(text: 'Monthly'),
-        Tab(text: 'Schedule'),
+      tabs: [
+        Tab(
+          child: Focus(
+            focusNode: _monthlyTabFocusNode,
+            child: Semantics(
+              button: true,
+              selected: monthlySelected,
+              label: 'Monthly tab, 1 of 2',
+              child: const ExcludeSemantics(child: Text('Monthly')),
+            ),
+          ),
+        ),
+        Tab(
+          child: Focus(
+            focusNode: _scheduleTabFocusNode,
+            child: Semantics(
+              button: true,
+              selected: scheduleSelected,
+              label: 'Schedule tab, 2 of 2',
+              child: const ExcludeSemantics(child: Text('Schedule')),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -849,6 +920,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return Semantics(
       button: true,
       label: semanticLabel,
+      hint: 'Double tap to activate',
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           borderRadius: BorderRadius.zero,
@@ -950,12 +1023,18 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _selectedHeaderLabel(_selectedDay),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 12,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: _selectedHeaderLabel(_selectedDay),
+                child: ExcludeSemantics(
+                  child: Text(
+                    _selectedHeaderLabel(_selectedDay),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -963,12 +1042,17 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
               if (_agendaForDate(_selectedDay).isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(
-                    'No due requests for this day',
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w400,
-                      fontSize: 11.5,
+                  child: Semantics(
+                    label: 'No due requests for ${_spokenDate(_selectedDay)}',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        'No due requests for this day',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w400,
+                          fontSize: 11.5,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1000,15 +1084,18 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
           )
         : Border.all(color: Colors.transparent, width: 2);
 
+    final dueLabel = dotCount == 0
+        ? 'no due requests'
+        : '$dotCount ${dotCount == 1 ? 'due request' : 'due requests'}';
     final label =
-        '${day.month}/${day.day}/${day.year}'
-        '${isToday ? ', today' : ''}'
-        '${dotCount > 0 ? ', $dotCount ${dotCount == 1 ? 'appointment' : 'appointments'}' : ''}';
+        '${_spokenDate(day)}${isToday ? ', today' : ''}'
+        '${!isInMonth ? ', outside current month' : ''}, $dueLabel';
 
     return Semantics(
       button: true,
       selected: isSelected,
       label: label,
+      hint: 'Double tap to select this date',
       onTap: onTap,
       child: ExcludeSemantics(
         child: GestureDetector(
@@ -1121,35 +1208,41 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.event_note_rounded,
-                size: 20,
-                color: AppColors.blackCat,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Upcoming due requests',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 12 * fontScale(context),
+        Semantics(
+          header: true,
+          label: 'Upcoming due requests, ${upcoming.length} total',
+          child: ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.event_note_rounded,
+                    size: 20,
                     color: AppColors.blackCat,
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Upcoming due requests',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w400,
+                        fontSize: 12 * fontScale(context),
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${upcoming.length}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12 * fontScale(context),
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                '${upcoming.length}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12 * fontScale(context),
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         const Divider(height: 1, color: AppColors.blackCatBorderLight),
@@ -1163,12 +1256,18 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _dateSectionLabel(date),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    color: AppColors.blackCat,
+                Semantics(
+                  header: true,
+                  label: _spokenDate(date),
+                  child: ExcludeSemantics(
+                    child: Text(
+                      _dateSectionLabel(date),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1205,9 +1304,18 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         ? const Color(0xFF8A5A00)
         : AppColors.deepPlum;
 
-    return MergeSemantics(
-      child: Semantics(
+    final clientName =
+        r.clientName.trim().isEmpty ? 'Client' : r.clientName.trim();
+    final requestTitle = r.title.trim().isEmpty ? 'Request' : r.title.trim();
+    final statusLabel = isOverdue
+        ? 'Overdue'
+        : (daysLeft == 0 ? 'Due today' : 'Due in $daysLeft days');
+
+    return Semantics(
         button: true,
+        label:
+            '$clientName. Need by ${_spokenDate(due)}. $requestTitle. $statusLabel.',
+        hint: 'Double tap to show this date in the monthly calendar',
         onTap: () {
           setState(() {
             _selectedDay = due;
@@ -1215,7 +1323,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
             _tabCtrl.index = 0;
           });
         },
-        child: InkWell(
+        child: ExcludeSemantics(
+          child: InkWell(
           borderRadius: BorderRadius.zero,
           onTap: () {
             setState(() {

@@ -835,6 +835,16 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return true;
   }
 
+  bool _accessibleNavigation(BuildContext context) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
+  }
+
   bool get _hasActiveFilters {
     final minPreset = widget.initialBudgetMin.clamp(15, 5000);
     final maxPreset = widget.initialBudgetMax.clamp(15, 5000);
@@ -2322,6 +2332,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final maxCtrl = TextEditingController(
       text: budgetRange.end.round().toString(),
     );
+    final closeFocusNode = FocusNode(debugLabel: 'artistRequestFilterClose');
+    var closeFocusRequested = false;
 
     RangeValues normalizedBudgetFromText() {
       final min =
@@ -2344,303 +2356,335 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final result = await showDialog<_RequestFilterResult>(
       context: context,
       builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: AppColors.snow,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 18,
-            vertical: 24,
-          ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          child: StatefulBuilder(
-            builder: (modalContext, setModalState) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.filter_alt_outlined,
-                          size: 18,
-                          color: AppColors.blackCat,
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'Filter',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Close',
-                          color: AppColors.blackCat,
-                          onPressed: () => Navigator.pop(dialogContext),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _filterChip(
-                            label: 'Direct Request',
-                            icon: Icons.verified_user_outlined,
-                            selected: directOnly,
-                            onTap: () =>
-                                setModalState(() => directOnly = !directOnly),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _filterChip(
-                            label: 'Group Order',
-                            icon: Icons.attach_file_rounded,
-                            selected: groupOnly,
-                            onTap: () =>
-                                setModalState(() => groupOnly = !groupOnly),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Budget',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: minCtrl,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.done,
-                            style: const TextStyle(
-                              color: AppColors.blackCat,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            cursorColor: AppColors.blackCat,
-                            decoration: _miniDec(prefix: '\$', hint: 'Min'),
-                            onSubmitted: (_) => applyTextBudget(setModalState),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: maxCtrl,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.done,
-                            style: const TextStyle(
-                              color: AppColors.blackCat,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            cursorColor: AppColors.blackCat,
-                            decoration: _miniDec(prefix: '\$', hint: 'Max'),
-                            onSubmitted: (_) => applyTextBudget(setModalState),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SliderTheme(
-                      data: SliderTheme.of(modalContext).copyWith(
-                        activeTrackColor: AppColors.blackCat,
-                        inactiveTrackColor: AppColors.blackCat.withValues(
-                          alpha: 0.18,
-                        ),
-                        thumbColor: AppColors.blackCat,
-                        overlayColor: Colors.transparent,
-                        rangeThumbShape: const RoundRangeSliderThumbShape(
-                          enabledThumbRadius: 8,
-                        ),
-                        valueIndicatorColor: AppColors.blackCat,
-                        valueIndicatorTextStyle: const TextStyle(
-                          color: AppColors.snow,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: RangeSlider(
-                        values: budgetRange,
-                        min: 15,
-                        max: 5000,
-                        divisions: 4985,
-                        labels: RangeLabels(
-                          '\$${budgetRange.start.round()}',
-                          '\$${budgetRange.end.round()}',
-                        ),
-                        onChanged: (v) {
-                          minCtrl.text = v.start.round().toString();
-                          maxCtrl.text = v.end.round().toString();
-                          setModalState(() {
-                            budgetRange = v;
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Sort',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.snow,
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: AppColors.blackCatBorderLight,
-                        ),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: sort,
-                          dropdownColor: AppColors.snow,
-                          style: TextStyle(
+        return Semantics(
+          scopesRoute: true,
+          explicitChildNodes: true,
+          namesRoute: true,
+          label: 'Artist request filters',
+          child: Dialog(
+            backgroundColor: AppColors.snow,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 24,
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            child: StatefulBuilder(
+              builder: (modalContext, setModalState) {
+                if (_accessibleNavigation(modalContext) &&
+                    !closeFocusRequested) {
+                  closeFocusRequested = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (closeFocusNode.canRequestFocus) {
+                      closeFocusNode.requestFocus();
+                    }
+                  });
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.filter_alt_outlined,
+                            size: 18,
                             color: AppColors.blackCat,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Filter',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            focusNode: closeFocusNode,
+                            tooltip: 'Close',
+                            color: AppColors.blackCat,
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _filterChip(
+                              label: 'Direct Request',
+                              icon: Icons.verified_user_outlined,
+                              selected: directOnly,
+                              onTap: () =>
+                                  setModalState(() => directOnly = !directOnly),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _filterChip(
+                              label: 'Group Order',
+                              icon: Icons.attach_file_rounded,
+                              selected: groupOnly,
+                              onTap: () =>
+                                  setModalState(() => groupOnly = !groupOnly),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Budget',
+                          style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                            color: AppColors.blackCat.withValues(alpha: 0.8),
                           ),
-                          icon: Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: AppColors.blackCat.withValues(alpha: 0.7),
-                          ),
-                          isExpanded: true,
-                          items: [
-                            DropdownMenuItem(
-                              value: 'Newest',
-                              child: Text(
-                                'Sort: Newest',
-                                style: TextStyle(color: AppColors.blackCat),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Soonest needed',
-                              child: Text(
-                                'Sort: Soonest needed',
-                                style: TextStyle(color: AppColors.blackCat),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Higher budget',
-                              child: Text(
-                                'Sort: Higher budget',
-                                style: TextStyle(color: AppColors.blackCat),
-                              ),
-                            ),
-                          ],
-                          onChanged: (v) =>
-                              setModalState(() => sort = v ?? 'Newest'),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat.withValues(
-                                alpha: 0.16,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: minCtrl,
+                              keyboardType: TextInputType.number,
+                              textInputAction: TextInputAction.done,
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w700,
                               ),
-                              foregroundColor: AppColors.blackCat,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              side: const BorderSide(
-                                color: AppColors.blackCatBorderLight,
-                              ),
-                              elevation: 0,
+                              cursorColor: AppColors.blackCat,
+                              decoration: _miniDec(prefix: '\$', hint: 'Min'),
+                              onSubmitted: (_) =>
+                                  applyTextBudget(setModalState),
                             ),
-                            onPressed: () {
-                              final minPreset = widget.initialBudgetMin.clamp(
-                                15,
-                                5000,
-                              );
-                              final maxPreset = widget.initialBudgetMax.clamp(
-                                15,
-                                5000,
-                              );
-                              final start = minPreset <= maxPreset
-                                  ? minPreset
-                                  : maxPreset;
-                              final end = minPreset <= maxPreset
-                                  ? maxPreset
-                                  : minPreset;
-                              minCtrl.text = start.toString();
-                              maxCtrl.text = end.toString();
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: maxCtrl,
+                              keyboardType: TextInputType.number,
+                              textInputAction: TextInputAction.done,
+                              style: const TextStyle(
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              cursorColor: AppColors.blackCat,
+                              decoration: _miniDec(prefix: '\$', hint: 'Max'),
+                              onSubmitted: (_) =>
+                                  applyTextBudget(setModalState),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SliderTheme(
+                        data: SliderTheme.of(modalContext).copyWith(
+                          activeTrackColor: AppColors.blackCat,
+                          inactiveTrackColor: AppColors.blackCat.withValues(
+                            alpha: 0.18,
+                          ),
+                          thumbColor: AppColors.blackCat,
+                          overlayColor: Colors.transparent,
+                          rangeThumbShape: const RoundRangeSliderThumbShape(
+                            enabledThumbRadius: 8,
+                          ),
+                          valueIndicatorColor: AppColors.blackCat,
+                          valueIndicatorTextStyle: const TextStyle(
+                            color: AppColors.snow,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        child: Semantics(
+                          label: 'Budget range',
+                          value:
+                              '\$${budgetRange.start.round()} to \$${budgetRange.end.round()}',
+                          child: RangeSlider(
+                            values: budgetRange,
+                            min: 15,
+                            max: 5000,
+                            divisions: 4985,
+                            labels: RangeLabels(
+                              '\$${budgetRange.start.round()}',
+                              '\$${budgetRange.end.round()}',
+                            ),
+                            onChanged: (v) {
+                              minCtrl.text = v.start.round().toString();
+                              maxCtrl.text = v.end.round().toString();
                               setModalState(() {
-                                directOnly = false;
-                                groupOnly = false;
-                                sort = 'Newest';
-                                budgetRange = RangeValues(
-                                  start.toDouble(),
-                                  end.toDouble(),
-                                );
+                                budgetRange = v;
                               });
                             },
-                            child: const Text(
-                              'Clear',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Sort',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.snow,
+                          borderRadius: BorderRadius.zero,
+                          border: Border.all(
+                            color: AppColors.blackCatBorderLight,
+                          ),
+                        ),
+                        child: Semantics(
+                          button: true,
+                          label: 'Sort filter',
+                          value: sort,
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: sort,
+                              dropdownColor: AppColors.snow,
                               style: TextStyle(
-                                fontWeight: FontWeight.w400,
-                                fontFamily: 'Arial',
+                                color: AppColors.blackCat,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                            ),
-                            child: const Text('Apply'),
-                            onPressed: () {
-                              final normalized = normalizedBudgetFromText();
-                              Navigator.pop(
-                                dialogContext,
-                                _RequestFilterResult(
-                                  directOnly: directOnly,
-                                  groupOnly: groupOnly,
-                                  sort: sort,
-                                  budgetRange: normalized,
+                              icon: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.7,
                                 ),
-                              );
-                            },
+                              ),
+                              isExpanded: true,
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'Newest',
+                                  child: Text(
+                                    'Sort: Newest',
+                                    style: TextStyle(color: AppColors.blackCat),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Soonest needed',
+                                  child: Text(
+                                    'Sort: Soonest needed',
+                                    style: TextStyle(color: AppColors.blackCat),
+                                  ),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Higher budget',
+                                  child: Text(
+                                    'Sort: Higher budget',
+                                    style: TextStyle(color: AppColors.blackCat),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) =>
+                                  setModalState(() => sort = v ?? 'Newest'),
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat.withValues(
+                                  alpha: 0.16,
+                                ),
+                                foregroundColor: AppColors.blackCat,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                                side: const BorderSide(
+                                  color: AppColors.blackCatBorderLight,
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: () {
+                                final minPreset = widget.initialBudgetMin.clamp(
+                                  15,
+                                  5000,
+                                );
+                                final maxPreset = widget.initialBudgetMax.clamp(
+                                  15,
+                                  5000,
+                                );
+                                final start = minPreset <= maxPreset
+                                    ? minPreset
+                                    : maxPreset;
+                                final end = minPreset <= maxPreset
+                                    ? maxPreset
+                                    : minPreset;
+                                minCtrl.text = start.toString();
+                                maxCtrl.text = end.toString();
+                                setModalState(() {
+                                  directOnly = false;
+                                  groupOnly = false;
+                                  sort = 'Newest';
+                                  budgetRange = RangeValues(
+                                    start.toDouble(),
+                                    end.toDouble(),
+                                  );
+                                });
+                              },
+                              child: const Text(
+                                'Clear',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              child: const Text('Apply'),
+                              onPressed: () {
+                                final normalized = normalizedBudgetFromText();
+                                Navigator.pop(
+                                  dialogContext,
+                                  _RequestFilterResult(
+                                    directOnly: directOnly,
+                                    groupOnly: groupOnly,
+                                    sort: sort,
+                                    budgetRange: normalized,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         );
       },
     );
 
+    closeFocusNode.dispose();
     minCtrl.dispose();
     maxCtrl.dispose();
 
@@ -2664,6 +2708,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     return Semantics(
       button: true,
       selected: selected,
+      label: '$label filter',
+      value: selected ? 'Selected' : 'Not selected',
       child: ExcludeSemantics(
         child: InkWell(
           borderRadius: BorderRadius.zero,
@@ -2967,13 +3013,18 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       // (request_id, detail_key), not on 'id' -- see the matching fix/comment
       // in DocumentReference._writeDetails above for why onConflict: 'id'
       // silently fails here with a 23505 duplicate-key error.
-      await Supabase.instance.client.from(detailTable).upsert(<String, dynamic>{
-        'id': '$rowId:payload',
-        'request_id': rowId,
-        'detail_key': 'payload',
-        'data': nextDetails,
-        'updated_at': nowIso,
-      }, onConflict: detailTable == 'client_custom_requests_details' ? 'request_id,detail_key' : 'id');
+      await Supabase.instance.client.from(detailTable).upsert(
+        <String, dynamic>{
+          'id': '$rowId:payload',
+          'request_id': rowId,
+          'detail_key': 'payload',
+          'data': nextDetails,
+          'updated_at': nowIso,
+        },
+        onConflict: detailTable == 'client_custom_requests_details'
+            ? 'request_id,detail_key'
+            : 'id',
+      );
     } catch (e) {
       debugPrint('[Artist Accept] details status sync failed: $e');
     }
@@ -3754,13 +3805,18 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     // (request_id, detail_key), not on 'id' -- see the matching fix/comment
     // in DocumentReference._writeDetails for why onConflict: 'id' silently
     // fails here with a 23505 duplicate-key error.
-    await Supabase.instance.client.from(detailTable).upsert(<String, dynamic>{
-      'id': '${request.id}:payload',
-      'request_id': request.id,
-      'detail_key': 'payload',
-      'data': updatedData,
-      'updated_at': declinedAtIso,
-    }, onConflict: detailTable == 'client_custom_requests_details' ? 'request_id,detail_key' : 'id');
+    await Supabase.instance.client.from(detailTable).upsert(
+      <String, dynamic>{
+        'id': '${request.id}:payload',
+        'request_id': request.id,
+        'detail_key': 'payload',
+        'data': updatedData,
+        'updated_at': declinedAtIso,
+      },
+      onConflict: detailTable == 'client_custom_requests_details'
+          ? 'request_id,detail_key'
+          : 'id',
+    );
 
     if (releaseDirectBrandRequestToPool) {
       final rootSnap = await docRef.get();
@@ -5317,10 +5373,46 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       return _companyRequestCard(r);
     }
     final s = _reqScale(context);
+    final isBrandRequest = r.sourceCollection == 'Company_Custom_Requests';
+    final displayName = isBrandRequest && r.brandName.trim().isNotEmpty
+        ? r.brandName.trim()
+        : r.clientName;
+    final requestTypeLabel = r.requestTypeLabel.isNotEmpty
+        ? r.requestTypeLabel
+        : (r.isDirectRequest ? 'Direct' : 'Standard');
+    final orderTypeLabel = r.orderType == RequestOrderTypeV2.group
+        ? 'Group'
+        : 'Single';
+    final hasClientProfileImage = r.clientProfileImage.trim().isNotEmpty;
+    final hasPreviewImage =
+        r.previewImageAsset.trim().isNotEmpty ||
+        r.clientImages.any((image) => image.trim().isNotEmpty);
+    // ExcludeSemantics below strips the card's own Text/Icon nodes so
+    // TalkBack doesn't announce a dozen fragments per card -- without this
+    // label the merged node has no name at all, which reads as empty and
+    // gets skipped over rather than stopped on during linear swipe.
+    final cardLabel = <String>[
+      displayName,
+      if (isBrandRequest)
+        (r.title.trim().isEmpty ? 'Campaign' : r.title.trim()),
+      'Order number ${r.orderNumber.trim().isNotEmpty ? r.orderNumber.trim() : r.id}',
+      'Need by ${_formatNeedBy(r.neededBy)}',
+      'Budget \$${r.budgetMin} to \$${r.budgetMax}',
+      'Request type $requestTypeLabel',
+      'Order type $orderTypeLabel',
+      'Status ${r.status.label}',
+      hasClientProfileImage
+          ? 'Client profile image shown'
+          : 'Client profile image not available',
+      hasPreviewImage
+          ? 'Request preview image shown'
+          : 'Request preview image not available',
+    ].join(', ');
 
     return MergeSemantics(
       child: Semantics(
         button: true,
+        label: cardLabel,
         child: ExcludeSemantics(
           child: InkWell(
             borderRadius: BorderRadius.zero,
@@ -5387,11 +5479,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                           children: [
                             Expanded(
                               child: Text(
-                                r.sourceCollection ==
-                                            'Company_Custom_Requests' &&
-                                        r.brandName.trim().isNotEmpty
-                                    ? r.brandName.trim()
-                                    : r.clientName,
+                                displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -5494,11 +5582,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                                 // requestTypeLabel is frozen at submission and
                                 // must never be recomputed from current state
                                 // (e.g. after client/artist acceptance).
-                                r.requestTypeLabel.isNotEmpty
-                                    ? r.requestTypeLabel
-                                    : (r.isDirectRequest
-                                          ? 'Direct'
-                                          : 'Standard'),
+                                requestTypeLabel,
                                 style: _t(
                                   11.5,
                                   w: FontWeight.w700,
@@ -5519,9 +5603,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                r.orderType == RequestOrderTypeV2.group
-                                    ? 'Group'
-                                    : 'Single',
+                                orderTypeLabel,
                                 style: _t(
                                   11.5,
                                   w: FontWeight.w700,
@@ -5995,9 +6077,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
   }
 
-  String _formatNeedBy(DateTime d) => formatDateMdy(d);
+  String _formatNeedBy(DateTime d) => formatDateMdyShortYear(d);
 
-  String _shortDate(DateTime d) => formatDateMdy(d);
+  String _shortDate(DateTime d) => formatDateMdyShortYear(d);
 
   String _companyRequestStatus(ClientRequestV2 r) {
     if (r.status == RequestStatusV2.inReview &&
@@ -8625,6 +8707,7 @@ class InReviewDetailsSheet extends StatelessWidget {
     final safeBottom = MediaQuery.of(context).viewPadding.bottom;
     final maxH = MediaQuery.of(context).size.height * 0.92;
     final isGroupOrder = request.orderType == RequestOrderTypeV2.group;
+    final s = _reqScale(context);
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -8634,221 +8717,258 @@ class InReviewDetailsSheet extends StatelessWidget {
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
         ),
-        child: Column(
+        child: Stack(
           children: [
-            const SizedBox(height: 10),
-            Container(
-              height: 5,
-              width: 54,
-              decoration: BoxDecoration(
-                color: AppColors.blackCat.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.zero,
-              ),
-            ),
-            const SizedBox(height: 10),
+            Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  height: 5,
+                  width: 54,
+                  decoration: BoxDecoration(
+                    color: AppColors.blackCat.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                const SizedBox(height: 10),
 
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                children: [
-                  _topHero(context),
-                  const SizedBox(height: 10),
-                  _descriptionAndCompanyBioSection(),
-                  const SizedBox(height: 10),
-                  if (isGroupOrder) ...[
-                    _softBox(
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _sectionTitle('Client Measurements'),
-                          const SizedBox(height: 10),
-                          FutureBuilder<_RequestNfcDetails>(
-                            future: _loadRequestedNfcDetails(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState !=
-                                      ConnectionState.done &&
-                                  !snapshot.hasData) {
-                                return const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 24),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                );
-                              }
-                              final details =
-                                  snapshot.data ?? _RequestNfcDetails.empty();
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [_groupOrderClientsTabs(details)],
-                              );
-                            },
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    children: [
+                      _topHero(context),
+                      const SizedBox(height: 10),
+                      _descriptionAndCompanyBioSection(),
+                      const SizedBox(height: 10),
+                      if (isGroupOrder) ...[
+                        _softBox(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _sectionTitle('Client Measurements'),
+                              const SizedBox(height: 10),
+                              FutureBuilder<_RequestNfcDetails>(
+                                future: _loadRequestedNfcDetails(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState !=
+                                          ConnectionState.done &&
+                                      !snapshot.hasData) {
+                                    return const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 24,
+                                        ),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final details =
+                                      snapshot.data ??
+                                      _RequestNfcDetails.empty();
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [_groupOrderClientsTabs(details)],
+                                  );
+                                },
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ] else ...[
-                    if (request.sourceCollection ==
-                        'Company_Custom_Requests') ...[
-                      _brandClientDetailsBlock(),
-                      const SizedBox(height: 12),
-                    ],
-                    FutureBuilder<_RequestNfcDetails>(
-                      future: _loadRequestedNfcDetails(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState != ConnectionState.done &&
-                            !snapshot.hasData) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        }
-                        final nfc = snapshot.data ?? _RequestNfcDetails.empty();
-                        final submittedClient =
-                            nfc.submittedClient ??
-                            _OrderClientTabData(
-                              name: request.clientName.trim().isEmpty
-                                  ? 'Client'
-                                  : request.clientName.trim(),
-                              nailShape: request.nailShape,
-                              nailLength: request.nailLength,
-                              leftHand: request.leftHand,
-                              rightHand: request.rightHand,
-                              nfc: nfc.main,
-                            );
-                        return _softBox(
-                          _nailDimensionsPanel(
-                            leftHand: submittedClient.leftHand,
-                            rightHand: submittedClient.rightHand,
-                            nailShape: submittedClient.nailShape,
-                            nailLength: submittedClient.nailLength,
-                            leftNfc: submittedClient.nfc.left,
-                            rightNfc: submittedClient.nfc.right,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  _softBox(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _sectionTitle(
-                          request.sourceCollection == 'Company_Custom_Requests'
-                              ? 'Uploaded Photo (Brand)'
-                              : 'Uploaded Photos (Client)',
                         ),
-                        const SizedBox(height: 10),
-                        FutureBuilder<List<String>>(
-                          future: _modalPhotoCandidates(),
+                        const SizedBox(height: 12),
+                      ] else ...[
+                        if (request.sourceCollection ==
+                            'Company_Custom_Requests') ...[
+                          _brandClientDetailsBlock(),
+                          const SizedBox(height: 12),
+                        ],
+                        FutureBuilder<_RequestNfcDetails>(
+                          future: _loadRequestedNfcDetails(),
                           builder: (context, snapshot) {
                             if (snapshot.connectionState !=
-                                ConnectionState.done) {
-                              return const SizedBox(
-                                height: 120,
-                                child: Center(
-                                  child: CircularProgressIndicator(),
+                                    ConnectionState.done &&
+                                !snapshot.hasData) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                               );
                             }
-                            final modalPhotos =
-                                snapshot.data ?? const <String>[];
-                            if (modalPhotos.isEmpty) {
-                              return Row(
-                                children: [
-                                  Icon(
-                                    Icons.image_outlined,
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.45,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    request.sourceCollection ==
-                                            'Company_Custom_Requests'
-                                        ? 'No photos uploaded by Brand'
-                                        : 'No images uploaded',
-                                    style: TextStyle(
-                                      color: AppColors.blackCat.withValues(
-                                        alpha: 0.82,
-                                      ),
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-                            return _photosGrid(context, modalPhotos);
+                            final nfc =
+                                snapshot.data ?? _RequestNfcDetails.empty();
+                            final submittedClient =
+                                nfc.submittedClient ??
+                                _OrderClientTabData(
+                                  name: request.clientName.trim().isEmpty
+                                      ? 'Client'
+                                      : request.clientName.trim(),
+                                  nailShape: request.nailShape,
+                                  nailLength: request.nailLength,
+                                  leftHand: request.leftHand,
+                                  rightHand: request.rightHand,
+                                  nfc: nfc.main,
+                                );
+                            return _softBox(
+                              _nailDimensionsPanel(
+                                leftHand: submittedClient.leftHand,
+                                rightHand: submittedClient.rightHand,
+                                nailShape: submittedClient.nailShape,
+                                nailLength: submittedClient.nailLength,
+                                leftNfc: submittedClient.nfc.left,
+                                rightNfc: submittedClient.nfc.right,
+                              ),
+                            );
                           },
                         ),
+                        const SizedBox(height: 12),
                       ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
 
-            Padding(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 132,
-                    height: 52,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat.withValues(
-                          alpha: 0.16,
-                        ),
-                        foregroundColor: AppColors.blackCat,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        side: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 0.30),
+                      _softBox(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _sectionTitle(
+                              request.sourceCollection ==
+                                      'Company_Custom_Requests'
+                                  ? 'Uploaded Photo (Brand)'
+                                  : 'Uploaded Photos (Client)',
+                            ),
+                            const SizedBox(height: 10),
+                            FutureBuilder<List<String>>(
+                              future: _modalPhotoCandidates(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState !=
+                                    ConnectionState.done) {
+                                  return const SizedBox(
+                                    height: 120,
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+                                final modalPhotos =
+                                    snapshot.data ?? const <String>[];
+                                if (modalPhotos.isEmpty) {
+                                  return Row(
+                                    children: [
+                                      Icon(
+                                        Icons.image_outlined,
+                                        color: AppColors.blackCat.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        request.sourceCollection ==
+                                                'Company_Custom_Requests'
+                                            ? 'No photos uploaded by Brand'
+                                            : 'No images uploaded',
+                                        style: TextStyle(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.82,
+                                          ),
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return _photosGrid(context, modalPhotos);
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                      onPressed: onDecline,
-                      child: Text(
-                        declineLabel,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          fontFamily: 'Arial',
+                    ],
+                  ),
+                ),
+
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 132,
+                        height: 52,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat.withValues(
+                              alpha: 0.16,
+                            ),
+                            foregroundColor: AppColors.blackCat,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            side: BorderSide(
+                              color: AppColors.blackCat.withValues(alpha: 0.30),
+                            ),
+                          ),
+                          onPressed: onDecline,
+                          child: Text(
+                            declineLabel,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 132,
+                        height: 52,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: onAccept,
+                          child: Text(
+                            acceptLabel,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              right: 6,
+              top: 6,
+              child: Semantics(
+                container: true,
+                button: true,
+                label: 'Close',
+                onTap: () => Navigator.pop(context),
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    borderRadius: BorderRadius.zero,
+                    onTap: () => Navigator.pop(context),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 18 * s,
+                        color: AppColors.blackCat,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 132,
-                    height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        elevation: 0,
-                      ),
-                      onPressed: onAccept,
-                      child: Text(
-                        acceptLabel,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w400,
-                          fontFamily: 'Arial',
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -8933,7 +9053,7 @@ class InReviewDetailsSheet extends StatelessWidget {
     Map<String, bool> rightNfc = const <String, bool>{},
   }) {
     return Padding(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -8957,7 +9077,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                   child: _plainHandColumn('Left Hand', leftHand, nfc: leftNfc),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: VerticalDivider(
                     width: 1,
                     thickness: 1,
@@ -9073,37 +9193,37 @@ class InReviewDetailsSheet extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.fade,
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w400,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                ),
-                if (nfcRequested) ...[
-                  const SizedBox(width: 6),
-                  _nfcDimensionChip(),
-                ],
-              ],
+          SizedBox(
+            width: 54,
+            child: Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.82),
+                fontWeight: FontWeight.w400,
+                fontSize: 13.5,
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          Text(
-            formatted,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 13.5,
-              color: AppColors.blackCat,
+          if (nfcRequested) ...[const SizedBox(width: 3), _nfcDimensionChip()],
+          const SizedBox(width: 6),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                formatted,
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13.5,
+                  color: AppColors.blackCat,
+                ),
+              ),
             ),
           ),
         ],
@@ -9215,7 +9335,7 @@ class InReviewDetailsSheet extends StatelessWidget {
 
   static Widget _nfcDimensionChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: const BoxDecoration(
         color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
@@ -9223,7 +9343,7 @@ class InReviewDetailsSheet extends StatelessWidget {
       child: const Text(
         'NFC',
         style: TextStyle(
-          fontSize: 9.5,
+          fontSize: 8,
           fontWeight: FontWeight.w700,
           color: AppColors.blackCat,
           height: 1.0,
@@ -9243,197 +9363,165 @@ class InReviewDetailsSheet extends StatelessWidget {
         ? request.brandName.trim()
         : request.clientName;
 
-    return Stack(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
 
-              // Avatar (center)
-              SizedBox(
-                height: 78 * s,
-                width: 78 * s,
-                child: FutureBuilder<String>(
-                  future: _resolvedHeroPhotoSource(),
-                  builder: (_, snap) {
-                    final path = (snap.data ?? _heroPhotoSource()).trim();
-                    if (path.isNotEmpty) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.zero,
-                        child: _heroAvatar(s, path),
-                      );
-                    }
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.zero,
-                        color: AppColors.balletSlippers,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        _initialLetter(),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 22 * s,
-                          color: AppColors.blackCat,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Name
-              Text(
-                displayName,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16 * s,
-                  color: AppColors.blackCat,
-                ),
-              ),
-              if (isBrandRequest) ...[
-                const SizedBox(height: 4),
-                Text(
-                  campaignName,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13.5 * s,
-                    color: AppColors.blackCat.withValues(alpha: 0.72),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
+          // Avatar (center)
+          SizedBox(
+            height: 78 * s,
+            width: 78 * s,
+            child: FutureBuilder<String>(
+              future: _resolvedHeroPhotoSource(),
+              builder: (_, snap) {
+                final path = (snap.data ?? _heroPhotoSource()).trim();
+                if (path.isNotEmpty) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: _heroAvatar(s, path),
+                  );
+                }
+                return Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.blackCat),
+                    borderRadius: BorderRadius.zero,
                     color: AppColors.balletSlippers,
                   ),
+                  alignment: Alignment.center,
                   child: Text(
-                    'Brand Request',
+                    _initialLetter(),
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 11 * s,
+                      fontSize: 22 * s,
                       color: AppColors.blackCat,
                     ),
                   ),
-                ),
-              ],
-              const SizedBox(height: 4),
-              Text(
-                'Order # ${request.orderNumber.trim().isNotEmpty ? request.orderNumber.trim() : request.id}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.blackCat.withValues(alpha: 0.78),
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12.5 * s,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              _requestTypePills(context),
-
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Flexible(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 18,
-                          color: AppColors.blackCat,
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Need by: ${_needByLabel(request.neededBy)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13.5 * s,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 12 * s),
-                  Container(
-                    width: 1,
-                    height: 18 * s,
-                    color: AppColors.blackCatBorderLight,
-                  ),
-                  SizedBox(width: 12 * s),
-                  Flexible(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.attach_money_rounded,
-                          size: 18,
-                          color: AppColors.blackCat,
-                        ),
-                        const SizedBox(width: 2),
-                        Flexible(
-                          child: Text(
-                            'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13.5 * s,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                );
+              },
+            ),
           ),
-        ),
 
-        // Close icon top-right
-        Positioned(
-          right: 6,
-          top: 6,
-          child: Semantics(
-            button: true,
-            label: 'Close',
-            onTap: () => Navigator.pop(context),
-            child: ExcludeSemantics(
-              child: InkWell(
-                borderRadius: BorderRadius.zero,
-                onTap: () => Navigator.pop(context),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 18 * s,
-                    color: AppColors.blackCat,
-                  ),
+          const SizedBox(height: 12),
+
+          // Name
+          Text(
+            displayName,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16 * s,
+              color: AppColors.blackCat,
+            ),
+          ),
+          if (isBrandRequest) ...[
+            const SizedBox(height: 4),
+            Text(
+              campaignName,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 13.5 * s,
+                color: AppColors.blackCat.withValues(alpha: 0.72),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.blackCat),
+                color: AppColors.balletSlippers,
+              ),
+              child: Text(
+                'Brand Request',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11 * s,
+                  color: AppColors.blackCat,
                 ),
               ),
             ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            'Order # ${request.orderNumber.trim().isNotEmpty ? request.orderNumber.trim() : request.id}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.78),
+              fontWeight: FontWeight.w500,
+              fontSize: 12.5 * s,
+            ),
           ),
-        ),
-      ],
+
+          const SizedBox(height: 12),
+
+          _requestTypePills(context),
+
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Flexible(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 18,
+                      color: AppColors.blackCat,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Need by: ${_needByLabel(request.neededBy)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5 * s,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 12 * s),
+              Container(
+                width: 1,
+                height: 18 * s,
+                color: AppColors.blackCatBorderLight,
+              ),
+              SizedBox(width: 12 * s),
+              Flexible(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.attach_money_rounded,
+                      size: 18,
+                      color: AppColors.blackCat,
+                    ),
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text(
+                        'Budget: \$${request.budgetMin} to \$${request.budgetMax}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5 * s,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -10258,7 +10346,7 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  static String _needByLabel(DateTime d) => formatDateMdy(d);
+  static String _needByLabel(DateTime d) => formatDateMdyShortYear(d);
 }
 
 String _decodeUriSafelyRepeatedly(String value) {

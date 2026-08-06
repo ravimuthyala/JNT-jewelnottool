@@ -51,6 +51,9 @@ class ArtistReviewsPage extends StatefulWidget {
     this.onOpenEarnings,
     this.onOpenReviews,
     this.onSignOut,
+    this.showTopChrome = true,
+    this.showTitleHeader = true,
+    this.onModalClose,
   });
 
   final bool clientArtistMenuStyle;
@@ -68,6 +71,9 @@ class ArtistReviewsPage extends StatefulWidget {
   final VoidCallback? onOpenEarnings;
   final VoidCallback? onOpenReviews;
   final VoidCallback? onSignOut;
+  final bool showTopChrome;
+  final bool showTitleHeader;
+  final VoidCallback? onModalClose;
 
   @override
   State<ArtistReviewsPage> createState() => _ArtistReviewsPageState();
@@ -307,7 +313,9 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         rows = await _supabase
             .from(entry.key)
             .select()
-            .or('accepted_by_artist_email.ilike.$email,artist_email.ilike.$email');
+            .or(
+              'accepted_by_artist_email.ilike.$email,artist_email.ilike.$email',
+            );
       } catch (e) {
         debugPrint('ARTIST REVIEWS LOAD FAILED for ${entry.key}: $e');
         continue;
@@ -461,118 +469,116 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
         ? 0.0
         : _reviews.fold<double>(0, (p, e) => p + e.rating) / reviewCount;
 
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      namesRoute: true,
-      label: 'Artist reviews',
-      child: Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: JntStandardAppBar(
-          onNotifications:
-              widget.onOpenNotifications ??
-              () {
-                NotificationsPage.showAsModal(context);
-              },
-          trailing: _ReviewsAvatarMenu(
-            onManageProfile: widget.onManageProfile,
-            onOpenHistory: widget.onOpenHistory,
-            onOpenCalendar: widget.onOpenCalendar,
-            onOpenArtist: widget.onOpenArtist,
-            onOpenEarnings: widget.onOpenEarnings,
-            onOpenReviews: widget.onOpenReviews,
-            onSignOut: widget.onSignOut,
-            logoutOnly: !widget.clientArtistMenuStyle,
-            useArtistAvatar: !widget.clientArtistMenuStyle,
-            clientDisplayName: widget.clientDisplayName,
-            clientProfileImageUrl: widget.clientProfileImageUrl,
-          ),
-        ),
-        bottomNavigationBar: widget.showBottomNav
-            ? (widget.clientArtistMenuStyle
-                  ? BottomNavigationBar(
-                      backgroundColor: AppColors.balletSlippers,
-                      currentIndex: widget.bottomNavCurrentIndex,
-                      onTap: widget.onBottomNavTap,
-                      type: BottomNavigationBarType.fixed,
-                      selectedItemColor: AppColors.blackCat,
-                      unselectedItemColor: Colors.black.withValues(alpha: 0.55),
-                      items: [
-                        const BottomNavigationBarItem(
-                          icon: Icon(Icons.home_outlined),
-                          activeIcon: Icon(Icons.home),
-                          label: 'Home',
-                        ),
-                        const BottomNavigationBarItem(
-                          icon: Icon(Icons.add_circle_outline),
-                          activeIcon: Icon(Icons.add_circle),
-                          label: 'Design',
-                        ),
-                        const BottomNavigationBarItem(
-                          icon: Icon(Icons.inbox_outlined),
-                          activeIcon: Icon(Icons.inbox),
-                          label: 'Requests',
-                        ),
-                        if (widget.showCampaignsTab)
-                          const BottomNavigationBarItem(
-                            icon: Icon(Icons.campaign_outlined),
-                            activeIcon: Icon(Icons.campaign),
-                            label: 'Campaigns',
-                          ),
-                        const BottomNavigationBarItem(
-                          icon: Icon(Icons.receipt_long_outlined),
-                          activeIcon: Icon(Icons.receipt_long),
-                          label: 'Orders',
-                        ),
-                        if (!widget.showCampaignsTab)
-                          const BottomNavigationBarItem(
-                            icon: Icon(Icons.attach_money_outlined),
-                            activeIcon: Icon(Icons.attach_money),
-                            label: 'Earnings',
-                          ),
-                      ],
-                    )
-                  : BottomNavigationBar(
-                      backgroundColor: AppColors.balletSlippers,
-                      currentIndex: widget.bottomNavCurrentIndex,
-                      onTap: widget.onBottomNavTap,
-                      type: BottomNavigationBarType.fixed,
-                      selectedItemColor: AppColors.blackCat,
-                      unselectedItemColor: AppColors.blackCat.withValues(
-                        alpha: 0.55,
+    final page = Scaffold(
+      backgroundColor: AppColors.snow,
+      appBar: widget.showTopChrome
+          ? JntStandardAppBar(
+              onNotifications:
+                  widget.onOpenNotifications ??
+                  () {
+                    NotificationsPage.showAsModal(context);
+                  },
+              trailing: _ReviewsAvatarMenu(
+                onManageProfile: widget.onManageProfile,
+                onOpenHistory: widget.onOpenHistory,
+                onOpenCalendar: widget.onOpenCalendar,
+                onOpenArtist: widget.onOpenArtist,
+                onOpenEarnings: widget.onOpenEarnings,
+                onOpenReviews: widget.onOpenReviews,
+                onSignOut: widget.onSignOut,
+                logoutOnly: !widget.clientArtistMenuStyle,
+                useArtistAvatar: !widget.clientArtistMenuStyle,
+                clientDisplayName: widget.clientDisplayName,
+                clientProfileImageUrl: widget.clientProfileImageUrl,
+              ),
+            )
+          : null,
+      bottomNavigationBar: widget.showBottomNav
+          ? (widget.clientArtistMenuStyle
+                ? BottomNavigationBar(
+                    backgroundColor: AppColors.balletSlippers,
+                    currentIndex: widget.bottomNavCurrentIndex,
+                    onTap: widget.onBottomNavTap,
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: AppColors.blackCat,
+                    unselectedItemColor: Colors.black.withValues(alpha: 0.55),
+                    items: [
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.home_outlined),
+                        activeIcon: Icon(Icons.home),
+                        label: 'Home',
                       ),
-                      items: const [
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.inbox_outlined),
-                          activeIcon: Icon(Icons.inbox),
-                          label: 'Requests',
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.add_circle_outline),
+                        activeIcon: Icon(Icons.add_circle),
+                        label: 'Design',
+                      ),
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.inbox_outlined),
+                        activeIcon: Icon(Icons.inbox),
+                        label: 'Requests',
+                      ),
+                      if (widget.showCampaignsTab)
+                        const BottomNavigationBarItem(
+                          icon: Icon(Icons.campaign_outlined),
+                          activeIcon: Icon(Icons.campaign),
+                          label: 'Campaigns',
                         ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.calendar_month_outlined),
-                          activeIcon: Icon(Icons.calendar_month),
-                          label: 'Calendar',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.history_outlined),
-                          activeIcon: Icon(Icons.history),
-                          label: 'History',
-                        ),
-                        BottomNavigationBarItem(
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.receipt_long_outlined),
+                        activeIcon: Icon(Icons.receipt_long),
+                        label: 'Orders',
+                      ),
+                      if (!widget.showCampaignsTab)
+                        const BottomNavigationBarItem(
                           icon: Icon(Icons.attach_money_outlined),
                           activeIcon: Icon(Icons.attach_money),
                           label: 'Earnings',
                         ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.person_outline),
-                          activeIcon: Icon(Icons.person),
-                          label: 'Profile',
-                        ),
-                      ],
-                    ))
-            : null,
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-          children: [
+                    ],
+                  )
+                : BottomNavigationBar(
+                    backgroundColor: AppColors.balletSlippers,
+                    currentIndex: widget.bottomNavCurrentIndex,
+                    onTap: widget.onBottomNavTap,
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: AppColors.blackCat,
+                    unselectedItemColor: AppColors.blackCat.withValues(
+                      alpha: 0.55,
+                    ),
+                    items: const [
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.inbox_outlined),
+                        activeIcon: Icon(Icons.inbox),
+                        label: 'Requests',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.calendar_month_outlined),
+                        activeIcon: Icon(Icons.calendar_month),
+                        label: 'Calendar',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.history_outlined),
+                        activeIcon: Icon(Icons.history),
+                        label: 'History',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.attach_money_outlined),
+                        activeIcon: Icon(Icons.attach_money),
+                        label: 'Earnings',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.person_outline),
+                        activeIcon: Icon(Icons.person),
+                        label: 'Profile',
+                      ),
+                    ],
+                  ))
+          : null,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+        children: [
+          if (widget.showTitleHeader) ...[
             const Text(
               'Reviews',
               textAlign: TextAlign.center,
@@ -593,73 +599,106 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                 fontFamily: 'Arial',
               ),
             ),
-            const SizedBox(height: 12),
-            _summaryCard(avg: avg, count: reviewCount, tips: totalTips),
-            const SizedBox(height: 12),
-            _tabs(),
-            const SizedBox(height: 10),
-            _filters(),
-            const SizedBox(height: 10),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (reviews.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.snow,
-                  border: Border.all(color: AppColors.blackCatBorderLight),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Text(
-                  'No reviews yet.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.blackCat.withValues(alpha: 0.72),
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'Arial',
-                  ),
-                ),
-              )
-            else
-              for (final r in reviews) ...[
-                _reviewCard(r),
-                const SizedBox(height: 10),
-              ],
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-              ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: AppColors.blackCat,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Reviews and tips are shared by clients and brands after completed orders/requests. They help build trust in our community.',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: AppColors.blackCat,
-                        fontFamily: 'Arialbold',
-                        fontWeight: FontWeight.w700,
-                      ),
+          ] else ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Reviews',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Arialbold',
+                      color: AppColors.blackCat,
                     ),
                   ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: 'Close reviews',
+                  color: AppColors.blackCat,
+                  onPressed:
+                      widget.onModalClose ?? () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
             ),
           ],
-        ),
+          const SizedBox(height: 12),
+          _summaryCard(avg: avg, count: reviewCount, tips: totalTips),
+          const SizedBox(height: 12),
+          _tabs(),
+          const SizedBox(height: 10),
+          _filters(),
+          const SizedBox(height: 10),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (reviews.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                border: Border.all(color: AppColors.blackCatBorderLight),
+                borderRadius: BorderRadius.zero,
+              ),
+              child: Text(
+                'No reviews yet.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.blackCat.withValues(alpha: 0.72),
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                ),
+              ),
+            )
+          else
+            for (final r in reviews) ...[
+              _reviewCard(r),
+              const SizedBox(height: 10),
+            ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: AppColors.blackCat,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Reviews and tips are shared by clients and brands after completed orders/requests. They help build trust in our community.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: AppColors.blackCat,
+                      fontFamily: 'Arialbold',
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+
+    if (!widget.showTopChrome) return page;
+
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: 'Artist reviews',
+      child: page,
     );
   }
 

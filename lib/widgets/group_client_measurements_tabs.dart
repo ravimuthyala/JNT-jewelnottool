@@ -86,7 +86,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
 
     if (compactRequestDetailsLayout) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: _measurementPanel(c, showOuterBorder: false),
       );
     }
@@ -124,7 +124,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
               children: [
                 _plainHandColumn('Left Hand', c.leftHand, c.leftNfc),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: VerticalDivider(
                     width: 1,
                     thickness: 1,
@@ -173,13 +173,14 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
     String value(String key) => _formatMm(map[key] ?? '');
 
     Widget row(String key, String label) {
+      final hasNfc = nfc[key] == true;
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(
-              width: 52,
+            Expanded(
+              flex: 7,
               child: Text(
                 label,
                 maxLines: 1,
@@ -191,13 +192,10 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(
-              width: 34,
-              child: nfc[key] == true
-                  ? Center(child: _nfcChip())
-                  : const SizedBox.shrink(),
-            ),
+            if (hasNfc) ...[const SizedBox(width: 3), _nfcChip()],
+            const SizedBox(width: 6),
             Expanded(
+              flex: 8,
               child: Align(
                 alignment: Alignment.centerRight,
                 child: FittedBox(
@@ -276,7 +274,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
 
   Widget _nfcChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: const BoxDecoration(
         color: AppColors.balletSlippers,
         borderRadius: BorderRadius.zero,
@@ -284,7 +282,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
       child: const Text(
         'NFC',
         style: TextStyle(
-          fontSize: 9.5,
+          fontSize: 8,
           fontWeight: FontWeight.w700,
           color: AppColors.blackCat,
           height: 1,
