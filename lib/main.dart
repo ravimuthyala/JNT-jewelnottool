@@ -79,7 +79,7 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
       future: _supabaseReady,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const HomePage();
+          return const ColoredBox(color: AppColors.blackCat);
         }
         if (snapshot.data != true) {
           debugPrint(
@@ -265,6 +265,7 @@ class _SupabaseInitFailedAppState extends State<_SupabaseInitFailedApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.light,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Arial'),
       home: Scaffold(
         backgroundColor: const Color(0xFF292222),
@@ -348,6 +349,7 @@ class JntApp extends StatelessWidget {
         navigatorKey: navigatorKey,
         title: 'JewelNotTool',
         debugShowCheckedModeBanner: false,
+        themeMode: ThemeMode.light,
 
         localizationsDelegates: const [
           CountryLocalizations.delegate,
