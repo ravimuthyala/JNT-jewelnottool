@@ -56,6 +56,15 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
 
+            <!-- Keeps the native launch_background drawable painted as an
+                 overlay while the Flutter engine boots, bridging the gap
+                 between the splash screen dismissing and Flutter's first
+                 frame. Without this the window briefly shows its default
+                 (white) background. -->
+            <meta-data
+                android:name="io.flutter.embedding.android.SplashScreenDrawable"
+                android:resource="@drawable/launch_background" />
+
             <meta-data
                 android:name="io.flutter.embedding.android.EnableImpeller"
                 android:value="false" />
