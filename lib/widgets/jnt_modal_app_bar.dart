@@ -56,6 +56,10 @@ class JntModalAppBar extends StatelessWidget implements PreferredSizeWidget {
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
               height: JntModalHeaderMetrics.logoHeight,
+              cacheHeight:
+                  (JntModalHeaderMetrics.logoHeight *
+                          MediaQuery.of(context).devicePixelRatio)
+                      .round(),
               fit: BoxFit.contain,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
@@ -116,7 +120,16 @@ class JntModalHeaderBar extends StatelessWidget {
               alignment: Alignment.center,
               child: ExcludeSemantics(
                 child: Image(
-                  image: AssetImage('assets/images/jnt_logo_black.png'),
+                  // 150 = logoHeight(50) * 3x, a safe high-DPI multiplier;
+                  // no BuildContext available here for devicePixelRatio
+                  // since this widget is const. ResizeImage is required
+                  // (rather than cacheHeight) because the generic Image()
+                  // constructor takes a pre-built ImageProvider and has no
+                  // cacheHeight parameter of its own.
+                  image: ResizeImage(
+                    AssetImage('assets/images/jnt_logo_black.png'),
+                    height: 150,
+                  ),
                   height: JntModalHeaderMetrics.logoHeight,
                   fit: BoxFit.contain,
                   errorBuilder: _errorBuilder,

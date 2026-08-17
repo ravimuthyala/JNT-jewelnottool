@@ -71,10 +71,7 @@ class SearchableDropdownField extends StatelessWidget {
           },
           onSelected: onChanged,
           fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-            return Semantics(
-              label: label,
-              textField: true,
-              child: TextField(
+            return TextField(
               controller: controller,
               focusNode: focusNode,
               textAlignVertical: TextAlignVertical.center,
@@ -127,7 +124,6 @@ class SearchableDropdownField extends StatelessWidget {
                   borderRadius: BorderRadius.zero,
                   borderSide: BorderSide(color: borderColor, width: 1.2),
                 ),
-              ),
               ),
             );
           },

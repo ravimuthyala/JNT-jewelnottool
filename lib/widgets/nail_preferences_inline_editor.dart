@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
@@ -345,7 +346,10 @@ class _NailPreferencesInlineEditorState
   Widget build(BuildContext context) {
     final dims = _currentDims();
 
-    return Container(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
       padding: widget.showOuterContainer
           ? const EdgeInsets.fromLTRB(16, 16, 16, 14)
           : EdgeInsets.zero,
@@ -376,66 +380,85 @@ class _NailPreferencesInlineEditorState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Nail Dimension (in mm) *',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-              color: AppColors.blackCat,
-              fontFamily: 'Arialbold',
+          Semantics(
+            header: true,
+            sortKey: OrdinalSortKey(1),
+            label: 'Nail Dimension in millimeters',
+            child: const ExcludeSemantics(
+              child: Text(
+                'Nail Dimension (in mm) *',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppColors.blackCat,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 14),
 
           if (widget.showNfcOptions) ...[
-            Text(
-              'NFC Eligible Designs marked with this checkbox can be upgraded with an NFC chip',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-                height: 1.3,
+            ExcludeSemantics(
+              child: Text(
+                'NFC Eligible Designs marked with this checkbox can be upgraded with an NFC chip',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
+                  height: 1.3,
+                ),
               ),
             ),
             const SizedBox(height: 10),
           ],
 
-          Row(
-            children: [
-              Text(
-                'Filled',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.blackCat,
+          ExcludeSemantics(
+            child: Row(
+              children: [
+                Text(
+                  'Filled',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.blackCat,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Text(
-                '${dims.filledCount}/10',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.blackCat,
+                const SizedBox(width: 14),
+                Text(
+                  '${dims.filledCount}/10',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.blackCat,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           const SizedBox(height: 16),
 
-          const Center(
-            child: Text(
-              'Left Hand',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                fontFamily: 'Arialbold',
+          Semantics(
+            header: true,
+            sortKey: OrdinalSortKey(2),
+            label: 'Left Hand',
+            child: const ExcludeSemantics(
+              child: Center(
+                child: Text(
+                  'Left Hand',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 12),
           _FingerRow(
+            semanticOrderStart: 3,
             inputDecoration: _miniDec,
             showDimensionImages: widget.showDimensionImages,
             showNfcOptions: widget.showNfcOptions,
@@ -462,18 +485,26 @@ class _NailPreferencesInlineEditorState
 
           const SizedBox(height: 16),
 
-          const Center(
-            child: Text(
-              'Right Hand',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                fontFamily: 'Arialbold',
+          Semantics(
+            header: true,
+            sortKey: OrdinalSortKey(8),
+            label: 'Right Hand',
+            child: const ExcludeSemantics(
+              child: Center(
+                child: Text(
+                  'Right Hand',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 12),
           _FingerRow(
+            semanticOrderStart: 9,
             inputDecoration: _miniDec,
             showDimensionImages: widget.showDimensionImages,
             showNfcOptions: widget.showNfcOptions,
@@ -500,12 +531,22 @@ class _NailPreferencesInlineEditorState
 
           const SizedBox(height: 18),
 
-          const Text(
-            'Choose Your Nail Shape *',
-            style: TextStyle(fontSize: _titleFs, fontWeight: FontWeight.w700),
+          Semantics(
+            header: true,
+            sortKey: OrdinalSortKey(15),
+            label: 'Choose Your Nail Shape',
+            child: const ExcludeSemantics(
+              child: Text(
+                'Choose Your Nail Shape *',
+                style: TextStyle(fontSize: _titleFs, fontWeight: FontWeight.w700),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
-          SizedBox(
+          Semantics(
+            container: true,
+            explicitChildNodes: true,
+            child: SizedBox(
             height: 162,
             child: ScrollConfiguration(
               behavior: ScrollConfiguration.of(context).copyWith(
@@ -525,6 +566,7 @@ class _NailPreferencesInlineEditorState
                   final selected = s == _shape;
 
                   return _ShapeCard(
+                    semanticOrder: 16 + i.toDouble(),
                     label: s,
                     imageAsset: _shapeImage(s),
                     selected: selected,
@@ -538,16 +580,27 @@ class _NailPreferencesInlineEditorState
               ),
             ),
           ),
+          ),
 
           const SizedBox(height: 18),
 
-          const Text(
-            'Choose Your Nail Length *',
-            style: TextStyle(fontSize: _titleFs, fontWeight: FontWeight.w700),
+          Semantics(
+            header: true,
+            sortKey: OrdinalSortKey(30),
+            label: 'Choose Your Nail Length',
+            child: const ExcludeSemantics(
+              child: Text(
+                'Choose Your Nail Length *',
+                style: TextStyle(fontSize: _titleFs, fontWeight: FontWeight.w700),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 
-          SizedBox(
+          Semantics(
+            container: true,
+            explicitChildNodes: true,
+            child: SizedBox(
             height: 158,
             child: ScrollConfiguration(
               behavior: ScrollConfiguration.of(context).copyWith(
@@ -568,6 +621,7 @@ class _NailPreferencesInlineEditorState
                   final selected = _length == len;
 
                   return _LengthImageCard(
+                    semanticOrder: 31 + i.toDouble(),
                     title: _lengthTitle(len),
                     //subtitle: _lengthSubtitle(len),
                     imageAsset: _lengthImage(len),
@@ -583,7 +637,9 @@ class _NailPreferencesInlineEditorState
               ),
             ),
           ),
+          ),
         ],
+      ),
       ),
     );
   }
@@ -600,6 +656,7 @@ class _FingerItemData {
 
 class _FingerRow extends StatelessWidget {
   const _FingerRow({
+    required this.semanticOrderStart,
     required this.items,
     required this.inputDecoration,
     required this.showDimensionImages,
@@ -609,6 +666,7 @@ class _FingerRow extends StatelessWidget {
     required this.onNfcChanged,
   });
 
+  final double semanticOrderStart;
   final List<_FingerItemData> items;
   final InputDecoration Function() inputDecoration;
   final bool showDimensionImages;
@@ -625,13 +683,19 @@ class _FingerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: items.map((f) {
+        children: items.asMap().entries.map((entry) {
+          final index = entry.key;
+          final f = entry.value;
           return Padding(
             padding: const EdgeInsets.only(right: 14),
             child: _FingerInput(
+              semanticOrder: semanticOrderStart + index,
               label: f.label,
               controller: f.controller,
               inputDecoration: inputDecoration,
@@ -643,12 +707,14 @@ class _FingerRow extends StatelessWidget {
           );
         }).toList(),
       ),
+      ),
     );
   }
 }
 
 class _FingerInput extends StatelessWidget {
   const _FingerInput({
+    required this.semanticOrder,
     required this.label,
     required this.controller,
     required this.inputDecoration,
@@ -658,6 +724,7 @@ class _FingerInput extends StatelessWidget {
     required this.onNfcChanged,
   });
 
+  final double semanticOrder;
   final String label;
   final TextEditingController controller;
   final InputDecoration Function() inputDecoration;
@@ -674,7 +741,8 @@ class _FingerInput extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
+          ExcludeSemantics(
+            child: SizedBox(
             height: 18,
             child: Center(
               child: Text(
@@ -690,6 +758,7 @@ class _FingerInput extends StatelessWidget {
                 ),
               ),
             ),
+          ),
           ),
           const SizedBox(height: 8),
 
@@ -724,21 +793,26 @@ class _FingerInput extends StatelessWidget {
 
           SizedBox(
             height: 40,
-            child: Semantics(
-              label: '$label nail dimension in millimeters',
-              textField: true,
-              child: TextField(
-                controller: controller,
-                readOnly: false,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+            child: MergeSemantics(
+              child: Semantics(
+                sortKey: OrdinalSortKey(semanticOrder),
+                label: '$label nail dimension in millimeters',
+                child: TextField(
+                  controller: controller,
+                  readOnly: false,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: inputDecoration(),
+                  inputFormatters: <TextInputFormatter>[
+                    NailDimensionTextInputFormatter(),
+                  ],
                 ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                decoration: inputDecoration(),
-                inputFormatters: <TextInputFormatter>[
-                  NailDimensionTextInputFormatter(),
-                ],
               ),
             ),
           ),
@@ -781,10 +855,12 @@ class _FingerInput extends StatelessWidget {
                 : const SizedBox.shrink(),
           ),
           const SizedBox(height: 2),
-          const Text(
-            'mm',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11.5, color: AppColors.blackCat),
+          const ExcludeSemantics(
+            child: Text(
+              'mm',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11.5, color: AppColors.blackCat),
+            ),
           ),
         ],
       ),
@@ -794,6 +870,7 @@ class _FingerInput extends StatelessWidget {
 
 class _ShapeCard extends StatelessWidget {
   const _ShapeCard({
+    required this.semanticOrder,
     required this.label,
     required this.imageAsset,
     required this.selected,
@@ -801,6 +878,7 @@ class _ShapeCard extends StatelessWidget {
     required this.onTap,
   });
 
+  final double semanticOrder;
   final String label;
   final String imageAsset;
   final bool selected;
@@ -819,6 +897,7 @@ class _ShapeCard extends StatelessWidget {
               : AppColors.blackCat.withValues(alpha: 0.10));
 
     return Semantics(
+      sortKey: OrdinalSortKey(semanticOrder),
       button: true,
       label: 'Nail shape: $label',
       selected: selected,
@@ -959,6 +1038,7 @@ String _shapeImage(String label) {
 
 class _LengthImageCard extends StatelessWidget {
   const _LengthImageCard({
+    required this.semanticOrder,
     required this.title,
     required this.subtitle,
     required this.imageAsset,
@@ -967,6 +1047,7 @@ class _LengthImageCard extends StatelessWidget {
     required this.onTap,
   });
 
+  final double semanticOrder;
   final String title;
   final String subtitle;
   final String imageAsset;
@@ -986,6 +1067,7 @@ class _LengthImageCard extends StatelessWidget {
               : AppColors.blackCat.withValues(alpha: 0.10));
 
     return Semantics(
+      sortKey: OrdinalSortKey(semanticOrder),
       button: true,
       label: 'Nail length: $title',
       selected: selected,

@@ -2744,9 +2744,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: Semantics(
-                                                label: 'Phone number',
                                                 isRequired: true,
-                                                textField: true,
                                                 child: TextFormField(
                                                   controller: _phoneCtrl,
                                                   style: const TextStyle(

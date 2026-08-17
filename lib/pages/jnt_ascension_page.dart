@@ -3,12 +3,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../utils/jnt_ascension_engine.dart';
 import '../theme/app_colors.dart';
-import '../widgets/jnt_modal_app_bar.dart';
 
 class JntAscensionPage extends StatefulWidget {
   const JntAscensionPage({super.key});
@@ -36,16 +36,24 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   int _portfolioUploads = 0;
   _AscensionStageSummary _stageSummary = const _AscensionStageSummary.empty();
 
+  // Accessibility / modal traversal controls.
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'JNT Ascension Close');
+  final GlobalKey _closeSemanticsKey = GlobalKey(debugLabel: 'JNT Ascension Close Semantics');
+
   @override
   void initState() {
     super.initState();
     _bindArtist();
+    _scheduleInitialAccessibilityFocus();
   }
 
   @override
   void dispose() {
     _artistChannel?.unsubscribe();
     _requestsChannel?.unsubscribe();
+    _scrollController.dispose();
+    _closeFocusNode.dispose();
     super.dispose();
   }
 
@@ -651,38 +659,127 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     return items;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (!_artistLoaded || !_hasServerSnapshot || !_initialAscensionResolved) {
-      return Semantics(
-        scopesRoute: true,
-        explicitChildNodes: true,
-        namesRoute: true,
-        label: 'JNT Ascension',
-        child: Scaffold(
-          backgroundColor: AppColors.snow,
-          appBar: JntModalAppBar(
-            onClose: () => Navigator.of(context).pop(),
-            closeTooltip: 'Close JNT Ascension',
-            title: const Text(
-              'JNT Ascension',
-              style: TextStyle(
-                color: AppColors.blackCat,
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-              ),
-            ),
-          ),
-          body: const Center(
-            child: SizedBox(
-              height: 28,
-              width: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.2),
+  void _scheduleInitialAccessibilityFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Wait until the modal route animation has completed before moving
+      // TalkBack/VoiceOver accessibility focus. Input FocusNode focus alone
+      // does not move Android accessibility focus.
+      Future<void>.delayed(const Duration(milliseconds: 420), () {
+        if (!mounted) return;
+        _focusRealCloseButton();
+      });
+      // A second pass handles slower devices / the loading-to-loaded rebuild.
+      Future<void>.delayed(const Duration(milliseconds: 760), () {
+        if (!mounted) return;
+        _focusRealCloseButton();
+      });
+    });
+  }
+
+  void _sendAccessibilityFocusToClose() {
+    final renderObject = _closeSemanticsKey.currentContext?.findRenderObject();
+    renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  void _focusRealCloseButton() {
+    if (!mounted) return;
+    _scrollToTopOnly();
+    _closeFocusNode.requestFocus();
+    _sendAccessibilityFocusToClose();
+  }
+
+  void _redirectEndOfModalToClose() {
+    // The invisible end marker is part of the modal semantics tree. Once
+    // TalkBack reaches it, immediately reveal and focus the actual X button.
+    _scrollToTopOnly();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _focusRealCloseButton();
+    });
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Close JNT Ascension',
+      hint: 'Double tap to close',
+      onTap: _closePage,
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
+  }
+
+  void _closePage() {
+    Navigator.of(context).pop();
+  }
+
+  void _scrollToTopOnly() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels != position.minScrollExtent) {
+      _scrollController.jumpTo(position.minScrollExtent);
+    }
+  }
+
+  Widget _buildModalHeader() {
+    return SizedBox(
+      height: 64,
+      child: Center(
+        child: ExcludeSemantics(
+          child: Text(
+            'JNT Ascension',
+            style: const TextStyle(
+              color: AppColors.blackCat,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  Widget _buildTopCloseButton() {
+    return Positioned(
+      top: 6,
+      right: 6,
+      child: Focus(
+        focusNode: _closeFocusNode,
+        autofocus: true,
+        child: Semantics(
+          key: _closeSemanticsKey,
+          container: true,
+          sortKey: const OrdinalSortKey(0.0),
+          button: true,
+          label: 'Close JNT Ascension',
+          hint: 'Double tap to close',
+          onTap: _closePage,
+          onDidGainAccessibilityFocus: _scrollToTopOnly,
+          child: ExcludeSemantics(
+            child: IconButton(
+              tooltip: 'Close JNT Ascension',
+              onPressed: _closePage,
+              icon: const Icon(
+                Icons.close_rounded,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectTab(_AscTab tab) {
+    if (_activeTab == tab) return;
+    setState(() => _activeTab = tab);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loading =
+        !_artistLoaded || !_hasServerSnapshot || !_initialAscensionResolved;
 
     final level = _currentLevel;
     final nextLevel = _nextTierLevel;
@@ -693,36 +790,81 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       namesRoute: true,
       label: 'JNT Ascension',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntModalAppBar(
-        onClose: () => Navigator.of(context).pop(),
-        closeTooltip: 'Close JNT Ascension',
-        title: const Text(
-          'JNT Ascension',
-          style: TextStyle(
-            color: AppColors.blackCat,
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        backgroundColor: AppColors.snow,
+        body: SafeArea(
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              _headerCard(level: level, nextLevel: nextLevel),
-              const SizedBox(height: 14),
-              _tabs(),
-              const SizedBox(height: 14),
-              if (_activeTab == _AscTab.activity) _activityTab(),
-              if (_activeTab == _AscTab.tiers) _tiersTab(level),
-              if (_activeTab == _AscTab.earnPoints) _earnPointsTab(),
+              Semantics(
+                container: true,
+                explicitChildNodes: true,
+                sortKey: const OrdinalSortKey(1.0),
+                child: Column(
+                  children: [
+                    _buildModalHeader(),
+                    Expanded(
+                      child: loading
+                          ? Center(
+                              child: Semantics(
+                                label: 'Loading JNT Ascension',
+                                child: const SizedBox(
+                                  height: 28,
+                                  width: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : SingleChildScrollView(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                8,
+                                16,
+                                18,
+                              ),
+                              child: Semantics(
+                                container: true,
+                                explicitChildNodes: true,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _headerCard(
+                                      level: level,
+                                      nextLevel: nextLevel,
+                                    ),
+                                    const SizedBox(height: 14),
+                                    _tabs(),
+                                    const SizedBox(height: 14),
+                                    if (_activeTab == _AscTab.activity)
+                                      _activityTab(),
+                                    if (_activeTab == _AscTab.tiers)
+                                      _tiersTab(level),
+                                    if (_activeTab == _AscTab.earnPoints)
+                                      _earnPointsTab(),
+                                    // Keep linear screen-reader traversal inside
+                                    // the modal. This final semantic stop redirects
+                                    // accessibility focus to the visible top X.
+                                    _buildAccessibilityCloseLoopTarget(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // IMPORTANT: This is the only semantic Close control. It is
+              // painted at the top-right, but it is deliberately the LAST
+              // sibling in the modal semantics tree. Therefore TalkBack's
+              // next swipe after the final body item lands on this real X
+              // instead of escaping to the dimmed profile page behind it.
+              _buildTopCloseButton(),
             ],
           ),
         ),
-      ),
       ),
     );
   }
@@ -732,244 +874,272 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
         ? 'A'
         : _artistName.trim().substring(0, 1).toUpperCase();
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1A1A1A), Color(0xFF3A2A1E)],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final progressLabel = level == _AscLevel.crowned
+        ? 'Crowned status achieved. Insurance reimbursement unlocked.'
+        : '${_fmtPoints(_pointsToNextTier)} points to ${nextLevel.label}.';
+
+    return Semantics(
+      container: true,
+      label:
+          '$_artistName. Current tier ${level.label}. '
+          '${_fmtPoints(_currentPoints)} points. $progressLabel',
+      child: ExcludeSemantics(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1A1A1A), Color(0xFF3A2A1E)],
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                height: 60,
-                width: 60,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.balletSlippers,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 22,
-                    color: Color(0xFF1F160E),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _artistName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              Row(
+                children: [
+                  Container(
+                    height: 60,
+                    width: 60,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.balletSlippers,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      initial,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 20,
+                        fontSize: 22,
+                        color: Color(0xFF1F160E),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${level.label}  ·  ${_fmtPoints(_currentPoints)} pts',
-                      style: const TextStyle(
-                        color: Color(0xFFE2BE83),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Row(
-            children: [
-              Text(
-                'Maker',
-                style: TextStyle(
-                  color: Color(0xFFE2BE83),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              Spacer(),
-              Text(
-                'Goldsmith',
-                style: TextStyle(
-                  color: Color(0xFF90939A),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              Spacer(),
-              Text(
-                'Crowned',
-                style: TextStyle(
-                  color: Color(0xFF90939A),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: LinearProgressIndicator(
-                  minHeight: 6,
-                  value: _progressAcrossTiers,
-                  backgroundColor: const Color(0xFF5C5954),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFE2BE83),
                   ),
-                ),
-              ),
-              Positioned.fill(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final knobX = constraints.maxWidth * _progressAcrossTiers;
-                    return Stack(
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Positioned(
-                          left: (constraints.maxWidth * (goldsmithMin / crownedMin)) - 1,
-                          top: 0,
-                          bottom: 0,
-                          child: Container(width: 2, color: const Color(0xAA2F2F2F)),
+                        Text(
+                          _artistName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                          ),
                         ),
-                        Positioned(
-                          left: (knobX - 7).clamp(0, constraints.maxWidth - 14),
-                          top: -4,
-                          child: Container(
-                            height: 14,
-                            width: 14,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE2BE83),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.black,
-                                width: 1.5,
-                              ),
-                            ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${level.label}  ·  ${_fmtPoints(_currentPoints)} pts',
+                          style: const TextStyle(
+                            color: Color(0xFFE2BE83),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
                           ),
                         ),
                       ],
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Text(
+                    'Maker',
+                    style: TextStyle(
+                      color: Color(0xFFE2BE83),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Spacer(),
+                  Text(
+                    'Goldsmith',
+                    style: TextStyle(
+                      color: Color(0xFF90939A),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Spacer(),
+                  Text(
+                    'Crowned',
+                    style: TextStyle(
+                      color: Color(0xFF90939A),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      value: _progressAcrossTiers,
+                      backgroundColor: const Color(0xFF5C5954),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFFE2BE83),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final knobX =
+                            constraints.maxWidth * _progressAcrossTiers;
+                        return Stack(
+                          children: [
+                            Positioned(
+                              left:
+                                  (constraints.maxWidth *
+                                          (goldsmithMin / crownedMin)) -
+                                      1,
+                              top: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 2,
+                                color: const Color(0xAA2F2F2F),
+                              ),
+                            ),
+                            Positioned(
+                              left: (knobX - 7).clamp(
+                                0,
+                                constraints.maxWidth - 14,
+                              ),
+                              top: -4,
+                              child: Container(
+                                height: 14,
+                                width: 14,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE2BE83),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.black,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (level == _AscLevel.crowned)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x22E2BE83),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0x66E2BE83)),
+                    ),
+                    child: const Column(
+                      children: [
+                        Text(
+                          'Crowned Status Achieved',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Insurance reimbursement unlocked',
+                          style: TextStyle(
+                            color: Color(0xFFE2BE83),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Center(
+                  child: RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: _fmtPoints(_pointsToNextTier),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 30,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' points to ${nextLevel.label}',
+                          style: const TextStyle(
+                            color: Color(0xFFC4A87A),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 14),
-          if (level == _AscLevel.crowned)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0x22E2BE83),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0x66E2BE83)),
-                ),
-                child: const Column(
-                  children: [
-                    Text(
-                      'Crowned Status Achieved',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Insurance reimbursement unlocked',
-                      style: TextStyle(
-                        color: Color(0xFFE2BE83),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Center(
-              child: RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: _fmtPoints(_pointsToNextTier),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 30,
-                      ),
-                    ),
-                    TextSpan(
-                      text: ' points to ${nextLevel.label}',
-                      style: const TextStyle(
-                        color: Color(0xFFC4A87A),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-        ],
+        ),
       ),
     );
   }
 
   Widget _tabs() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.alabaster,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          _tabButton(_AscTab.activity, 'Activity'),
-          _tabButton(_AscTab.tiers, 'Tiers'),
-          _tabButton(_AscTab.earnPoints, 'Earn Points'),
-        ],
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: 'JNT Ascension tabs',
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppColors.alabaster,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            _tabButton(_AscTab.activity, 'Activity', 1),
+            _tabButton(_AscTab.tiers, 'Tiers', 2),
+            _tabButton(_AscTab.earnPoints, 'Earn Points', 3),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _tabButton(_AscTab tab, String label) {
+  Widget _tabButton(_AscTab tab, String label, int position) {
     final selected = _activeTab == tab;
     return Expanded(
       child: Semantics(
+        container: true,
         button: true,
         selected: selected,
-        label: label,
+        label: '$label tab, $position of 3',
         value: selected ? 'Selected' : 'Not selected',
-        onTap: () => setState(() => _activeTab = tab),
+        hint: selected ? 'Selected' : 'Double tap to open $label',
+        onTap: () => _selectTab(tab),
         child: ExcludeSemantics(
           child: InkWell(
-            onTap: () => setState(() => _activeTab = tab),
+            onTap: () => _selectTab(tab),
             borderRadius: BorderRadius.circular(11),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
@@ -997,309 +1167,286 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   }
 
   Widget _activityTab() {
-    final orders = _readMetricInt('completedOrders');
-    final deliveredOrders = _stageSummary.deliveredOrders;
-    final currentTier = _currentLevel.label;
+    final paceText =
+        "At your current pace, you'll reach ${_nextTierLevel.label} in about ${(_pointsToNextTier / JntAscensionEngine.blendedAveragePointsPerOrder).ceil().clamp(0, 9999)} completed orders.";
 
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text(
-              'Recent Points',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const Spacer(),
-            Text(
-              'This month: ${_fmtSignedPoints(_stageSummary.thisMonthPoints)} pts',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF8A8F98),
-                fontWeight: FontWeight.w500,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: 'Activity content',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            label: 'Recent Points',
+            child: const ExcludeSemantics(
+              child: Text(
+                'Recent Points',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        for (final item in _activityItems) _activityRow(item),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF0EAE0),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFD9C9B4)),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: Icon(Icons.insights_outlined, color: Color(0xFF7C838E)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  "At your current pace, you'll reach ${_nextTierLevel.label} in about ${(_pointsToNextTier / JntAscensionEngine.blendedAveragePointsPerOrder).ceil().clamp(0, 9999)} completed orders.",
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF3A3025),
-                  ),
+          const SizedBox(height: 4),
+          Semantics(
+            label:
+                'This month, ${_fmtSignedPoints(_stageSummary.thisMonthPoints)} points',
+            child: ExcludeSemantics(
+              child: Text(
+                'This month: ${_fmtSignedPoints(_stageSummary.thisMonthPoints)} pts',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF8A8F98),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE4E4E4)),
+          const SizedBox(height: 10),
+          for (final item in _activityItems) _activityRow(item),
+          const SizedBox(height: 16),
+          Semantics(
+            container: true,
+            focusable: true,
+            label: paceText,
+            // Final Activity content node. The real top-right Close X is
+            // the next sibling in the modal semantics tree.
+            child: ExcludeSemantics(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0EAE0),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFD9C9B4)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.insights_outlined,
+                        color: Color(0xFF7C838E),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        paceText,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF3A3025),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Completed orders: $orders',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Delivered orders: $deliveredOrders',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Artist GMV: \$${artistGmv.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Artist earnings: \$${artistEarnings.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'JNT revenue: \$${jntRevenue.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Current tier: $currentTier',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Points to next tier: ${_fmtPoints(_pointsToNextTier)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  color: Color(0xFF4E545E),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (isGoldsmith &&
-                  crownedPointsQualified &&
-                  !crownedRevenueQualified) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '\$${jntRevenueToCrowned.toStringAsFixed(0)} JNT revenue remaining to unlock Crowned benefits.',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.35,
-                    color: Color(0xFF3A3025),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _semanticStat(
+    String label,
+    String semanticValue, {
+    String? visualValue,
+  }) {
+    final visual = visualValue ?? semanticValue;
+    return Semantics(
+      container: true,
+      label: '$label, $semanticValue',
+      child: ExcludeSemantics(
+        child: Text(
+          '$label: $visual',
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            color: Color(0xFF4E545E),
+            fontWeight: FontWeight.w500,
           ),
         ),
-      ],
+      ),
     );
   }
 
   Widget _activityRow(_PointActivityItem item) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            height: 8,
-            width: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFFCFAE78),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+    final label =
+        '${item.title}. ${item.subtitle}. ${_fmtSignedPoints(item.points)} points.';
+    return Semantics(
+      container: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                height: 8,
+                width: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFCFAE78),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  item.subtitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF8A8F98),
-                  ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF8A8F98),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Text(
+                _fmtSignedPoints(item.points),
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF14823A),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          Text(
-            _fmtSignedPoints(item.points),
-            style: const TextStyle(
-              fontSize: 16,
-              color: Color(0xFF14823A),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _tiersTab(_AscLevel currentLevel) {
-    return Column(
-      children: [
-        _tierCard(
-          _AscLevel.maker,
-          '${_fmtTierThreshold(0)}-${_fmtTierThreshold(999)} pts',
-          currentLevel == _AscLevel.maker,
-        ),
-        const SizedBox(height: 10),
-        _tierCard(
-          _AscLevel.goldsmith,
-          '${_fmtTierThreshold(1000)}-${_fmtTierThreshold(9749)} pts',
-          currentLevel == _AscLevel.goldsmith,
-        ),
-        const SizedBox(height: 10),
-        _tierCard(
-          _AscLevel.crowned,
-          '${_fmtTierThreshold(9750)}+ pts',
-          currentLevel == _AscLevel.crowned,
-        ),
-      ],
-    );
-  }
-
-  Widget _tierCard(_AscLevel level, String range, bool isCurrent) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isCurrent ? const Color(0xFFCDAF78) : const Color(0xFFE3E3E3),
-          width: isCurrent ? 1.4 : 1,
-        ),
-      ),
-      child: Row(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: 'Tiers content',
+      child: Column(
         children: [
-          Container(
-            height: 34,
-            width: 34,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F1EA),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(level.icon, style: const TextStyle(fontSize: 16)),
+          _tierCard(
+            _AscLevel.maker,
+            '${_fmtTierThreshold(0)}-${_fmtTierThreshold(999)} pts',
+            currentLevel == _AscLevel.maker,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  level.label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: isCurrent ? Colors.black : const Color(0xFF8B8B8B),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  range,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF8A8F98),
-                  ),
-                ),
-              ],
-            ),
+          const SizedBox(height: 10),
+          _tierCard(
+            _AscLevel.goldsmith,
+            '${_fmtTierThreshold(1000)}-${_fmtTierThreshold(9749)} pts',
+            currentLevel == _AscLevel.goldsmith,
           ),
-          if (isCurrent)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0E6D7),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Text(
-                'CURRENT',
-                style: TextStyle(
-                  color: Color(0xFFC69445),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+          const SizedBox(height: 10),
+          _tierCard(
+            _AscLevel.crowned,
+            '${_fmtTierThreshold(9750)}+ pts',
+            currentLevel == _AscLevel.crowned,
+          ),
         ],
       ),
     );
   }
 
+  Widget _tierCard(_AscLevel level, String range, bool isCurrent) {
+    return Semantics(
+      container: true,
+      selected: isCurrent,
+      label:
+          '${level.label} tier. $range.${isCurrent ? ' Current tier.' : ''}',
+      child: ExcludeSemantics(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isCurrent
+                  ? const Color(0xFFCDAF78)
+                  : const Color(0xFFE3E3E3),
+              width: isCurrent ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                height: 34,
+                width: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F1EA),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(level.icon, style: const TextStyle(fontSize: 16)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      level.label,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: isCurrent
+                            ? Colors.black
+                            : const Color(0xFF8B8B8B),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      range,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF8A8F98),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isCurrent)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0E6D7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'CURRENT',
+                    style: TextStyle(
+                      color: Color(0xFFC69445),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _earnPointsTab() {
-    // These must mirror JntAscensionEngine's actual weighted constants --
-    // this tab used to hardcode different (unweighted) numbers than what
-    // the "Ascension stages" breakdown on this same page actually awards,
-    // e.g. showing +20 for a repeat client order when the real calculation
-    // only ever grants +6.
     String pts(double value) =>
         '+${value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(2)} pts';
     final earnItems = <_EarnRuleItem>[
@@ -1330,91 +1477,114 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       ),
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'How to earn',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Points are awarded in stages as orders move through completion, shipping, delivery, review, and repeat-client activity.',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF6F7580),
-          ),
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final cardWidth = (constraints.maxWidth - 10) / 2;
-            final compact = cardWidth < 170;
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: earnItems.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: compact ? 1.24 : 1.42,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: 'Earn Points content',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            label: 'How to earn',
+            child: const ExcludeSemantics(
+              child: Text(
+                'How to earn',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
-              itemBuilder: (_, i) {
-                final item = earnItems[i];
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE3E3E3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 34,
-                        width: 34,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Semantics(
+            label:
+                'Points are awarded in stages as orders move through completion, shipping, delivery, review, and repeat-client activity.',
+            child: ExcludeSemantics(
+              child: Text(
+                'Points are awarded in stages as orders move through completion, shipping, delivery, review, and repeat-client activity.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF6F7580),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = (constraints.maxWidth - 10) / 2;
+              final compact = cardWidth < 170;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: earnItems.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: compact ? 1.24 : 1.42,
+                ),
+                itemBuilder: (_, i) {
+                  final item = earnItems[i];
+                  return Semantics(
+                    container: true,
+                    label: '${item.title}. ${item.points}.',
+                    child: ExcludeSemantics(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
-                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE3E3E3)),
                         ),
-                        child: Icon(item.icon, size: 18),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: compact ? 14 : 15,
-                          fontWeight: FontWeight.w500,
-                          height: 1.2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 34,
+                              width: 34,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF5F5F5),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(item.icon, size: 18),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              item.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: compact ? 14 : 15,
+                                fontWeight: FontWeight.w500,
+                                height: 1.2,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              item.points,
+                              style: TextStyle(
+                                fontSize: compact ? 19 : 22,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF0D7E38),
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        item.points,
-                        style: TextStyle(
-                          fontSize: compact ? 19 : 22,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0D7E38),
-                          height: 1.0,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        ),
-      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
-}
 
+}
 
 class _AscensionStageSummary {
   const _AscensionStageSummary({

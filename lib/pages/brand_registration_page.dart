@@ -51,6 +51,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   final FocusNode _logoUploadFocusNode = FocusNode(
     debugLabel: 'companyLogoUpload',
   );
+  final FocusNode _billingAddressTopFocusNode = FocusNode(
+    debugLabel: 'billingAddressTop',
+  );
   Timer? _billingStreetAutocompleteDebounce;
   Timer? _shippingStreetAutocompleteDebounce;
   List<AddressSuggestion> _billingStreetSuggestions = const [];
@@ -362,6 +365,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     _emailAvailabilityDebounce?.cancel();
     _registrationScrollController.dispose();
     _logoUploadFocusNode.dispose();
+    _billingAddressTopFocusNode.dispose();
     // existing
     _nameCtrl.dispose();
     _emailCtrl.dispose();
@@ -1832,6 +1836,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     });
     _announceStep(_registrationStep);
     _scrollRegistrationToTop();
+    _focusTopOfStep(_registrationStep);
   }
 
   /// Advancing/going back a step swaps which fields render within the same
@@ -1842,6 +1847,20 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_registrationScrollController.hasClients) return;
       _registrationScrollController.jumpTo(0);
+    });
+  }
+
+  /// The step announcement alone doesn't move screen-reader focus -- without
+  /// this, TalkBack/VoiceOver stay wherever focus already was (typically the
+  /// Next/Back button, or wherever it last landed), so it can silently skip
+  /// past the new step's first field. Moves focus to that field explicitly.
+  void _focusTopOfStep(int step) {
+    final target = step == 0
+        ? _logoUploadFocusNode
+        : _billingAddressTopFocusNode;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(target);
     });
   }
 
@@ -1871,6 +1890,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                   _validationTriggeredStep = null;
                 });
                 _announceStep(index);
+                _scrollRegistrationToTop();
+                _focusTopOfStep(index);
               },
               child: ExcludeSemantics(
                 child: InkWell(
@@ -1880,6 +1901,8 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                       _validationTriggeredStep = null;
                     });
                     _announceStep(index);
+                    _scrollRegistrationToTop();
+                    _focusTopOfStep(index);
                   },
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -2009,6 +2032,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                   });
                   _announceStep(_registrationStep);
                   _scrollRegistrationToTop();
+                  _focusTopOfStep(_registrationStep);
                 },
                 child: const Text(
                   'Back',
@@ -2246,9 +2270,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: Semantics(
-                                                label: 'Company phone number',
                                                 isRequired: true,
-                                                textField: true,
                                                 child: TextFormField(
                                                   controller: _phoneCtrl,
                                                   style: const TextStyle(
@@ -2523,9 +2545,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: Semantics(
-                                                label: 'Contact phone number',
                                                 isRequired: true,
-                                                textField: true,
                                                 child: TextFormField(
                                                   controller: _contactPhoneCtrl,
                                                   style: const TextStyle(
@@ -2689,6 +2709,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               _req(
                                 true,
                                 TextFormField(
+                                  focusNode: _billingAddressTopFocusNode,
                                   controller: _streetCtrl,
                                   style: const TextStyle(fontSize: _inputFs),
                                   decoration: _dec(
@@ -2867,33 +2888,68 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                     color: Colors.black.withValues(alpha: 0.06),
                                   ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Is Shipping Address same as Billing Address',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.black.withValues(
-                                            alpha: 0.75,
+                                child: Builder(
+                                  builder: (context) {
+                                    const title =
+                                        'Is Shipping Address same as Billing Address';
+                                    void handleChanged(bool next) {
+                                      setState(
+                                        () => _shippingSameAsBilling = next,
+                                      );
+                                      SemanticsService.sendAnnouncement(
+                                        View.of(context),
+                                        '$title toggle ${next ? 'on' : 'off'}',
+                                        Directionality.of(context),
+                                      );
+                                    }
+
+                                    return MergeSemantics(
+                                      child: Semantics(
+                                        button: true,
+                                        label:
+                                            '$title toggle ${_shippingSameAsBilling ? 'on' : 'off'}',
+                                        child: InkWell(
+                                          onTap: () => handleChanged(
+                                            !_shippingSameAsBilling,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: ExcludeSemantics(
+                                                  child: Text(
+                                                    title,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.75,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              ExcludeSemantics(
+                                                child: Switch(
+                                                  value:
+                                                      _shippingSameAsBilling,
+                                                  activeThumbColor:
+                                                      AppColors.deepPlum,
+                                                  inactiveThumbColor:
+                                                      AppColors.blackCatLight,
+                                                  inactiveTrackColor: AppColors
+                                                      .blackCatLight
+                                                      .withValues(alpha: 0.35),
+                                                  onChanged: handleChanged,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    Switch(
-                                      value: _shippingSameAsBilling,
-                                      activeThumbColor: AppColors.deepPlum,
-                                      inactiveThumbColor:
-                                          AppColors.blackCatLight,
-                                      inactiveTrackColor: AppColors
-                                          .blackCatLight
-                                          .withValues(alpha: 0.35),
-                                      onChanged: (v) => setState(
-                                        () => _shippingSameAsBilling = v,
-                                      ),
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 ),
                               ),
 
@@ -3311,29 +3367,43 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        InkWell(
+                                        Semantics(
+                                          button: true,
+                                          selected: selected,
+                                          label:
+                                              '$method'
+                                              '${selected ? ', selected' : ''}',
                                           onTap: () => setState(
                                             () => _billingMethod = method,
                                           ),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                _billingMethod == method
-                                                    ? Icons.radio_button_checked
-                                                    : Icons
-                                                          .radio_button_unchecked,
-                                                color: AppColors.deepPlum,
+                                          child: ExcludeSemantics(
+                                            child: InkWell(
+                                              onTap: () => setState(
+                                                () => _billingMethod = method,
                                               ),
-                                              Expanded(
-                                                child: Text(
-                                                  method,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    _billingMethod == method
+                                                        ? Icons
+                                                              .radio_button_checked
+                                                        : Icons
+                                                              .radio_button_unchecked,
+                                                    color: AppColors.deepPlum,
                                                   ),
-                                                ),
+                                                  Expanded(
+                                                    child: Text(
+                                                      method,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
+                                            ),
                                           ),
                                         ),
                                         if (selected) ...[

@@ -81,6 +81,48 @@ class BrandingCompanyHomePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: _OverviewTile(
+                  icon: Icons.campaign_outlined,
+                  title: 'Campaigns',
+                  value: '$campaignCount',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _OverviewTile(
+                  icon: Icons.timelapse,
+                  title: 'In Progress',
+                  value: '$inProgressCount',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _OverviewTile(
+                  icon: Icons.check_circle_outline,
+                  title: 'Delivered',
+                  value: '$deliveredCount',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _OverviewTile(
+                  icon: Icons.cancel_outlined,
+                  title: 'Cancelled',
+                  value: '$cancelledCount',
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
           if (loadingTrendingLooks)
             const SizedBox(
               height: 220,
@@ -123,6 +165,61 @@ class BrandingCompanyHomePage extends StatelessWidget {
         ],
       ),
     ));
+  }
+}
+
+class _OverviewTile extends StatelessWidget {
+  const _OverviewTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 74,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.blackCat, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

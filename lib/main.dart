@@ -79,7 +79,7 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
       future: _supabaseReady,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const ColoredBox(color: AppColors.blackCat);
+          return const _LogoSplash();
         }
         if (snapshot.data != true) {
           debugPrint(
@@ -89,6 +89,30 @@ class _AppBootstrapperState extends State<_AppBootstrapper> {
         }
         return const JntApp();
       },
+    );
+  }
+}
+
+/// The one loading frame shown throughout cold start, from native splash
+/// hand-off through session restoration: same blackCat background as the
+/// native launch theme, with the JNT logo, so there is no visible seam no
+/// matter how long each async step underneath actually takes.
+class _LogoSplash extends StatelessWidget {
+  const _LogoSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: AppColors.blackCat,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 72),
+          child: Image(
+            image: AssetImage('assets/images/JNTWhitelogo.png'),
+            width: 160,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -166,7 +190,13 @@ class _SessionHomeGateState extends State<_SessionHomeGate> {
       future: _home,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const HomePage();
+          // Not the marketing HomePage: whether this resolves in a few
+          // milliseconds (session already cached) or takes the full
+          // restoration wait, a signed-in user must see one consistent
+          // frame throughout, not a flash of the logged-out landing page
+          // (with its "Sign In" button) that only appears when resolution
+          // happens to be slow enough for this frame to actually paint.
+          return const _LogoSplash();
         }
         if (snapshot.hasData) return snapshot.data!;
 

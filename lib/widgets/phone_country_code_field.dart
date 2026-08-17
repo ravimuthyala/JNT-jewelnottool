@@ -113,29 +113,25 @@ class PhoneCountryCodeField extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Semantics(
-              label: semanticLabel,
-              textField: true,
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                style: TextStyle(fontSize: fontSize, fontFamily: 'Arial'),
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                  UsPhoneTextInputFormatter(),
-                ],
-                decoration: InputDecoration(
-                  hintText: 'Enter 10-digit phone',
-                  hintStyle: TextStyle(
-                    fontSize: fontSize - 1,
-                    color: AppColors.blackCat.withValues(alpha: 0.35),
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: TextStyle(fontSize: fontSize, fontFamily: 'Arial'),
+              keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+                UsPhoneTextInputFormatter(),
+              ],
+              decoration: InputDecoration(
+                hintText: 'Enter 10-digit phone',
+                hintStyle: TextStyle(
+                  fontSize: fontSize - 1,
+                  color: AppColors.blackCat.withValues(alpha: 0.35),
                 ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
           ),

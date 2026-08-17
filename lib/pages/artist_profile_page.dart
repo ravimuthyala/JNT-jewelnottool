@@ -118,87 +118,152 @@ class _ArtistCommunicationPreferencesPopupState
     extends State<_ArtistCommunicationPreferencesPopup> {
   late bool _emailNotifications;
   late bool _smsNotifications;
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _closeSemanticsKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _emailNotifications = widget.initialValue.emailNotifications;
     _smsNotifications = widget.initialValue.smsNotifications;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final features = WidgetsBinding
+          .instance.platformDispatcher.accessibilityFeatures;
+      if (!features.accessibleNavigation) return;
+      final renderObject = _closeSemanticsKey.currentContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        decoration: const BoxDecoration(color: AppColors.snow),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Center(
-                    child: Text(
-                      'Communication Preferences',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.blackCat,
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Communication preferences',
+      child: SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(color: AppColors.snow),
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            shrinkWrap: true,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Center(
+                      child: ExcludeSemantics(
+                        child: Text(
+                          'Communication Preferences',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Close communication preferences',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _emailNotifications,
-              onChanged: (value) => setState(() {
-                _emailNotifications = value;
-              }),
-              title: const Text('Email Notifications'),
-              activeThumbColor: AppColors.blackCat,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _smsNotifications,
-              onChanged: (value) => setState(() {
-                _smsNotifications = value;
-              }),
-              title: const Text('SMS Notifications'),
-              activeThumbColor: AppColors.blackCat,
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
+                  Semantics(
+                    key: _closeSemanticsKey,
+                    button: true,
+                    label: 'Close communication preferences',
+                    hint: 'Double tap to close without saving',
+                    onTap: () => Navigator.pop(context),
+                    child: ExcludeSemantics(
+                      child: IconButton(
+                        tooltip: 'Close communication preferences',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ),
                   ),
-                ),
-                onPressed: () => Navigator.pop(
-                  context,
-                  _ArtistCommunicationPreferences(
-                    emailNotifications: _emailNotifications,
-                    smsNotifications: _smsNotifications,
-                  ),
-                ),
-                child: const Text('Save communication preferences'),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Semantics(
+                container: true,
+                button: true,
+                label: 'Email notifications toggle, ${_emailNotifications ? 'On' : 'Off'}',
+                hint: 'Double tap to ${_emailNotifications ? 'turn off' : 'turn on'}',
+                onTap: () => setState(() {
+                  _emailNotifications = !_emailNotifications;
+                }),
+                child: ExcludeSemantics(
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _emailNotifications,
+                    onChanged: (value) => setState(() {
+                      _emailNotifications = value;
+                    }),
+                    title: const Text('Email Notifications'),
+                    activeThumbColor: AppColors.blackCat,
+                  ),
+                ),
+              ),
+              Semantics(
+                container: true,
+                button: true,
+                label: 'SMS notifications toggle, ${_smsNotifications ? 'On' : 'Off'}',
+                hint: 'Double tap to ${_smsNotifications ? 'turn off' : 'turn on'}',
+                onTap: () => setState(() {
+                  _smsNotifications = !_smsNotifications;
+                }),
+                child: ExcludeSemantics(
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _smsNotifications,
+                    onChanged: (value) => setState(() {
+                      _smsNotifications = value;
+                    }),
+                    title: const Text('SMS Notifications'),
+                    activeThumbColor: AppColors.blackCat,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: Semantics(
+                  button: true,
+                  label: 'Save communication preferences',
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _ArtistCommunicationPreferences(
+                        emailNotifications: _emailNotifications,
+                        smsNotifications: _smsNotifications,
+                      ),
+                    ),
+                    child: const Text('Save communication preferences'),
+                  ),
+                ),
+              ),
+              _AccessibilityCloseLoopTarget(
+                label: 'Close communication preferences',
+                onClose: () => Navigator.pop(context),
+                closeSemanticsKey: _closeSemanticsKey,
+                scrollController: _scrollController,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -209,33 +274,100 @@ class _AccessibilityCloseLoopTarget extends StatelessWidget {
   const _AccessibilityCloseLoopTarget({
     required this.label,
     required this.onClose,
+    this.closeSemanticsKey,
+    this.scrollController,
   });
 
   final String label;
   final VoidCallback onClose;
+  final GlobalKey? closeSemanticsKey;
+  final ScrollController? scrollController;
 
-  @override
-  Widget build(BuildContext context) {
-    void scrollToTop() {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final scrollable = Scrollable.maybeOf(context);
-        if (scrollable == null || !scrollable.position.hasPixels) return;
-        scrollable.position.animateTo(
+  Future<void> _moveToRealClose(BuildContext context) async {
+    // This node exists only to create a final TalkBack stop after Save/content.
+    // Move the *real* close X on screen before transferring semantics focus.
+    final controller = scrollController;
+    if (controller != null && controller.hasClients) {
+      await controller.animateTo(
+        controller.position.minScrollExtent,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+      if (controller.hasClients) {
+        controller.jumpTo(controller.position.minScrollExtent);
+      }
+    } else {
+      final scrollable = Scrollable.maybeOf(context);
+      if (scrollable != null && scrollable.position.hasPixels) {
+        await scrollable.position.animateTo(
           scrollable.position.minScrollExtent,
           duration: const Duration(milliseconds: 260),
           curve: Curves.easeOut,
         );
-      });
+        if (scrollable.position.hasPixels) {
+          scrollable.position.jumpTo(scrollable.position.minScrollExtent);
+        }
+      }
     }
 
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+
+    final closeContext = closeSemanticsKey?.currentContext;
+    if (closeContext == null) return;
+
+    // Guarantee the visual X is actually inside the viewport before moving
+    // accessibility focus. This prevents the blue TalkBack focus strip from
+    // remaining at the bottom of long sheets.
+    await Scrollable.ensureVisible(
+      closeContext,
+      alignment: 0,
+      duration: Duration.zero,
+    );
+    await WidgetsBinding.instance.endOfFrame;
+
+    final renderObject = closeContext.findRenderObject();
+    if (renderObject == null) return;
+    renderObject.sendSemanticsEvent(const FocusSemanticEvent());
+
+    // Some Android/TalkBack builds ignore a focus event sent during the same
+    // semantics rebuild. A second event on the next frame makes the transfer
+    // deterministic without changing non-accessibility behavior.
+    await WidgetsBinding.instance.endOfFrame;
+    renderObject.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Semantics(
       container: true,
       button: true,
       label: label,
       hint: 'Double tap to close without saving',
       onTap: onClose,
-      onDidGainAccessibilityFocus: scrollToTop,
+      onDidGainAccessibilityFocus: () {
+        unawaited(_moveToRealClose(context));
+      },
       child: const SizedBox(width: 1, height: 1),
+    );
+  }
+}
+
+class _AccessibleArtistReviewsModal extends StatelessWidget {
+  const _AccessibleArtistReviewsModal();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Artist reviews',
+      child: ArtistReviewsPage(
+        showTopChrome: false,
+        showTitleHeader: true,
+        onModalClose: () => Navigator.pop(context),
+      ),
     );
   }
 }
@@ -1492,15 +1624,11 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => FractionallySizedBox(
+      builder: (_) => const FractionallySizedBox(
         heightFactor: 0.94,
         child: ClipRRect(
           borderRadius: BorderRadius.zero,
-          child: ArtistReviewsPage(
-            showTopChrome: false,
-            showTitleHeader: false,
-            onModalClose: () => Navigator.pop(sheetContext),
-          ),
+          child: _AccessibleArtistReviewsModal(),
         ),
       ),
     );
@@ -2053,10 +2181,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
     return Semantics(
       container: true,
-      toggled: enabled,
+      button: true,
       enabled: !_savingDirectRequestPref,
-      label: 'Direct Requests',
-      value: stateLabel,
+      label: 'Direct Requests toggle, ${enabled ? 'On' : 'Off'}. $stateLabel',
       hint: _savingDirectRequestPref
           ? 'Updating'
           : 'Double tap to ${enabled ? 'turn off' : 'turn on'} direct requests',
@@ -2130,10 +2257,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
 
     return Semantics(
       container: true,
-      toggled: enabled,
+      button: true,
       enabled: !_savingNfcRequestPref,
-      label: 'NFC Request',
-      value: stateLabel,
+      label: 'NFC Request toggle, ${enabled ? 'On' : 'Off'}. $stateLabel',
       hint: _savingNfcRequestPref
           ? 'Updating'
           : 'Double tap to ${enabled ? 'turn off' : 'turn on'} NFC requests',
@@ -2244,10 +2370,9 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   }) {
     return Semantics(
       container: true,
-      toggled: value,
+      button: true,
       enabled: !saving,
-      label: label,
-      value: value ? 'On' : 'Off',
+      label: '$label toggle, ${value ? 'On' : 'Off'}',
       hint: saving
           ? 'Updating'
           : 'Double tap to turn ${value ? 'off' : 'on'}',
@@ -2289,6 +2414,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.94,
@@ -2635,6 +2761,8 @@ class ArtistPayoutSettingsPage extends StatefulWidget {
 }
 
 class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _closeSemanticsKey = GlobalKey();
   bool _saving = false;
 
   bool _openApple = false;
@@ -2761,6 +2889,14 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
     );
 
     _applyDefaultExpandedMethod(method);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final features = WidgetsBinding
+          .instance.platformDispatcher.accessibilityFeatures;
+      if (!features.accessibleNavigation) return;
+      final renderObject = _closeSemanticsKey.currentContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
   }
 
   @override
@@ -2776,6 +2912,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
     _achAccountCtrl.dispose();
     _venmoUserCtrl.dispose();
     _venmoPhoneCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -3042,6 +3179,7 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       backgroundColor: AppColors.snow,
       body: SafeArea(
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
           children: [
             Row(
@@ -3060,10 +3198,19 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Close payout settings',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded),
+                Semantics(
+                  key: _closeSemanticsKey,
+                  button: true,
+                  label: 'Close payout settings',
+                  hint: 'Double tap to close without saving',
+                  onTap: () => Navigator.pop(context),
+                  child: ExcludeSemantics(
+                    child: IconButton(
+                      tooltip: 'Close payout settings',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -3164,6 +3311,8 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
             _AccessibilityCloseLoopTarget(
               label: 'Close payout settings',
               onClose: () => Navigator.pop(context),
+              closeSemanticsKey: _closeSemanticsKey,
+              scrollController: _scrollController,
             ),
           ],
         ),
@@ -3187,44 +3336,41 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       ),
       child: Column(
         children: [
-          MergeSemantics(
-            child: Semantics(
-              button: true,
-              selected: open,
-              label: title,
-              value: open ? 'Expanded' : 'Collapsed',
-              hint: open ? 'Double tap to collapse' : 'Double tap to expand',
-              onTap: onTap,
-              child: ExcludeSemantics(
-                child: InkWell(
-                  onTap: onTap,
-                  borderRadius: BorderRadius.zero,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        height: 34,
-                        width: 56,
-                        child: Center(child: leading),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.blackCat,
-                          ),
+          Semantics(
+            container: true,
+            button: true,
+            label: '$title, ${open ? 'expanded' : 'collapsed'}',
+            hint: open ? 'Double tap to collapse $title' : 'Double tap to expand $title',
+            onTap: onTap,
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.zero,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      height: 34,
+                      width: 56,
+                      child: Center(child: leading),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.blackCat,
                         ),
                       ),
-                      Icon(
-                        open
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.chevron_right_rounded,
-                        color: AppColors.blackCat.withValues(alpha: 0.45),
-                      ),
-                    ],
-                  ),
+                    ),
+                    Icon(
+                      open
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.chevron_right_rounded,
+                      color: AppColors.blackCat.withValues(alpha: 0.45),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -3236,59 +3382,101 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
   }
 
   Widget _field(String label, TextEditingController c) {
-    final isPhoneField = label.trim().toLowerCase() == 'phone';
+    final normalizedLabel = label.trim().toLowerCase();
+    final isPhoneField = normalizedLabel == 'phone';
+    final isNumericIdentifier =
+        normalizedLabel == 'routing number' ||
+        normalizedLabel == 'account number';
+
+    String spokenValue(String raw) {
+      final text = raw.trim();
+      if (text.isEmpty) return 'Empty';
+      if (!isNumericIdentifier) return text;
+      final digits = text.replaceAll(RegExp(r'\D'), '');
+      return digits.isEmpty ? text : digits.split('').join(' ');
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.blackCat.withValues(alpha: 0.7),
+          ExcludeSemantics(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.blackCat.withValues(alpha: 0.7),
+              ),
             ),
           ),
           const SizedBox(height: 5),
-          TextField(
-            controller: c,
-            keyboardType: isPhoneField ? TextInputType.phone : null,
-            inputFormatters: isPhoneField
-                ? <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                    UsPhoneTextInputFormatter(),
-                  ]
-                : null,
-            style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.snow,
-              hintStyle: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.45),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: AppColors.blackCatBorderLight,
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: c,
+            builder: (context, value, _) {
+              return MergeSemantics(
+                child: Semantics(
+                  container: true,
+                  label: label,
+                  value: spokenValue(value.text),
+                  textField: true,
+                  child: TextField(
+                    controller: c,
+                    keyboardType: isPhoneField
+                        ? TextInputType.phone
+                        : isNumericIdentifier
+                        ? TextInputType.number
+                        : null,
+                    inputFormatters: isPhoneField
+                        ? <TextInputFormatter>[
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                            UsPhoneTextInputFormatter(),
+                          ]
+                        : isNumericIdentifier
+                        ? <TextInputFormatter>[
+                            FilteringTextInputFormatter.digitsOnly,
+                          ]
+                        : null,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.blackCat,
+                    ),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.snow,
+                      hintStyle: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.45),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: const BorderSide(
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: const BorderSide(
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                      ),
+                      focusedBorder: const OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(
+                          color: AppColors.blackCat,
+                          width: 1.2,
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: AppColors.blackCatBorderLight,
-                ),
-              ),
-              focusedBorder: const OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -3301,57 +3489,79 @@ class _ArtistPayoutSettingsPageState extends State<ArtistPayoutSettingsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Account Type',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.blackCat.withValues(alpha: 0.7),
+          ExcludeSemantics(
+            child: Text(
+              'Account Type',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.blackCat.withValues(alpha: 0.7),
+              ),
             ),
           ),
           const SizedBox(height: 5),
-          DropdownButtonFormField<String>(
-            initialValue: _achType,
-            dropdownColor: AppColors.snow,
-            iconEnabledColor: AppColors.blackCat,
-            style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.snow,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: AppColors.blackCatBorderLight,
+          MergeSemantics(
+            child: Semantics(
+              container: true,
+              label: 'Account Type',
+              hint: 'Double tap to choose Checking or Savings',
+              child: DropdownButtonFormField<String>(
+                initialValue: _achType,
+                dropdownColor: AppColors.snow,
+                iconEnabledColor: AppColors.blackCat,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.blackCat,
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: AppColors.blackCatBorderLight,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: AppColors.snow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: const BorderSide(
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: const BorderSide(
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(
+                      color: AppColors.blackCat,
+                      width: 1.2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                 ),
-              ),
-              focusedBorder: const OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Checking',
+                    child: Text('Checking'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Savings',
+                    child: Text('Savings'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _achType = value);
+                },
               ),
             ),
-            items: const [
-              DropdownMenuItem(value: 'Checking', child: Text('Checking')),
-              DropdownMenuItem(value: 'Savings', child: Text('Savings')),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _achType = value);
-            },
           ),
         ],
       ),
     );
   }
+
 }
 
 class ArtistPortfolioItem {
@@ -3545,7 +3755,9 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
   String? _loadError;
   final Set<String> _deletingImages = <String>{};
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _closeSemanticsKey = GlobalKey();
   final TextEditingController _licenseCtrl = TextEditingController();
+  final FocusNode _licenseFocusNode = FocusNode();
   final TextEditingController _jurisdictionCtrl = TextEditingController();
   final TextEditingController _schoolCtrl = TextEditingController();
   final TextEditingController _instagramCtrl = TextEditingController();
@@ -3565,11 +3777,20 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     _hydrateProfileFields();
     _scrollController.addListener(_onScroll);
     unawaited(_loadInitialPage());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final features = WidgetsBinding
+          .instance.platformDispatcher.accessibilityFeatures;
+      if (!features.accessibleNavigation) return;
+      final renderObject = _closeSemanticsKey.currentContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
   }
 
   @override
   void dispose() {
     _licenseCtrl.dispose();
+    _licenseFocusNode.dispose();
     _jurisdictionCtrl.dispose();
     _schoolCtrl.dispose();
     _instagramCtrl.dispose();
@@ -4053,10 +4274,19 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Close portfolio',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
+                  Semantics(
+                    key: _closeSemanticsKey,
+                    button: true,
+                    label: 'Close portfolio',
+                    hint: 'Double tap to close portfolio',
+                    onTap: () => Navigator.pop(context),
+                    child: ExcludeSemantics(
+                      child: IconButton(
+                        tooltip: 'Close portfolio',
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -4219,7 +4449,19 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                       ),
                     )
                   else
-                    _buildPortfolioGridSliver(displayItems),
+                    SliverMainAxisGroup(
+                      slivers: [
+                        _buildPortfolioGridSliver(displayItems),
+                        SliverToBoxAdapter(
+                          child: _AccessibilityCloseLoopTarget(
+                            label: 'Close portfolio',
+                            onClose: () => Navigator.pop(context),
+                            closeSemanticsKey: _closeSemanticsKey,
+                            scrollController: _scrollController,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -4288,7 +4530,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           ),
           const SizedBox(height: 12),
           if (_nailTechType == 'professional') ...[
-            _detailsField('License #', _licenseCtrl),
+            _detailsField('License number', _licenseCtrl, spellDigits: true),
             _detailsField('Jurisdiction', _jurisdictionCtrl),
             _detailsDropdown(
               label: 'Years of Experience',
@@ -4410,14 +4652,20 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
     );
   }
 
-  Widget _detailsField(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextField(
+  Widget _detailsField(
+    String label,
+    TextEditingController controller, {
+    bool spellDigits = false,
+  }) {
+    Widget field({FocusNode? focusNode, ValueChanged<String>? onChanged}) {
+      return TextField(
         controller: controller,
+        focusNode: focusNode,
+        keyboardType: spellDigits ? TextInputType.text : null,
+        onChanged: onChanged,
         style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
         decoration: InputDecoration(
-          labelText: '$label *',
+          labelText: label,
           floatingLabelBehavior: FloatingLabelBehavior.always,
           filled: true,
           fillColor: AppColors.snow,
@@ -4443,6 +4691,36 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
             vertical: 12,
           ),
         ),
+      );
+    }
+
+    if (!spellDigits) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: field(),
+      );
+    }
+
+    // A license number is an identifier, not a mathematical number. Giving
+    // TalkBack a spaced character label prevents values such as 45434534 from
+    // being converted to "forty-five million..." while keeping the real field
+    // editable on double tap.
+    final digits = controller.text.trim();
+    final spokenDigits = digits.isEmpty ? 'Not entered' : digits.split('').join(' ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Semantics(
+        container: true,
+        textField: true,
+        label: '$label, $spokenDigits',
+        hint: 'Double tap to edit',
+        onTap: () => _licenseFocusNode.requestFocus(),
+        child: ExcludeSemantics(
+          child: field(
+            focusNode: _licenseFocusNode,
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
       ),
     );
   }
@@ -4461,7 +4739,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
         iconEnabledColor: AppColors.blackCat,
         style: const TextStyle(fontSize: 12, color: AppColors.blackCat),
         decoration: InputDecoration(
-          labelText: '$label *',
+          labelText: label,
           floatingLabelBehavior: FloatingLabelBehavior.always,
           filled: true,
           fillColor: AppColors.snow,
@@ -4529,9 +4807,12 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
           }
           final item = items[i];
           final deleting = _deletingImages.contains(item.image.trim());
-          return ClipRRect(
-            borderRadius: BorderRadius.zero,
-            child: Stack(
+          return Semantics(
+            container: true,
+            label: 'Portfolio image ${i + 1} of ${items.length}',
+            child: ClipRRect(
+              borderRadius: BorderRadius.zero,
+              child: Stack(
               fit: StackFit.expand,
               children: [
                 _portfolioImage(item.image),
@@ -4577,6 +4858,7 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                   ),
                 ),
               ],
+            ),
             ),
           );
         }, childCount: showTailLoader ? items.length + 1 : items.length),
@@ -4803,6 +5085,8 @@ class _ArtistSpecializationServiceAreaModalState
   final TextEditingController _countryCtrl = TextEditingController();
   final TextEditingController _stateCtrl = TextEditingController();
   final Set<String> _services = <String>{};
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _closeSemanticsKey = GlobalKey();
   bool _saving = false;
   bool _rushAvailable = false;
   String _timeZone = 'America/New_York';
@@ -4910,6 +5194,15 @@ class _ArtistSpecializationServiceAreaModalState
       artist['time_zone'],
       'America/New_York',
     ]);
+  
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final features = WidgetsBinding
+          .instance.platformDispatcher.accessibilityFeatures;
+      if (!features.accessibleNavigation) return;
+      final renderObject = _closeSemanticsKey.currentContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
   }
 
   @override
@@ -4919,6 +5212,7 @@ class _ArtistSpecializationServiceAreaModalState
     _cityCtrl.dispose();
     _countryCtrl.dispose();
     _stateCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -5218,6 +5512,7 @@ class _ArtistSpecializationServiceAreaModalState
         child: SafeArea(
           top: false,
           child: ListView(
+            controller: _scrollController,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
             children: [
               Row(
@@ -5237,6 +5532,7 @@ class _ArtistSpecializationServiceAreaModalState
                     ),
                   ),
                   Semantics(
+                    key: _closeSemanticsKey,
                     button: true,
                     label: 'Close specialization and service area',
                     onTap: () => Navigator.pop(context),
@@ -5362,48 +5658,57 @@ class _ArtistSpecializationServiceAreaModalState
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: _field('Min Price (\$) *', _minPriceCtrl)),
+                  Expanded(child: _field('Min Price (\$)', _minPriceCtrl)),
                   const SizedBox(width: 12),
-                  Expanded(child: _field('Max Price (\$) *', _maxPriceCtrl)),
+                  Expanded(child: _field('Max Price (\$)', _maxPriceCtrl)),
                 ],
               ),
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Rush availability',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.blackCat,
-                          ),
+              Semantics(
+                container: true,
+                button: true,
+                label: 'Rush availability toggle, ${_rushAvailable ? 'On' : 'Off'}',
+                hint: 'Double tap to ${_rushAvailable ? 'turn off' : 'turn on'}',
+                onTap: () => setState(() => _rushAvailable = !_rushAvailable),
+                child: ExcludeSemantics(
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Rush availability',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Enable if you can take expedited requests.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Enable if you can take expedited requests.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.blackCat,
-                          ),
+                      ),
+                      Switch(
+                        value: _rushAvailable,
+                        activeThumbColor: AppColors.blackCat,
+                        inactiveThumbColor: AppColors.blackCatLight,
+                        inactiveTrackColor: AppColors.blackCatLight.withValues(
+                          alpha: 0.35,
                         ),
-                      ],
-                    ),
+                        onChanged: (value) =>
+                            setState(() => _rushAvailable = value),
+                      ),
+                    ],
                   ),
-                  Switch(
-                    value: _rushAvailable,
-                    activeThumbColor: AppColors.blackCat,
-                    inactiveThumbColor: AppColors.blackCatLight,
-                    inactiveTrackColor: AppColors.blackCatLight.withValues(
-                      alpha: 0.35,
-                    ),
-                    onChanged: (value) =>
-                        setState(() => _rushAvailable = value),
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 18),
               const Divider(color: AppColors.blackCatBorderLight, height: 1),
@@ -5425,11 +5730,11 @@ class _ArtistSpecializationServiceAreaModalState
                 ),
               ),
               const SizedBox(height: 12),
-              _field('City *', _cityCtrl),
-              _field('State *', _stateCtrl),
-              _field('Country *', _countryCtrl),
+              _field('City', _cityCtrl),
+              _field('State', _stateCtrl),
+              _field('Country', _countryCtrl),
               _dropdown(
-                label: 'Time Zone *',
+                label: 'Time Zone',
                 value: _timeZone,
                 items: _artistTimeZones,
                 onChanged: (value) =>
@@ -5463,6 +5768,8 @@ class _ArtistSpecializationServiceAreaModalState
               _AccessibilityCloseLoopTarget(
                 label: 'Close specialization and service area',
                 onClose: () => Navigator.pop(context),
+                closeSemanticsKey: _closeSemanticsKey,
+                scrollController: _scrollController,
               ),
             ],
           ),
@@ -5599,6 +5906,8 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
   String? _dragStateToApply;
   final Set<String> _dragVisitedKeys = <String>{};
   bool _dragChanged = false;
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _closeSemanticsKey = GlobalKey();
 
   static const List<String> _weekdays = <String>[
     'S',
@@ -5617,12 +5926,39 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
     _visibleMonth = DateTime(now.year, now.month);
     _dayStates = Map<String, String>.from(widget.initialDayStates);
     _directRequestsEnabled = widget.initialDirectRequestsEnabled;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final features = WidgetsBinding
+          .instance.platformDispatcher.accessibilityFeatures;
+      if (!features.accessibleNavigation) return;
+      final renderObject = _closeSemanticsKey.currentContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   String _dateKey(DateTime d) {
     final mm = d.month.toString().padLeft(2, '0');
     final dd = d.day.toString().padLeft(2, '0');
     return '${d.year}-$mm-$dd';
+  }
+
+  String _weekdayLabel(DateTime d) {
+    const names = <String>[
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return names[d.weekday - 1];
   }
 
   String _monthLabel(DateTime d) {
@@ -5785,6 +6121,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
       backgroundColor: AppColors.snow,
       body: SafeArea(
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
           children: [
             Row(
@@ -5803,10 +6140,19 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Close availability',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded),
+                Semantics(
+                  key: _closeSemanticsKey,
+                  button: true,
+                  label: 'Close availability',
+                  hint: 'Double tap to close availability',
+                  onTap: () => Navigator.pop(context),
+                  child: ExcludeSemantics(
+                    child: IconButton(
+                      tooltip: 'Close availability',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -5824,27 +6170,38 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Text(
-                  'Direct Request',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.blackCat,
-                  ),
+            Semantics(
+              container: true,
+              button: true,
+              label: 'Direct Request availability toggle, ${_directRequestsEnabled ? 'On' : 'Off'}',
+              hint: 'Double tap to ${_directRequestsEnabled ? 'turn off' : 'turn on'}',
+              onTap: _savingDirect
+                  ? null
+                  : () => _onDirectToggle(!_directRequestsEnabled),
+              child: ExcludeSemantics(
+                child: Row(
+                  children: [
+                    const Text(
+                      'Direct Request',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Switch(
+                      value: _directRequestsEnabled,
+                      activeThumbColor: AppColors.blackCat,
+                      inactiveThumbColor: AppColors.blackCatLight,
+                      inactiveTrackColor: AppColors.blackCatLight.withValues(
+                        alpha: 0.35,
+                      ),
+                      onChanged: _savingDirect ? null : _onDirectToggle,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Switch(
-                  value: _directRequestsEnabled,
-                  activeThumbColor: AppColors.blackCat,
-                  inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withValues(
-                    alpha: 0.35,
-                  ),
-                  onChanged: _savingDirect ? null : _onDirectToggle,
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 12),
             Container(
@@ -5859,18 +6216,28 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                     padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                     child: Row(
                       children: [
-                        IconButton(
-                          tooltip: 'Previous month',
-                          onPressed: () => setState(() {
-                            _visibleMonth = DateTime(
-                              _visibleMonth.year,
-                              _visibleMonth.month - 1,
-                            );
-                          }),
-                          icon: const Icon(Icons.chevron_left_rounded),
+                        Semantics(
+                          button: true,
+                          label: 'Previous month',
+                          child: ExcludeSemantics(
+                            child: IconButton(
+                              tooltip: 'Previous month',
+                              onPressed: () => setState(() {
+                                _visibleMonth = DateTime(
+                                  _visibleMonth.year,
+                                  _visibleMonth.month - 1,
+                                );
+                              }),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                            ),
+                          ),
                         ),
                         Expanded(
-                          child: Container(
+                          child: Semantics(
+                            header: true,
+                            label: _monthLabel(_visibleMonth),
+                            child: ExcludeSemantics(
+                              child: Container(
                             height: 46,
                             decoration: BoxDecoration(
                               color: AppColors.snow,
@@ -5902,16 +6269,24 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                               ],
                             ),
                           ),
+                            ),
+                          ),
                         ),
-                        IconButton(
-                          tooltip: 'Next month',
-                          onPressed: () => setState(() {
-                            _visibleMonth = DateTime(
-                              _visibleMonth.year,
-                              _visibleMonth.month + 1,
-                            );
-                          }),
-                          icon: const Icon(Icons.chevron_right_rounded),
+                        Semantics(
+                          button: true,
+                          label: 'Next month',
+                          child: ExcludeSemantics(
+                            child: IconButton(
+                              tooltip: 'Next month',
+                              onPressed: () => setState(() {
+                                _visibleMonth = DateTime(
+                                  _visibleMonth.year,
+                                  _visibleMonth.month + 1,
+                                );
+                              }),
+                              icon: const Icon(Icons.chevron_right_rounded),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -5920,7 +6295,8 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                     height: 1,
                     color: AppColors.blackCat.withValues(alpha: 0.05),
                   ),
-                  Padding(
+                  ExcludeSemantics(
+                    child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 10,
@@ -5945,6 +6321,7 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                           .toList(),
                     ),
                   ),
+                  ),
                   SizedBox(
                     height: 280,
                     child: LayoutBuilder(
@@ -5956,9 +6333,9 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                         return Semantics(
                           container: true,
                           explicitChildNodes: true,
-                          label: 'Availability calendar',
                           child: GestureDetector(
                             behavior: HitTestBehavior.translucent,
+                            excludeFromSemantics: true,
                             onPanStart: (details) => _startDrag(
                               details.localPosition,
                               days,
@@ -6042,6 +6419,12 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
                 color: AppColors.blackCat.withValues(alpha: 0.7),
               ),
             ),
+            _AccessibilityCloseLoopTarget(
+              label: 'Close availability',
+              onClose: () => Navigator.pop(context),
+              closeSemanticsKey: _closeSemanticsKey,
+              scrollController: _scrollController,
+            ),
           ],
         ),
       ),
@@ -6079,9 +6462,28 @@ class _ArtistAvailabilityModalState extends State<ArtistAvailabilityModal> {
         ? 'unavailable'
         : 'available';
 
+    if (!isCurrentMonth) {
+      return ExcludeSemantics(
+        child: Container(
+          margin: const EdgeInsets.all(1),
+          color: bg,
+          alignment: Alignment.center,
+          child: Text(
+            '${day.day}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: text,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Semantics(
       button: true,
-      label: '${_monthLabel(day)} ${day.day}, $statusLabel',
+      label: '${_weekdayLabel(day)}, ${_monthLabel(day)} ${day.day}, $statusLabel',
+      hint: 'One tap for Direct Request. Two taps for Blocked. Three taps for Not Available.',
       onTap: () => _onDayTap(day),
       child: ExcludeSemantics(
         child: InkWell(
@@ -6138,34 +6540,46 @@ class _AvailabilityLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: slashed
-              ? Transform.rotate(
-                  angle: -0.75,
-                  child: Center(
-                    child: Container(
-                      width: 12,
-                      height: 1.4,
-                      color: AppColors.blackCatLight,
-                    ),
-                  ),
-                )
-              : null,
+    final tapInstruction = switch (label) {
+      'Direct Request' => 'One tap for Direct Request',
+      'Blocked' => 'Two taps for Blocked',
+      'Not Available' => 'Three taps for Not Available',
+      _ => label,
+    };
+    return Semantics(
+      container: true,
+      label: tapInstruction,
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: slashed
+                  ? Transform.rotate(
+                      angle: -0.75,
+                      child: Center(
+                        child: Container(
+                          width: 12,
+                          height: 1.4,
+                          color: AppColors.blackCatLight,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.blackCat.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.blackCat.withValues(alpha: 0.6),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -6590,6 +7004,16 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
       data['photoUrl'],
       data['avatarUrl'],
     ]);
+  
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final features = WidgetsBinding
+          .instance.platformDispatcher.accessibilityFeatures;
+      if (!features.accessibleNavigation) return;
+      final renderObject =
+          _editProfileCloseSemanticsKey.currentContext?.findRenderObject();
+      renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
   }
 
   @override
@@ -7142,32 +7566,33 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
             ),
           ),
           const SizedBox(height: 6),
-          Semantics(
-            label: label,
-            textField: true,
-            child: TextField(
-              controller: c,
-              maxLines: maxLines,
-              keyboardType: keyboardType,
-              style: const TextStyle(fontSize: 12),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: AppColors.snow,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: const BorderSide(
-                    color: AppColors.blackCatBorderLight,
+          MergeSemantics(
+            child: Semantics(
+              label: label,
+              child: TextField(
+                controller: c,
+                maxLines: maxLines,
+                keyboardType: keyboardType,
+                style: const TextStyle(fontSize: 12),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: AppColors.snow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: const BorderSide(
+                      color: AppColors.blackCatBorderLight,
+                    ),
                   ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: const BorderSide(
-                    color: AppColors.blackCatBorderLight,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: const BorderSide(
+                      color: AppColors.blackCatBorderLight,
+                    ),
                   ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                 ),
               ),
             ),
@@ -7234,19 +7659,15 @@ class _ArtistEditProfilePageState extends State<ArtistEditProfilePage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Semantics(
-                        label: 'Search $title',
-                        textField: true,
-                        child: TextField(
-                          controller: searchController,
-                          onChanged: (value) =>
-                              setSheetState(() => query = value),
-                          decoration: InputDecoration(
-                            hintText: 'Search $title',
-                            prefixIcon: const Icon(Icons.search_rounded),
-                            border: const OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: (value) =>
+                            setSheetState(() => query = value),
+                        decoration: InputDecoration(
+                          hintText: 'Search $title',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          border: const OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
                           ),
                         ),
                       ),

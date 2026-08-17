@@ -356,46 +356,47 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
           ),
         ),
         const SizedBox(height: _fieldGap),
-        Semantics(
-          textField: true,
-          label: label,
-          child: TextField(
-            controller: c,
-            focusNode: focusNode,
-            onChanged: label == 'Street'
-                ? (_) => _autofillAddressFromStreet()
-                : null,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              fontFamily: 'Arial',
-            ),
-            keyboardType: keyboardType,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.snow,
-              isDense: true,
-              constraints: const BoxConstraints(minHeight: _fieldHeight),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: _fieldVerticalPadding,
+        MergeSemantics(
+          child: Semantics(
+            label: label,
+            child: TextField(
+              controller: c,
+              focusNode: focusNode,
+              onChanged: label == 'Street'
+                  ? (_) => _autofillAddressFromStreet()
+                  : null,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Arial',
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+              keyboardType: keyboardType,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.snow,
+                isDense: true,
+                constraints: const BoxConstraints(minHeight: _fieldHeight),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: _fieldVerticalPadding,
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
                 ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
                 ),
               ),
             ),

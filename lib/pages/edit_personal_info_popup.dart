@@ -419,49 +419,49 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
           ),
         ),
         const SizedBox(height: 6),
-        Semantics(
-          container: true,
-          textField: true,
-          label: semanticLabel ?? '$label, text field',
-          child: TextField(
-            controller: c,
-            focusNode: focusNode,
-            keyboardType: keyboardType,
-            inputFormatters: isPhoneField
-                ? <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                    UsPhoneTextInputFormatter(),
-                  ]
-                : null,
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w500,
-              fontFamily: 'Arial',
-            ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.snow,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 6,
+        MergeSemantics(
+          child: Semantics(
+            label: semanticLabel ?? '$label, text field',
+            child: TextField(
+              controller: c,
+              focusNode: focusNode,
+              keyboardType: keyboardType,
+              inputFormatters: isPhoneField
+                  ? <TextInputFormatter>[
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                      UsPhoneTextInputFormatter(),
+                    ]
+                  : null,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Arial',
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.snow,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
                 ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
                 ),
               ),
             ),

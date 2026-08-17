@@ -3344,43 +3344,39 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                 ),
               ),
               if (_selected == 'Something else')
-                Semantics(
-                  label: 'Decline reason',
-                  textField: true,
-                  child: TextField(
-                    controller: _reasonCtrl,
-                    minLines: 1,
-                    maxLines: 3,
-                    onChanged: (_) {
-                      if (_error.isNotEmpty) setState(() => _error = '');
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Enter your reason...',
-                      isDense: true,
-                      filled: true,
-                      fillColor: AppColors.snow,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 36,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.zero,
-                        borderSide: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 20),
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.zero,
-                        borderSide: BorderSide(
-                          color: AppColors.blackCat.withValues(alpha: 20),
-                        ),
+                TextField(
+                  controller: _reasonCtrl,
+                  minLines: 1,
+                  maxLines: 3,
+                  onChanged: (_) {
+                    if (_error.isNotEmpty) setState(() => _error = '');
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Enter your reason...',
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.snow,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 36,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.blackCat.withValues(alpha: 20),
                       ),
                     ),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.3,
-                      fontFamily: 'Arial',
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.zero,
+                      borderSide: BorderSide(
+                        color: AppColors.blackCat.withValues(alpha: 20),
+                      ),
                     ),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    fontFamily: 'Arial',
                   ),
                 ),
               const SizedBox(height: 14),
@@ -4816,40 +4812,36 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Semantics(
-                          label: 'Review comment',
-                          textField: true,
-                          child: TextField(
-                            controller: _commentCtrl,
-                            minLines: 3,
-                            maxLines: 4,
-                            decoration: InputDecoration(
-                              hintText: 'Write a quick review (optional)',
-                              isDense: true,
-                              filled: true,
-                              fillColor: AppColors.snow,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
-                                  ),
+                        TextField(
+                          controller: _commentCtrl,
+                          minLines: 3,
+                          maxLines: 4,
+                          decoration: InputDecoration(
+                            hintText: 'Write a quick review (optional)',
+                            isDense: true,
+                            filled: true,
+                            fillColor: AppColors.snow,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
                                 ),
                               ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
-                                  ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.08,
                                 ),
                               ),
-                              focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat,
-                                  width: 1.4,
-                                ),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                color: AppColors.blackCat,
+                                width: 1.4,
                               ),
                             ),
                           ),

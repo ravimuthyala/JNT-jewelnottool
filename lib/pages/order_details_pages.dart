@@ -1265,6 +1265,7 @@ class _OrderSafe {
   final String orderNumber;
   final String? brandName;
   final String? campaignName;
+  final String creatorName;
   final String title;
   final String subtitle;
   final bool hasAssignedArtist;
@@ -1276,6 +1277,8 @@ class _OrderSafe {
   final List<String> inspirationPhotos;
   final String needByDisplay;
   final String jntRevealDateDisplay;
+  final Map<String, dynamic> brandCollaboration;
+  final String brandCollaborationAskText;
   final String nailShape;
   final String nailLength;
   final int? budgetMin;
@@ -1323,6 +1326,7 @@ class _OrderSafe {
     required this.orderNumber,
     required this.brandName,
     required this.campaignName,
+    required this.creatorName,
     required this.title,
     required this.subtitle,
     required this.hasAssignedArtist,
@@ -1334,6 +1338,8 @@ class _OrderSafe {
     required this.inspirationPhotos,
     required this.needByDisplay,
     required this.jntRevealDateDisplay,
+    required this.brandCollaboration,
+    required this.brandCollaborationAskText,
     required this.nailShape,
     required this.nailLength,
     required this.budgetMin,
@@ -1379,6 +1385,33 @@ class _OrderSafe {
   static _OrderSafe from(dynamic o) {
     String s(dynamic v, String fb) =>
         (v is String && v.trim().isNotEmpty) ? v : fb;
+    String firstText(List<Object?> values, {String fallback = ''}) {
+      for (final value in values) {
+        final text = (value ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return fallback;
+    }
+
+    Object? field(String name) {
+      if (o is Map) return o[name];
+      try {
+        switch (name) {
+          case 'acceptedClientName':
+            return o.acceptedClientName;
+          case 'acceptedByClientName':
+            return o.acceptedByClientName;
+          case 'selectedClientName':
+            return o.selectedClientName;
+          case 'sourceCollection':
+            return o.sourceCollection;
+          case 'clientDescription':
+            return o.clientDescription;
+        }
+      } catch (_) {}
+      return null;
+    }
+
     double? d(dynamic v) {
       if (v is num) return v.toDouble();
       return double.tryParse((v ?? '').toString().trim());
@@ -1436,8 +1469,8 @@ class _OrderSafe {
 
     String dateDisplay(dynamic value) {
       final parsed = dt(value);
-      if (parsed != null) return formatDateMdy(parsed);
-      return (value ?? '').toString().trim();
+      if (parsed != null) return formatDateMdyShortYear(parsed);
+      return compactDateDisplay((value ?? '').toString());
     }
 
     String dateDisplayFrom(List<Object?> values) {
@@ -1472,6 +1505,94 @@ class _OrderSafe {
     final designMap = asMap(payloadMap['designApproval']).isNotEmpty
         ? asMap(payloadMap['designApproval'])
         : asMap(detailMap['designApproval']);
+    final sourceCollection = s(
+      field('sourceCollection'),
+      'Client_Custom_Requests',
+    );
+    final isBrandRequest =
+        sourceCollection.trim().toLowerCase().replaceAll(' ', '_') ==
+        'company_custom_requests';
+    final requestDescription = isBrandRequest
+        ? firstText([
+            requestDetailsMap['description'],
+            detailMap['description'],
+            payloadMap['description'],
+            rootMap['description'],
+            rootMap['descriptionPreview'],
+            detailMap['descriptionPreview'],
+            payloadMap['descriptionPreview'],
+            rootMap['bio'],
+            detailMap['bio'],
+            payloadMap['bio'],
+            field('clientDescription'),
+          ])
+        : firstText([
+            requestDetailsMap['description'],
+            requestDetailsMap['customDescription'],
+            requestDetailsMap['descriptionPreview'],
+            detailMap['description'],
+            detailMap['customDescription'],
+            detailMap['descriptionPreview'],
+            payloadMap['description'],
+            payloadMap['customDescription'],
+            payloadMap['descriptionPreview'],
+            rootMap['description'],
+            rootMap['customDescription'],
+            rootMap['descriptionPreview'],
+            field('clientDescription'),
+          ]);
+    final creatorName = firstText([
+      field('acceptedClientName'),
+      field('acceptedByClientName'),
+      field('selectedClientName'),
+      rootMap['acceptedByClientName'],
+      rootMap['accepted_by_client_name'],
+      detailMap['acceptedByClientName'],
+      detailMap['accepted_by_client_name'],
+      payloadMap['acceptedByClientName'],
+      payloadMap['accepted_by_client_name'],
+      requestDetailsMap['acceptedByClientName'],
+      requestDetailsMap['accepted_by_client_name'],
+      rootMap['acceptedClientName'],
+      rootMap['accepted_client_name'],
+      detailMap['acceptedClientName'],
+      detailMap['accepted_client_name'],
+      payloadMap['acceptedClientName'],
+      payloadMap['accepted_client_name'],
+      requestDetailsMap['acceptedClientName'],
+      requestDetailsMap['accepted_client_name'],
+      rootMap['selectedClient'],
+      rootMap['selected_client'],
+      detailMap['selectedClient'],
+      detailMap['selected_client'],
+      payloadMap['selectedClient'],
+      payloadMap['selected_client'],
+      requestDetailsMap['selectedClient'],
+      requestDetailsMap['selected_client'],
+      rootMap['clientName'],
+      rootMap['client_name'],
+      detailMap['clientName'],
+      detailMap['client_name'],
+      payloadMap['clientName'],
+      payloadMap['client_name'],
+      requestDetailsMap['clientName'],
+      requestDetailsMap['client_name'],
+    ], fallback: 'the creator');
+    final brandCollaborationMap =
+        asMap(detailMap['brandCollaboration']).isNotEmpty
+        ? asMap(detailMap['brandCollaboration'])
+        : asMap(payloadMap['brandCollaboration']).isNotEmpty
+        ? asMap(payloadMap['brandCollaboration'])
+        : asMap(requestDetailsMap['brandCollaboration']).isNotEmpty
+        ? asMap(requestDetailsMap['brandCollaboration'])
+        : asMap(rootMap['brandCollaboration']);
+    final brandCollaborationWording = asMap(brandCollaborationMap['wording']);
+    final brandCollaborationAskText = firstText([
+      brandCollaborationMap['description'],
+      brandCollaborationMap['ask'],
+      brandCollaborationMap['request'],
+      brandCollaborationWording['talkingPoints'],
+    ]);
     List<String> collectPhotoRefs(List<dynamic> values) {
       final out = <String>[];
       final seen = <String>{};
@@ -1632,11 +1753,12 @@ class _OrderSafe {
     }
 
     return _OrderSafe(
-      sourceCollection: s(o?.sourceCollection, 'Client_Custom_Requests'),
+      sourceCollection: sourceCollection,
       id: s(o?.id, 'order'),
       orderNumber: s(o?.orderNumber, ''),
       brandName: s(o?.brandName, ''),
       campaignName: s(o?.campaignName, ''),
+      creatorName: creatorName,
       title: s(o?.title, 'Artist'),
       subtitle: s(o?.subtitle, ''),
       hasAssignedArtist: o?.hasAssignedArtist is bool
@@ -1645,7 +1767,7 @@ class _OrderSafe {
       orderType: s(o?.orderType, 'single'),
       groupClients: pickGroupClients(),
       createdAt: o?.createdAt is DateTime ? o.createdAt as DateTime : null,
-      clientDescription: s(o?.clientDescription, ''),
+      clientDescription: requestDescription,
       cancelReason: s(o?.cancelReason, ''),
       inspirationPhotos: collectPhotoRefs([
         o?.inspirationPhotos,
@@ -1710,6 +1832,8 @@ class _OrderSafe {
         orderMap['revealDate'],
         orderMap['jntRevealDateDisplay'],
       ]),
+      brandCollaboration: brandCollaborationMap,
+      brandCollaborationAskText: brandCollaborationAskText,
 
       nailShape: s(
         o?.nailShape ??
@@ -2203,6 +2327,35 @@ class NewOrderDetailsPage extends StatelessWidget {
 /// ------------------------
 /// Shared base layout
 /// ------------------------
+class _BrandCollaborationOrderPayload {
+  const _BrandCollaborationOrderPayload({
+    required this.brandCollaboration,
+    required this.askText,
+  });
+
+  const _BrandCollaborationOrderPayload.empty()
+    : brandCollaboration = const <String, dynamic>{},
+      askText = '';
+
+  final Map<String, dynamic> brandCollaboration;
+  final String askText;
+
+  bool get hasBrandCollaboration {
+    if (brandCollaboration['enabled'] != true) return false;
+    final pricing = _mapFromDynamic(brandCollaboration['pricing']);
+    double amount(dynamic value) {
+      if (value is num) return value.toDouble();
+      return double.tryParse((value ?? '').toString().trim()) ?? 0;
+    }
+
+    return amount(pricing['dueOnSigning']) > 0 ||
+        amount(pricing['baseFee']) > 0 ||
+        amount(pricing['clientOffer']) > 0 ||
+        amount(brandCollaboration['dueOnSigning']) > 0 ||
+        amount(brandCollaboration['baseFee']) > 0;
+  }
+}
+
 class _BaseOrderDetails extends StatelessWidget {
   const _BaseOrderDetails({
     required this.title,
@@ -2250,9 +2403,104 @@ class _BaseOrderDetails extends StatelessWidget {
     return double.tryParse((value ?? '').toString().trim());
   }
 
+  _BrandCollaborationOrderPayload _brandCollaborationPayloadFromMaps(
+    Map<String, dynamic> rootMap,
+  ) {
+    final detailsMap = _mapFromDynamic(rootMap['details']);
+    final dataMap = _mapFromDynamic(rootMap['data']);
+    final detailMap = dataMap.isNotEmpty ? dataMap : detailsMap;
+    final payloadMap = _mapFromDynamic(detailMap['payload']).isNotEmpty
+        ? _mapFromDynamic(detailMap['payload'])
+        : _mapFromDynamic(rootMap['payload']).isNotEmpty
+        ? _mapFromDynamic(rootMap['payload'])
+        : detailMap;
+    final requestDetailsMap =
+        _mapFromDynamic(payloadMap['requestDetails']).isNotEmpty
+        ? _mapFromDynamic(payloadMap['requestDetails'])
+        : _mapFromDynamic(detailMap['requestDetails']).isNotEmpty
+        ? _mapFromDynamic(detailMap['requestDetails'])
+        : _mapFromDynamic(rootMap['requestDetails']);
+
+    final brandCollaborationMap =
+        _mapFromDynamic(detailMap['brandCollaboration']).isNotEmpty
+        ? _mapFromDynamic(detailMap['brandCollaboration'])
+        : _mapFromDynamic(payloadMap['brandCollaboration']).isNotEmpty
+        ? _mapFromDynamic(payloadMap['brandCollaboration'])
+        : _mapFromDynamic(requestDetailsMap['brandCollaboration']).isNotEmpty
+        ? _mapFromDynamic(requestDetailsMap['brandCollaboration'])
+        : _mapFromDynamic(rootMap['brandCollaboration']);
+    final wording = _mapFromDynamic(brandCollaborationMap['wording']);
+    final askText = _firstNonEmpty([
+      brandCollaborationMap['description'],
+      brandCollaborationMap['ask'],
+      brandCollaborationMap['request'],
+      wording['talkingPoints'],
+    ]);
+
+    return _BrandCollaborationOrderPayload(
+      brandCollaboration: brandCollaborationMap,
+      askText: askText,
+    );
+  }
+
+  _BrandCollaborationOrderPayload get _localBrandCollaborationPayload =>
+      _BrandCollaborationOrderPayload(
+        brandCollaboration: order.brandCollaboration,
+        askText: order.brandCollaborationAskText,
+      );
+
+  Future<_BrandCollaborationOrderPayload>
+  _loadBrandCollaborationPayload() async {
+    if (!_isBrandRequest) return const _BrandCollaborationOrderPayload.empty();
+
+    final local = _localBrandCollaborationPayload;
+    if (local.hasBrandCollaboration) return local;
+
+    final requestId = order.id.trim();
+    if (requestId.isEmpty) {
+      return const _BrandCollaborationOrderPayload.empty();
+    }
+
+    final collection = order.sourceCollection.trim().isEmpty
+        ? 'Company_Custom_Requests'
+        : order.sourceCollection.trim();
+    final client = Supabase.instance.client;
+
+    try {
+      final rows = await client
+          .from(_detailsTableFor(collection))
+          .select()
+          .eq('request_id', requestId)
+          .eq('detail_key', 'payload')
+          .limit(1);
+      for (final row in rows as List) {
+        final payload = _brandCollaborationPayloadFromMaps(
+          Map<String, dynamic>.from(row as Map),
+        );
+        if (payload.hasBrandCollaboration) return payload;
+      }
+    } catch (_) {}
+
+    try {
+      final rows = await client
+          .from(_tableFor(collection))
+          .select()
+          .eq('id', requestId)
+          .limit(1);
+      for (final row in rows as List) {
+        final payload = _brandCollaborationPayloadFromMaps(
+          Map<String, dynamic>.from(row as Map),
+        );
+        if (payload.hasBrandCollaboration) return payload;
+      }
+    } catch (_) {}
+
+    return const _BrandCollaborationOrderPayload.empty();
+  }
+
   bool get _isBrandRequest {
     final source = order.sourceCollection.trim().toLowerCase();
-    return source == 'company_custom_requests';
+    return source.replaceAll(' ', '_') == 'company_custom_requests';
   }
 
   String _rangeText(int? min, int? max) {
@@ -2854,22 +3102,15 @@ class _BaseOrderDetails extends StatelessWidget {
           ],
 
           if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _orderDetailsWithRightNailDimensions(),
-                  const SizedBox(height: 8),
-                  Divider(color: Colors.black.withValues(alpha: 0.08)),
-                  const SizedBox(height: 5),
-                  _paymentSection(context),
-                ],
-              ),
-            ),
+            _Card(child: _orderDetailsWithRightNailDimensions()),
+            const SizedBox(height: 12),
+            _brandCollaborationOrderCard(bottomSpacing: 12),
+            _Card(child: _paymentSection(context)),
           ] else ...[
             if (statusPillText != 'Delivered') ...[
               _Card(child: _orderDetailsWithRightNailDimensions()),
               const SizedBox(height: 14),
+              _brandCollaborationOrderCard(),
             ],
             if (statusPillText != 'In Progress' &&
                 statusPillText != 'Shipped' &&
@@ -2923,6 +3164,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      _brandCollaborationOrderCard(bottomSpacing: 12),
                       if (_shouldShowPaymentAmountSection()) ...[
                         _Card(child: _finalAcceptedAmountSection()),
                         const SizedBox(height: 12),
@@ -2990,6 +3232,7 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      _brandCollaborationOrderCard(bottomSpacing: 12),
                       if (_shouldShowPaymentAmountSection()) ...[
                         _Card(child: _finalAcceptedAmountSection()),
                         const SizedBox(height: 12),
@@ -4078,7 +4321,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
   String? _dateText(DateTime? date) {
     if (date == null) return null;
-    return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    return formatDateMdyShortYear(date);
   }
 
   Future<_RequestNfcDetails> _loadRequestNfcDetails() async {
@@ -4241,10 +4484,13 @@ class _BaseOrderDetails extends StatelessWidget {
               _bullet('Description', order.clientDescription.trim()),
             ],
           ],
-          _bullet('Need by', _valueOrDash(order.needByDisplay)),
+          _bullet('Need by', compactDateDisplayOrDash(order.needByDisplay)),
           if (_isBrandRequest &&
               order.jntRevealDateDisplay.trim().isNotEmpty) ...[
-            _bullet('JNT Reveal Date', order.jntRevealDateDisplay.trim()),
+            _bullet(
+              'JNT Reveal Date',
+              compactDateDisplay(order.jntRevealDateDisplay),
+            ),
           ],
           if (!_isBrandRequest &&
               order.clientDescription.trim().isNotEmpty) ...[
@@ -4303,6 +4549,553 @@ class _BaseOrderDetails extends StatelessWidget {
           enableFirestoreFallback: true,
         ),
       ],
+    );
+  }
+
+  bool get _hasBrandCollaboration =>
+      _localBrandCollaborationPayload.hasBrandCollaboration;
+
+  Widget _brandCollaborationOrderCard({double bottomSpacing = 14}) {
+    if (!_isBrandRequest) return const SizedBox.shrink();
+
+    Widget wrap(_BrandCollaborationOrderPayload payload) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: bottomSpacing),
+        child: _Card(child: _brandCollaborationOrderSection(payload)),
+      );
+    }
+
+    if (_hasBrandCollaboration) {
+      return wrap(_localBrandCollaborationPayload);
+    }
+
+    return FutureBuilder<_BrandCollaborationOrderPayload>(
+      future: _loadBrandCollaborationPayload(),
+      builder: (context, snapshot) {
+        final payload =
+            snapshot.data ?? const _BrandCollaborationOrderPayload.empty();
+        if (!payload.hasBrandCollaboration) return const SizedBox.shrink();
+        return wrap(payload);
+      },
+    );
+  }
+
+  String _creatorDisplayName() {
+    final orderName = order.creatorName.trim();
+    if (orderName.isNotEmpty && orderName.toLowerCase() != 'the creator') {
+      return orderName;
+    }
+    final currentName = (AppAuth.instance.currentUser?.displayName ?? '')
+        .trim();
+    if (currentName.isNotEmpty) return currentName;
+    final fallbackCurrentName = (AppAuth.instance.currentUser?.email ?? '')
+        .trim();
+    if (fallbackCurrentName.contains('@')) {
+      return fallbackCurrentName.split('@').first;
+    }
+    return 'Client';
+  }
+
+  Widget _brandCollaborationOrderSection(
+    _BrandCollaborationOrderPayload payload,
+  ) {
+    final bc = payload.brandCollaboration;
+    final pricing = _mapFromDynamic(bc['pricing']);
+    final dueRaw = pricing['dueOnSigning'];
+    final due = dueRaw is num
+        ? dueRaw.round()
+        : int.tryParse((dueRaw ?? '').toString()) ?? 0;
+
+    final posts = _mapFromDynamic(bc['posts']);
+    int postCount(String key) {
+      final value = posts[key];
+      if (value is num) return value.round();
+      return int.tryParse((value ?? '').toString()) ?? 0;
+    }
+
+    final postRows = <({String label, String subtitle, int count})>[
+      (
+        label: 'Instagram Reel',
+        subtitle: '30-60 sec, full application',
+        count: postCount('instagramReel'),
+      ),
+      (
+        label: 'Instagram Stories',
+        subtitle: 'With link sticker',
+        count: postCount('instagramStories'),
+      ),
+      (
+        label: 'Carousel post',
+        subtitle: '3-5 images',
+        count: postCount('carouselPost'),
+      ),
+      (
+        label: 'TikTok',
+        subtitle: 'Cross-post allowed',
+        count: postCount('tiktok'),
+      ),
+    ].where((row) => row.count > 0).toList(growable: false);
+
+    final links = bc['links'] is List ? bc['links'] as List : const [];
+    final wording = _mapFromDynamic(bc['wording']);
+    final mustInclude = wording['mustInclude'] is List
+        ? List<String>.from(wording['mustInclude'] as List)
+        : const <String>[];
+    final doNotSay = wording['doNotSay'] is List
+        ? List<String>.from(wording['doNotSay'] as List)
+        : const <String>[];
+    final talkingPoints = (wording['talkingPoints'] ?? '').toString().trim();
+    final creatorName = _creatorDisplayName();
+    final nfcCardTapsEnabled = bc['nfcCardTapsEnabled'] == true;
+    final tapRateRaw = bc['tapRatePerTap'];
+    final tapRate = tapRateRaw is num ? tapRateRaw.toDouble() : null;
+    final tapCapRaw = bc['tapCap'];
+    final tapCap = tapCapRaw is num
+        ? tapCapRaw.round()
+        : int.tryParse((tapCapRaw ?? '').toString());
+    final maxTapBonus = (tapCap ?? 0) * (tapRate ?? 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Brand Collaboration',
+          style: TextStyle(
+            color: AppColors.blackCat,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            fontFamily: 'Arial',
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          color: AppColors.blackCat,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Client Offer',
+                style: TextStyle(
+                  color: AppColors.snow,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  fontFamily: 'Arial',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '\$$due',
+                style: const TextStyle(
+                  color: AppColors.snow,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arial',
+                ),
+              ),
+              if (nfcCardTapsEnabled && tapCap != null && tapRate != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Plus up to \$${maxTapBonus.toStringAsFixed(0)} in tap '
+                  'bonuses - $tapCap taps x \$${tapRate.toStringAsFixed(2)}, '
+                  'paid monthly.',
+                  style: TextStyle(
+                    color: AppColors.snow.withValues(alpha: 0.75),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Arial',
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _brandCollaborationBox(
+          children: [
+            const _BrandCollaborationHeader("WHAT THEY'RE ASKING FOR"),
+            if (order.jntRevealDateDisplay.trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Live by ${compactDateDisplay(order.jntRevealDateDisplay)}',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            if (postRows.isEmpty)
+              Text(
+                '-',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.75),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Arial',
+                ),
+              )
+            else
+              for (var i = 0; i < postRows.length; i++) ...[
+                if (i > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(
+                      height: 1,
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${postRows[i].count}x',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.6),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            postRows[i].label,
+                            style: const TextStyle(
+                              color: AppColors.blackCat,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            postRows[i].subtitle,
+                            style: TextStyle(
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+          ],
+        ),
+        if (links.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _brandCollaborationBox(
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: _BrandCollaborationHeader('LINKS TO USE'),
+                  ),
+                  Text(
+                    'Already tagged to you',
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.6),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              for (var i = 0; i < links.length; i++) ...[
+                if (i > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(
+                      height: 1,
+                      color: AppColors.blackCatBorderLight,
+                    ),
+                  ),
+                Builder(
+                  builder: (context) {
+                    final link = _mapFromDynamic(links[i]);
+                    final label = (link['label'] ?? '').toString().trim();
+                    final url = (link['url'] ?? '').toString().trim();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label.isEmpty ? 'Link' : label,
+                          style: const TextStyle(
+                            color: AppColors.blackCat,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          url.isEmpty ? '-' : url,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.6),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ],
+        if (mustInclude.isNotEmpty ||
+            doNotSay.isNotEmpty ||
+            talkingPoints.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _brandCollaborationBox(
+            children: [
+              const _BrandCollaborationHeader("WHAT THEY'D LIKE YOU TO SAY"),
+              if (mustInclude.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _brandCollaborationSubhead('Must appear in your caption'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final phrase in mustInclude)
+                      _brandCollaborationChip(phrase),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$creatorName will include the following in the caption of '
+                  'each deliverable: ${mustInclude.join(', ')}. This is in '
+                  'addition to the disclosure requirements in §07.',
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Arial',
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              if (talkingPoints.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _brandCollaborationSubhead('Talking points, if you want them'),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.snow,
+                    border: Border.all(color: AppColors.blackCatBorderLight),
+                  ),
+                  child: Text(
+                    talkingPoints,
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.85),
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '§07 Talking points are suggestions. $creatorName is free '
+                  "to express them in the client's own words or omit them.",
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Arial',
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              if (doNotSay.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _brandCollaborationSubhead("Please don't say"),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final phrase in doNotSay)
+                      _brandCollaborationChip(phrase, strikethrough: true),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '§08 $creatorName will not state or imply: '
+                  '${doNotSay.join(', ')}. $creatorName will not make medical '
+                  'claims, guarantee outcomes, or describe the product as '
+                  'damage-free.',
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Arial',
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        _brandCollaborationTermsBox(pricing),
+      ],
+    );
+  }
+
+  Widget _brandCollaborationTermsBox(Map<String, dynamic> pricing) {
+    final brandName = (order.brandName ?? '').trim().isEmpty
+        ? 'The brand'
+        : (order.brandName ?? '').trim();
+    final creatorName = _creatorDisplayName();
+    final repostDurationName = (pricing['repostDuration'] ?? '').toString();
+    final repostDuration = switch (repostDurationName) {
+      'threeMonths' => '3 months',
+      'twelveMonths' => '12 months',
+      'forever' => 'forever',
+      'sixMonths' => '6 months',
+      _ => '',
+    };
+    final repostText = repostDurationName == 'forever'
+        ? '$brandName may repost this content on channels it owns with no end '
+              'date. This right survives the end of this agreement. '
+              '$creatorName may request removal in writing; $brandName will '
+              'respond within 30 days but is not obliged to remove.'
+        : repostDuration.isEmpty
+        ? '-'
+        : '$brandName may repost this content on channels it owns for '
+              '$repostDuration from the date each piece goes live. After that '
+              'it comes down unless you agree to extend.';
+
+    String possessive(String name) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) return '';
+      return trimmed.toLowerCase().endsWith('s') ? "$trimmed'" : "$trimmed's";
+    }
+
+    final paidAdText = pricing['runAsAd'] == true
+        ? '$creatorName grants $brandName the right to run the content as '
+              'paid media under ${possessive(brandName)} or '
+              '${possessive(creatorName)} handle for 6 months. $brandName '
+              'will not alter the content beyond trimming and captioning. '
+              '$creatorName may withdraw any specific asset from paid '
+              "rotation on 10 days' written notice."
+        : "Not included. If they want to put ad money behind your face, "
+              "that's a separate offer and a separate fee.";
+
+    final firstPostDate = order.jntRevealDateDisplay.trim().isEmpty
+        ? 'the first posting date'
+        : compactDateDisplay(order.jntRevealDateDisplay);
+    final competingText = switch ((pricing['competingBrandsWindow'] ?? '')
+        .toString()) {
+      'none' =>
+        'No exclusivity is granted. $creatorName may promote any other brand, '
+            'including competitors, at any time.',
+      'fourteenDays' =>
+        'For 14 days following $firstPostDate, $creatorName will not create '
+            'sponsored content for another company in the same category.',
+      'sixtyDays' =>
+        'For 60 days following $firstPostDate, $creatorName will disclose any '
+            'competing offer received during this period; $brandName may waive '
+            'exclusivity in writing.',
+      'thirtyDays' =>
+        'For 30 days following $firstPostDate, $creatorName will not create '
+            'sponsored content for another company in the same category.',
+      _ => '-',
+    };
+
+    return _brandCollaborationBox(
+      children: [
+        const _BrandCollaborationHeader('THE TERMS'),
+        const SizedBox(height: 10),
+        _bullet(
+          'Payment',
+          'Half within 3 days of signing, half within 15 days of your '
+              "last post going live. Tap bonuses are paid monthly as "
+              "they're earned.",
+        ),
+        _bullet('How they reuse your content', repostText),
+        _bullet('Running it as a paid ad', paidAdText),
+        _bullet('Competing brands', competingText),
+        _bullet(
+          'Your clients',
+          'Anyone who taps your card decides for themselves about photos '
+              'and texts. You never have to ask on their behalf, and their '
+              'details stay with the platform, not with $brandName.',
+        ),
+        _bullet(
+          'Ending it early',
+          "Either side can walk with 10 days' written notice. Anything "
+              "you've already delivered still gets paid.",
+        ),
+      ],
+    );
+  }
+
+  Widget _brandCollaborationBox({required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _brandCollaborationSubhead(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: AppColors.blackCat.withValues(alpha: 0.55),
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        fontFamily: 'Arial',
+      ),
+    );
+  }
+
+  Widget _brandCollaborationChip(String text, {bool strikethrough = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.balletSlippers,
+        border: Border.all(color: AppColors.blackCatBorderLight),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: AppColors.blackCat.withValues(alpha: strikethrough ? 0.45 : 1),
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Arial',
+          decoration: strikethrough ? TextDecoration.lineThrough : null,
+        ),
+      ),
     );
   }
 
@@ -4680,12 +5473,14 @@ class _BaseOrderDetails extends StatelessWidget {
       child: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: RichText(
-            text: TextSpan(
+          child: Text.rich(
+            TextSpan(
               style: TextStyle(
                 color: AppColors.blackCat.withValues(alpha: 0.75),
                 fontWeight: FontWeight.w400,
-                fontSize: 14,
+                fontSize: 12,
+                fontFamily: 'Arial',
+                height: 1.35,
               ),
               children: [
                 TextSpan(
@@ -4693,6 +5488,7 @@ class _BaseOrderDetails extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     color: AppColors.blackCat,
+                    fontFamily: 'Arial',
                   ),
                 ),
                 TextSpan(text: cleanValue),
@@ -4754,7 +5550,7 @@ class _BaseOrderDetails extends StatelessWidget {
     return '\$${max!}';
   }
 
-  String _placedOnText() => formatDateMdyOrDash(order.createdAt);
+  String _placedOnText() => formatDateMdyShortYearOrDash(order.createdAt);
 }
 
 class _RequestNfcDetails {
@@ -5532,6 +6328,24 @@ class _Card extends StatelessWidget {
         ],
       ),
       child: child,
+    );
+  }
+}
+
+class _BrandCollaborationHeader extends StatelessWidget {
+  const _BrandCollaborationHeader(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: AppColors.blackCat.withValues(alpha: 0.55),
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        fontFamily: 'Arial',
+      ),
     );
   }
 }
@@ -6568,7 +7382,8 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return channels.join(', ');
   }
 
-  String _formatDeliveryDate(DateTime? value) => formatDateMdyOrDash(value);
+  String _formatDeliveryDate(DateTime? value) =>
+      formatDateMdyShortYearOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();

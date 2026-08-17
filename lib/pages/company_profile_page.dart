@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import 'edit_company_business_info_popup.dart';
@@ -1375,77 +1376,128 @@ class _CompanyCommunicationPreferencesPopupState
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        decoration: const BoxDecoration(color: AppColors.snow),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: 'Communication preferences',
+      child: SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(color: AppColors.snow),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'Communication Preferences',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close communication preferences',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _toggleTile(
+                title: 'Email Notifications',
+                value: _emailNotifications,
+                onChanged: (value) =>
+                    setState(() => _emailNotifications = value),
+              ),
+              _toggleTile(
+                title: 'SMS Notifications',
+                value: _smsNotifications,
+                onChanged: (value) =>
+                    setState(() => _smsNotifications = value),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(
+                    context,
+                    CompanyCommunicationPreferences(
+                      emailNotifications: _emailNotifications,
+                      smsNotifications: _smsNotifications,
+                    ),
+                  ),
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toggleTile({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    void handleChanged(bool next) {
+      onChanged(next);
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        '$title toggle ${next ? 'on' : 'off'}',
+        Directionality.of(context),
+      );
+    }
+
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: '$title toggle ${value ? 'on' : 'off'}',
+        child: InkWell(
+          onTap: () => handleChanged(!value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
               children: [
-                const Expanded(
-                  child: Center(
+                Expanded(
+                  child: ExcludeSemantics(
                     child: Text(
-                      'Communication Preferences',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.blackCat,
                       ),
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Close communication preferences',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded),
+                ExcludeSemantics(
+                  child: Switch(
+                    value: value,
+                    onChanged: handleChanged,
+                    activeThumbColor: AppColors.blackCat,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _emailNotifications,
-              onChanged: (value) => setState(() {
-                _emailNotifications = value;
-              }),
-              title: const Text('Email Notifications'),
-              activeThumbColor: AppColors.blackCat,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _smsNotifications,
-              onChanged: (value) => setState(() {
-                _smsNotifications = value;
-              }),
-              title: const Text('SMS Notifications'),
-              activeThumbColor: AppColors.blackCat,
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: AppColors.snow,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                onPressed: () => Navigator.pop(
-                  context,
-                  CompanyCommunicationPreferences(
-                    emailNotifications: _emailNotifications,
-                    smsNotifications: _smsNotifications,
-                  ),
-                ),
-                child: const Text('Save'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1787,106 +1839,70 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                       if (selected) ...[
                         const SizedBox(height: 8),
                         if (m == 'Credit/Debit Card') ...[
-                          Semantics(
-                            label: 'Name on Card',
-                            textField: true,
-                            child: TextField(
-                              controller: _nameOnCardCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Name on Card'),
-                            ),
+                          TextField(
+                            controller: _nameOnCardCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Name on Card'),
                           ),
                           const SizedBox(height: 8),
-                          Semantics(
-                            label: 'Card Number',
-                            textField: true,
-                            child: TextField(
-                              controller: _cardNumberCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Card Number'),
-                            ),
+                          TextField(
+                            controller: _cardNumberCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Card Number'),
                           ),
                           const SizedBox(height: 8),
                           Row(
                             children: [
                               Expanded(
-                                child: Semantics(
-                                  label: 'Expiration Date',
-                                  textField: true,
-                                  child: TextField(
-                                    controller: _expiryCtrl,
-                                    style: const TextStyle(fontSize: 11),
-                                    decoration: _dec('Expiry MM/YY'),
-                                  ),
+                                child: TextField(
+                                  controller: _expiryCtrl,
+                                  style: const TextStyle(fontSize: 11),
+                                  decoration: _dec('Expiry MM/YY'),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Semantics(
-                                  label: 'CVV',
-                                  textField: true,
-                                  child: TextField(
-                                    controller: _cvvCtrl,
-                                    style: const TextStyle(fontSize: 11),
-                                    decoration: _dec('CVV'),
-                                  ),
+                                child: TextField(
+                                  controller: _cvvCtrl,
+                                  style: const TextStyle(fontSize: 11),
+                                  decoration: _dec('CVV'),
                                 ),
                               ),
                             ],
                           ),
                         ],
                         if (m == 'ACH Transfer') ...[
-                          Semantics(
-                            label: 'Account Holder Name',
-                            textField: true,
-                            child: TextField(
-                              controller: _achAccountNameCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Account Holder Name'),
-                            ),
+                          TextField(
+                            controller: _achAccountNameCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Account Holder Name'),
                           ),
                           const SizedBox(height: 8),
-                          Semantics(
-                            label: 'Routing Number',
-                            textField: true,
-                            child: TextField(
-                              controller: _achRoutingCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Routing Number'),
-                            ),
+                          TextField(
+                            controller: _achRoutingCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Routing Number'),
                           ),
                           const SizedBox(height: 8),
-                          Semantics(
-                            label: 'Account Number',
-                            textField: true,
-                            child: TextField(
-                              controller: _achAccountCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Account Number'),
-                            ),
+                          TextField(
+                            controller: _achAccountCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Account Number'),
                           ),
                         ],
                         if (m == 'Apple Pay')
-                          Semantics(
-                            label: 'Apple Pay Email',
-                            textField: true,
-                            child: TextField(
-                              controller: _applePayEmailCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Apple Pay Email'),
-                              keyboardType: TextInputType.emailAddress,
-                            ),
+                          TextField(
+                            controller: _applePayEmailCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Apple Pay Email'),
+                            keyboardType: TextInputType.emailAddress,
                           ),
                         if (m == 'Google Pay')
-                          Semantics(
-                            label: 'Google Pay Email',
-                            textField: true,
-                            child: TextField(
-                              controller: _googlePayEmailCtrl,
-                              style: const TextStyle(fontSize: 11),
-                              decoration: _dec('Google Pay Email'),
-                              keyboardType: TextInputType.emailAddress,
-                            ),
+                          TextField(
+                            controller: _googlePayEmailCtrl,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: _dec('Google Pay Email'),
+                            keyboardType: TextInputType.emailAddress,
                           ),
                         const SizedBox(height: 8),
                       ],

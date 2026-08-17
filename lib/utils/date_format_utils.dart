@@ -30,3 +30,24 @@ String formatDateMdyShortYearOrDash(DateTime? date, {String fallback = '-'}) {
   if (date == null) return fallback;
   return formatDateMdyShortYear(date);
 }
+
+/// Compacts a stored display date or parseable date string to `MM/DD/YY`.
+String compactDateDisplay(String value) {
+  final text = value.trim();
+  if (text.isEmpty) return '';
+  final parsedIso = DateTime.tryParse(text);
+  if (parsedIso != null) return formatDateMdyShortYear(parsedIso);
+
+  final slash = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})$').firstMatch(text);
+  if (slash == null) return text;
+  final month = slash.group(1)!.padLeft(2, '0');
+  final day = slash.group(2)!.padLeft(2, '0');
+  final yearRaw = slash.group(3)!;
+  final year = yearRaw.length == 2 ? yearRaw : yearRaw.substring(2);
+  return '$month/$day/$year';
+}
+
+String compactDateDisplayOrDash(String value, {String fallback = '-'}) {
+  final compact = compactDateDisplay(value);
+  return compact.isEmpty ? fallback : compact;
+}

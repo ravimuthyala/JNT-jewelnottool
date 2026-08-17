@@ -859,6 +859,10 @@ class _ClientHomePageState extends State<ClientHomePage> {
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
               height: JntHeaderMetrics.logoHeight,
+              cacheHeight:
+                  (JntHeaderMetrics.logoHeight *
+                          MediaQuery.of(context).devicePixelRatio)
+                      .round(),
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),

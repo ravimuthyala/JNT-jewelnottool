@@ -161,44 +161,40 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                 ),
               ),
               const SizedBox(height: 8),
-              Semantics(
-                label: 'Tracking number',
-                textField: true,
-                child: TextField(
-                  controller: _trackingCtrl,
-                  onChanged: (_) => setState(() {}),
-                  style: const TextStyle(
+              TextField(
+                controller: _trackingCtrl,
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Enter tracking number',
+                  hintStyle: const TextStyle(
                     fontWeight: FontWeight.w400,
                     fontSize: 14,
                   ),
-                  decoration: InputDecoration(
-                    hintText: 'Enter tracking number',
-                    hintStyle: const TextStyle(
-                      fontWeight: FontWeight.w400,
-                      fontSize: 14,
+                  filled: true,
+                  fillColor: AppColors.snow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(
+                      color: AppColors.blackCat.withValues(alpha: 0.08),
                     ),
-                    filled: true,
-                    fillColor: AppColors.snow,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 0.08),
-                      ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(
+                      color: AppColors.blackCat.withValues(alpha: 0.08),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    focusedBorder: const OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(color: AppColors.blackCat),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(color: AppColors.blackCat),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
                   ),
                 ),
               ),

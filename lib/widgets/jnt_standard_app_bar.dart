@@ -60,6 +60,14 @@ class JntStandardAppBar extends StatelessWidget implements PreferredSizeWidget {
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
               height: JntHeaderMetrics.logoHeight,
+              // Decode at display size, not the asset's native resolution --
+              // without this a stray oversized source file (as happened
+              // before) silently costs a multi-second decode on first paint
+              // instead of a build-time-obvious error.
+              cacheHeight:
+                  (JntHeaderMetrics.logoHeight *
+                          MediaQuery.of(context).devicePixelRatio)
+                      .round(),
               fit: BoxFit.contain,
               excludeFromSemantics: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),

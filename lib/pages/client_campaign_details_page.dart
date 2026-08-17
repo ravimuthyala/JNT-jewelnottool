@@ -37,7 +37,6 @@ class ClientCampaignDetailsPage extends StatefulWidget {
 
 class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   late final Future<_RequestDetailsVm> _vmFuture;
-  int _currentStep = 1;
   bool _acceptedBrandCollaborationContract = false;
   final Set<int> _expandedTerms = {1, 2, 3, 4, 5, 6};
 
@@ -111,74 +110,50 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
                       children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            vm.statusLabel,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
                         _overviewCard(vm),
                         const SizedBox(height: 12),
-                        Center(
-                          child: Text(
-                            _currentStep == 1 ? 'Step 1 of 2' : 'Step 2 of 2',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.4,
-                              color: AppColors.blackCat.withValues(alpha: 0.45),
-                            ),
+                        _sectionContainer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _plainSection(
+                                title: vm.isBrandRequest
+                                    ? 'Company Bio'
+                                    : 'Client Bio',
+                                body: vm.bioSectionBody,
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                height: 1,
+                                color: AppColors.blackCatBorderLight,
+                              ),
+                              const SizedBox(height: 12),
+                              _plainSection(
+                                title: 'Custom Request Description',
+                                body: vm.customDescription,
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),
-                        if (_currentStep == 1) ...[
-                          _sectionContainer(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _plainSection(
-                                  title: vm.isBrandRequest
-                                      ? 'Company Bio'
-                                      : 'Client Bio',
-                                  body: vm.bioSectionBody,
-                                ),
-                                const SizedBox(height: 12),
-                                Container(
-                                  height: 1,
-                                  color: AppColors.blackCatBorderLight,
-                                ),
-                                const SizedBox(height: 12),
-                                _plainSection(
-                                  title: 'Custom Request Description',
-                                  body: vm.customDescription,
-                                ),
-                              ],
-                            ),
+                        _sectionContainer(child: _nailDimensionsSection(vm)),
+                        const SizedBox(height: 12),
+                        _sectionContainer(
+                          child: _numberOfSetsSection(vm.numberOfSets),
+                        ),
+                        const SizedBox(height: 12),
+                        _sectionContainer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _sectionHeader(text: 'Inspiration Photos'),
+                              const SizedBox(height: 10),
+                              _photosStrip(vm.photos),
+                            ],
                           ),
+                        ),
+                        if (vm.isBrandRequest && vm.hasBrandCollaboration) ...[
                           const SizedBox(height: 12),
-                          _sectionContainer(child: _nailDimensionsSection(vm)),
-                          const SizedBox(height: 12),
-                          _sectionContainer(
-                            child: _numberOfSetsSection(vm.numberOfSets),
-                          ),
-                          const SizedBox(height: 12),
-                          _sectionContainer(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _sectionHeader(text: 'Inspiration Photos'),
-                                const SizedBox(height: 10),
-                                _photosStrip(vm.photos),
-                              ],
-                            ),
-                          ),
-                        ] else ...[
                           _brandCollaborationStepSection(vm),
                         ],
                       ],
@@ -186,23 +161,43 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   ),
                   Padding(
                     padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
-                    child: _currentStep == 1
-                        ? SizedBox(
-                            width: double.infinity,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
                             height: 56,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.blackCat,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.snow,
-                                elevation: 0,
+                                side: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.7,
+                                  ),
+                                ),
+                                backgroundColor: AppColors.blackCat.withValues(
+                                  alpha: 0.7,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.zero,
                                 ),
                               ),
-                              onPressed: () => setState(() => _currentStep = 2),
-                              child: const Text(
-                                'Next',
-                                style: TextStyle(
+                              onPressed: () async {
+                                try {
+                                  await widget.onDecline();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Unable to decline request: $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Text(
+                                widget.declineLabel,
+                                style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   color: AppColors.snow,
@@ -210,29 +205,30 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                 ),
                               ),
                             ),
-                          )
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: SizedBox(
-                                  height: 56,
-                                  child: OutlinedButton(
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppColors.snow,
-                                      side: BorderSide(
-                                        color: AppColors.blackCat.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                      ),
-                                      backgroundColor: AppColors.blackCat
-                                          .withValues(alpha: 0.7),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.zero,
-                                      ),
-                                    ),
-                                    onPressed: () async {
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                disabledBackgroundColor: AppColors.blackCat
+                                    .withValues(alpha: 0.35),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed:
+                                  (vm.hasBrandCollaboration &&
+                                      !_acceptedBrandCollaborationContract)
+                                  ? null
+                                  : () async {
                                       try {
-                                        await widget.onDecline();
+                                        await widget.onAccept();
                                       } catch (e) {
                                         if (!context.mounted) return;
                                         ScaffoldMessenger.of(
@@ -240,74 +236,26 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                         ).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              'Unable to decline request: $e',
+                                              'Unable to accept request: $e',
                                             ),
                                           ),
                                         );
                                       }
                                     },
-                                    child: Text(
-                                      widget.declineLabel,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.snow,
-                                        fontFamily: 'Arial',
-                                      ),
-                                    ),
-                                  ),
+                              child: Text(
+                                widget.acceptLabel,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.snow,
+                                  fontFamily: 'Arial',
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: SizedBox(
-                                  height: 56,
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.blackCat,
-                                      foregroundColor: AppColors.snow,
-                                      disabledBackgroundColor: AppColors
-                                          .blackCat
-                                          .withValues(alpha: 0.35),
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.zero,
-                                      ),
-                                    ),
-                                    onPressed:
-                                        (vm.hasBrandCollaboration &&
-                                            !_acceptedBrandCollaborationContract)
-                                        ? null
-                                        : () async {
-                                            try {
-                                              await widget.onAccept();
-                                            } catch (e) {
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    'Unable to accept request: $e',
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                    child: Text(
-                                      widget.acceptLabel,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.snow,
-                                        fontFamily: 'Arial',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               );
@@ -367,8 +315,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
               color: AppColors.blackCat,
             ),
           ),
-          const SizedBox(height: 8),
-          _requestTypeOrderRow(vm),
           const SizedBox(height: 8),
           _overviewNeedBudgetAcceptRow(vm),
         ],
@@ -680,111 +626,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
   }
 
-  Widget _requestTypeOrderRow(_RequestDetailsVm vm) {
-    Widget divider() =>
-        Container(width: 1, height: 16, color: AppColors.blackCatBorderLight);
-
-    final requestTypeSegment = Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          vm.requestType.toLowerCase().contains('direct')
-              ? Icons.arrow_outward_rounded
-              : Icons.arrow_forward_rounded,
-          size: 16,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            vm.requestType,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ),
-      ],
-    );
-
-    final orderTypeSegment = Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          vm.orderType.toLowerCase().contains('group')
-              ? Icons.groups_2_outlined
-              : Icons.person_outline_rounded,
-          size: 16,
-          color: AppColors.blackCat,
-        ),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            vm.orderType,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ),
-      ],
-    );
-
-    final nfcSegment = Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.nfc_rounded, size: 16, color: AppColors.blackCat),
-        const SizedBox(width: 6),
-        const Flexible(
-          child: Text(
-            'NFC',
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ),
-      ],
-    );
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Equal flex for every visible segment so each is centered within
-        // its own slot and the divider(s) always land at the same relative
-        // position, whether NFC is shown or not.
-        Expanded(child: requestTypeSegment),
-        const SizedBox(width: 12),
-        divider(),
-        const SizedBox(width: 12),
-        Expanded(child: orderTypeSegment),
-        // Dynamic: only shown when this brand request requires NFC.
-        if (vm.requiresNfc) ...[
-          const SizedBox(width: 12),
-          divider(),
-          const SizedBox(width: 12),
-          Expanded(child: nfcSegment),
-        ],
-      ],
-    );
-  }
-
   Widget _overviewNeedBudgetAcceptRow(_RequestDetailsVm vm) {
     if (vm.isBrandRequest) {
       return Column(
@@ -989,6 +830,17 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     );
   }
 
+  Widget _bcSubhead(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: AppColors.blackCat.withValues(alpha: 0.55),
+      ),
+    );
+  }
+
   Widget _atYourChairBox(String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -1097,6 +949,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     final brandName = vm.brandName.trim().isEmpty
         ? 'The brand'
         : vm.brandName.trim();
+    final creatorName = vm.creatorName.trim().isEmpty
+        ? 'the creator'
+        : vm.creatorName.trim();
 
     String repostDurationDisplay() {
       switch ((pricing['repostDuration'] ?? '').toString()) {
@@ -1112,37 +967,61 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       }
     }
 
+    String repostTermsText() {
+      final duration = repostDurationDisplay();
+      if ((pricing['repostDuration'] ?? '').toString() == 'forever') {
+        return '$brandName may repost this content on channels it owns with '
+            'no end date. This right survives the end of this agreement. '
+            '$creatorName may request removal in writing; $brandName will '
+            'respond within 30 days but is not obliged to remove.';
+      }
+      return '$brandName may repost this content on channels it owns for '
+          '$duration from the date each piece goes live. After that it '
+          'comes down unless you agree to extend.';
+    }
+
     final runAsAd = pricing['runAsAd'] == true;
-    final paidAdsFeeRaw = pricing['paidAdsFeeAmount'];
-    final paidAdsFee = paidAdsFeeRaw is num
-        ? paidAdsFeeRaw.round()
-        : int.tryParse((paidAdsFeeRaw ?? '').toString()) ?? 0;
+    String possessive(String name) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) return '';
+      return trimmed.toLowerCase().endsWith('s') ? "$trimmed'" : "$trimmed's";
+    }
+
     final paidAdText = runAsAd
-        ? 'Included in this offer as a paid ad, priced separately at '
-              '\$$paidAdsFee.'
+        ? '$creatorName grants $brandName the right to run the content as '
+              'paid media under ${possessive(brandName)} or '
+              '${possessive(creatorName)} handle for 6 months. $brandName '
+              'will not alter the content beyond trimming and captioning. '
+              '$creatorName may withdraw any specific asset from paid '
+              "rotation on 10 days' written notice."
         : "Not included. If they want to put ad money behind your face, "
               "that's a separate offer and a separate fee.";
 
     final competingWindowName = (pricing['competingBrandsWindow'] ?? '')
         .toString();
-    String competingDurationDisplay() {
+    final firstPostDate = vm.jntRevealDateLabel.trim().isEmpty
+        ? 'the first posting date'
+        : vm.jntRevealDateLabel.trim();
+    String competingTermsText() {
       switch (competingWindowName) {
+        case 'none':
+          return 'No exclusivity is granted. $creatorName may promote any '
+              'other brand, including competitors, at any time.';
         case 'fourteenDays':
-          return '14 days';
+          return 'For 14 days following $firstPostDate, $creatorName will '
+              'not create sponsored content for another company in the same '
+              'category.';
         case 'sixtyDays':
-          return '60 days';
+          return 'For 60 days following $firstPostDate, $creatorName will '
+              'disclose any competing offer received during this period; '
+              '$brandName may waive exclusivity in writing.';
         case 'thirtyDays':
         default:
-          return '30 days';
+          return 'For 30 days following $firstPostDate, $creatorName will '
+              'not create sponsored content for another company in the same '
+              'category.';
       }
     }
-
-    final competingText = competingWindowName == 'none'
-        ? "No exclusivity required — you're free to promote other "
-              "press-on or nail-tip brands right away."
-        : 'No promoting other press-on or nail-tip brands for '
-              '${competingDurationDisplay()} after your first post. Gel, '
-              'polish, and tools are fine.';
 
     final terms = <(String, String)>[
       (
@@ -1151,14 +1030,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             "last post going live. Tap bonuses are paid monthly as "
             "they're earned.",
       ),
-      (
-        'How they reuse your content',
-        '$brandName can repost it on their own channels for '
-            '${repostDurationDisplay()}. After that it comes down unless '
-            'you agree to extend.',
-      ),
+      ('How they reuse your content', repostTermsText()),
       ('Running it as a paid ad', paidAdText),
-      ('Competing brands', competingText),
+      ('Competing brands', competingTermsText()),
       (
         'Your clients',
         'Anyone who taps your card decides for themselves about photos '
@@ -1281,6 +1155,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         ? List<String>.from(wording['doNotSay'] as List)
         : const <String>[];
     final talkingPoints = (wording['talkingPoints'] ?? '').toString().trim();
+    final creatorName = vm.creatorName.trim().isEmpty
+        ? 'the creator'
+        : vm.creatorName.trim();
 
     final pricing = _RequestDetailsVm.asMap(bc['pricing']);
     final dueRaw = pricing['dueOnSigning'];
@@ -1288,10 +1165,20 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         ? dueRaw.round()
         : int.tryParse((dueRaw ?? '').toString()) ?? 0;
     final maxTapBonus = (tapCap ?? 0) * (tapRate ?? 0);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 2, bottom: 8),
+          child: Text(
+            'Brand Collaboration',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
+          ),
+        ),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
@@ -1299,7 +1186,15 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _bcHeader("YOU'D BE PAID"),
+              const Text(
+                'Client Offer',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: AppColors.snow,
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 '\$$due',
@@ -1331,25 +1226,22 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _bcHeader("WHAT THEY'RE ASKING FOR")),
-                  if (vm.jntRevealDateLabel.trim().isNotEmpty)
-                    Text(
-                      'Live by ${vm.jntRevealDateLabel}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.blackCat.withValues(alpha: 0.6),
-                      ),
-                    ),
-                ],
-              ),
+              _bcHeader("WHAT THEY'RE ASKING FOR"),
+              if (vm.jntRevealDateLabel.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Live by ${vm.jntRevealDateLabel}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.blackCat.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               if (postRows.isEmpty)
                 Text(
-                  'No posts requested.',
+                  '-',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -1629,13 +1521,56 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                 _bcHeader("WHAT THEY'D LIKE YOU TO SAY"),
                 if (mustInclude.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    'Must appear in your caption',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat.withValues(alpha: 0.55),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _bcSubhead('Must appear in your caption'),
+                      ),
+                      Builder(
+                        builder: (context) {
+                          return SizedBox(
+                            height: 30,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed: () async {
+                                final parts = <String>[
+                                  if (mustInclude.isNotEmpty)
+                                    mustInclude.join(' '),
+                                  if (talkingPoints.isNotEmpty) talkingPoints,
+                                ];
+                                await Clipboard.setData(
+                                  ClipboardData(text: parts.join('\n\n')),
+                                );
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Copied')),
+                                );
+                              },
+                              child: const Text(
+                                'Copy All',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.snow,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -1645,82 +1580,55 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       for (final phrase in mustInclude) _bcChip(phrase),
                     ],
                   ),
-                ],
-                if (mustInclude.isNotEmpty || talkingPoints.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Builder(
-                    builder: (context) {
-                      return SizedBox(
-                        height: 30,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                          ),
-                          onPressed: () async {
-                            final parts = <String>[
-                              if (mustInclude.isNotEmpty) mustInclude.join(' '),
-                              if (talkingPoints.isNotEmpty) talkingPoints,
-                            ];
-                            await Clipboard.setData(
-                              ClipboardData(text: parts.join('\n\n')),
-                            );
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Copied')),
-                            );
-                          },
-                          child: const Text(
-                            'Copy All',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.snow,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                  const SizedBox(height: 8),
+                  Text(
+                    '$creatorName will include the following in the caption '
+                    'of each deliverable: ${mustInclude.join(', ')}. This is '
+                    'in addition to the disclosure requirements in §07.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                      height: 1.35,
+                    ),
                   ),
                 ],
                 if (talkingPoints.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  Text(
-                    'Talking points, if you want them',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                  _bcSubhead('Talking points, if you want them'),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.snow,
+                      border: Border.all(color: AppColors.blackCatBorderLight),
+                    ),
+                    child: Text(
+                      talkingPoints,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.blackCat.withValues(alpha: 0.85),
+                        height: 1.3,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    talkingPoints,
+                    '§07 Talking points are suggestions. $creatorName is free to '
+                    "express them in the client's own words or omit them.",
                     style: TextStyle(
-                      fontSize: 13.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.blackCat.withValues(alpha: 0.85),
-                      height: 1.3,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                      height: 1.35,
                     ),
                   ),
                 ],
                 if (doNotSay.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  Text(
-                    "Please don't say",
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat.withValues(alpha: 0.55),
-                    ),
-                  ),
+                  _bcSubhead("Please don't say"),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -1729,6 +1637,19 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       for (final phrase in doNotSay)
                         _bcChip(phrase, strikethrough: true),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '§08 $creatorName will not state or imply: '
+                    '${doNotSay.join(', ')}. $creatorName will not make '
+                    'medical claims, guarantee outcomes, or describe the '
+                    'product as damage-free.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                      height: 1.35,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 14),
@@ -1994,6 +1915,7 @@ class _RequestDetailsVm {
   const _RequestDetailsVm({
     required this.isBrandRequest,
     required this.brandName,
+    required this.creatorName,
     required this.campaignName,
     required this.profileImage,
     required this.statusLabel,
@@ -2007,6 +1929,7 @@ class _RequestDetailsVm {
     required this.bioSectionBody,
     required this.companyBio,
     required this.customDescription,
+    required this.whatTheyAreAskingFor,
     required this.numberOfSets,
     required this.photos,
     required this.leftHand,
@@ -2020,6 +1943,7 @@ class _RequestDetailsVm {
 
   final bool isBrandRequest;
   final String brandName;
+  final String creatorName;
   final String campaignName;
   final String profileImage;
   final String statusLabel;
@@ -2033,6 +1957,7 @@ class _RequestDetailsVm {
   final String bioSectionBody;
   final String companyBio;
   final String customDescription;
+  final String whatTheyAreAskingFor;
   final String numberOfSets;
   final List<String> photos;
   final NailDimensionsV2 leftHand;
@@ -2043,7 +1968,21 @@ class _RequestDetailsVm {
   final String requestAcceptByLabel;
   final Map<String, dynamic> brandCollaboration;
 
-  bool get hasBrandCollaboration => brandCollaboration['enabled'] == true;
+  bool get hasBrandCollaboration {
+    if (!isBrandRequest) return false;
+    if (brandCollaboration['enabled'] != true) return false;
+    final pricing = asMap(brandCollaboration['pricing']);
+    double amount(dynamic value) {
+      if (value is num) return value.toDouble();
+      return double.tryParse((value ?? '').toString().trim()) ?? 0;
+    }
+
+    return amount(pricing['dueOnSigning']) > 0 ||
+        amount(pricing['baseFee']) > 0 ||
+        amount(pricing['clientOffer']) > 0 ||
+        amount(brandCollaboration['dueOnSigning']) > 0 ||
+        amount(brandCollaboration['baseFee']) > 0;
+  }
 
   static Map<String, dynamic> asMap(dynamic v) {
     if (v is Map<String, dynamic>) return v;
@@ -2901,6 +2840,14 @@ class _RequestDetailsVm {
       root['description'],
       request.bio,
     ], fallback: '-');
+    final brandCollaborationMap = asMap(details['brandCollaboration']);
+    final brandCollaborationWording = asMap(brandCollaborationMap['wording']);
+    final whatTheyAreAskingFor = firstNonEmpty([
+      brandCollaborationMap['description'],
+      brandCollaborationMap['ask'],
+      brandCollaborationMap['request'],
+      brandCollaborationWording['talkingPoints'],
+    ]);
     final requestAcceptBy =
         asDate(root['requestAcceptBy']) ??
         asDate(requestDetails['requestAcceptBy']) ??
@@ -3210,6 +3157,34 @@ class _RequestDetailsVm {
       companyName: companyNameLookup,
     );
     final requestClientData = await loadRequestClientData();
+    final creatorName = firstNonEmpty([
+      root['acceptedByClientName'],
+      root['accepted_by_client_name'],
+      details['acceptedByClientName'],
+      details['accepted_by_client_name'],
+      requestDetails['acceptedByClientName'],
+      requestDetails['accepted_by_client_name'],
+      payload['acceptedByClientName'],
+      payload['accepted_by_client_name'],
+      root['acceptedClientName'],
+      root['accepted_client_name'],
+      details['acceptedClientName'],
+      details['accepted_client_name'],
+      requestDetails['acceptedClientName'],
+      requestDetails['accepted_client_name'],
+      payload['acceptedClientName'],
+      payload['accepted_client_name'],
+      selectedClient,
+      requestClientData['name'],
+      requestClientData['displayName'],
+      requestClientData['fullName'],
+      requestClientData['clientName'],
+      detailClientBasicForCompany['name'],
+      detailClientBasicForCompany['displayName'],
+      rootClientBasicForCompany['name'],
+      rootClientBasicForCompany['displayName'],
+      if (!isBrandRequest) request.clientName,
+    ], fallback: 'the creator');
     final requestClientDims = asMap(requestClientData['nailDimensions']);
     final clientBio = cleanCompanyBio(
       firstNonEmpty([
@@ -3352,6 +3327,7 @@ class _RequestDetailsVm {
     return _RequestDetailsVm(
       isBrandRequest: isBrandRequest,
       brandName: brandName,
+      creatorName: creatorName,
       campaignName: campaignName,
       profileImage: profileImage,
       statusLabel: _statusLabel(request.status),
@@ -3366,6 +3342,7 @@ class _RequestDetailsVm {
       bioSectionBody: bioSectionBody,
       companyBio: companyBio,
       customDescription: customDescription,
+      whatTheyAreAskingFor: whatTheyAreAskingFor,
       numberOfSets: numberOfSets,
       photos: photos,
       leftHand: leftHand,
@@ -3374,7 +3351,7 @@ class _RequestDetailsVm {
       nailLength: nailLength,
       requiresNfc: _requestRequiresNfcFromMaps(root, details, payload),
       requestAcceptByLabel: _dateLabel(requestAcceptBy),
-      brandCollaboration: asMap(details['brandCollaboration']),
+      brandCollaboration: brandCollaborationMap,
     );
   }
 
@@ -3475,7 +3452,7 @@ class _RequestDetailsVm {
     return candidates.any(truthy);
   }
 
-  static String _dateLabel(DateTime? d) => formatDateMdyOrDash(d);
+  static String _dateLabel(DateTime? d) => formatDateMdyShortYearOrDash(d);
 
   static String _dateLabelOrBlank(dynamic value) {
     if (value == null) return '';
@@ -3484,7 +3461,7 @@ class _RequestDetailsVm {
     if (text.isEmpty) return '';
     final parsed = DateTime.tryParse(text);
     if (parsed != null) return _dateLabel(parsed);
-    return text;
+    return compactDateDisplay(text);
   }
 
   static String _statusLabel(RequestStatusV2 status) {

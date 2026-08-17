@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import '../theme/app_colors.dart';
 
 class CommunicationPreferenceSection extends StatelessWidget {
@@ -50,46 +51,80 @@ class CommunicationPreferenceSection extends StatelessWidget {
             type: MaterialType.transparency,
             child: Column(
               children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
+                _toggleTile(
+                  context: context,
+                  title: 'Email Notifications',
                   value: emailNotifications,
                   onChanged: onEmailChanged,
-                  title: const Text(
-                    'Email Notifications',
-                    style: TextStyle(
-                      fontSize: _labelFs,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  activeThumbColor: AppColors.blackCat,
-                  activeTrackColor: AppColors.blackCat.withValues(alpha: 0.35),
-                  inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withValues(
-                    alpha: 0.35,
-                  ),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
+                _toggleTile(
+                  context: context,
+                  title: 'SMS Notifications',
                   value: smsNotifications,
                   onChanged: onSmsChanged,
-                  title: const Text(
-                    'SMS Notifications',
-                    style: TextStyle(
-                      fontSize: _labelFs,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  activeThumbColor: AppColors.blackCat,
-                  activeTrackColor: AppColors.blackCat.withValues(alpha: 0.35),
-                  inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withValues(
-                    alpha: 0.35,
-                  ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _toggleTile({
+    required BuildContext context,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    void handleChanged(bool next) {
+      onChanged(next);
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        '$title toggle ${next ? 'on' : 'off'}',
+        Directionality.of(context),
+      );
+    }
+
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: '$title toggle ${value ? 'on' : 'off'}',
+        child: InkWell(
+          onTap: () => handleChanged(!value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ExcludeSemantics(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: _labelFs,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                ExcludeSemantics(
+                  child: Switch(
+                    value: value,
+                    onChanged: handleChanged,
+                    activeThumbColor: AppColors.blackCat,
+                    activeTrackColor: AppColors.blackCat.withValues(
+                      alpha: 0.35,
+                    ),
+                    inactiveThumbColor: AppColors.blackCatLight,
+                    inactiveTrackColor: AppColors.blackCatLight.withValues(
+                      alpha: 0.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

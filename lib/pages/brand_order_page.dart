@@ -559,7 +559,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     final submittedAt = req.clientSubmittedAt;
     final submittedText = submittedAt == null
         ? 'Submitted'
-        : 'Submitted ${formatDateMdy(submittedAt)}';
+        : 'Submitted ${formatDateMdyShortYear(submittedAt)}';
     final campaignName = req.campaignName.trim().isNotEmpty
         ? req.campaignName.trim()
         : 'Campaign';
@@ -591,6 +591,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     final selectedArtistName = _normalizeSelectedArtistName(req.selectedArtist);
 
     return ClientOrder(
+      sourceCollection: req.sourceCollection,
       id: req.id,
       orderNumber: req.orderNumber,
       title: campaignName,
@@ -615,6 +616,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           ? req.description
           : req.descriptionPreview,
       cancelReason: req.cancelReason,
+      brandCollaboration: req.brandCollaboration,
       inspirationPhotos: req.inspirationPhotos,
       needByDisplay: req.needByDisplay,
       jntRevealDateDisplay: req.jntRevealDateDisplay,
@@ -715,7 +717,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     if (status == OrderStatus.expired) {
       final due = req.needBy;
       if (due != null) {
-        return 'Expired ${formatDateMdy(due)}';
+        return 'Expired ${formatDateMdyShortYear(due)}';
       }
       return 'Expired';
     }
@@ -724,7 +726,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       final cancelledAt = req.cancelledAt;
       final when = cancelledAt == null
           ? 'Cancelled'
-          : 'Cancelled ${formatDateMdy(cancelledAt)}';
+          : 'Cancelled ${formatDateMdyShortYear(cancelledAt)}';
       final reason = req.cancelReason.trim();
       if (reason.isNotEmpty) {
         return '$when • Reason: $reason';
@@ -1469,7 +1471,7 @@ class _OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final submittedLabel = order.createdAt == null
         ? 'Submitted -'
-        : 'Submitted ${order.createdAt!.month.toString().padLeft(2, '0')}/${order.createdAt!.day.toString().padLeft(2, '0')}/${order.createdAt!.year}';
+        : 'Submitted ${formatDateMdyShortYear(order.createdAt!)}';
 
     return _Card(
       child: Row(
@@ -1556,7 +1558,7 @@ class _OrderCard extends StatelessWidget {
                 ],
                 const SizedBox(height: 4),
                 Text(
-                  'Need By: ${order.needByDisplay.trim().isEmpty ? '-' : order.needByDisplay.trim()}  ',
+                  'Need By: ${compactDateDisplayOrDash(order.needByDisplay)}  ',
                   style: TextStyle(
                     color: AppColors.blackCat,
                     fontWeight: FontWeight.w600,
@@ -1567,7 +1569,7 @@ class _OrderCard extends StatelessWidget {
                 if (order.jntRevealDateDisplay.trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'JNT Reveal Date: ${order.jntRevealDateDisplay.trim()}',
+                    'JNT Reveal Date: ${compactDateDisplay(order.jntRevealDateDisplay)}',
                     style: TextStyle(
                       color: AppColors.blackCat,
                       fontWeight: FontWeight.w600,
@@ -1810,6 +1812,7 @@ enum OrderStatus {
 }
 
 class ClientOrder {
+  final String sourceCollection;
   final String id;
   final String orderNumber;
   final String title;
@@ -1863,6 +1866,7 @@ class ClientOrder {
   final String trackingNumber;
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
+  final Map<String, dynamic> brandCollaboration;
 
   /// 0..1 progress for in-progress only
   final double? progress;
@@ -1875,6 +1879,7 @@ class ClientOrder {
   final String imageAsset;
 
   const ClientOrder({
+    this.sourceCollection = 'Client_Custom_Requests',
     required this.id,
     this.orderNumber = '',
     required this.title,
@@ -1884,6 +1889,7 @@ class ClientOrder {
     this.groupClients = const <OrderClientMeasurement>[],
     this.clientDescription = '',
     this.cancelReason = '',
+    this.brandCollaboration = const <String, dynamic>{},
     this.inspirationPhotos = const [],
     this.needByDisplay = '',
     this.jntRevealDateDisplay = '',

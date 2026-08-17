@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Duplicate of values-v31/styles.xml. Android resolves the "night
+         mode" qualifier at higher priority than the "platform version"
+         qualifier, so on an API 31+ device in system Dark Mode,
+         values-night/styles.xml would otherwise be chosen over
+         values-v31/styles.xml, silently dropping the tuned
+         windowSplashScreenBackground/IconBackgroundColor/DisablePreview
+         attributes below and letting the OS fall back to its own (visibly
+         different) SplashScreen defaults. Keep this file in sync with
+         values-v31/styles.xml. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">#292222</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/transparent_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#292222</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+</resources>
