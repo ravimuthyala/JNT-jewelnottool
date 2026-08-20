@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../models/client_profile_models.dart';
@@ -11,6 +12,7 @@ import '../utils/date_format_utils.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'client_custom_request_page.dart';
 import 'notifications_page.dart';
 import 'simple_status_request_sheet.dart';
@@ -446,6 +448,68 @@ class _SupabaseOrderService {
         }..removeWhere((e) => e.isEmpty);
         if (names.contains(name)) return true;
       }
+
+      // Group orders: the viewer may be one of several invited clients, not
+      // the row's own "clientEmail" (that's the brand's contact email for a
+      // Company_Custom_Requests row) -- check group-client membership too,
+      // both the flat invited/accepted/declined email arrays and each
+      // per-client entry's own email, so every invited client's copy of a
+      // group order is included in their list.
+      final detailsOrder2 = asMap(details['order']);
+      final payloadOrder2 = asMap(payload['order']);
+      final detailsGroupOrder = asMap(details['groupOrder']);
+      final payloadGroupOrder = asMap(payload['groupOrder']);
+      final requestGroupOrder = asMap(requestDetails['groupOrder']);
+      final groupEmails = <String>{};
+      for (final list in [
+        row['selected_group_client_emails'],
+        row['accepted_group_client_emails'],
+        row['declined_group_client_emails'],
+        summary['selectedGroupClientEmails'],
+        summary['acceptedGroupClientEmails'],
+        details['selectedGroupClientEmails'],
+        details['acceptedGroupClientEmails'],
+        payload['selectedGroupClientEmails'],
+        payload['acceptedGroupClientEmails'],
+        detailsOrder2['selectedGroupClientEmails'],
+        payloadOrder2['selectedGroupClientEmails'],
+      ]) {
+        if (list is List) {
+          groupEmails.addAll(
+            list.map((e) => (e ?? '').toString().trim().toLowerCase()),
+          );
+        }
+      }
+      List<dynamic>? groupClientEntries;
+      for (final candidate in [
+        row['group_clients'],
+        summary['groupClients'],
+        details['groupClients'],
+        payload['groupClients'],
+        detailsGroupOrder['clients'],
+        payloadGroupOrder['clients'],
+        requestGroupOrder['clients'],
+      ]) {
+        if (candidate is List && candidate.isNotEmpty) {
+          groupClientEntries = candidate;
+          break;
+        }
+      }
+      if (groupClientEntries != null) {
+        for (final entry in groupClientEntries) {
+          final m = asMap(entry);
+          groupEmails.add(
+            pickText([
+              m['clientEmail'],
+              m['client_email'],
+              m['email'],
+            ]).toLowerCase(),
+          );
+        }
+      }
+      groupEmails.removeWhere((e) => e.isEmpty);
+      if (emails.intersection(groupEmails).isNotEmpty) return true;
+
       return false;
     }
 
@@ -819,6 +883,8 @@ class _SupabaseOrderService {
         summary['needByDisplay'],
         details['needByDisplay'],
         payload['needByDisplay'],
+        requestDetails['needByDisplay'],
+        requestDetails['needBy'],
       ]),
       jntRevealDateDisplay: displayDate([
         row['jnt_reveal_date_display'],
@@ -845,12 +911,18 @@ class _SupabaseOrderService {
         summary['nailShape'],
         details['nailShape'],
         payload['nailShape'],
+        requestDetails['nailShape'],
+        asMap(details['nailPreferences'])['shape'],
+        asMap(payload['nailPreferences'])['shape'],
       ]),
       nailLength: text([
         row['nail_length'],
         summary['nailLength'],
         details['nailLength'],
         payload['nailLength'],
+        requestDetails['nailLength'],
+        asMap(details['nailPreferences'])['length'],
+        asMap(payload['nailPreferences'])['length'],
       ]),
       paymentStatus: text([
         row['payment_status'],
@@ -985,6 +1057,7 @@ class _SupabaseOrderService {
         summary['needBy'],
         details['needBy'],
         payload['needBy'],
+        requestDetails['needBy'],
       ]),
       requestAcceptBy: date([
         row['request_accept_by'],
@@ -1059,6 +1132,10 @@ class _SupabaseOrderService {
         summary['inspirationPhotos'],
         details['inspirationPhotos'],
         payload['inspirationPhotos'],
+        requestDetails['inspirationPhotos'],
+        requestDetails['brandInspirationPhotos'],
+        details['brandInspirationPhotos'],
+        payload['brandInspirationPhotos'],
       ]),
       artistCompletedPhotos: list([
         row['artist_completed_photos'],
@@ -1182,6 +1259,7 @@ class ClientOrdersPage extends StatefulWidget {
     this.onOpenHistory,
     this.onOpenCalendar,
     this.onOpenArtist,
+    this.onOpenReviews,
     this.onLogout,
     this.showExtendedAvatarMenu = false,
     this.showProfileMenu = false,
@@ -1200,6 +1278,7 @@ class ClientOrdersPage extends StatefulWidget {
   final VoidCallback? onOpenHistory;
   final VoidCallback? onOpenCalendar;
   final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final Future<void> Function()? onLogout;
   final bool showExtendedAvatarMenu;
   final bool showProfileMenu;
@@ -1213,11 +1292,12 @@ class ClientOrdersPage extends StatefulWidget {
 }
 
 class _ClientOrdersPageState extends State<ClientOrdersPage> {
+  final Map<String, GlobalKey> _orderDetailsSemanticsKeys =
+      <String, GlobalKey>{};
   OrdersFilter _filter = OrdersFilter.all;
   StreamSubscription<List<SubmittedClientRequestSummary>>?
   _submittedRequestsSub;
   List<ClientOrder> _submittedOrders = const [];
-  DateTime? _lastExpirySyncAt;
   final FocusNode _notificationsFocusNode = FocusNode(
     debugLabel: 'ordersNotifications',
   );
@@ -1297,7 +1377,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     final currentUserEmail = authEmail.isNotEmpty ? authEmail : effectiveEmail;
     final controller = StreamController<List<SubmittedClientRequestSummary>>();
     var cancelled = false;
-    Timer? loadDebounce;
 
     Future<void> load() async {
       try {
@@ -1313,13 +1392,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       }
     }
 
-    void scheduleLoad() {
-      loadDebounce?.cancel();
-      loadDebounce = Timer(const Duration(milliseconds: 400), () {
-        if (!cancelled) unawaited(load());
-      });
-    }
-
     unawaited(load());
     final realtimeSub = Supabase.instance.client
         .channel('client-orders-${effectiveEmail.hashCode}')
@@ -1327,13 +1399,13 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'client_custom_requests',
-          callback: (_) => scheduleLoad(),
+          callback: (_) => unawaited(load()),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'company_custom_requests',
-          callback: (_) => scheduleLoad(),
+          callback: (_) => unawaited(load()),
         )
         .subscribe();
 
@@ -1346,12 +1418,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                   !_shouldHideFromClientArtistOrders(req, currentUserEmail),
             )
             .toList(growable: false);
-        final now = DateTime.now();
-        if (_lastExpirySyncAt == null ||
-            now.difference(_lastExpirySyncAt!) > const Duration(seconds: 60)) {
-          _lastExpirySyncAt = now;
-          unawaited(_syncExpiredRequests(filteredItems));
-        }
+        unawaited(_syncExpiredRequests(filteredItems));
         final orders =
             filteredItems
                 .map(
@@ -1376,7 +1443,6 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       _submittedRequestsSub!,
       onCancelExtra: () async {
         cancelled = true;
-        loadDebounce?.cancel();
         await Supabase.instance.client.removeChannel(realtimeSub);
         await controller.close();
       },
@@ -1596,6 +1662,48 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     }
   }
 
+  String _profileNailLengthTitle() {
+    switch (widget.profile.nail.length) {
+      case NailLength.short:
+        return 'Short';
+      case NailLength.medium:
+        return 'Medium';
+      case NailLength.long:
+        return 'Long';
+      case NailLength.extraLong:
+        return 'XL Long';
+      case NailLength.xlLong:
+        return 'XXL Long';
+      case NailLength.none:
+        return '';
+    }
+  }
+
+  String _dimensionText(Object? value) {
+    if (value is num) {
+      return value == value.roundToDouble()
+          ? value.toInt().toString()
+          : value.toString();
+    }
+    final text = (value ?? '').toString().trim();
+    return (text == 'null') ? '' : text;
+  }
+
+  bool _hasAnyDimension(Map<String, String> value) {
+    return value.values.any((v) => v.trim().isNotEmpty && v.trim() != '-');
+  }
+
+  Map<String, String> _profileHandDimensions(bool left) {
+    final dims = widget.profile.nail.dimensions;
+    return <String, String>{
+      'thumb': _dimensionText(left ? dims.lThumb : dims.rThumb),
+      'index': _dimensionText(left ? dims.lIndex : dims.rIndex),
+      'middle': _dimensionText(left ? dims.lMiddle : dims.rMiddle),
+      'ring': _dimensionText(left ? dims.lRing : dims.rRing),
+      'pinky': _dimensionText(left ? dims.lPinky : dims.rPinky),
+    };
+  }
+
   ClientOrder _mapSubmittedRequestToOrder(
     SubmittedClientRequestSummary req,
     String currentUserEmail,
@@ -1681,6 +1789,26 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       submittedFallback: submittedText,
     );
     final selectedArtistName = _normalizeSelectedArtistName(req.selectedArtist);
+    final profileShape = widget.profile.nail.shape.trim();
+    final profileLength = _profileNailLengthTitle();
+    final profileLeftHand = _profileHandDimensions(true);
+    final profileRightHand = _profileHandDimensions(false);
+    final profileEmail = widget.profile.basic.email.trim().toLowerCase();
+    final leftHandForOrder = _hasAnyDimension(req.leftHandDimensions)
+        ? req.leftHandDimensions
+        : profileLeftHand;
+    final rightHandForOrder = _hasAnyDimension(req.rightHandDimensions)
+        ? req.rightHandDimensions
+        : profileRightHand;
+    final nailShapeForOrder = req.nailShape.trim().isNotEmpty
+        ? req.nailShape.trim()
+        : profileShape;
+    final nailLengthForOrder = req.nailLength.trim().isNotEmpty
+        ? req.nailLength.trim()
+        : profileLength;
+    final needByDisplayForOrder = req.needByDisplay.trim().isNotEmpty
+        ? req.needByDisplay.trim()
+        : (req.needBy == null ? '' : formatDateMdy(req.needBy!));
 
     return ClientOrder(
       id: req.id,
@@ -1698,36 +1826,55 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       hasAssignedArtist: selectedArtistName.isNotEmpty,
       orderType: req.orderType,
       groupClients: req.groupClients
-          .map(
-            (client) => OrderClientMeasurement(
+          .map((client) {
+            // Group-order slots only ever hold a snapshot captured when that
+            // client accepted -- unlike the single-order fields above, they
+            // never fell back to the viewer's own current profile. For the
+            // viewer's own slot specifically, fill in anything still missing
+            // from their live profile, same as a single-client order does.
+            final isViewersOwnSlot =
+                client.clientEmail.trim().toLowerCase() == profileEmail;
+            return OrderClientMeasurement(
               clientId: client.clientId,
               clientName: client.clientName,
               clientEmail: client.clientEmail,
               responseStatus: client.responseStatus,
-              nailShape: client.nailShape,
-              nailLength: client.nailLength,
-              leftHandDimensions: client.leftHandDimensions,
-              rightHandDimensions: client.rightHandDimensions,
-            ),
-          )
+              nailShape: client.nailShape.trim().isNotEmpty
+                  ? client.nailShape
+                  : (isViewersOwnSlot ? profileShape : client.nailShape),
+              nailLength: client.nailLength.trim().isNotEmpty
+                  ? client.nailLength
+                  : (isViewersOwnSlot ? profileLength : client.nailLength),
+              leftHandDimensions: _hasAnyDimension(client.leftHandDimensions)
+                  ? client.leftHandDimensions
+                  : (isViewersOwnSlot
+                        ? profileLeftHand
+                        : client.leftHandDimensions),
+              rightHandDimensions: _hasAnyDimension(client.rightHandDimensions)
+                  ? client.rightHandDimensions
+                  : (isViewersOwnSlot
+                        ? profileRightHand
+                        : client.rightHandDimensions),
+            );
+          })
           .toList(growable: false),
       clientDescription: req.description.isNotEmpty
           ? req.description
           : req.descriptionPreview,
       cancelReason: req.cancelReason,
       inspirationPhotos: req.inspirationPhotos,
-      needByDisplay: req.needByDisplay,
+      needByDisplay: needByDisplayForOrder,
       jntRevealDateDisplay: req.jntRevealDateDisplay,
-      nailShape: req.nailShape,
-      nailLength: req.nailLength,
+      nailShape: nailShapeForOrder,
+      nailLength: nailLengthForOrder,
       budgetMin: req.budgetMin,
       budgetMax: req.budgetMax,
       clientBudgetMin: req.clientBudgetMin,
       clientBudgetMax: req.clientBudgetMax,
       artistBudgetMin: req.artistBudgetMin,
       artistBudgetMax: req.artistBudgetMax,
-      leftHandDimensions: req.leftHandDimensions,
-      rightHandDimensions: req.rightHandDimensions,
+      leftHandDimensions: leftHandForOrder,
+      rightHandDimensions: rightHandForOrder,
       status: mappedStatus,
       expectedOrDeliveredText: statusText,
       imageAsset: _safeCardAvatar(profileImage: req.clientProfileImage),
@@ -1941,6 +2088,19 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     }
   }
 
+  String _ordersFilterLabel(OrdersFilter filter) {
+    return switch (filter) {
+      OrdersFilter.all => 'All Orders',
+      OrdersFilter.pending => 'Pending',
+      OrdersFilter.submitted => 'Submitted',
+      OrdersFilter.inProgress => 'In Progress',
+      OrdersFilter.shipped => 'Shipped',
+      OrdersFilter.delivered => 'Delivered',
+      OrdersFilter.declined => 'Declined',
+      OrdersFilter.cancelledExpired => 'Cancelled or Expired',
+    };
+  }
+
   bool _isSubmittedOrder(ClientOrder order) =>
       order.status == OrderStatus.newOrder ||
       order.status == OrderStatus.inReview;
@@ -1988,9 +2148,13 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       return;
     }
     if (value == 'reviews') {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ArtistReviewsPage()));
+      if (widget.onOpenReviews != null) {
+        widget.onOpenReviews?.call();
+      } else {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ArtistReviewsPage()));
+      }
       return;
     }
     if (value == 'logout') {
@@ -2018,7 +2182,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'Client order',
+      label: 'Client orders',
       child: Scaffold(
         backgroundColor: AppColors.snow,
 
@@ -2083,17 +2247,30 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                     )
                     .length,
               },
-              onChanged: (f) => setState(() => _filter = f),
+              onChanged: (f) {
+                setState(() => _filter = f);
+                final count = _filteredOrders.length;
+                announceRequestAccessibilityMessage(
+                  context,
+                  '${_ordersFilterLabel(f)} selected. $count ${count == 1 ? 'order' : 'orders'} found.',
+                );
+              },
             ),
             const SizedBox(height: 16),
 
             if (_pending.isNotEmpty) ...[
-              const Text(
-                'All Orders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: 'All Orders',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    'All Orders',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -2103,6 +2280,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                   child: _OrderCard(
                     order: o,
                     showLeadingThumb: widget.showCompanyChrome,
+                    detailsSemanticsKey: _orderDetailsSemanticsKeys.putIfAbsent(
+                      o.id,
+                      () => GlobalKey(),
+                    ),
                     onDetails: () => _openOrderDetails(context, o),
                   ),
                 ),
@@ -2111,12 +2292,18 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             ],
 
             if (_past.isNotEmpty) ...[
-              const Text(
-                'Past Orders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: 'Past Orders',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    'Past Orders',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -2126,6 +2313,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                   child: _OrderCard(
                     order: o,
                     showLeadingThumb: widget.showCompanyChrome,
+                    detailsSemanticsKey: _orderDetailsSemanticsKeys.putIfAbsent(
+                      o.id,
+                      () => GlobalKey(),
+                    ),
                     onDetails: () => _openOrderDetails(context, o),
                   ),
                 ),
@@ -2134,8 +2325,12 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
 
             if (_pending.isEmpty && _past.isEmpty) ...[
               const SizedBox(height: 28),
-              _Card(
-                child: Column(
+              Semantics(
+                liveRegion: true,
+                label: 'No orders found. Try changing filters or place a new design request.',
+                child: ExcludeSemantics(
+                  child: _Card(
+                    child: Column(
                   children: [
                     Icon(
                       Icons.receipt_long_outlined,
@@ -2162,6 +2357,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                       ),
                     ),
                   ],
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -2177,9 +2374,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     );
   }
 
-  void _openOrderDetails(BuildContext context, ClientOrder order) {
+  Future<void> _openOrderDetails(BuildContext context, ClientOrder order) async {
     if (order.status == OrderStatus.declined) {
-      unawaited(_openDeclinedRequestSheet(context, order));
+      await _openDeclinedRequestSheet(context, order);
+      await _restoreOrderDetailsFocus(order.id);
       return;
     }
 
@@ -2250,7 +2448,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         break;
     }
 
-    showGeneralDialog<void>(
+    await showGeneralDialog<void>(
       context: context,
       barrierLabel: 'Order details',
       barrierDismissible: true,
@@ -2290,6 +2488,17 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         );
       },
     );
+    await _restoreOrderDetailsFocus(order.id);
+  }
+
+  Future<void> _restoreOrderDetailsFocus(String orderId) async {
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    _orderDetailsSemanticsKeys[orderId]
+        ?.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
   }
 
   Future<void> _openDeclinedRequestSheet(
@@ -2491,15 +2700,12 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             showBackArrow: false,
             showBottomNav: true,
             bottomNavIndex: 1,
-            // This page is pushed as its own route (not a shell tab), so
-            // onNavTap must stay null — that's what makes _goHomeAfterSubmit
-            // pop this route away after a successful (re)submit instead of
-            // switching a tab on the shell underneath, which leaves this
-            // page stuck on screen.
+            onNavTap: widget.onNavTap,
             onOpenProfile: widget.onOpenProfile,
             onOpenHistory: widget.onOpenHistory,
             onOpenCalendar: widget.onOpenCalendar,
             onOpenArtist: widget.onOpenArtist,
+            onOpenReviews: widget.onOpenReviews,
             onLogout: widget.onLogout,
             showExtendedAvatarMenu: widget.showExtendedAvatarMenu,
             showProfileMenu: widget.showProfileMenu,
@@ -2696,35 +2902,37 @@ class _FilterTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 42,
+      height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         child: Row(
           children: [
-            _tab('All Orders', OrdersFilter.all),
-            _tab('Pending', OrdersFilter.pending),
-            _tab('In Progress', OrdersFilter.inProgress),
-            _tab('Shipped', OrdersFilter.shipped),
-            _tab('Delivered', OrdersFilter.delivered),
-            _tab('Declined', OrdersFilter.declined),
-            _tab('Cancelled/Expired', OrdersFilter.cancelledExpired),
+            _tab('All Orders', OrdersFilter.all, 1),
+            _tab('Pending', OrdersFilter.pending, 2),
+            _tab('In Progress', OrdersFilter.inProgress, 3),
+            _tab('Shipped', OrdersFilter.shipped, 4),
+            _tab('Delivered', OrdersFilter.delivered, 5),
+            _tab('Declined', OrdersFilter.declined, 6),
+            _tab('Cancelled/Expired', OrdersFilter.cancelledExpired, 7),
           ],
         ),
       ),
     );
   }
 
-  Widget _tab(String label, OrdersFilter value) {
+  Widget _tab(String label, OrdersFilter value, int position) {
     final bool isSelected = selected == value;
     final count = counts[value] ?? 0;
-    final semanticLabel = '$label, $count ${count == 1 ? 'order' : 'orders'}';
+    final semanticLabel =
+        '$label, tab $position of 7, $count ${count == 1 ? 'order' : 'orders'}';
 
     return Semantics(
       button: true,
       selected: isSelected,
       label: semanticLabel,
       hint: isSelected ? 'Selected filter' : 'Double tap to filter orders',
+      onTap: () => onChanged(value),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: () => onChanged(value),
@@ -2781,11 +2989,13 @@ class _OrderCard extends StatelessWidget {
     required this.order,
     required this.onDetails,
     required this.showLeadingThumb,
+    required this.detailsSemanticsKey,
   });
 
   final ClientOrder order;
   final VoidCallback onDetails;
   final bool showLeadingThumb;
+  final GlobalKey detailsSemanticsKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2809,8 +3019,6 @@ class _OrderCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         order.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -2820,7 +3028,7 @@ class _OrderCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     if (order.status == OrderStatus.shipped) ...[
                       SizedBox(
-                        height: 30,
+                        height: 48,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.blackCat,
@@ -2856,8 +3064,6 @@ class _OrderCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   order.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppColors.blackCat,
                     fontWeight: FontWeight.w500,
@@ -2866,34 +3072,40 @@ class _OrderCard extends StatelessWidget {
                     fontFamily: 'Arial',
                   ),
                 ),
-                _OrderNfcChipLine(order: order),
-                const SizedBox(height: 8),
-                if (isBrandRequest)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.balletSlippers,
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: AppColors.blackCatBorderLight,
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _OrderNfcChipLine(order: order, trailingGap: 8),
+                      if (isBrandRequest) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.balletSlippers,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          child: const Text(
+                            'Brand Request',
+                            style: TextStyle(
+                              color: AppColors.blackCat,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
                         ),
-                      ),
-                      child: const Text(
-                        'Brand Request',
-                        style: TextStyle(
-                          color: AppColors.blackCat,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'Arial',
-                        ),
-                      ),
-                    ),
+                      ],
+                    ],
                   ),
+                ),
                 if (isBrandRequest) ...[
                   const SizedBox(height: 6),
                   if ((order.brandName ?? '').trim().isNotEmpty)
@@ -2964,7 +3176,10 @@ class _OrderCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _OrderDetailsLink(onTap: onDetails),
+                    _OrderDetailsLink(
+                      semanticsKey: detailsSemanticsKey,
+                      onTap: onDetails,
+                    ),
                   ],
                 ),
               ],
@@ -3125,9 +3340,10 @@ class _Thumb extends StatelessWidget {
 }
 
 class _OrderNfcChipLine extends StatelessWidget {
-  const _OrderNfcChipLine({required this.order});
+  const _OrderNfcChipLine({required this.order, this.trailingGap = 0});
 
   final ClientOrder order;
+  final double trailingGap;
 
   @override
   Widget build(BuildContext context) {
@@ -3141,9 +3357,13 @@ class _OrderNfcChipLine extends StatelessWidget {
       future: _shouldShowNfcChip(collection: collection, id: id),
       builder: (context, snapshot) {
         if (snapshot.data != true) return const SizedBox.shrink();
-        return const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: Align(alignment: Alignment.centerLeft, child: _NfcChip()),
+        if (trailingGap <= 0) return const _NfcChip();
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _NfcChip(),
+            SizedBox(width: trailingGap),
+          ],
         );
       },
     );
@@ -3334,13 +3554,18 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _OrderDetailsLink extends StatelessWidget {
-  const _OrderDetailsLink({required this.onTap});
+  const _OrderDetailsLink({
+    required this.onTap,
+    required this.semanticsKey,
+  });
 
   final VoidCallback onTap;
+  final GlobalKey semanticsKey;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      key: semanticsKey,
       button: true,
       label: 'Order details',
       hint: 'Double tap to view order details',
@@ -3352,8 +3577,10 @@ class _OrderDetailsLink extends StatelessWidget {
           hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
           splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
           highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3371,6 +3598,7 @@ class _OrderDetailsLink extends StatelessWidget {
                   color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
               ],
+              ),
             ),
           ),
         ),

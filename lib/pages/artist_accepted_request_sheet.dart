@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -16,6 +17,7 @@ import '../services/storage_url_resolver.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'request_chat_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -106,6 +108,13 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   final FocusNode _closeFocusNode = FocusNode(
     debugLabel: 'acceptedRequestClose',
   );
+  final FocusNode _uploadFocusNode = FocusNode(
+    debugLabel: 'acceptedRequestUploadPhotos',
+  );
+  final GlobalKey _uploadSemanticsKey = GlobalKey(
+    debugLabel: 'acceptedRequestUploadPhotosSemantics',
+  );
+  bool _didRequestInitialFocus = false;
   static const int _maxArtistImageBytes = 2 * 1024 * 1024;
   static const int _maxArtistCompletedPhotos = 10;
 
@@ -481,12 +490,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_accessibleNavigation(context)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _closeFocusNode.requestFocus();
-      });
-    }
+    if (_didRequestInitialFocus || !_accessibleNavigation(context)) return;
+    _didRequestInitialFocus = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _closeFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -497,12 +506,47 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   @override
   void dispose() {
     _closeFocusNode.dispose();
+    _uploadFocusNode.dispose();
     super.dispose();
+  }
+
+  void _restoreUploadFocus({bool announceCount = true}) {
+    if (!_accessibleNavigation(context)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_uploadFocusNode.canRequestFocus) return;
+      _uploadFocusNode.requestFocus();
+      Future<void>.delayed(const Duration(milliseconds: 250), () {
+        if (!mounted) return;
+        _uploadSemanticsKey.currentContext
+            ?.findRenderObject()
+            ?.sendSemanticsEvent(const FocusSemanticEvent());
+      });
+      if (announceCount) {
+        Future<void>.delayed(const Duration(milliseconds: 750), () {
+          if (!mounted) return;
+          SemanticsService.sendAnnouncement(
+            View.of(context),
+            _uploadPhotoCountSemantics,
+            Directionality.of(context),
+          );
+        });
+      }
+    });
+  }
+
+  String get _uploadPhotoCountSemantics {
+    final count = _artistPhotos.length;
+    if (count == 0) return 'No photos uploaded';
+    if (count >= _maxArtistCompletedPhotos) {
+      return '$count photos uploaded, maximum reached';
+    }
+    return '$count ${count == 1 ? 'photo' : 'photos'} uploaded';
   }
 
   bool _accessibleNavigation(BuildContext context) {
     final mediaQuery = MediaQuery.maybeOf(context);
     return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding.instance.platformDispatcher.semanticsEnabled ||
         WidgetsBinding
             .instance
             .platformDispatcher
@@ -519,7 +563,9 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'Accepted request details',
+      label: _isDesigningMode
+          ? 'Designing request details'
+          : 'Accepted request details',
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Container(
@@ -530,6 +576,22 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           ),
           child: Stack(
             children: [
+              Positioned(
+                right: 6,
+                top: 6,
+                child: RequestModalInitialClose(
+                  label: _isDesigningMode
+                      ? 'Close designing request details'
+                      : 'Close accepted request details',
+                  onClose: () => Navigator.pop(
+                    context,
+                    const _AcceptedSheetResult(
+                      completed: false,
+                      artistPhotos: <String>[],
+                    ),
+                  ),
+                ),
+              ),
               Column(
                 children: [
                   const SizedBox(height: 10),
@@ -678,27 +740,32 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                 Center(
                                   child: SizedBox(
                                     height: 50,
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.blackCat
-                                            .withValues(alpha: 0.78),
-                                        foregroundColor: AppColors.snow,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.zero,
+                                    child: Semantics(
+                                      key: _uploadSemanticsKey,
+                                      value: _uploadPhotoCountSemantics,
+                                      child: ElevatedButton.icon(
+                                        focusNode: _uploadFocusNode,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.blackCat
+                                              .withValues(alpha: 0.78),
+                                          foregroundColor: AppColors.snow,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.zero,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 18,
+                                          ),
                                         ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 18,
+                                        onPressed: () => _openPickOptions(),
+                                        icon: const Icon(
+                                          Icons.add_a_photo_outlined,
                                         ),
-                                      ),
-                                      onPressed: () => _openPickOptions(),
-                                      icon: const Icon(
-                                        Icons.add_a_photo_outlined,
-                                      ),
-                                      label: const Text(
-                                        'Upload',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 12,
+                                        label: const Text(
+                                          'Upload',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -851,11 +918,17 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                   ? null
                                   : _handleMarkCompleted,
                               child: _markingCompleted
-                                  ? const SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                                  ? Semantics(
+                                      liveRegion: true,
+                                      label: 'Marking request as completed',
+                                      child: const ExcludeSemantics(
+                                        child: SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
                                       ),
                                     )
                                   : const Text(
@@ -876,19 +949,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               Positioned(
                 right: 6,
                 top: 6,
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: 'Close',
-                  onTap: () => Navigator.pop(
-                    context,
-                    const _AcceptedSheetResult(
-                      completed: false,
-                      artistPhotos: <String>[],
-                    ),
-                  ),
-                  child: ExcludeSemantics(
-                    child: InkWell(
+                child: ExcludeSemantics(
+                  child: InkWell(
                       focusNode: _closeFocusNode,
                       borderRadius: BorderRadius.zero,
                       onTap: () => Navigator.pop(
@@ -906,7 +968,6 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                           color: AppColors.blackCat.withValues(alpha: 0.70),
                         ),
                       ),
-                    ),
                   ),
                 ),
               ),
@@ -921,7 +982,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   // Actions
   // -----------------------
   Future<void> _openPickOptions() async {
-    await showModalBottomSheet<void>(
+    final source = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) {
@@ -979,10 +1040,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                             color: AppColors.blackCat,
                           ),
                         ),
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          await _pickFromGallery();
-                        },
+                        onPressed: () => Navigator.pop(context, 'gallery'),
                       ),
                     ),
                   ),
@@ -1013,10 +1071,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                             color: AppColors.blackCat,
                           ),
                         ),
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          await _takePhoto();
-                        },
+                        onPressed: () => Navigator.pop(context, 'camera'),
                       ),
                     ),
                   ),
@@ -1028,29 +1083,47 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         );
       },
     );
+    _restoreUploadFocus(announceCount: source == null);
+    if (source == null) return;
+
+    // Let the picker-options route finish closing and establish Upload as
+    // the parent route's restoration target before opening the native picker.
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    if (source == 'gallery') {
+      await _pickFromGallery();
+    } else if (source == 'camera') {
+      await _takePhoto();
+    }
   }
 
   Future<void> _pickFromGallery() async {
-    final picked = await _picker.pickMultiImage(
-      imageQuality: 70,
-      maxWidth: 1280,
-      maxHeight: 1280,
-    );
-    if (picked.isEmpty) return;
-
-    await _validateAndAddPhotos(picked);
+    try {
+      final picked = await _picker.pickMultiImage(
+        imageQuality: 70,
+        maxWidth: 1280,
+        maxHeight: 1280,
+      );
+      if (picked.isEmpty) return;
+      await _validateAndAddPhotos(picked);
+    } finally {
+      _restoreUploadFocus();
+    }
   }
 
   Future<void> _takePhoto() async {
-    final x = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 70,
-      maxWidth: 1280,
-      maxHeight: 1280,
-    );
-    if (x == null) return;
-
-    await _validateAndAddPhotos([x]);
+    try {
+      final x = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 70,
+        maxWidth: 1280,
+        maxHeight: 1280,
+      );
+      if (x == null) return;
+      await _validateAndAddPhotos([x]);
+    } finally {
+      _restoreUploadFocus();
+    }
   }
 
   bool _isAllowedImageExtension(String value) {
@@ -1526,7 +1599,10 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   Widget _artistPhotosGrid() {
     return _localPhotosGrid(
       photos: _artistPhotos,
-      onRemoveAt: (i) => setState(() => _artistPhotos.removeAt(i)),
+      onRemoveAt: (i) {
+        setState(() => _artistPhotos.removeAt(i));
+        _restoreUploadFocus();
+      },
     );
   }
 
@@ -1566,21 +1642,27 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                   top: 6,
                   child: Semantics(
                     button: true,
-                    label: 'Remove photo',
+                    label: 'Remove completed set photo ${i + 1}',
                     child: ExcludeSemantics(
                       child: InkWell(
                         onTap: () => onRemoveAt(i),
-                        child: Container(
-                          height: 26,
-                          width: 26,
-                          decoration: BoxDecoration(
-                            color: AppColors.blackCat.withValues(alpha: 0.70),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            size: 16,
-                            color: Colors.white,
+                        child: SizedBox(
+                          height: 48,
+                          width: 48,
+                          child: Center(
+                            child: Container(
+                              height: 26,
+                              width: 26,
+                              decoration: BoxDecoration(
+                                color: AppColors.blackCat.withValues(alpha: 0.70),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1595,9 +1677,15 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     );
   }
 
-  static Widget _sectionTitle(String t) => Text(
-    t,
-    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+  static Widget _sectionTitle(String t) => Semantics(
+    header: true,
+    label: t,
+    child: ExcludeSemantics(
+      child: Text(
+        t,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+      ),
+    ),
   );
 
   Widget _finalAcceptedAmountBox(ClientRequestV2 r) {
@@ -2663,6 +2751,20 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     final avatarLetter = headerName.isEmpty
         ? (isBrandRequest ? 'B' : 'C')
         : headerName[0].toUpperCase();
+    final requestType = r.requestTypeLabel.isNotEmpty
+        ? r.requestTypeLabel
+        : (r.isDirectRequest ? 'Direct' : 'Standard');
+    final orderType = r.orderType == RequestOrderTypeV2.group
+        ? 'Group'
+        : 'Single';
+    final orderNumber = r.orderNumber.trim().isNotEmpty
+        ? r.orderNumber.trim()
+        : r.id;
+    final summaryLabel =
+        '$headerName. ${headerSubtitle.isEmpty ? '' : '$headerSubtitle. '}'
+        'Order number $orderNumber. $requestType request. $orderType order. '
+        'Need by ${_needByLabel(r.neededBy)}. '
+        'Budget ${r.budgetMin} dollars to ${r.budgetMax} dollars.';
 
     Widget avatarFallback() => Container(
       height: 78,
@@ -2678,9 +2780,13 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Column(
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: summaryLabel,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Column(
         children: [
           const SizedBox(height: 10),
           FutureBuilder<String>(
@@ -2764,6 +2870,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           ),
           const SizedBox(height: 16),
         ],
+        ),
       ),
     );
   }
@@ -3241,28 +3348,50 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     }
     await showDialog<void>(
       context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(8),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: InteractiveViewer(
-                minScale: 0.8,
-                maxScale: 4,
-                child: Center(child: image),
+      builder: (_) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Request photo preview',
+        child: Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(8),
+          child: Stack(
+            children: [
+              Positioned(
+                top: 8,
+                right: 8,
+                child: RequestModalInitialClose(
+                  label: 'Close image preview',
+                  onClose: () => Navigator.of(context).pop(),
+                ),
               ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                tooltip: 'Close image preview',
-                icon: const Icon(Icons.close, color: AppColors.blackCat),
+              Positioned.fill(
+                child: Semantics(
+                  image: true,
+                  label: 'Client request photo',
+                  child: ExcludeSemantics(
+                    child: InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4,
+                      child: Center(child: image),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+              Positioned(
+                top: 8,
+                right: 8,
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close image preview',
+                    icon: const Icon(Icons.close, color: AppColors.blackCat),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3448,7 +3577,10 @@ class _CompactGroupClientMeasurementsTabsState
               ),
               child: Semantics(
                 button: true,
-                label: name,
+                selected: selected,
+                label: '$name, tab ${index + 1} of ${widget.clients.length}',
+                hint: selected ? 'Selected tab' : 'Double tap to show client measurements',
+                onTap: () => setState(() => _selectedIndex = index),
                 child: ExcludeSemantics(
                   child: InkWell(
                     borderRadius: BorderRadius.zero,

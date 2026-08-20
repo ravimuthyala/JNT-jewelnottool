@@ -41,6 +41,10 @@
     <true/>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>NSCalendarsUsageDescription</key>
+    <string>JNT uses your calendar so you can add an accepted request's due date to your personal calendar.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>JNT uses your calendar so you can add an accepted request's due date to your personal calendar.</string>
     <key>NSCameraUsageDescription</key>
     <string>JNT uses your camera so you can take a photo for your profile picture, portfolio, or a custom nail design request.</string>
     <key>NSPhotoLibraryUsageDescription</key>

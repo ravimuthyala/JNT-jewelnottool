@@ -5,6 +5,7 @@ import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/notification_bell_button.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'notifications_page.dart';
 
 class ReviewArtistPage extends StatefulWidget {
@@ -395,15 +396,24 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
   Widget _star(int value) {
     final selected = value <= _rating;
 
+    void selectRating() {
+      setState(() => _rating = value);
+      announceRequestAccessibilityMessage(
+        context,
+        '$value ${value == 1 ? 'star' : 'stars'} selected.',
+      );
+    }
+
     return Semantics(
       button: true,
       selected: value == _rating,
       label: '$value ${value == 1 ? 'star' : 'stars'}',
       value: value == _rating ? 'Selected' : null,
-      onTap: () => setState(() => _rating = value),
+      hint: 'Double tap to rate $value ${value == 1 ? 'star' : 'stars'}',
+      onTap: selectRating,
       child: ExcludeSemantics(
         child: IconButton(
-          onPressed: () => setState(() => _rating = value),
+          onPressed: selectRating,
           icon: Icon(
             selected ? Icons.star : Icons.star_border,
             size: 34,
@@ -422,8 +432,14 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
         explicitChildNodes: true,
         namesRoute: true,
         label: 'Review artist',
-        child: const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
+        child: Scaffold(
+          body: Semantics(
+            liveRegion: true,
+            label: 'Loading review form',
+            child: ExcludeSemantics(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
         ),
       );
     }
@@ -485,13 +501,17 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
-            const Text(
+            Semantics(
+              header: true,
+              label: 'How was your experience?',
+              child: const ExcludeSemantics(child: Text(
               'How was your experience?',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: AppColors.blackCat,
               ),
+              )),
             ),
             const SizedBox(height: 8),
             Text(
@@ -502,14 +522,22 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
               ),
             ),
             const SizedBox(height: 24),
-            Row(
+            Semantics(
+              container: true,
+              explicitChildNodes: true,
+              label: 'Artist rating. Current rating $_rating out of 5.',
+              child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (i) => _star(i + 1)),
+              ),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _commentCtrl,
               maxLines: 5,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
               decoration: const InputDecoration(
                 labelText: 'Write a review',
                 hintText: 'Share your experience with this artist',
@@ -531,13 +559,17 @@ class _ReviewArtistPageState extends State<ReviewArtistPage> {
                   ),
                 ),
                 child: _submitting
-                    ? const SizedBox(
+                    ? Semantics(
+                        liveRegion: true,
+                        label: 'Submitting review',
+                        child: const ExcludeSemantics(child: SizedBox(
                         height: 18,
                         width: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: AppColors.snow,
                         ),
+                        )),
                       )
                     : const Text('Submit Review'),
               ),

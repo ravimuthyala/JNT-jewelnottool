@@ -113,25 +113,33 @@ class PhoneCountryCodeField extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: TextStyle(fontSize: fontSize, fontFamily: 'Arial'),
-              keyboardType: TextInputType.phone,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(10),
-                UsPhoneTextInputFormatter(),
-              ],
-              decoration: InputDecoration(
-                hintText: 'Enter 10-digit phone',
-                hintStyle: TextStyle(
-                  fontSize: fontSize - 1,
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
+            // semanticLabel distinguishes this field's purpose (e.g.
+            // "Company phone number" vs "Contact phone number" on the same
+            // screen) -- merged onto just this TextField, not the whole
+            // Row, so the CountryCodePicker beside it stays its own
+            // independently reachable stop.
+            child: Semantics(
+              label: semanticLabel,
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                style: TextStyle(fontSize: fontSize, fontFamily: 'Arial'),
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                  UsPhoneTextInputFormatter(),
+                ],
+                decoration: InputDecoration(
+                  hintText: 'Enter 10-digit phone',
+                  hintStyle: TextStyle(
+                    fontSize: fontSize - 1,
+                    color: AppColors.blackCat.withValues(alpha: 0.35),
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
           ),

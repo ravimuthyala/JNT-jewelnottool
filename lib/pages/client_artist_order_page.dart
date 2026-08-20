@@ -19,6 +19,7 @@ class ClientArtistOrderPage extends StatelessWidget {
     this.showProfileMenu = false,
     this.bottomNavIndex = 3,
     this.onNavTap,
+    this.isActiveTab = true,
   });
 
   final ClientProfileDraft profile;
@@ -34,6 +35,7 @@ class ClientArtistOrderPage extends StatelessWidget {
   final bool showProfileMenu;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
+  final bool isActiveTab;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +54,7 @@ class ClientArtistOrderPage extends StatelessWidget {
       bottomNavIndex: bottomNavIndex,
       onNavTap: onNavTap,
       audience: OrdersAudience.clientArtist,
+      isActiveTab: isActiveTab,
     );
   }
 }

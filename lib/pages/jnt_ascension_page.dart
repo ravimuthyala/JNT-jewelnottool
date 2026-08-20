@@ -9,6 +9,7 @@ import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
 import '../utils/jnt_ascension_engine.dart';
 import '../theme/app_colors.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 class JntAscensionPage extends StatefulWidget {
   const JntAscensionPage({super.key});
@@ -665,12 +666,12 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       // TalkBack/VoiceOver accessibility focus. Input FocusNode focus alone
       // does not move Android accessibility focus.
       Future<void>.delayed(const Duration(milliseconds: 420), () {
-        if (!mounted) return;
+        if (!mounted || !requestAccessibilityEnabled(context)) return;
         _focusRealCloseButton();
       });
       // A second pass handles slower devices / the loading-to-loaded rebuild.
       Future<void>.delayed(const Duration(milliseconds: 760), () {
-        if (!mounted) return;
+        if (!mounted || !requestAccessibilityEnabled(context)) return;
         _focusRealCloseButton();
       });
     });
@@ -774,6 +775,15 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   void _selectTab(_AscTab tab) {
     if (_activeTab == tab) return;
     setState(() => _activeTab = tab);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final label = switch (tab) {
+        _AscTab.activity => 'Activity',
+        _AscTab.tiers => 'Tiers',
+        _AscTab.earnPoints => 'Earn Points',
+      };
+      announceRequestAccessibilityMessage(context, '$label tab selected');
+    });
   }
 
   @override
@@ -806,13 +816,16 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                       child: loading
                           ? Center(
                               child: Semantics(
+                                liveRegion: true,
                                 label: 'Loading JNT Ascension',
-                                child: const SizedBox(
+                                child: const ExcludeSemantics(
+                                  child: SizedBox(
                                   height: 28,
                                   width: 28,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2.2,
                                   ),
+                                ),
                                 ),
                               ),
                             )
@@ -924,8 +937,8 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                       children: [
                         Text(
                           _artistName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                          overflow: TextOverflow.visible,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -1105,23 +1118,34 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
   }
 
   Widget _tabs() {
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final verticalTabs = textScale > 1.30;
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      label: 'JNT Ascension tabs',
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: AppColors.alabaster,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Row(
-          children: [
-            _tabButton(_AscTab.activity, 'Activity', 1),
-            _tabButton(_AscTab.tiers, 'Tiers', 2),
-            _tabButton(_AscTab.earnPoints, 'Earn Points', 3),
-          ],
-        ),
+        child: verticalTabs
+            ? Column(
+                children: [
+                  _tabButton(_AscTab.activity, 'Activity', 1),
+                  const SizedBox(height: 4),
+                  _tabButton(_AscTab.tiers, 'Tiers', 2),
+                  const SizedBox(height: 4),
+                  _tabButton(_AscTab.earnPoints, 'Earn Points', 3),
+                ],
+              )
+            : Row(
+                children: [
+                  _tabButton(_AscTab.activity, 'Activity', 1),
+                  _tabButton(_AscTab.tiers, 'Tiers', 2),
+                  _tabButton(_AscTab.earnPoints, 'Earn Points', 3),
+                ],
+              ),
       ),
     );
   }
@@ -1143,6 +1167,7 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             borderRadius: BorderRadius.circular(11),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
+              constraints: const BoxConstraints(minHeight: 48),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
                 color: selected ? Colors.white : Colors.transparent,
@@ -1173,7 +1198,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      label: 'Activity content',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1251,29 +1275,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     );
   }
 
-  Widget _semanticStat(
-    String label,
-    String semanticValue, {
-    String? visualValue,
-  }) {
-    final visual = visualValue ?? semanticValue;
-    return Semantics(
-      container: true,
-      label: '$label, $semanticValue',
-      child: ExcludeSemantics(
-        child: Text(
-          '$label: $visual',
-          style: const TextStyle(
-            fontSize: 13,
-            height: 1.35,
-            color: Color(0xFF4E545E),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _activityRow(_PointActivityItem item) {
     final label =
         '${item.title}. ${item.subtitle}. ${_fmtSignedPoints(item.points)} points.';
@@ -1337,7 +1338,6 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      label: 'Tiers content',
       child: Column(
         children: [
           _tierCard(
@@ -1477,10 +1477,69 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
       ),
     ];
 
+    Widget earnCard(
+      _EarnRuleItem item, {
+      required bool compact,
+      required bool flexibleHeight,
+    }) {
+      return Semantics(
+        container: true,
+        label: '${item.title}. ${item.points}.',
+        child: ExcludeSemantics(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE3E3E3)),
+            ),
+            child: Column(
+              mainAxisSize: flexibleHeight ? MainAxisSize.min : MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 34,
+                  width: 34,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F5F5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(item.icon, size: 18),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  item.title,
+                  maxLines: flexibleHeight ? null : 2,
+                  overflow: flexibleHeight
+                      ? TextOverflow.visible
+                      : TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 14 : 15,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+                if (!flexibleHeight) const Spacer() else const SizedBox(height: 12),
+                Text(
+                  item.points,
+                  style: TextStyle(
+                    fontSize: compact ? 19 : 22,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0D7E38),
+                    height: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      label: 'Earn Points content',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1514,6 +1573,24 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
             builder: (context, constraints) {
               final cardWidth = (constraints.maxWidth - 10) / 2;
               final compact = cardWidth < 170;
+              final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+              final singleColumn =
+                  constraints.maxWidth < 360 || textScale > 1.25;
+              if (singleColumn) {
+                return Column(
+                  children: [
+                    for (int i = 0; i < earnItems.length; i++) ...[
+                      earnCard(
+                        earnItems[i],
+                        compact: false,
+                        flexibleHeight: true,
+                      ),
+                      if (i != earnItems.length - 1)
+                        const SizedBox(height: 10),
+                    ],
+                  ],
+                );
+              }
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1525,55 +1602,10 @@ class _JntAscensionPageState extends State<JntAscensionPage> {
                   childAspectRatio: compact ? 1.24 : 1.42,
                 ),
                 itemBuilder: (_, i) {
-                  final item = earnItems[i];
-                  return Semantics(
-                    container: true,
-                    label: '${item.title}. ${item.points}.',
-                    child: ExcludeSemantics(
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE3E3E3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              height: 34,
-                              width: 34,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF5F5F5),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(item.icon, size: 18),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              item.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: compact ? 14 : 15,
-                                fontWeight: FontWeight.w500,
-                                height: 1.2,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              item.points,
-                              style: TextStyle(
-                                fontSize: compact ? 19 : 22,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF0D7E38),
-                                height: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  return earnCard(
+                    earnItems[i],
+                    compact: compact,
+                    flexibleHeight: false,
                   );
                 },
               );

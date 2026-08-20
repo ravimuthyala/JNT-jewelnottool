@@ -120,83 +120,113 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
   }
 
+  // Tapping a bottom-nav item for another pushed page (Design/Artists/
+  // Orders, indices 1-3) while already on one of those pages used to pop
+  // back to the shell first, then push the new page -- which briefly
+  // revealed the shell's own bottom nav (with its stale, unrelated
+  // `_index`) for one frame. That transient wrong-state frame is what
+  // TalkBack's accessibility focus was landing on/sticking to instead of
+  // following through to the newly opened page. Navigator.pushReplacement
+  // swaps the route directly with no intermediate shell frame. Returning
+  // to a shell-hosted tab (Home=0/Profile=4) still needs a plain pop,
+  // since those aren't pushed routes at all -- they're shown via the
+  // shell's own IndexedStack.
+  void _crossTabNavTap(
+    int i, {
+    required ClientProfileDraft profile,
+    required String companyName,
+  }) {
+    if (i == 0 || i == 4) {
+      Navigator.pop(context);
+      _onNavTap(i, profile: profile, companyName: companyName);
+      return;
+    }
+    _onNavTap(i, profile: profile, companyName: companyName, replace: true);
+  }
+
   Future<void> _openDesign({
     required ClientProfileDraft profile,
     required String companyName,
+    bool replace = false,
   }) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BrandCustomRequestPage(
-          profile: profile,
-          onBackHome: () => Navigator.pop(context),
-          companyName: companyName,
-          onOpenProfile: () => _onNavTap(4),
-          onLogout: _logoutToHomePage,
-          showBottomNav: true,
-          bottomNavIndex: 1,
-          onNavTap: (i) async {
-            if (i == 1) return;
-            Navigator.pop(context);
-            await _onNavTap(i, profile: profile, companyName: companyName);
-          },
-        ),
+    final route = MaterialPageRoute(
+      builder: (_) => BrandCustomRequestPage(
+        profile: profile,
+        onBackHome: () => Navigator.pop(context),
+        companyName: companyName,
+        onOpenProfile: () => _onNavTap(4),
+        onLogout: _logoutToHomePage,
+        showBottomNav: true,
+        bottomNavIndex: 1,
+        onNavTap: (i) async {
+          if (i == 1) return;
+          _crossTabNavTap(i, profile: profile, companyName: companyName);
+        },
       ),
     );
+    if (replace) {
+      await Navigator.pushReplacement(context, route);
+    } else {
+      await Navigator.push(context, route);
+    }
   }
 
   Future<void> _openArtists({
     required ClientProfileDraft profile,
     required String companyName,
+    bool replace = false,
   }) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ClientArtistsPage(
-          profile: profile,
-          showCompanyChrome: true,
-          companyName: companyName,
-          onOpenProfile: () => _onNavTap(4),
-          onLogout: _logoutToHomePage,
-          onRequestArtist: (artistName) {
-            _openCustomRequestWithArtist(
-              profile: profile,
-              companyName: companyName,
-              artistName: artistName,
-            );
-          },
-          bottomNavIndex: 2,
-          onNavTap: (i) async {
-            if (i == 2) return;
-            Navigator.pop(context);
-            await _onNavTap(i, profile: profile, companyName: companyName);
-          },
-        ),
+    final route = MaterialPageRoute(
+      builder: (_) => ClientArtistsPage(
+        profile: profile,
+        showCompanyChrome: true,
+        companyName: companyName,
+        onOpenProfile: () => _onNavTap(4),
+        onLogout: _logoutToHomePage,
+        onRequestArtist: (artistName) {
+          _openCustomRequestWithArtist(
+            profile: profile,
+            companyName: companyName,
+            artistName: artistName,
+          );
+        },
+        bottomNavIndex: 2,
+        onNavTap: (i) async {
+          if (i == 2) return;
+          _crossTabNavTap(i, profile: profile, companyName: companyName);
+        },
       ),
     );
+    if (replace) {
+      await Navigator.pushReplacement(context, route);
+    } else {
+      await Navigator.push(context, route);
+    }
   }
 
   Future<void> _openOrders({
     required ClientProfileDraft profile,
     required String companyName,
+    bool replace = false,
   }) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BrandOrderPageV2(
-          profile: profile,
-          companyName: companyName,
-          onOpenProfile: () => _onNavTap(4),
-          onLogout: _logoutToHomePage,
-          bottomNavIndex: 3,
-          onNavTap: (i) async {
-            if (i == 3) return;
-            Navigator.pop(context);
-            await _onNavTap(i, profile: profile, companyName: companyName);
-          },
-        ),
+    final route = MaterialPageRoute(
+      builder: (_) => BrandOrderPageV2(
+        profile: profile,
+        companyName: companyName,
+        onOpenProfile: () => _onNavTap(4),
+        onLogout: _logoutToHomePage,
+        bottomNavIndex: 3,
+        onNavTap: (i) async {
+          if (i == 3) return;
+          _crossTabNavTap(i, profile: profile, companyName: companyName);
+        },
       ),
     );
+    if (replace) {
+      await Navigator.pushReplacement(context, route);
+    } else {
+      await Navigator.push(context, route);
+    }
   }
 
   Future<void> _openCustomRequestWithArtist({
@@ -222,8 +252,7 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
           bottomNavIndex: 1,
           onNavTap: (i) async {
             if (i == 1) return;
-            Navigator.pop(context);
-            await _onNavTap(i, profile: profile, companyName: companyName);
+            _crossTabNavTap(i, profile: profile, companyName: companyName);
           },
           artistName: artistName,
           artistNames: artistNames,
@@ -236,19 +265,32 @@ class _BrandingCompanyShellPageState extends State<BrandingCompanyShellPage> {
     int i, {
     ClientProfileDraft? profile,
     String? companyName,
+    bool replace = false,
   }) async {
     final navProfile = profile ?? widget.profile ?? ClientProfileDraft.mock();
     final navCompanyName = companyName ?? widget.companyDisplayName;
     if (i == 1) {
-      await _openDesign(profile: navProfile, companyName: navCompanyName);
+      await _openDesign(
+        profile: navProfile,
+        companyName: navCompanyName,
+        replace: replace,
+      );
       return;
     }
     if (i == 2) {
-      await _openArtists(profile: navProfile, companyName: navCompanyName);
+      await _openArtists(
+        profile: navProfile,
+        companyName: navCompanyName,
+        replace: replace,
+      );
       return;
     }
     if (i == 3) {
-      await _openOrders(profile: navProfile, companyName: navCompanyName);
+      await _openOrders(
+        profile: navProfile,
+        companyName: navCompanyName,
+        replace: replace,
+      );
       return;
     }
     setState(() {

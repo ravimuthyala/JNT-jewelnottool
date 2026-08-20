@@ -67,6 +67,18 @@ class _NailPreferencesInlineEditorState
   late final TextEditingController rRing;
   late final TextEditingController rPinky;
 
+  late final FocusNode lThumbFocus;
+  late final FocusNode lIndexFocus;
+  late final FocusNode lMiddleFocus;
+  late final FocusNode lRingFocus;
+  late final FocusNode lPinkyFocus;
+
+  late final FocusNode rThumbFocus;
+  late final FocusNode rIndexFocus;
+  late final FocusNode rMiddleFocus;
+  late final FocusNode rRingFocus;
+  late final FocusNode rPinkyFocus;
+
   late String _shape;
   late NailLength _length;
   final Set<String> _nfcSelections = <String>{};
@@ -94,6 +106,18 @@ class _NailPreferencesInlineEditorState
     rMiddle = TextEditingController(text: _t(d.rMiddle));
     rRing = TextEditingController(text: _t(d.rRing));
     rPinky = TextEditingController(text: _t(d.rPinky));
+
+    lThumbFocus = FocusNode(debugLabel: 'leftThumbNailDimension');
+    lIndexFocus = FocusNode(debugLabel: 'leftIndexNailDimension');
+    lMiddleFocus = FocusNode(debugLabel: 'leftMiddleNailDimension');
+    lRingFocus = FocusNode(debugLabel: 'leftRingNailDimension');
+    lPinkyFocus = FocusNode(debugLabel: 'leftPinkyNailDimension');
+
+    rThumbFocus = FocusNode(debugLabel: 'rightThumbNailDimension');
+    rIndexFocus = FocusNode(debugLabel: 'rightIndexNailDimension');
+    rMiddleFocus = FocusNode(debugLabel: 'rightMiddleNailDimension');
+    rRingFocus = FocusNode(debugLabel: 'rightRingNailDimension');
+    rPinkyFocus = FocusNode(debugLabel: 'rightPinkyNailDimension');
 
     _shape = _normalizeShape(widget.initial.shape);
     _length = _normalizeLength(widget.initial.length);
@@ -127,6 +151,19 @@ class _NailPreferencesInlineEditorState
     rMiddle.dispose();
     rRing.dispose();
     rPinky.dispose();
+
+    lThumbFocus.dispose();
+    lIndexFocus.dispose();
+    lMiddleFocus.dispose();
+    lRingFocus.dispose();
+    lPinkyFocus.dispose();
+
+    rThumbFocus.dispose();
+    rIndexFocus.dispose();
+    rMiddleFocus.dispose();
+    rRingFocus.dispose();
+    rPinkyFocus.dispose();
+
     super.dispose();
   }
 
@@ -308,6 +345,54 @@ class _NailPreferencesInlineEditorState
     return NailLength.none;
   }
 
+  Future<void> _handleDimensionDone({
+    required String semanticLabel,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+  }) async {
+    final raw = controller.text.trim();
+    final parsed = _parse(raw);
+    final spokenValue = parsed == null
+        ? (raw.isEmpty ? 'No value entered' : raw)
+        : '${parsed.toStringAsFixed(2)} millimeters';
+
+    // Hide the keyboard without allowing the default "Done" action to move
+    // focus away from the current dimension field.
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      '$semanticLabel, $spokenValue',
+      Directionality.of(context),
+    );
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 110));
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    focusNode.context
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    // One small retry helps TalkBack retain the field after the IME closes.
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    focusNode.context
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
+  void _dismissDimensionKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
+
   InputDecoration _miniDec() => InputDecoration(
     isDense: true,
     filled: true,
@@ -383,7 +468,7 @@ class _NailPreferencesInlineEditorState
           Semantics(
             header: true,
             sortKey: OrdinalSortKey(1),
-            label: 'Nail Dimension in millimeters',
+            label: 'Nail Dimension in millimeters, required',
             child: const ExcludeSemantics(
               child: Text(
                 'Nail Dimension (in mm) *',
@@ -399,41 +484,50 @@ class _NailPreferencesInlineEditorState
           const SizedBox(height: 14),
 
           if (widget.showNfcOptions) ...[
-            ExcludeSemantics(
-              child: Text(
-                'NFC Eligible Designs marked with this checkbox can be upgraded with an NFC chip',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat.withValues(alpha: 0.70),
-                  height: 1.3,
+            Semantics(
+              sortKey: const OrdinalSortKey(2),
+              label:
+                  'NFC eligible designs marked with this checkbox can be upgraded with an NFC chip',
+              child: ExcludeSemantics(
+                child: Text(
+                  'NFC Eligible Designs marked with this checkbox can be upgraded with an NFC chip',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
+                    height: 1.3,
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 10),
           ],
 
-          ExcludeSemantics(
-            child: Row(
-              children: [
-                Text(
-                  'Filled',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.blackCat,
+          Semantics(
+            sortKey: const OrdinalSortKey(3),
+            label: 'Filled ${dims.filledCount} of 10',
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
+                  Text(
+                    'Filled',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.blackCat,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                Text(
-                  '${dims.filledCount}/10',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.blackCat,
+                  const SizedBox(width: 14),
+                  Text(
+                    '${dims.filledCount}/10',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.blackCat,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
@@ -441,7 +535,7 @@ class _NailPreferencesInlineEditorState
 
           Semantics(
             header: true,
-            sortKey: OrdinalSortKey(2),
+            sortKey: OrdinalSortKey(4),
             label: 'Left Hand',
             child: const ExcludeSemantics(
               child: Center(
@@ -458,7 +552,7 @@ class _NailPreferencesInlineEditorState
           ),
           const SizedBox(height: 12),
           _FingerRow(
-            semanticOrderStart: 3,
+            semanticOrderStart: 5,
             inputDecoration: _miniDec,
             showDimensionImages: widget.showDimensionImages,
             showNfcOptions: widget.showNfcOptions,
@@ -474,12 +568,48 @@ class _NailPreferencesInlineEditorState
               });
               _emit();
             },
+            onDimensionDone: (label, controller, focusNode) =>
+                _handleDimensionDone(
+                  semanticLabel: label,
+                  controller: controller,
+                  focusNode: focusNode,
+                ),
             items: [
-              _FingerItemData('lThumb', 'Thumb', lThumb),
-              _FingerItemData('lIndex', 'Index', lIndex),
-              _FingerItemData('lMiddle', 'Middle', lMiddle),
-              _FingerItemData('lRing', 'Ring', lRing),
-              _FingerItemData('lPinky', 'Pinky', lPinky),
+              _FingerItemData(
+                'lThumb',
+                'Thumb',
+                'Left hand thumb nail dimension in millimeters',
+                lThumb,
+                lThumbFocus,
+              ),
+              _FingerItemData(
+                'lIndex',
+                'Index',
+                'Left hand index nail dimension in millimeters',
+                lIndex,
+                lIndexFocus,
+              ),
+              _FingerItemData(
+                'lMiddle',
+                'Middle',
+                'Left hand middle nail dimension in millimeters',
+                lMiddle,
+                lMiddleFocus,
+              ),
+              _FingerItemData(
+                'lRing',
+                'Ring',
+                'Left hand ring nail dimension in millimeters',
+                lRing,
+                lRingFocus,
+              ),
+              _FingerItemData(
+                'lPinky',
+                'Pinky',
+                'Left hand pinky nail dimension in millimeters',
+                lPinky,
+                lPinkyFocus,
+              ),
             ],
           ),
 
@@ -487,7 +617,7 @@ class _NailPreferencesInlineEditorState
 
           Semantics(
             header: true,
-            sortKey: OrdinalSortKey(8),
+            sortKey: OrdinalSortKey(10),
             label: 'Right Hand',
             child: const ExcludeSemantics(
               child: Center(
@@ -504,7 +634,7 @@ class _NailPreferencesInlineEditorState
           ),
           const SizedBox(height: 12),
           _FingerRow(
-            semanticOrderStart: 9,
+            semanticOrderStart: 11,
             inputDecoration: _miniDec,
             showDimensionImages: widget.showDimensionImages,
             showNfcOptions: widget.showNfcOptions,
@@ -520,12 +650,48 @@ class _NailPreferencesInlineEditorState
               });
               _emit();
             },
+            onDimensionDone: (label, controller, focusNode) =>
+                _handleDimensionDone(
+                  semanticLabel: label,
+                  controller: controller,
+                  focusNode: focusNode,
+                ),
             items: [
-              _FingerItemData('rThumb', 'Thumb', rThumb),
-              _FingerItemData('rIndex', 'Index', rIndex),
-              _FingerItemData('rMiddle', 'Middle', rMiddle),
-              _FingerItemData('rRing', 'Ring', rRing),
-              _FingerItemData('rPinky', 'Pinky', rPinky),
+              _FingerItemData(
+                'rThumb',
+                'Thumb',
+                'Right hand thumb nail dimension in millimeters',
+                rThumb,
+                rThumbFocus,
+              ),
+              _FingerItemData(
+                'rIndex',
+                'Index',
+                'Right hand index nail dimension in millimeters',
+                rIndex,
+                rIndexFocus,
+              ),
+              _FingerItemData(
+                'rMiddle',
+                'Middle',
+                'Right hand middle nail dimension in millimeters',
+                rMiddle,
+                rMiddleFocus,
+              ),
+              _FingerItemData(
+                'rRing',
+                'Ring',
+                'Right hand ring nail dimension in millimeters',
+                rRing,
+                rRingFocus,
+              ),
+              _FingerItemData(
+                'rPinky',
+                'Pinky',
+                'Right hand pinky nail dimension in millimeters',
+                rPinky,
+                rPinkyFocus,
+              ),
             ],
           ),
 
@@ -533,8 +699,9 @@ class _NailPreferencesInlineEditorState
 
           Semantics(
             header: true,
-            sortKey: OrdinalSortKey(15),
+            sortKey: OrdinalSortKey(17),
             label: 'Choose Your Nail Shape',
+            onDidGainAccessibilityFocus: _dismissDimensionKeyboard,
             child: const ExcludeSemantics(
               child: Text(
                 'Choose Your Nail Shape *',
@@ -546,40 +713,49 @@ class _NailPreferencesInlineEditorState
           Semantics(
             container: true,
             explicitChildNodes: true,
+            sortKey: OrdinalSortKey(18),
             child: SizedBox(
-            height: 162,
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(context).copyWith(
-                dragDevices: {
-                  PointerDeviceKind.touch,
-                  PointerDeviceKind.mouse,
-                  PointerDeviceKind.trackpad,
-                },
-              ),
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                itemCount: nailShapes.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (context, i) {
-                  final s = nailShapes[i];
-                  final selected = s == _shape;
+              height: 162,
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                  },
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: List<Widget>.generate(
+                      nailShapes.length,
+                      (i) {
+                        final s = nailShapes[i];
+                        final selected = s == _shape;
 
-                  return _ShapeCard(
-                    semanticOrder: 16 + i.toDouble(),
-                    label: s,
-                    imageAsset: _shapeImage(s),
-                    selected: selected,
-                    useBlackModalStyle: widget.useBlackModalStyle,
-                    onTap: () {
-                      setState(() => _shape = s);
-                      _emit();
-                    },
-                  );
-                },
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            right: i == nailShapes.length - 1 ? 0 : 12,
+                          ),
+                          child: _ShapeCard(
+                            semanticOrder: i.toDouble(),
+                            label: s,
+                            imageAsset: _shapeImage(s),
+                            selected: selected,
+                            useBlackModalStyle: widget.useBlackModalStyle,
+                            onTap: () {
+                              setState(() => _shape = s);
+                              _emit();
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
           ),
 
           const SizedBox(height: 18),
@@ -600,43 +776,50 @@ class _NailPreferencesInlineEditorState
           Semantics(
             container: true,
             explicitChildNodes: true,
+            sortKey: OrdinalSortKey(31),
             child: SizedBox(
-            height: 158,
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(context).copyWith(
-                dragDevices: {
-                  PointerDeviceKind.touch,
-                  PointerDeviceKind.mouse,
-                  PointerDeviceKind.trackpad,
-                },
-              ),
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                itemCount: _supportedLengths.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (context, i) {
-                  final list = _supportedLengths;
-                  final len = list[i];
-                  final selected = _length == len;
+              height: 158,
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                  },
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: List<Widget>.generate(
+                      _supportedLengths.length,
+                      (i) {
+                        final len = _supportedLengths[i];
+                        final selected = _length == len;
 
-                  return _LengthImageCard(
-                    semanticOrder: 31 + i.toDouble(),
-                    title: _lengthTitle(len),
-                    //subtitle: _lengthSubtitle(len),
-                    imageAsset: _lengthImage(len),
-                    selected: selected,
-                    useBlackModalStyle: widget.useBlackModalStyle,
-                    onTap: () {
-                      setState(() => _length = len);
-                      _emit();
-                    },
-                    subtitle: '',
-                  );
-                },
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            right: i == _supportedLengths.length - 1 ? 0 : 12,
+                          ),
+                          child: _LengthImageCard(
+                            semanticOrder: i.toDouble(),
+                            title: _lengthTitle(len),
+                            imageAsset: _lengthImage(len),
+                            selected: selected,
+                            useBlackModalStyle: widget.useBlackModalStyle,
+                            onTap: () {
+                              setState(() => _length = len);
+                              _emit();
+                            },
+                            subtitle: '',
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
           ),
         ],
       ),
@@ -650,8 +833,17 @@ class _NailPreferencesInlineEditorState
 class _FingerItemData {
   final String keyName;
   final String label;
+  final String semanticLabel;
   final TextEditingController controller;
-  const _FingerItemData(this.keyName, this.label, this.controller);
+  final FocusNode focusNode;
+
+  const _FingerItemData(
+    this.keyName,
+    this.label,
+    this.semanticLabel,
+    this.controller,
+    this.focusNode,
+  );
 }
 
 class _FingerRow extends StatelessWidget {
@@ -664,6 +856,7 @@ class _FingerRow extends StatelessWidget {
     required this.nfcSelections,
     required this.valueFor,
     required this.onNfcChanged,
+    required this.onDimensionDone,
   });
 
   final double semanticOrderStart;
@@ -674,6 +867,11 @@ class _FingerRow extends StatelessWidget {
   final Set<String> nfcSelections;
   final double? Function(String value) valueFor;
   final void Function(String key, bool selected) onNfcChanged;
+  final Future<void> Function(
+    String semanticLabel,
+    TextEditingController controller,
+    FocusNode focusNode,
+  ) onDimensionDone;
 
   bool _isNfcEligible(TextEditingController controller) {
     if (!showNfcOptions) return false;
@@ -686,27 +884,42 @@ class _FingerRow extends StatelessWidget {
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+      sortKey: OrdinalSortKey(semanticOrderStart),
       child: Row(
         children: items.asMap().entries.map((entry) {
           final index = entry.key;
           final f = entry.value;
-          return Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: _FingerInput(
-              semanticOrder: semanticOrderStart + index,
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                right: index == items.length - 1 ? 0 : 6,
+              ),
+              child: _FingerInput(
+              // Sort locally inside this hand's semantics group.
+              semanticOrder: index.toDouble(),
+              nfcSemanticOrder: (items.length + index).toDouble(),
               label: f.label,
+              semanticLabel: f.semanticLabel,
+              nfcSemanticLabel: f.semanticLabel.replaceFirst(
+                ' nail dimension in millimeters',
+                ' NFC chip checkbox',
+              ),
               controller: f.controller,
+              focusNode: f.focusNode,
               inputDecoration: inputDecoration,
+              onDimensionDone: () => onDimensionDone(
+                f.semanticLabel,
+                f.controller,
+                f.focusNode,
+              ),
               showDimensionImages: showDimensionImages,
               showNfc: _isNfcEligible(f.controller),
               nfcSelected: nfcSelections.contains(f.keyName),
               onNfcChanged: (selected) => onNfcChanged(f.keyName, selected),
+              ),
             ),
           );
         }).toList(),
-      ),
       ),
     );
   }
@@ -715,9 +928,14 @@ class _FingerRow extends StatelessWidget {
 class _FingerInput extends StatelessWidget {
   const _FingerInput({
     required this.semanticOrder,
+    required this.nfcSemanticOrder,
     required this.label,
+    required this.semanticLabel,
+    required this.nfcSemanticLabel,
     required this.controller,
+    required this.focusNode,
     required this.inputDecoration,
+    required this.onDimensionDone,
     required this.showDimensionImages,
     required this.showNfc,
     required this.nfcSelected,
@@ -725,9 +943,14 @@ class _FingerInput extends StatelessWidget {
   });
 
   final double semanticOrder;
+  final double nfcSemanticOrder;
   final String label;
+  final String semanticLabel;
+  final String nfcSemanticLabel;
   final TextEditingController controller;
+  final FocusNode focusNode;
   final InputDecoration Function() inputDecoration;
+  final VoidCallback onDimensionDone;
   final bool showDimensionImages;
   final bool showNfc;
   final bool nfcSelected;
@@ -735,8 +958,21 @@ class _FingerInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void updateNfcSelection(bool selected) {
+      onNfcChanged(selected);
+      final textDirection = Directionality.of(context);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        SemanticsService.sendAnnouncement(
+          View.of(context),
+          '$nfcSemanticLabel, ${selected ? 'checked' : 'not checked'}',
+          textDirection,
+        );
+      });
+    }
+
     return SizedBox(
-      width: 68,
+      width: double.infinity,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -768,13 +1004,13 @@ class _FingerInput extends StatelessWidget {
               child: Image.asset(
                 'assets/images/nail_dimension.png',
                 height: 78,
-                width: 68,
+                width: double.infinity,
                 fit: BoxFit.cover,
                 cacheWidth: 140,
                 errorBuilder: (_, _, _) {
                   return Container(
                     height: 78,
-                    width: 68,
+                    width: double.infinity,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: AppColors.blackCat.withValues(alpha: 0.05),
@@ -796,16 +1032,27 @@ class _FingerInput extends StatelessWidget {
             child: MergeSemantics(
               child: Semantics(
                 sortKey: OrdinalSortKey(semanticOrder),
-                label: '$label nail dimension in millimeters',
+                label: semanticLabel,
+                value: controller.text.trim().isEmpty
+                    ? 'Not entered'
+                    : '${controller.text.trim()} millimeters',
+                textField: true,
                 child: TextField(
                   controller: controller,
+                  focusNode: focusNode,
                   readOnly: false,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  textInputAction: TextInputAction.done,
+                  // Suppress EditableText's default Done behavior, which
+                  // otherwise unfocuses the field and can send TalkBack to
+                  // the modal Close button.
+                  onEditingComplete: () {},
+                  onSubmitted: (_) => onDimensionDone(),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
                   decoration: inputDecoration(),
@@ -824,21 +1071,31 @@ class _FingerInput extends StatelessWidget {
           SizedBox(
             height: 24,
             child: showNfc
-                ? Row(
+                ? Semantics(
+                    sortKey: OrdinalSortKey(nfcSemanticOrder),
+                    label: nfcSemanticLabel,
+                    checked: nfcSelected,
+                    onTap: () => updateNfcSelection(!nfcSelected),
+                    child: ExcludeSemantics(
+                      child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Transform.scale(
-                        scale: 0.68,
-                        child: Checkbox(
-                          value: nfcSelected,
-                          onChanged: (checked) =>
-                              onNfcChanged(checked ?? false),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                          activeColor: AppColors.blackCat,
-                          checkColor: AppColors.snow,
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: Transform.scale(
+                          scale: 0.68,
+                          child: Checkbox(
+                            value: nfcSelected,
+                            onChanged: (checked) =>
+                                updateNfcSelection(checked ?? false),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            activeColor: AppColors.blackCat,
+                            checkColor: AppColors.snow,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 1),
@@ -851,6 +1108,8 @@ class _FingerInput extends StatelessWidget {
                         ),
                       ),
                     ],
+                      ),
+                    ),
                   )
                 : const SizedBox.shrink(),
           ),

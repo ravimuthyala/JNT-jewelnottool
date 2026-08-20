@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
@@ -12,6 +14,60 @@ import '../services/storage_url_resolver.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
+
+
+/// Shared heading wrapper for visible section titles. The visible Text is
+/// excluded so TalkBack gets one clean heading stop rather than a duplicate
+/// text node plus a semantics wrapper.
+class _A11yHeading extends StatelessWidget {
+  const _A11yHeading(
+    this.text, {
+    this.fontSize = 16,
+    this.fontFamily,
+  }) : textAlign = null;
+
+  final String text;
+  final double fontSize;
+  final String? fontFamily;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      label: text,
+      child: ExcludeSemantics(
+        child: Text(
+          text,
+          textAlign: textAlign,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            color: AppColors.blackCat,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _a11yIdentifier(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty || trimmed == '-') return 'not available';
+  final parts = <String>[];
+  for (final rune in trimmed.runes) {
+    final char = String.fromCharCode(rune);
+    if (char == '-') {
+      parts.add('dash');
+    } else if (char == '/') {
+      parts.add('slash');
+    } else if (char.trim().isNotEmpty) {
+      parts.add(char);
+    }
+  }
+  return parts.join(' ');
+}
 
 /// If you already have this model elsewhere, you can delete this class
 /// and import the correct model file instead.
@@ -1199,27 +1255,41 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
               const SizedBox(height: 16),
             ],
-            Row(
-              children: [
-                Text(
-                  'Placed on: ${_placedOnText()}',
-                  style: TextStyle(
-                    color: AppColors.blackCat,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 16,
-                    fontFamily: 'ArialBold',
+            Semantics(
+              container: true,
+              explicitChildNodes: true,
+              child: Row(
+                children: [
+                  Semantics(
+                    label: 'Placed on ${_placedOnText()}',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        'Placed on: ${_placedOnText()}',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                          fontFamily: 'ArialBold',
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  statusPillText,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    color: AppColors.blackCat,
+                  const Spacer(),
+                  Semantics(
+                    label: 'Order status, $statusPillText',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        statusPillText,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (order.nfcRequested) ...[
               const SizedBox(height: 8),
@@ -1284,7 +1354,17 @@ class _BaseOrderDetails extends StatelessWidget {
                       meta.state.trim(),
                     ].where((e) => e.isNotEmpty).join(', ');
 
-                    return Row(
+                    final artistSummary = <String>[
+                      'Assigned artist, $displayName',
+                      if (rating != null) 'rating ${rating.toStringAsFixed(1)} out of 5',
+                      if (location.isNotEmpty) location,
+                      'Artist assigned to your request',
+                    ].join('. ');
+
+                    return Semantics(
+                      label: artistSummary,
+                      child: ExcludeSemantics(
+                        child: Row(
                       children: [
                         Container(
                           height: 48,
@@ -1366,6 +1446,8 @@ class _BaseOrderDetails extends StatelessWidget {
                           ),
                         ),
                       ],
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -1388,13 +1470,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Reason for Cancellation',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
+                    const _A11yHeading('Reason for Cancellation'),
                     const SizedBox(height: 10),
                     Text(
                       order.cancelReason.trim().isNotEmpty
@@ -1416,13 +1492,7 @@ class _BaseOrderDetails extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Reason for Expiration',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
+                    const _A11yHeading('Reason for Expiration'),
                     const SizedBox(height: 10),
                     Text(
                       order.cancelReason.trim().isNotEmpty
@@ -1493,14 +1563,9 @@ class _BaseOrderDetails extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      const _A11yHeading(
                         'Artist Completed Art',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          fontFamily: 'ArialBold',
-                          color: AppColors.blackCat,
-                        ),
+                        fontFamily: 'ArialBold',
                       ),
                       const SizedBox(height: 10),
                       SizedBox(
@@ -1695,7 +1760,8 @@ class _BaseOrderDetails extends StatelessWidget {
                           if (!context.mounted || result == null) return;
 
                           if (!result.confirm) {
-                            Navigator.of(context).pop();
+                            // The dialog has already closed. Keep the user on
+                            // Brand Order Details when they choose Keep Order.
                             return;
                           }
 
@@ -1885,32 +1951,34 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          header,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
+        _A11yHeading(header),
         const SizedBox(height: 10),
         if (isPaid || isPending)
-          Row(
-            children: [
-              Text(
-                isPaid ? 'Paid Amount:' : 'Amount Due:',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                ),
+          Semantics(
+            label: '${isPaid ? 'Paid amount' : 'Amount due'}, $amountText',
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
+                  Text(
+                    isPaid ? 'Paid Amount:' : 'Amount Due:',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    amountText,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
-              Text(
-                amountText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ],
+            ),
           )
         else
           FutureBuilder<Map<String, String>>(
@@ -1925,7 +1993,10 @@ class _BaseOrderDetails extends StatelessWidget {
                   : rangeText;
               return Column(
                 children: [
-                  Row(
+                  Semantics(
+                    label: 'Client budget range, $clientRange',
+                    child: ExcludeSemantics(
+                      child: Row(
                     children: [
                       const Text(
                         'Client Budget Range:',
@@ -1945,9 +2016,14 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                     ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 6),
-                  Row(
+                  Semantics(
+                    label: 'Artist budget range, $artistRange',
+                    child: ExcludeSemantics(
+                      child: Row(
                     children: [
                       const Text(
                         'Artist Budget Range:',
@@ -1967,6 +2043,8 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                     ],
+                      ),
+                    ),
                   ),
                 ],
               );
@@ -2018,7 +2096,13 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   Widget _artistWorkingInfoCard() {
-    return Row(
+    final artistName = order.artistName.trim().isEmpty
+        ? 'Artist'
+        : order.artistName.trim();
+    return Semantics(
+      label: '$artistName. Artist working on your nail art.',
+      child: ExcludeSemantics(
+        child: Row(
       children: [
         Container(
           height: 50,
@@ -2055,30 +2139,38 @@ class _BaseOrderDetails extends StatelessWidget {
           ),
         ),
       ],
+        ),
+      ),
     );
   }
 
   Widget _finalAmountRow(String label, String value) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.blackCat,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+    final cleanLabel = label.replaceAll(':', '').trim();
+    return Semantics(
+      label: '$cleanLabel, $value',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: AppColors.blackCat,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ],
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -2103,23 +2195,23 @@ class _BaseOrderDetails extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text(
+                const _A11yHeading(
                   'Final Amount',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: AppColors.blackCat,
-                    fontFamily: 'ArialBold',
-                  ),
+                  fontFamily: 'ArialBold',
                 ),
                 const Spacer(),
-                Text(
+                Semantics(
+                  label: 'Final amount, $sumText',
+                  child: ExcludeSemantics(
+                    child: Text(
                   sumText,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                     color: AppColors.blackCat,
                     fontFamily: 'ArialBold',
+                  ),
+                    ),
                   ),
                 ),
               ],
@@ -2146,19 +2238,14 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        const _A11yHeading(
           'Shipping Information',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: AppColors.blackCat,
-            fontFamily: 'ArialBold',
-          ),
+          fontFamily: 'ArialBold',
         ),
         const SizedBox(height: 10),
         _bullet('Courier', courier),
         _bullet('Shipping Date', shippedOn),
-        _bullet('Tracking #', tracking),
+        _bullet('Tracking number', tracking, speakAsIdentifier: true),
         if (statusPillText == 'Shipped') ...[
           const SizedBox(height: 10),
           SizedBox(
@@ -2514,12 +2601,14 @@ class _BaseOrderDetails extends StatelessWidget {
   Future<void> _simulatePayment(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Simulate Payment',
+        child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text(
-          'Simulate Payment',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
+        title: const _A11yHeading('Simulate Payment'),
         content: const Text(
           'Mark this order as paid for testing?',
           style: TextStyle(fontSize: 12),
@@ -2544,6 +2633,7 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
 
@@ -2665,10 +2755,7 @@ class _BaseOrderDetails extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Order Details',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
+          const _A11yHeading('Order Details'),
           const SizedBox(height: 10),
           _bullet('Campaign Name', _valueOrDash(order.title)),
           _bullet('Description', _valueOrDash(order.clientDescription)),
@@ -2678,14 +2765,10 @@ class _BaseOrderDetails extends StatelessWidget {
           _bullet('Requested Artist', _requestArtistDisplay()),
           _bullet('Accepted Clients', _acceptedClientsDisplay()),
           const SizedBox(height: 10),
-          const Text(
+          const _A11yHeading(
             'Uploaded Photos',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              fontFamily: 'ArialBold',
-              color: AppColors.blackCat,
-            ),
+            fontSize: 15,
+            fontFamily: 'ArialBold',
           ),
           const SizedBox(height: 10),
           _SubmittedPhotosStrip(
@@ -2796,14 +2879,10 @@ class _BaseOrderDetails extends StatelessWidget {
     final dueOnDelivery = _asIntValue(pricing['dueOnSigning']) ?? 0;
 
     Widget subHeader(String title) {
-      return Text(
+      return _A11yHeading(
         title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
-          fontFamily: 'ArialBold',
-          color: AppColors.blackCat,
-        ),
+        fontSize: 15,
+        fontFamily: 'ArialBold',
       );
     }
 
@@ -2826,10 +2905,7 @@ class _BaseOrderDetails extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Brand Collaboration',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
+          const _A11yHeading('Brand Collaboration'),
           const SizedBox(height: 12),
           subHeader('Posts'),
           const SizedBox(height: 8),
@@ -3005,29 +3081,39 @@ class _BaseOrderDetails extends StatelessWidget {
     }
   }
 
-  static Widget _bullet(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: RichText(
-        text: TextSpan(
-          style: TextStyle(
-            color: AppColors.blackCat,
-            fontWeight: FontWeight.w400,
-            fontSize: 14,
-          ),
-          children: [
-            TextSpan(
-              text: '$k: ',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
+  static Widget _bullet(
+    String k,
+    String v, {
+    bool speakAsIdentifier = false,
+  }) {
+    final spokenValue = speakAsIdentifier ? _a11yIdentifier(v) : v;
+    return Semantics(
+      label: '$k, $spokenValue',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
                 color: AppColors.blackCat,
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
               ),
+              children: [
+                TextSpan(
+                  text: '$k: ',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                TextSpan(
+                  text: v,
+                  style: const TextStyle(color: AppColors.blackCat),
+                ),
+              ],
             ),
-            TextSpan(
-              text: v,
-              style: const TextStyle(color: AppColors.blackCat),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -3134,6 +3220,9 @@ class _ProgressCard extends StatelessWidget {
     return _InfoCard(
       title: 'Progress',
       lines: steps.map((s) => '${s.done ? "✓" : "•"} ${s.label}').toList(),
+      semanticLines: steps
+          .map((s) => '${s.label}, ${s.done ? 'complete' : 'not complete'}')
+          .toList(growable: false),
     );
   }
 }
@@ -3150,15 +3239,20 @@ class _InfoCard extends StatelessWidget {
     required this.lines,
     this.backgroundColor = AppColors.snow,
     this.textColor = AppColors.blackCat,
+    this.semanticLines,
   });
   final String title;
   final List<String> lines;
+  final List<String>? semanticLines;
   final Color backgroundColor;
   final Color textColor;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: backgroundColor,
@@ -3168,26 +3262,34 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-          ),
+          _A11yHeading(title, fontSize: 12),
           const SizedBox(height: 8),
-          ...lines.map(
-            (l) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                l,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.w400,
-                  fontSize: 11.5,
+          ...List<Widget>.generate(lines.length, (index) {
+            final line = lines[index];
+            final semanticLine = semanticLines != null &&
+                    index < semanticLines!.length
+                ? semanticLines![index]
+                : line;
+            return Semantics(
+              label: semanticLine,
+              child: ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    line,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w400,
+                      fontSize: 11.5,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
+        ),
     );
   }
 }
@@ -3198,14 +3300,20 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: AppColors.blackCat.withValues(alpha: 0.12),
+          ),
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }
@@ -3225,6 +3333,15 @@ class _CancelOrderDialog extends StatefulWidget {
 
 class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   final TextEditingController _reasonCtrl = TextEditingController();
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'cancelOrderClose');
+  final FocusNode _reasonFocusNode = FocusNode(debugLabel: 'cancelOrderReason');
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'cancelOrderCloseA11y',
+  );
+  final GlobalKey _reasonSemanticsKey = GlobalKey(
+    debugLabel: 'cancelOrderReasonA11y',
+  );
+
   String _selected = 'Changed my mind on the design';
   String _error = '';
 
@@ -3237,237 +3354,462 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_focusCloseAfterDialogSettles());
+    });
+  }
+
+  @override
   void dispose() {
     _reasonCtrl.dispose();
+    _closeFocusNode.dispose();
+    _reasonFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _focusCloseAfterDialogSettles() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_closeFocusNode);
+    _closeSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _closeSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  Future<void> _focusReasonField() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_reasonFocusNode);
+    _reasonSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  void _announce(String message) {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+  }
+
+  void _selectReason(String value) {
+    setState(() {
+      _selected = value;
+      _error = '';
+    });
+    _announce('$value selected.');
+    if (value == 'Something else') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_focusReasonField());
+      });
+    }
+  }
+
+  void _submitCancellation() {
+    final typed = _reasonCtrl.text.trim();
+    if (_selected == 'Something else' && typed.isEmpty) {
+      setState(() => _error = 'Please enter a reason.');
+      _announce('Please enter a cancellation reason.');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_focusReasonField());
+      });
+      return;
+    }
+    final reason = _selected == 'Something else'
+        ? 'Something else: $typed'
+        : _selected;
+    Navigator.of(context).pop(
+      _CancelOrderResult(confirm: true, reason: reason),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Cancel Order',
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          decoration: BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        sortKey: OrdinalSortKey(1),
+                        header: true,
+                        label: 'Cancel Order',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            'Cancel Order?',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Semantics(
+                      key: _closeSemanticsKey,
+                      sortKey: OrdinalSortKey(0),
+                      button: true,
+                      label: 'Close Cancel Order',
+                      hint: 'Double tap to keep this order and close',
+                      onTap: () => Navigator.of(context).pop(),
+                      child: ExcludeSemantics(
+                        child: IconButton(
+                          focusNode: _closeFocusNode,
+                          tooltip: 'Close Cancel Order',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  sortKey: OrdinalSortKey(2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: ExcludeSemantics(
+                          child: Container(
+                            height: 74,
+                            width: 74,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.balletSlippers,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(alpha: 15),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.warning_amber_rounded,
+                              size: 38,
+                              color: AppColors.blackCat.withValues(alpha: 140),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: Text(
+                          'Are you certain you want to cancel this order?\n'
+                          'This will alert the artist and stop any progress made so far.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontSize: 13,
+                            height: 1.35,
+                            fontFamily: 'Arial',
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const _A11yHeading(
+                        'Reason for Cancellation',
+                        fontFamily: 'ArialBold',
+                      ),
+                      const SizedBox(height: 10),
+                      Semantics(
+                        container: true,
+                        explicitChildNodes: true,
+                        child: RadioGroup<String>(
+                          groupValue: _selected,
+                          onChanged: (v) {
+                            if (v != null) _selectReason(v);
+                          },
+                          child: Column(
+                            children: _reasons.entries
+                                .map(
+                                  (entry) => RadioListTile<String>(
+                                    value: entry.key,
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    activeColor: AppColors.blackCat,
+                                    title: Text(
+                                      entry.key,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    subtitle: entry.value.isEmpty
+                                        ? null
+                                        : Text(
+                                            entry.value,
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                        ),
+                      ),
+                      if (_selected == 'Something else') ...[
+                        const SizedBox(height: 8),
+                        Semantics(
+                          key: _reasonSemanticsKey,
+                          label: 'Cancellation reason',
+                          textField: true,
+                          isRequired: true,
+                          child: TextField(
+                            controller: _reasonCtrl,
+                            focusNode: _reasonFocusNode,
+                            minLines: 1,
+                            maxLines: 3,
+                            onChanged: (_) {
+                              if (_error.isNotEmpty) {
+                                setState(() => _error = '');
+                              }
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Enter your reason...',
+                              isDense: true,
+                              filled: true,
+                              fillColor: AppColors.snow,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 16,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(alpha: 20),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(alpha: 20),
+                                ),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.3,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_error.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Semantics(
+                          liveRegion: true,
+                          label: 'Error. $_error',
+                          child: ExcludeSemantics(
+                            child: Text(
+                              _error,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      AppColors.blackCat.withValues(alpha: 0.72),
+                                  foregroundColor: AppColors.snow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  elevation: 0,
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).pop(
+                                    const _CancelOrderResult(
+                                      confirm: false,
+                                      reason: '',
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  'Keep Order',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.blackCat,
+                                  foregroundColor: AppColors.snow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                                onPressed: _submitCancellation,
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text(
+                                  'Yes, Cancel Order',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Semantics(
+                  sortKey: OrdinalSortKey(3),
+                  button: true,
+                  label: 'Close Cancel Order',
+                  onTap: () => Navigator.of(context).pop(),
+                  onDidGainAccessibilityFocus: () {
+                    unawaited(_focusCloseAfterDialogSettles());
+                  },
+                  child: const SizedBox(height: 1, width: 1),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccessibleOrderImagePreviewDialog extends StatefulWidget {
+  const _AccessibleOrderImagePreviewDialog({required this.image});
+  final ImageProvider image;
+
+  @override
+  State<_AccessibleOrderImagePreviewDialog> createState() =>
+      _AccessibleOrderImagePreviewDialogState();
+}
+
+class _AccessibleOrderImagePreviewDialogState
+    extends State<_AccessibleOrderImagePreviewDialog> {
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'orderImageClose');
+  final GlobalKey _closeKey = GlobalKey(debugLabel: 'orderImageCloseA11y');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_closeFocusNode);
+      _closeKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 2),
-              Center(
-                child: Container(
-                  height: 74,
-                  width: 74,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.balletSlippers,
-                    border: Border.all(
-                      color: AppColors.blackCat.withValues(alpha: 15),
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.warning_amber_rounded,
-                    size: 38,
-                    color: AppColors.blackCat.withValues(alpha: 140),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Center(
-                child: Text(
-                  'Cancel Order?',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Are you certain you want to cancel this order?\nThis will alert the artist and stop any progress made so far.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.blackCat,
-                    fontSize: 13,
-                    height: 1.35,
-                    fontFamily: 'Arial',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Reason for Cancellation',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'ArialBold',
-                ),
-              ),
-              const SizedBox(height: 10),
-              RadioGroup<String>(
-                groupValue: _selected,
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _selected = v;
-                    _error = '';
-                  });
-                },
-                child: Column(
-                  children: _reasons.entries
-                      .map(
-                        (entry) => RadioListTile<String>(
-                          value: entry.key,
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          activeColor: AppColors.blackCat,
-                          title: Text(
-                            entry.key,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          subtitle: entry.value.isEmpty
-                              ? null
-                              : Text(
-                                  entry.value,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ),
-              if (_selected == 'Something else')
-                TextField(
-                  controller: _reasonCtrl,
-                  minLines: 1,
-                  maxLines: 3,
-                  onChanged: (_) {
-                    if (_error.isNotEmpty) setState(() => _error = '');
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Enter your reason...',
-                    isDense: true,
-                    filled: true,
-                    fillColor: AppColors.snow,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 36,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 20),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 20),
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Order image preview',
+      child: Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(8),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Semantics(
+                label: 'Order photo. Pinch to zoom or drag to inspect.',
+                image: true,
+                child: ExcludeSemantics(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4,
+                    child: Center(
+                      child: Image(
+                        image: widget.image,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
                     ),
                   ),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.3,
-                    fontFamily: 'Arial',
-                  ),
                 ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat.withValues(
-                            alpha: 0.72,
-                          ),
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).pop(
-                            const _CancelOrderResult(
-                              confirm: false,
-                              reason: '',
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Keep Order',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat,
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        onPressed: () {
-                          final typed = _reasonCtrl.text.trim();
-                          if (_selected == 'Something else' && typed.isEmpty) {
-                            setState(() => _error = 'Please enter a reason.');
-                            return;
-                          }
-                          final reason = _selected == 'Something else'
-                              ? 'Something else: $typed'
-                              : _selected;
-                          Navigator.of(context).pop(
-                            _CancelOrderResult(confirm: true, reason: reason),
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 18,
-                        ),
-                        label: const Text(
-                          'Yes, Cancel Order',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
-              if (_error.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error,
-                  style: const TextStyle(
-                    color: Colors.redAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Semantics(
+                key: _closeKey,
+                button: true,
+                label: 'Close image preview',
+                hint: 'Double tap to close',
+                onTap: () => Navigator.of(context).pop(),
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    focusNode: _closeFocusNode,
+                    tooltip: 'Close image preview',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: AppColors.snow),
                   ),
                 ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -3879,49 +4221,23 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
     // in the resolved list, so the image is already in Flutter's image
     // cache by the time a tile is built.
     final provider = _providerFor(resolved);
+
+    void openFullScreen() {
+      showDialog<void>(
+        context: context,
+        builder: (_) => _AccessibleOrderImagePreviewDialog(image: provider),
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.zero,
       child: Semantics(
         button: true,
         label: 'View photo full screen',
+        onTap: openFullScreen,
         child: ExcludeSemantics(
           child: InkWell(
-            onTap: () {
-              showDialog<void>(
-                context: context,
-                builder: (_) => Dialog(
-                  backgroundColor: Colors.black,
-                  insetPadding: const EdgeInsets.all(8),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: InteractiveViewer(
-                          minScale: 0.8,
-                          maxScale: 4,
-                          child: Center(
-                            child: Image(
-                              image: provider,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) =>
-                                  const SizedBox.shrink(),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: IconButton(
-                          tooltip: 'Close image preview',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close, color: AppColors.snow),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+            onTap: openFullScreen,
             child: SizedBox(
               width: size,
               height: size,
@@ -4062,6 +4378,18 @@ class _DeliveredReviewPanel extends StatefulWidget {
 class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   late final TextEditingController _commentCtrl;
   late final TextEditingController _customTipCtrl;
+  final FocusNode _reviewModalCloseFocusNode = FocusNode(
+    debugLabel: 'reviewTipModalClose',
+  );
+  final FocusNode _customTipFocusNode = FocusNode(
+    debugLabel: 'reviewTipCustomAmount',
+  );
+  final GlobalKey _reviewModalCloseSemanticsKey = GlobalKey(
+    debugLabel: 'reviewTipModalCloseA11y',
+  );
+  final GlobalKey _customTipSemanticsKey = GlobalKey(
+    debugLabel: 'reviewTipCustomAmountA11y',
+  );
   late double _rating;
   bool _saving = false;
   bool _promptProcessed = false;
@@ -4093,6 +4421,8 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   void dispose() {
     _commentCtrl.dispose();
     _customTipCtrl.dispose();
+    _reviewModalCloseFocusNode.dispose();
+    _customTipFocusNode.dispose();
     super.dispose();
   }
 
@@ -4684,6 +5014,39 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     } catch (_) {}
   }
 
+  void _announceReviewA11y(String message) {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+  }
+
+  Future<void> _focusReviewModalClose() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_reviewModalCloseFocusNode);
+    _reviewModalCloseSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _reviewModalCloseSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  Future<void> _focusCustomTip() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_customTipFocusNode);
+    _customTipSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
   Widget _tipOptionChip({
     required String label,
     required bool selected,
@@ -4692,6 +5055,9 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return Semantics(
       button: true,
       selected: selected,
+      label: label,
+      hint: selected ? 'Selected tip option' : 'Double tap to select tip option',
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           borderRadius: BorderRadius.zero,
@@ -4718,36 +5084,58 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   }
 
   Future<void> _openReviewTipModal() async {
+    var initialFocusScheduled = false;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, modalSetState) {
+            if (!initialFocusScheduled) {
+              initialFocusScheduled = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                unawaited(_focusReviewModalClose());
+              });
+            }
+
             Widget star(int index) {
-              final selected = _rating >= index;
+              final filled = _rating >= index;
+              final selected = _rating.round() == index;
+
+              void chooseRating() {
+                setState(() => _rating = index.toDouble());
+                modalSetState(() {});
+                _announceReviewA11y(
+                  '$index ${index == 1 ? 'star' : 'stars'} selected.',
+                );
+              }
+
               return Semantics(
                 button: true,
-                selected: _rating.round() == index,
+                selected: selected,
                 label: '$index ${index == 1 ? 'star' : 'stars'}',
+                hint: selected
+                    ? 'Selected rating'
+                    : 'Double tap to select this rating',
+                onTap: chooseRating,
                 child: ExcludeSemantics(
                   child: IconButton(
-                    onPressed: () {
-                      setState(() => _rating = index.toDouble());
-                      modalSetState(() {});
-                    },
+                    onPressed: chooseRating,
                     icon: Icon(
-                      selected ? Icons.star_rounded : Icons.star_border_rounded,
-                      color: selected
+                      filled ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: filled
                           ? const Color(0xFFFFB000)
                           : Colors.black54,
                       size: 26,
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 2),
                     constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
+                      minWidth: 48,
+                      minHeight: 48,
                     ),
                   ),
                 ),
@@ -4757,258 +5145,347 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
             final bottomInset = MediaQuery.of(context).viewInsets.bottom;
             final calculatedTip = _calculatedTip;
 
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Review & Tip Your Artist',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Close',
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Rate your delivered order, leave comments, and add an optional tip.',
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.62),
-                            fontSize: 12.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Text(
-                              'Artist Review Rating',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ...List<Widget>.generate(5, (i) => star(i + 1)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _commentCtrl,
-                          minLines: 3,
-                          maxLines: 4,
-                          decoration: InputDecoration(
-                            hintText: 'Write a quick review (optional)',
-                            isDense: true,
-                            filled: true,
-                            fillColor: AppColors.snow,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat,
-                                width: 1.4,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Tip (optional)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _tipOptionChip(
-                              label: '5%',
-                              selected: _selectedTipPercent == 5,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 5);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: '10%',
-                              selected: _selectedTipPercent == 10,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 10);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: '15%',
-                              selected: _selectedTipPercent == 15,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 15);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: '20%',
-                              selected: _selectedTipPercent == 20,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 20);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: 'Custom',
-                              selected: _selectedTipPercent == null,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = null);
-                                modalSetState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (_selectedTipPercent == null)
-                          TextField(
-                            controller: _customTipCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            onChanged: (_) => modalSetState(() {}),
-                            decoration: InputDecoration(
-                              hintText: 'Custom tip amount (\$)',
-                              isDense: true,
-                              filled: true,
-                              fillColor: AppColors.snow,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                ),
-                              ),
-                              focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat,
-                                  width: 1.4,
-                                ),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF3F0FA),
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          child: Text(
-                            'Tip total: \$${calculatedTip.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              elevation: 0,
-                            ),
-                            onPressed: _saving
-                                ? null
-                                : () async {
-                                    final success = await _submitReview();
-                                    if (success) {
-                                      final localNav = Navigator.of(
-                                        sheetContext,
-                                      );
-                                      if (localNav.canPop()) {
-                                        localNav.pop();
-                                      } else {
-                                        Navigator.of(
-                                          sheetContext,
-                                          rootNavigator: true,
-                                        ).pop();
-                                      }
-                                    }
-                                  },
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(
-                                    _submittedAt == null
-                                        ? 'Submit Review & Tip'
-                                        : 'Update Review & Tip',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
+            return Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              explicitChildNodes: true,
+              label: 'Review and Tip Your Artist',
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Semantics(
+                                  sortKey: OrdinalSortKey(1),
+                                  header: true,
+                                  label: 'Review and Tip Your Artist',
+                                  child: ExcludeSemantics(
+                                    child: Text(
+                                      'Review & Tip Your Artist',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
                                     ),
                                   ),
+                                ),
+                              ),
+                              Semantics(
+                                key: _reviewModalCloseSemanticsKey,
+                                sortKey: OrdinalSortKey(0),
+                                button: true,
+                                label: 'Close Review and Tip',
+                                hint: 'Double tap to close',
+                                onTap: () => Navigator.of(sheetContext).pop(),
+                                child: ExcludeSemantics(
+                                  child: IconButton(
+                                    focusNode: _reviewModalCloseFocusNode,
+                                    tooltip: 'Close Review and Tip',
+                                    onPressed: () =>
+                                        Navigator.of(sheetContext).pop(),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          Semantics(
+                            container: true,
+                            explicitChildNodes: true,
+                            sortKey: OrdinalSortKey(2),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rate your delivered order, leave comments, and add an optional tip.',
+                                  style: TextStyle(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.62,
+                                    ),
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const _A11yHeading(
+                                  'Artist Review Rating',
+                                  fontSize: 12.5,
+                                ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 2,
+                                  children: List<Widget>.generate(
+                                    5,
+                                    (i) => star(i + 1),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  label: 'Review comments, optional',
+                                  textField: true,
+                                  child: TextField(
+                                    controller: _commentCtrl,
+                                    minLines: 3,
+                                    maxLines: 4,
+                                    decoration: InputDecoration(
+                                      hintText: 'Write a quick review (optional)',
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: AppColors.snow,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.zero,
+                                        borderSide: BorderSide(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.zero,
+                                        borderSide: BorderSide(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                        ),
+                                      ),
+                                      focusedBorder: const OutlineInputBorder(
+                                        borderRadius: BorderRadius.zero,
+                                        borderSide: BorderSide(
+                                          color: AppColors.blackCat,
+                                          width: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const _A11yHeading(
+                                  'Tip, optional',
+                                  fontSize: 12.5,
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _tipOptionChip(
+                                      label: '5%',
+                                      selected: _selectedTipPercent == 5,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 5,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '5 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: '10%',
+                                      selected: _selectedTipPercent == 10,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 10,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '10 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: '15%',
+                                      selected: _selectedTipPercent == 15,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 15,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '15 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: '20%',
+                                      selected: _selectedTipPercent == 20,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 20,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '20 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: 'Custom',
+                                      selected: _selectedTipPercent == null,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = null,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          'Custom tip selected.',
+                                        );
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                          if (!mounted) return;
+                                          unawaited(_focusCustomTip());
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                if (_selectedTipPercent == null)
+                                  Semantics(
+                                    key: _customTipSemanticsKey,
+                                    label: 'Custom tip amount, dollars',
+                                    textField: true,
+                                    child: TextField(
+                                      controller: _customTipCtrl,
+                                      focusNode: _customTipFocusNode,
+                                      keyboardType: const TextInputType
+                                          .numberWithOptions(decimal: true),
+                                      onChanged: (_) => modalSetState(() {}),
+                                      decoration: InputDecoration(
+                                        hintText: 'Custom tip amount (\$)',
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: AppColors.snow,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.08),
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.08),
+                                          ),
+                                        ),
+                                        focusedBorder:
+                                            const OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: AppColors.blackCat,
+                                            width: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  liveRegion: true,
+                                  label:
+                                      'Tip total, ${calculatedTip.toStringAsFixed(2)} dollars',
+                                  child: ExcludeSemantics(
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3F0FA),
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      child: Text(
+                                        'Tip total: \$${calculatedTip.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 48,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.blackCat,
+                                      foregroundColor: AppColors.snow,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: _saving
+                                        ? null
+                                        : () async {
+                                            final success =
+                                                await _submitReview();
+                                            if (success) {
+                                              final localNav = Navigator.of(
+                                                sheetContext,
+                                              );
+                                              if (localNav.canPop()) {
+                                                localNav.pop();
+                                              } else {
+                                                Navigator.of(
+                                                  sheetContext,
+                                                  rootNavigator: true,
+                                                ).pop();
+                                              }
+                                            }
+                                          },
+                                    child: _saving
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : Text(
+                                            _submittedAt == null
+                                                ? 'Submit Review & Tip'
+                                                : 'Update Review & Tip',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Semantics(
+                            sortKey: OrdinalSortKey(3),
+                            button: true,
+                            label: 'Close Review and Tip',
+                            onTap: () => Navigator.of(sheetContext).pop(),
+                            onDidGainAccessibilityFocus: () {
+                              unawaited(_focusReviewModalClose());
+                            },
+                            child: const SizedBox(height: 1, width: 1),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -5025,10 +5502,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Delivered',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
+        const _A11yHeading('Delivered'),
         const SizedBox(height: 4),
         Text(
           'Delivered successfully. Add an Artist Review Rating and optional tip (charged from your bank account).',

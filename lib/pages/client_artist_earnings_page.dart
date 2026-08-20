@@ -46,7 +46,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
   }
 
   Future<void> _openHistory(BuildContext context) async {
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistHistoryPage(
@@ -61,7 +61,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
   }
 
   Future<void> _openCalendar(BuildContext context) async {
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistCalendarPage(
@@ -76,7 +76,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
   }
 
   Future<void> _openArtist(BuildContext context) async {
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistArtistPage(
@@ -131,7 +131,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
         _openArtist(context);
       },
       onOpenReviews: () {
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => ClientArtistReviewsPage(
               profile: profile,

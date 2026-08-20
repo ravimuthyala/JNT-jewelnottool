@@ -14,6 +14,7 @@ import '../services/supabase_auth_service.dart';
 import '../services/auth_email_alias_service.dart';
 import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
 import '../widgets/jnt_modal_app_bar.dart';
@@ -1942,6 +1943,14 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     }
   }
 
+  // Lets a sighted or screen-reader user type the date directly instead of
+  // requiring the calendar picker. Age-eligibility is re-checked at submit
+  // time regardless of entry method, so this only needs to track the parsed
+  // value -- not repeat that check on every keystroke.
+  void _onDateOfBirthTyped(String value) {
+    setState(() => _dateOfBirth = tryParseMmDdYyyy(value));
+  }
+
   // -----------------------
   // Build
   // -----------------------
@@ -2119,14 +2128,19 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           isRequired: true,
                           child: TextFormField(
                             controller: _dateOfBirthCtrl,
-                            readOnly: true,
-                            onTap: _pickDateOfBirth,
+                            keyboardType: TextInputType.datetime,
+                            style: const TextStyle(fontSize: _inputFs),
+                            onChanged: _onDateOfBirthTyped,
                             decoration: _dec(
                               'Date of Birth *',
                               'MM/DD/YYYY',
-                              suffixIcon: const Icon(
-                                Icons.calendar_today_outlined,
-                                size: 18,
+                              suffixIcon: IconButton(
+                                tooltip: 'Pick date of birth',
+                                onPressed: _pickDateOfBirth,
+                                icon: const Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 18,
+                                ),
                               ),
                             ),
                             validator: _dateOfBirthValidator,

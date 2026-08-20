@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/profile_table_columns.dart';
@@ -43,6 +44,10 @@ class ClientCampaignsPage extends StatefulWidget {
     super.key,
     this.onOpenNotifications,
     this.onOpenProfile,
+    this.onOpenHistory,
+    this.onOpenCalendar,
+    this.onOpenArtist,
+    this.onOpenReviews,
     this.onOpenEarnings,
     this.onLogout,
     this.showProfileMenuItem = true,
@@ -50,10 +55,15 @@ class ClientCampaignsPage extends StatefulWidget {
     this.showClientRequests = true,
     this.splitArtistVisibleRequestsBySource = false,
     this.useCampaignNaming = false,
+    this.clientArtistMenuStyle = false,
   });
 
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenHistory;
+  final VoidCallback? onOpenCalendar;
+  final VoidCallback? onOpenArtist;
+  final VoidCallback? onOpenReviews;
   final VoidCallback? onOpenEarnings;
   final VoidCallback? onLogout;
   final bool showProfileMenuItem;
@@ -61,6 +71,7 @@ class ClientCampaignsPage extends StatefulWidget {
   final bool showClientRequests;
   final bool splitArtistVisibleRequestsBySource;
   final bool useCampaignNaming;
+  final bool clientArtistMenuStyle;
 
   @override
   State<ClientCampaignsPage> createState() => _ClientCampaignsPageState();
@@ -70,6 +81,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
   RealtimeChannel? _companyChannel;
   bool _loading = true;
   List<ClientRequestV2> _items = const <ClientRequestV2>[];
+  final Map<String, GlobalKey> _requestCardSemanticsKeys = <String, GlobalKey>{};
   List<ClientRequestV2> _brandRequests = const <ClientRequestV2>[];
   List<ClientRequestV2> _clientRequests = const <ClientRequestV2>[];
   final Set<String> _hiddenRequestIds = <String>{};
@@ -1123,6 +1135,16 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         );
       },
     );
+
+    if (!mounted ||
+        !WidgetsBinding.instance.platformDispatcher.semanticsEnabled) {
+      return;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    final renderObject = _requestCardSemanticsKeys[request.id]
+        ?.currentContext
+        ?.findRenderObject();
+    renderObject?.sendSemanticsEvent(const FocusSemanticEvent());
   }
 
   void _replaceById(String id, ClientRequestV2 replacement) {
@@ -1837,7 +1859,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
   Widget build(BuildContext context) {
     Widget content;
     if (_loading) {
-      content = const Center(child: CircularProgressIndicator());
+      content = Semantics(
+        liveRegion: true,
+        label: 'Loading campaigns',
+        child: const Center(child: CircularProgressIndicator()),
+      );
     } else {
       final brandRequests = _brandRequests;
       final clientRequests = _clientRequests;
@@ -1861,9 +1887,48 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
             return FutureBuilder<bool>(
               future: _requestRequiresNfc(request),
               builder: (context, nfcSnap) {
+                final revealDate = revealSnap.data?.trim() ?? '';
+                final submittedDate = _submittedLabel(
+                  request.submittedAt ?? request.neededBy,
+                );
+                final acceptByDate = _isCompanyCustomRequestSource(
+                  request.sourceCollection,
+                )
+                    ? _acceptByLabel(
+                        DateTime(
+                          request.neededBy.year,
+                          request.neededBy.month,
+                          request.neededBy.day,
+                        ).subtract(const Duration(days: 5)),
+                      )
+                    : '';
+                final campaignTitle = request.title.trim();
+                final displayedBrandName = request.brandName.trim().isNotEmpty
+                    ? request.brandName.trim()
+                    : request.clientName.trim();
+                final orderNumber = request.orderNumber.trim().isEmpty
+                    ? request.id
+                    : request.orderNumber.trim();
+                final accessibilityLabel = <String>[
+                  displayedBrandName,
+                  'Status ${_statusLabel(request)}',
+                  if (campaignTitle.isNotEmpty) 'Description $campaignTitle',
+                  'Order number $orderNumber',
+                  'Need By ${_needByLabel(request.neededBy)}',
+                  if (revealDate.isNotEmpty) 'JNT Reveal Date $revealDate',
+                  'Submitted Date $submittedDate',
+                  if (acceptByDate.isNotEmpty) 'Accept By $acceptByDate',
+                  if (nfcSnap.data == true) 'NFC eligible',
+                ].join(', ');
                 return Semantics(
+                  key: _requestCardSemanticsKeys.putIfAbsent(
+                    request.id,
+                    () => GlobalKey(),
+                  ),
                   button: true,
-                  label: 'Open request details for ${request.clientName}',
+                  label: accessibilityLabel,
+                  hint: 'Double tap to open details',
+                  onTap: () => _openDetails(request),
                   child: ExcludeSemantics(
                     child: InkWell(
                       borderRadius: BorderRadius.zero,
@@ -1873,22 +1938,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
                         scale: 1.0,
                         displayStatus: _statusLabel(request),
                         needByLabel: _needByLabel(request.neededBy),
-                        submittedLabel: _submittedLabel(
-                          request.submittedAt ?? request.neededBy,
-                        ),
-                        acceptByLabel:
-                            _isCompanyCustomRequestSource(
-                              request.sourceCollection,
-                            )
-                            ? _acceptByLabel(
-                                DateTime(
-                                  request.neededBy.year,
-                                  request.neededBy.month,
-                                  request.neededBy.day,
-                                ).subtract(const Duration(days: 5)),
-                              )
-                            : '',
-                        jntRevealDateLabel: revealSnap.data?.trim() ?? '',
+                        submittedLabel: submittedDate,
+                        acceptByLabel: acceptByDate,
+                        jntRevealDateLabel: revealDate,
                         avatar: _avatarWidget(request),
                         previewImage: _previewWidget(request),
                         onTap: () => _openDetails(request),
@@ -1904,12 +1956,15 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       }
 
       Widget sectionTitle(String title) {
-        return Text(
-          title,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
+        return Semantics(
+          header: true,
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
           ),
         );
       }
@@ -1926,12 +1981,18 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       }
 
       Widget emptyText(String text) {
-        return Text(
-          text,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w500,
-            color: AppColors.blackCat.withValues(alpha: 0.6),
+        return Semantics(
+          liveRegion: true,
+          label: text,
+          child: ExcludeSemantics(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.blackCat.withValues(alpha: 0.6),
+              ),
+            ),
           ),
         );
       }
@@ -2055,6 +2116,14 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
                       .trim(),
             avatarUrl: _headerAvatarUrl,
             showEarnings: widget.onOpenEarnings != null,
+            showHistory:
+                widget.clientArtistMenuStyle || widget.onOpenHistory != null,
+            showCalendar:
+                widget.clientArtistMenuStyle || widget.onOpenCalendar != null,
+            showArtist:
+                widget.clientArtistMenuStyle || widget.onOpenArtist != null,
+            showReviews:
+                widget.clientArtistMenuStyle || widget.onOpenReviews != null,
           ),
         ),
         body: content,
@@ -2069,6 +2138,22 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     }
     if (choice == 'earnings') {
       widget.onOpenEarnings?.call();
+      return;
+    }
+    if (choice == 'history') {
+      widget.onOpenHistory?.call();
+      return;
+    }
+    if (choice == 'calendar') {
+      widget.onOpenCalendar?.call();
+      return;
+    }
+    if (choice == 'artist') {
+      widget.onOpenArtist?.call();
+      return;
+    }
+    if (choice == 'reviews') {
+      widget.onOpenReviews?.call();
       return;
     }
     if (choice == 'logout') {
@@ -2368,17 +2453,27 @@ class _AvatarMenu extends StatelessWidget {
     this.avatarUrl = '',
     this.displayName = '',
     this.showEarnings = false,
+    this.showHistory = false,
+    this.showCalendar = false,
+    this.showArtist = false,
+    this.showReviews = false,
   });
 
   final ValueChanged<String> onSelected;
   final String avatarUrl;
   final String displayName;
   final bool showEarnings;
+  final bool showHistory;
+  final bool showCalendar;
+  final bool showArtist;
+  final bool showReviews;
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: 'Account menu',
+      tooltip: displayName.trim().isEmpty
+          ? 'Account menu'
+          : 'Account menu for ${displayName.trim()}',
       offset: const Offset(0, 55),
       elevation: 8,
       color: AppColors.snow,
@@ -2398,6 +2493,39 @@ class _AvatarMenu extends StatelessWidget {
             ],
           ),
         ),
+        if (showHistory)
+          const PopupMenuItem<String>(
+            value: 'history',
+            child: Row(
+              children: [
+                Icon(Icons.history, size: 22),
+                SizedBox(width: 14),
+                Text('History', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        if (showCalendar)
+          const PopupMenuItem<String>(
+            value: 'calendar',
+            child: Row(
+              children: [
+                Icon(Icons.calendar_month_outlined, size: 22),
+                SizedBox(width: 14),
+                Text('Calendar', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        if (showArtist)
+          const PopupMenuItem<String>(
+            value: 'artist',
+            child: Row(
+              children: [
+                Icon(Icons.brush_outlined, size: 22),
+                SizedBox(width: 14),
+                Text('Artist', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
         if (showEarnings)
           const PopupMenuItem<String>(
             value: 'earnings',
@@ -2409,6 +2537,17 @@ class _AvatarMenu extends StatelessWidget {
                   'Earnings',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
+              ],
+            ),
+          ),
+        if (showReviews)
+          const PopupMenuItem<String>(
+            value: 'reviews',
+            child: Row(
+              children: [
+                Icon(Icons.star_border, size: 22),
+                SizedBox(width: 14),
+                Text('Reviews', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

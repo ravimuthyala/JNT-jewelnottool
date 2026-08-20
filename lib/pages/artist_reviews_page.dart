@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'notifications_page.dart';
 
 enum ArtistReviewType { client, brand }
@@ -440,6 +442,10 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       _reviews = out;
       _loading = false;
     });
+    announceRequestAccessibilityMessage(
+      context,
+      '${out.length} ${out.length == 1 ? 'review' : 'reviews'} available.',
+    );
   }
 
   List<ArtistReviewItem> get _filtered {
@@ -458,6 +464,26 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           : a.date.compareTo(b.date),
     );
     return list;
+  }
+
+  void _announceVisibleReviews() {
+    if (!mounted) return;
+    final count = _filtered.length;
+    announceRequestAccessibilityMessage(
+      context,
+      '$count ${count == 1 ? 'review' : 'reviews'} shown.',
+    );
+  }
+
+  void _selectTab(int tab, String label) {
+    setState(() => _tab = tab);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      announceRequestAccessibilityMessage(
+        context,
+        '$label selected. ${_filtered.length} ${_filtered.length == 1 ? 'review' : 'reviews'} shown.',
+      );
+    });
   }
 
   @override
@@ -631,9 +657,15 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           _filters(),
           const SizedBox(height: 10),
           if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
+            Semantics(
+              liveRegion: true,
+              label: 'Loading reviews',
+                child: const ExcludeSemantics(
+                  child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
             )
           else if (reviews.isEmpty)
             Container(
@@ -707,7 +739,11 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
     required int count,
     required double tips,
   }) {
-    return Container(
+    return Semantics(
+      container: true,
+      label:
+          'Review summary. Overall rating ${avg.toStringAsFixed(1)} out of 5. $count ${count == 1 ? 'review' : 'reviews'}. ${tips.toStringAsFixed(2)} dollars in tips earned.',
+      child: ExcludeSemantics(child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.snow,
@@ -755,20 +791,27 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           ),
         ],
       ),
+      )),
     );
   }
 
   Widget _tabs() {
     Widget tab(int i, String label) {
       final active = _tab == i;
-      return Expanded(
-        child: Semantics(
+      return Semantics(
+          container: true,
+          focusable: true,
           button: true,
           selected: active,
+          label: '$label tab',
+          value: active ? 'Selected' : 'Not selected',
+          hint: active ? 'Selected' : 'Double tap to show $label',
+          onTap: () => _selectTab(i, label),
           child: ExcludeSemantics(
             child: InkWell(
-              onTap: () => setState(() => _tab = i),
+              onTap: () => _selectTab(i, label),
               child: Container(
+                constraints: const BoxConstraints(minHeight: 48),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
                   border: Border(
@@ -793,46 +836,82 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
               ),
             ),
           ),
-        ),
       );
     }
 
-    return Row(
-      children: [
-        tab(0, 'All Reviews'),
-        tab(1, 'Client Reviews'),
-        tab(2, 'Brand Reviews'),
-      ],
+    if (MediaQuery.textScalerOf(context).scale(1.0) > 1.30) {
+      return Semantics(
+        container: true,
+        explicitChildNodes: true,
+        child: Column(
+          children: [
+            SizedBox(width: double.infinity, child: tab(0, 'All Reviews')),
+            SizedBox(width: double.infinity, child: tab(1, 'Client Reviews')),
+            SizedBox(width: double.infinity, child: tab(2, 'Brand Reviews')),
+          ],
+        ),
+      );
+    }
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Row(
+        children: [
+          Expanded(child: tab(0, 'All Reviews')),
+          Expanded(child: tab(1, 'Client Reviews')),
+          Expanded(child: tab(2, 'Brand Reviews')),
+        ],
+      ),
     );
   }
 
   Widget _filters() {
-    return Row(
-      children: [
-        Expanded(
-          child: _dropdown(
-            value: _sort,
-            items: const ['Newest First', 'Oldest First'],
-            onChanged: (v) => setState(() => _sort = v),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _dropdown(
-            value: _typeFilter,
-            items: const ['All', 'Client', 'Brand'],
-            onChanged: (v) => setState(() => _typeFilter = v),
-          ),
-        ),
-      ],
+    final largeText = MediaQuery.textScalerOf(context).scale(1.0) > 1.30;
+    final sort = _dropdown(
+      semanticLabel: 'Sort reviews',
+      value: _sort,
+      items: const ['Newest First', 'Oldest First'],
+      onChanged: (v) {
+        setState(() => _sort = v);
+        _announceVisibleReviews();
+      },
+    );
+    final type = _dropdown(
+      semanticLabel: 'Review type filter',
+      value: _typeFilter,
+      items: const ['All', 'Client', 'Brand'],
+      onChanged: (v) {
+        setState(() => _typeFilter = v);
+        _announceVisibleReviews();
+      },
+    );
+    if (largeText) {
+      return Semantics(
+        container: true,
+        explicitChildNodes: true,
+        child: Column(children: [sort, const SizedBox(height: 10), type]),
+      );
+    }
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Row(
+        children: [
+          Expanded(child: sort),
+          const SizedBox(width: 10),
+          Expanded(child: type),
+        ],
+      ),
     );
   }
 
   Widget _dropdown({
+    required String semanticLabel,
     required String value,
     required List<String> items,
     required ValueChanged<String> onChanged,
   }) {
+    final selectedOptionKey = GlobalKey(debugLabel: semanticLabel);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
@@ -842,7 +921,12 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
       ),
       child: Builder(
         builder: (fieldContext) => Semantics(
+          container: true,
+          focusable: true,
           button: true,
+          label: semanticLabel,
+          value: value,
+          hint: 'Double tap to select',
           child: ExcludeSemantics(
             child: InkWell(
               onTap: () async {
@@ -864,7 +948,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                   ),
                   Offset.zero & overlay.size,
                 );
-                final selected = await showMenu<String>(
+                final menuFuture = showMenu<String>(
                   context: fieldContext,
                   position: menuPosition,
                   color: AppColors.snow,
@@ -872,18 +956,47 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
                       .map(
                         (e) => PopupMenuItem<String>(
                           value: e,
-                          child: Text(
-                            e,
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontFamily: 'Arial',
-                              color: AppColors.blackCat,
+                          child: Focus(
+                            autofocus: e == value,
+                            child: Semantics(
+                              key: e == value ? selectedOptionKey : null,
+                              container: true,
+                              focusable: true,
+                              selected: e == value,
+                              label: e,
+                              child: ExcludeSemantics(
+                                child: Text(
+                                  e,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontFamily: 'Arial',
+                                    color: AppColors.blackCat,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       )
                       .toList(growable: false),
                 );
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  void focusSelectedOption() {
+                    selectedOptionKey.currentContext
+                        ?.findRenderObject()
+                        ?.sendSemanticsEvent(const FocusSemanticEvent());
+                  }
+
+                  Future<void>.delayed(
+                    const Duration(milliseconds: 380),
+                    focusSelectedOption,
+                  );
+                  Future<void>.delayed(
+                    const Duration(milliseconds: 700),
+                    focusSelectedOption,
+                  );
+                });
+                final selected = await menuFuture;
                 if (selected != null) {
                   onChanged(selected);
                 }
@@ -917,7 +1030,12 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
     final badgeText = r.type == ArtistReviewType.client ? 'Client' : 'Brand';
     final badgeColor = AppColors.balletSlippers;
     final when = formatDateMdy(r.date);
-    return Container(
+    final comment = r.comment.trim().isEmpty ? 'No written review' : r.comment.trim();
+    return Semantics(
+      container: true,
+      label:
+          '$badgeText review from ${r.reviewerName}. ${r.rating.toStringAsFixed(1)} out of 5 stars. Date $when. $comment. Order or request ${r.requestId}. Tip ${r.tipAmount.toStringAsFixed(2)} dollars.',
+      child: ExcludeSemantics(child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.snow,
@@ -1075,6 +1193,7 @@ class _ArtistReviewsPageState extends State<ArtistReviewsPage> {
           ),
         ],
       ),
+      )),
     );
   }
 }
@@ -1116,7 +1235,6 @@ class _ReviewsAvatarMenu extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       onSelected: (value) {
         if (value == 'profile') onManageProfile?.call();
-        if (value == 'earnings') onOpenEarnings?.call();
         if (value == 'history') onOpenHistory?.call();
         if (value == 'calendar') onOpenCalendar?.call();
         if (value == 'artist') onOpenArtist?.call();
@@ -1144,13 +1262,6 @@ class _ReviewsAvatarMenu extends StatelessWidget {
                 child: _AvatarMenuRow(
                   icon: Icons.person_outline,
                   label: 'Profile',
-                ),
-              ),
-              const PopupMenuItem<String>(
-                value: 'earnings',
-                child: _AvatarMenuRow(
-                  icon: Icons.attach_money_outlined,
-                  label: 'Earnings',
                 ),
               ),
               const PopupMenuItem<String>(

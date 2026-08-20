@@ -179,6 +179,7 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
                   children: [
                     const Spacer(),
                     IconButton(
+                      autofocus: true,
                       tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close_rounded),
@@ -426,9 +427,15 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
     );
   }
 
-  Widget _sectionTitle(String t) => Text(
-    t,
-    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+  Widget _sectionTitle(String t) => Semantics(
+    header: true,
+    label: t,
+    child: ExcludeSemantics(
+      child: Text(
+        t,
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+      ),
+    ),
   );
 
   Widget _emptyPhotos() {
@@ -473,9 +480,15 @@ class _DeliveredHistorySheetLite extends StatelessWidget {
           final path = renderable[i];
           return SizedBox(
             width: 112,
-            child: ClipRRect(
-              borderRadius: BorderRadius.zero,
-              child: _imageForPath(path),
+            child: Semantics(
+              image: true,
+              label: 'Request photo ${i + 1} of ${renderable.length}',
+              child: ExcludeSemantics(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.zero,
+                  child: _imageForPath(path),
+                ),
+              ),
             ),
           );
         },

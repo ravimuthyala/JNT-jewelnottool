@@ -51,3 +51,24 @@ String compactDateDisplayOrDash(String value, {String fallback = '-'}) {
   final compact = compactDateDisplay(value);
   return compact.isEmpty ? fallback : compact;
 }
+
+/// Parses a strict `MM/DD/YYYY` string typed by a user, returning null for
+/// anything incomplete or invalid (including non-existent calendar dates
+/// like 02/30) rather than throwing.
+DateTime? tryParseMmDdYyyy(String raw) {
+  final text = raw.trim();
+  final parts = text.split('/');
+  if (parts.length != 3) return null;
+  final month = int.tryParse(parts[0]);
+  final day = int.tryParse(parts[1]);
+  final year = int.tryParse(parts[2]);
+  if (month == null || day == null || year == null) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900) {
+    return null;
+  }
+  final date = DateTime(year, month, day);
+  if (date.month != month || date.day != day || date.year != year) {
+    return null;
+  }
+  return date;
+}

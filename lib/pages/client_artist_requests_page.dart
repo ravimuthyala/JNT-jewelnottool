@@ -29,18 +29,27 @@ class ClientArtistRequestsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ArtistRequestsPageRedesign(
-      clientArtistMenuStyle: true,
-      showProfileMenuItem: true,
-      clientDisplayName: profile?.basic.name ?? '',
-      clientProfileImageUrl: profile?.basic.profileImageUrl ?? '',
-      onManageProfile: onOpenProfile,
-      onOpenHistory: onOpenHistory,
-      onOpenCalendar: onOpenCalendar,
-      onOpenArtist: onOpenArtist,
-      onOpenReviews: onOpenReviews,
-      onOpenEarnings: onOpenEarnings,
-      onSignOut: onLogout == null ? null : () => unawaited(onLogout!.call()),
+    return FocusTraversalGroup(
+      policy: ReadingOrderTraversalPolicy(),
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        child: ArtistRequestsPageRedesign(
+          clientArtistMenuStyle: true,
+          showProfileMenuItem: true,
+          clientDisplayName: profile?.basic.name ?? '',
+          clientProfileImageUrl: profile?.basic.profileImageUrl ?? '',
+          onManageProfile: onOpenProfile,
+          onOpenHistory: onOpenHistory,
+          onOpenCalendar: onOpenCalendar,
+          onOpenArtist: onOpenArtist,
+          onOpenReviews: onOpenReviews,
+          onOpenEarnings: onOpenEarnings,
+          onSignOut: onLogout == null
+              ? null
+              : () => unawaited(onLogout!.call()),
+        ),
+      ),
     );
   }
 }

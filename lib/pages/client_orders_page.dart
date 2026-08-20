@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/client_request_v2.dart';
 import '../models/client_profile_models.dart';
@@ -11,6 +12,7 @@ import '../utils/date_format_utils.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'client_custom_request_page.dart';
 import 'notifications_page.dart';
 import 'simple_status_request_sheet.dart';
@@ -1290,6 +1292,8 @@ class ClientOrdersPage extends StatefulWidget {
 }
 
 class _ClientOrdersPageState extends State<ClientOrdersPage> {
+  final Map<String, GlobalKey> _orderDetailsSemanticsKeys =
+      <String, GlobalKey>{};
   OrdersFilter _filter = OrdersFilter.all;
   StreamSubscription<List<SubmittedClientRequestSummary>>?
   _submittedRequestsSub;
@@ -2084,6 +2088,19 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     }
   }
 
+  String _ordersFilterLabel(OrdersFilter filter) {
+    return switch (filter) {
+      OrdersFilter.all => 'All Orders',
+      OrdersFilter.pending => 'Pending',
+      OrdersFilter.submitted => 'Submitted',
+      OrdersFilter.inProgress => 'In Progress',
+      OrdersFilter.shipped => 'Shipped',
+      OrdersFilter.delivered => 'Delivered',
+      OrdersFilter.declined => 'Declined',
+      OrdersFilter.cancelledExpired => 'Cancelled or Expired',
+    };
+  }
+
   bool _isSubmittedOrder(ClientOrder order) =>
       order.status == OrderStatus.newOrder ||
       order.status == OrderStatus.inReview;
@@ -2230,17 +2247,30 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                     )
                     .length,
               },
-              onChanged: (f) => setState(() => _filter = f),
+              onChanged: (f) {
+                setState(() => _filter = f);
+                final count = _filteredOrders.length;
+                announceRequestAccessibilityMessage(
+                  context,
+                  '${_ordersFilterLabel(f)} selected. $count ${count == 1 ? 'order' : 'orders'} found.',
+                );
+              },
             ),
             const SizedBox(height: 16),
 
             if (_pending.isNotEmpty) ...[
-              const Text(
-                'All Orders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: 'All Orders',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    'All Orders',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -2250,6 +2280,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                   child: _OrderCard(
                     order: o,
                     showLeadingThumb: widget.showCompanyChrome,
+                    detailsSemanticsKey: _orderDetailsSemanticsKeys.putIfAbsent(
+                      o.id,
+                      () => GlobalKey(),
+                    ),
                     onDetails: () => _openOrderDetails(context, o),
                   ),
                 ),
@@ -2258,12 +2292,18 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             ],
 
             if (_past.isNotEmpty) ...[
-              const Text(
-                'Past Orders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: 'Past Orders',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    'Past Orders',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -2273,6 +2313,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                   child: _OrderCard(
                     order: o,
                     showLeadingThumb: widget.showCompanyChrome,
+                    detailsSemanticsKey: _orderDetailsSemanticsKeys.putIfAbsent(
+                      o.id,
+                      () => GlobalKey(),
+                    ),
                     onDetails: () => _openOrderDetails(context, o),
                   ),
                 ),
@@ -2281,8 +2325,12 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
 
             if (_pending.isEmpty && _past.isEmpty) ...[
               const SizedBox(height: 28),
-              _Card(
-                child: Column(
+              Semantics(
+                liveRegion: true,
+                label: 'No orders found. Try changing filters or place a new design request.',
+                child: ExcludeSemantics(
+                  child: _Card(
+                    child: Column(
                   children: [
                     Icon(
                       Icons.receipt_long_outlined,
@@ -2309,6 +2357,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                       ),
                     ),
                   ],
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -2324,9 +2374,10 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     );
   }
 
-  void _openOrderDetails(BuildContext context, ClientOrder order) {
+  Future<void> _openOrderDetails(BuildContext context, ClientOrder order) async {
     if (order.status == OrderStatus.declined) {
-      unawaited(_openDeclinedRequestSheet(context, order));
+      await _openDeclinedRequestSheet(context, order);
+      await _restoreOrderDetailsFocus(order.id);
       return;
     }
 
@@ -2397,7 +2448,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         break;
     }
 
-    showGeneralDialog<void>(
+    await showGeneralDialog<void>(
       context: context,
       barrierLabel: 'Order details',
       barrierDismissible: true,
@@ -2437,6 +2488,17 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         );
       },
     );
+    await _restoreOrderDetailsFocus(order.id);
+  }
+
+  Future<void> _restoreOrderDetailsFocus(String orderId) async {
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    _orderDetailsSemanticsKeys[orderId]
+        ?.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
   }
 
   Future<void> _openDeclinedRequestSheet(
@@ -2840,35 +2902,37 @@ class _FilterTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 42,
+      height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         child: Row(
           children: [
-            _tab('All Orders', OrdersFilter.all),
-            _tab('Pending', OrdersFilter.pending),
-            _tab('In Progress', OrdersFilter.inProgress),
-            _tab('Shipped', OrdersFilter.shipped),
-            _tab('Delivered', OrdersFilter.delivered),
-            _tab('Declined', OrdersFilter.declined),
-            _tab('Cancelled/Expired', OrdersFilter.cancelledExpired),
+            _tab('All Orders', OrdersFilter.all, 1),
+            _tab('Pending', OrdersFilter.pending, 2),
+            _tab('In Progress', OrdersFilter.inProgress, 3),
+            _tab('Shipped', OrdersFilter.shipped, 4),
+            _tab('Delivered', OrdersFilter.delivered, 5),
+            _tab('Declined', OrdersFilter.declined, 6),
+            _tab('Cancelled/Expired', OrdersFilter.cancelledExpired, 7),
           ],
         ),
       ),
     );
   }
 
-  Widget _tab(String label, OrdersFilter value) {
+  Widget _tab(String label, OrdersFilter value, int position) {
     final bool isSelected = selected == value;
     final count = counts[value] ?? 0;
-    final semanticLabel = '$label, $count ${count == 1 ? 'order' : 'orders'}';
+    final semanticLabel =
+        '$label, tab $position of 7, $count ${count == 1 ? 'order' : 'orders'}';
 
     return Semantics(
       button: true,
       selected: isSelected,
       label: semanticLabel,
       hint: isSelected ? 'Selected filter' : 'Double tap to filter orders',
+      onTap: () => onChanged(value),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: () => onChanged(value),
@@ -2925,11 +2989,13 @@ class _OrderCard extends StatelessWidget {
     required this.order,
     required this.onDetails,
     required this.showLeadingThumb,
+    required this.detailsSemanticsKey,
   });
 
   final ClientOrder order;
   final VoidCallback onDetails;
   final bool showLeadingThumb;
+  final GlobalKey detailsSemanticsKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2953,8 +3019,6 @@ class _OrderCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         order.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -2964,7 +3028,7 @@ class _OrderCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     if (order.status == OrderStatus.shipped) ...[
                       SizedBox(
-                        height: 30,
+                        height: 48,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.blackCat,
@@ -3000,8 +3064,6 @@ class _OrderCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   order.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppColors.blackCat,
                     fontWeight: FontWeight.w500,
@@ -3114,7 +3176,10 @@ class _OrderCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _OrderDetailsLink(onTap: onDetails),
+                    _OrderDetailsLink(
+                      semanticsKey: detailsSemanticsKey,
+                      onTap: onDetails,
+                    ),
                   ],
                 ),
               ],
@@ -3489,13 +3554,18 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _OrderDetailsLink extends StatelessWidget {
-  const _OrderDetailsLink({required this.onTap});
+  const _OrderDetailsLink({
+    required this.onTap,
+    required this.semanticsKey,
+  });
 
   final VoidCallback onTap;
+  final GlobalKey semanticsKey;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      key: semanticsKey,
       button: true,
       label: 'Order details',
       hint: 'Double tap to view order details',
@@ -3507,8 +3577,10 @@ class _OrderDetailsLink extends StatelessWidget {
           hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
           splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
           highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3526,6 +3598,7 @@ class _OrderDetailsLink extends StatelessWidget {
                   color: AppColors.blackCat.withValues(alpha: 0.45),
                 ),
               ],
+              ),
             ),
           ),
         ),

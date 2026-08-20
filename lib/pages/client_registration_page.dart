@@ -16,6 +16,7 @@ import '../theme/app_colors.dart';
 import '../config/auth_flags.dart';
 import '../models/client_profile_models.dart';
 import '../services/notifications_service.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/registration_input_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
@@ -1667,6 +1668,14 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     }
   }
 
+  // Lets a sighted or screen-reader user type the date directly instead of
+  // requiring the calendar picker. Age-eligibility is re-checked at submit
+  // time (_onCreateAccount) regardless of entry method, so this only needs
+  // to track the parsed value -- not repeat that check on every keystroke.
+  void _onDateOfBirthTyped(String value) {
+    setState(() => _dateOfBirth = tryParseMmDdYyyy(value));
+  }
+
   void _onEmailChanged(String value) {
     _emailAvailabilityDebounce?.cancel();
     final normalized = value.trim().toLowerCase();
@@ -2619,14 +2628,22 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                 true,
                                 TextFormField(
                                   controller: _dateOfBirthCtrl,
-                                  readOnly: true,
-                                  onTap: _pickDateOfBirth,
+                                  keyboardType: TextInputType.datetime,
+                                  style: const TextStyle(
+                                    fontSize: _inputFs,
+                                    fontFamily: 'Arial',
+                                  ),
+                                  onChanged: _onDateOfBirthTyped,
                                   decoration: _dec(
                                     'Date of Birth',
                                     'MM/DD/YYYY',
-                                    suffixIcon: const Icon(
-                                      Icons.calendar_today_outlined,
-                                      size: 18,
+                                    suffixIcon: IconButton(
+                                      tooltip: 'Pick date of birth',
+                                      onPressed: _pickDateOfBirth,
+                                      icon: const Icon(
+                                        Icons.calendar_today_outlined,
+                                        size: 18,
+                                      ),
                                     ),
                                   ),
                                   validator: _dateOfBirthValidator,

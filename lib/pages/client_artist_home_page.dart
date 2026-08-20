@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_profile_models.dart';
@@ -43,6 +44,27 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
   int _clientIndex = 0;
   String? _initialArtistName;
   bool _showCampaignsTab = false;
+  int _tabFocusRequestSerial = 0;
+
+  // These scopes are deliberately NOT semantic nodes. They are only used to
+  // move Flutter focus into the newly selected IndexedStack child. TalkBack
+  // should land on the first REAL control in that page (Notifications), not
+  // on an artificial "Home tab" / "Design tab" wrapper.
+  final Map<int, FocusScopeNode> _tabFocusScopes = <int, FocusScopeNode>{
+    0: FocusScopeNode(debugLabel: 'clientArtistHomeScope'),
+    1: FocusScopeNode(debugLabel: 'clientArtistDesignScope'),
+    2: FocusScopeNode(debugLabel: 'clientArtistRequestsScope'),
+    3: FocusScopeNode(debugLabel: 'clientArtistFourthScope'),
+    4: FocusScopeNode(debugLabel: 'clientArtistFifthScope'),
+  };
+
+  final Map<int, FocusNode> _tabFocusSentinels = <int, FocusNode>{
+    0: FocusNode(debugLabel: 'clientArtistHomeSentinel', skipTraversal: true),
+    1: FocusNode(debugLabel: 'clientArtistDesignSentinel', skipTraversal: true),
+    2: FocusNode(debugLabel: 'clientArtistRequestsSentinel', skipTraversal: true),
+    3: FocusNode(debugLabel: 'clientArtistFourthSentinel', skipTraversal: true),
+    4: FocusNode(debugLabel: 'clientArtistFifthSentinel', skipTraversal: true),
+  };
 
   late ClientProfileDraft _profile;
 
@@ -68,9 +90,128 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
   void initState() {
     super.initState();
     _profile = widget.profile ?? _fallbackProfile();
-    _clientIndex = widget.initialTabIndex.clamp(0, 5);
+    _clientIndex = widget.initialTabIndex.clamp(0, 4);
     unawaited(_loadAmbassadorStatus());
     unawaited(_loadProfileFromSupabase());
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_focusActiveTab(_clientIndex));
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final node in _tabFocusSentinels.values) {
+      node.dispose();
+    }
+    for (final scope in _tabFocusScopes.values) {
+      scope.dispose();
+    }
+    super.dispose();
+  }
+
+  Widget _tabFocusBoundary({
+    required int index,
+    required Widget child,
+  }) {
+    final scope = _tabFocusScopes[index]!;
+    final sentinel = _tabFocusSentinels[index]!;
+
+    return FocusScope(
+      node: scope,
+      child: FocusTraversalGroup(
+        policy: WidgetOrderTraversalPolicy(),
+        child: Focus(
+          focusNode: sentinel,
+          skipTraversal: true,
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  bool _screenReaderNavigationEnabled() {
+    return (MediaQuery.maybeOf(context)?.accessibleNavigation ?? false) ||
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
+  }
+
+  Future<void> _focusActiveTab(int index) async {
+    final requestSerial = ++_tabFocusRequestSerial;
+
+    // Wait for IndexedStack selection and the destination app bar semantics
+    // to be attached before asking for its first real focusable control.
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted ||
+        requestSerial != _tabFocusRequestSerial ||
+        _clientIndex != index ||
+        !_screenReaderNavigationEnabled()) {
+      return;
+    }
+
+    final sentinel = _tabFocusSentinels[index];
+    if (sentinel == null || sentinel.context == null) return;
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    sentinel.requestFocus();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || requestSerial != _tabFocusRequestSerial) return;
+
+    // Because the sentinel is skipTraversal=true, nextFocus() advances to
+    // the first actual focusable widget in this tab. All Client-Artist main
+    // pages put Notifications first in the app bar, followed by the avatar.
+    sentinel.nextFocus();
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+
+    if (!mounted ||
+        requestSerial != _tabFocusRequestSerial ||
+        _clientIndex != index) {
+      return;
+    }
+
+    var target = FocusManager.instance.primaryFocus;
+    if (target == null || identical(target, sentinel)) {
+      sentinel.nextFocus();
+      await WidgetsBinding.instance.endOfFrame;
+      target = FocusManager.instance.primaryFocus;
+    }
+
+    target?.context
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    // Some Android builds restore accessibility focus to the tapped bottom
+    // navigation item after the first frame. Reassert focus once more after
+    // that race has settled, but NEVER focus a whole-page semantic wrapper.
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    if (!mounted ||
+        requestSerial != _tabFocusRequestSerial ||
+        _clientIndex != index) {
+      return;
+    }
+
+    target = FocusManager.instance.primaryFocus;
+    target?.context
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
+  void _activateClientTab(int index) {
+    final safeIndex = index.clamp(0, 4);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    if (_clientIndex != safeIndex) {
+      setState(() => _clientIndex = safeIndex);
+    }
+
+    unawaited(_focusActiveTab(safeIndex));
   }
 
   bool _isAmbassadorFromData(Map<String, dynamic> data) {
@@ -387,7 +528,30 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         for (final row in rows) {
           if (_isAmbassadorFromData(_asMap(row))) {
             if (!mounted) return;
-            setState(() => _showCampaignsTab = true);
+
+            final oldIndex = _clientIndex;
+            int nextIndex = oldIndex;
+
+            // Before ambassador status resolves, index 3 is Orders and index
+            // 4 is Earnings. When Campaigns is inserted at index 3, preserve
+            // Orders by shifting it to index 4. Earnings has no bottom-nav
+            // destination in ambassador mode, so return safely to Home.
+            if (!_showCampaignsTab) {
+              if (oldIndex == 3) {
+                nextIndex = 4;
+              } else if (oldIndex == 4) {
+                nextIndex = 0;
+              }
+            }
+
+            setState(() {
+              _showCampaignsTab = true;
+              _clientIndex = nextIndex;
+            });
+
+            if (nextIndex != oldIndex) {
+              unawaited(_focusActiveTab(nextIndex));
+            }
             return;
           }
         }
@@ -407,6 +571,8 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         builder: (context) => ClientArtistProfilePage(initialProfile: _profile),
       ),
     );
+    if (!mounted) return;
+    unawaited(_focusActiveTab(_clientIndex));
   }
 
   Future<void> _logout() async {
@@ -444,6 +610,8 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
           artistNames: _initialArtistName == null
               ? const <String>[]
               : <String>[_initialArtistName!],
+          showCampaignsTab: _showCampaignsTab,
+          enableAllTabs: widget.enableAllTabs,
           onClientNavTap: (ctx, index) async {
             if (index == 1) return;
             if (Navigator.of(ctx).canPop()) {
@@ -454,11 +622,11 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
       ),
     );
     if (navIndex == null || !mounted) return;
-    setState(() => _clientIndex = navIndex);
+    _activateClientTab(navIndex);
   }
 
-  void _openClientArtistArtistSection() {
-    Navigator.push(
+  Future<void> _openClientArtistArtistSection() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistArtistPage(
@@ -477,6 +645,8 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         ),
       ),
     );
+    if (!mounted) return;
+    unawaited(_focusActiveTab(_clientIndex));
   }
 
   Future<void> _openClientArtistHistory() async {
@@ -492,6 +662,8 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         ),
       ),
     );
+    if (!mounted) return;
+    unawaited(_focusActiveTab(_clientIndex));
   }
 
   Future<void> _openClientArtistCalendar() async {
@@ -507,6 +679,8 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         ),
       ),
     );
+    if (!mounted) return;
+    unawaited(_focusActiveTab(_clientIndex));
   }
 
   Future<void> _openClientArtistEarnings() async {
@@ -523,6 +697,8 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         ),
       ),
     );
+    if (!mounted) return;
+    unawaited(_focusActiveTab(_clientIndex));
   }
 
   Future<void> _openClientArtistReviews() async {
@@ -539,128 +715,165 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         ),
       ),
     );
+    if (!mounted) return;
+    unawaited(_focusActiveTab(_clientIndex));
   }
 
   Widget _buildClientBody() {
+    final homePage = ClientHomePage(
+      clientName: _profile.basic.name.trim().isEmpty
+          ? 'Client'
+          : _profile.basic.name.trim(),
+      profileImageUrl: _profile.basic.profileImageUrl,
+      profileComplete: true,
+      tapArtistTileOpensImageOnly: true,
+      onOpenProfile: _openUnifiedProfile,
+      onOpenHistory: () {
+        unawaited(_openClientArtistHistory());
+      },
+      onOpenCalendar: () {
+        unawaited(_openClientArtistCalendar());
+      },
+      onOpenArtist: _openClientArtistArtistSection,
+      onOpenReviews: () {
+        unawaited(_openClientArtistReviews());
+      },
+      onOpenEarnings: _showCampaignsTab
+          ? () {
+              unawaited(_openClientArtistEarnings());
+            }
+          : null,
+      onLogout: _logout,
+      showExtendedAvatarMenu: true,
+      onRequestArtist: (artistName) {
+        unawaited(_openClientArtistRequestWithArtist(artistName));
+      },
+    );
+
+    final designPage = ClientCustomRequestPage(
+      profile: _profile,
+      showExtendedAvatarMenu: true,
+      showProfileMenu: true,
+      initialArtistName: _initialArtistName,
+      isActiveTab: _clientIndex == 1,
+      onNavTap: _activateClientTab,
+      onOpenProfile: _openUnifiedProfile,
+      onOpenHistory: () {
+        unawaited(_openClientArtistHistory());
+      },
+      onOpenCalendar: () {
+        unawaited(_openClientArtistCalendar());
+      },
+      onOpenArtist: _openClientArtistArtistSection,
+      onOpenReviews: () {
+        unawaited(_openClientArtistReviews());
+      },
+      onLogout: _logout,
+    );
+
+    final requestsPage = ClientArtistRequestsPage(
+      profile: _profile,
+      onOpenProfile: _openUnifiedProfile,
+      onOpenHistory: () {
+        unawaited(_openClientArtistHistory());
+      },
+      onOpenCalendar: () {
+        unawaited(_openClientArtistCalendar());
+      },
+      onOpenArtist: _openClientArtistArtistSection,
+      onOpenReviews: () {
+        unawaited(_openClientArtistReviews());
+      },
+      onOpenEarnings: _showCampaignsTab
+          ? () {
+              unawaited(_openClientArtistEarnings());
+            }
+          : null,
+      onLogout: _logout,
+    );
+
+    final orderNavIndex = _showCampaignsTab ? 4 : 3;
+    final ordersPage = ClientArtistOrderPage(
+      profile: _profile,
+      showExtendedAvatarMenu: true,
+      showProfileMenu: true,
+      bottomNavIndex: orderNavIndex,
+      isActiveTab: _clientIndex == orderNavIndex,
+      onNavTap: _activateClientTab,
+      onBackHome: () => _activateClientTab(0),
+      onOpenProfile: _openUnifiedProfile,
+      onOpenEarnings: _showCampaignsTab
+          ? () {
+              unawaited(_openClientArtistEarnings());
+            }
+          : null,
+      onOpenHistory: () {
+        unawaited(_openClientArtistHistory());
+      },
+      onOpenCalendar: () {
+        unawaited(_openClientArtistCalendar());
+      },
+      onOpenArtist: _openClientArtistArtistSection,
+      onOpenReviews: () {
+        unawaited(_openClientArtistReviews());
+      },
+      onLogout: _logout,
+    );
+
     final pages = <Widget>[
-      ClientHomePage(
-        clientName: _profile.basic.name.trim().isEmpty
-            ? 'Client'
-            : _profile.basic.name.trim(),
-        profileImageUrl: _profile.basic.profileImageUrl,
-        profileComplete: true,
-        tapArtistTileOpensImageOnly: true,
-        onOpenProfile: _openUnifiedProfile,
-        onOpenHistory: () {
-          unawaited(_openClientArtistHistory());
-        },
-        onOpenCalendar: () {
-          unawaited(_openClientArtistCalendar());
-        },
-        onOpenArtist: _openClientArtistArtistSection,
-        onOpenReviews: () {
-          unawaited(_openClientArtistReviews());
-        },
-        onOpenEarnings: _showCampaignsTab
-            ? () {
-                unawaited(_openClientArtistEarnings());
-              }
-            : null,
-        onLogout: _logout,
-        showExtendedAvatarMenu: true,
-        onRequestArtist: (artistName) {
-          unawaited(_openClientArtistRequestWithArtist(artistName));
-        },
+      _tabFocusBoundary(
+        index: 0,
+        child: homePage,
       ),
-      ClientCustomRequestPage(
-        profile: _profile,
-        showExtendedAvatarMenu: true,
-        showProfileMenu: true,
-        initialArtistName: _initialArtistName,
-        onNavTap: (i) {
-          if (!mounted) return;
-          setState(() => _clientIndex = i);
-        },
-        onOpenProfile: _openUnifiedProfile,
-        onOpenHistory: () {
-          unawaited(_openClientArtistHistory());
-        },
-        onOpenCalendar: () {
-          unawaited(_openClientArtistCalendar());
-        },
-        onOpenArtist: _openClientArtistArtistSection,
-        onOpenReviews: () {
-          unawaited(_openClientArtistReviews());
-        },
-        onLogout: _logout,
+      _tabFocusBoundary(
+        index: 1,
+        child: designPage,
       ),
-      ClientArtistRequestsPage(
-        profile: _profile,
-        onOpenProfile: _openUnifiedProfile,
-        onOpenHistory: () {
-          unawaited(_openClientArtistHistory());
-        },
-        onOpenCalendar: () {
-          unawaited(_openClientArtistCalendar());
-        },
-        onOpenArtist: _openClientArtistArtistSection,
-        onOpenReviews: () {
-          unawaited(_openClientArtistReviews());
-        },
-        onOpenEarnings: _showCampaignsTab
-            ? () {
-                unawaited(_openClientArtistEarnings());
-              }
-            : null,
-        onLogout: _logout,
+      _tabFocusBoundary(
+        index: 2,
+        child: requestsPage,
       ),
       if (_showCampaignsTab)
-        ClientArtistCampaignsPage(
-          onOpenProfile: _openUnifiedProfile,
-          onOpenEarnings: () {
-            unawaited(_openClientArtistEarnings());
-          },
-          onLogout: () {
-            unawaited(_logout());
-          },
+        _tabFocusBoundary(
+          index: 3,
+          child: ClientArtistCampaignsPage(
+            onOpenProfile: _openUnifiedProfile,
+            onOpenHistory: () {
+              unawaited(_openClientArtistHistory());
+            },
+            onOpenCalendar: () {
+              unawaited(_openClientArtistCalendar());
+            },
+            onOpenArtist: () {
+              unawaited(_openClientArtistArtistSection());
+            },
+            onOpenReviews: () {
+              unawaited(_openClientArtistReviews());
+            },
+            onOpenEarnings: () {
+              unawaited(_openClientArtistEarnings());
+            },
+            onLogout: () {
+              unawaited(_logout());
+            },
+          ),
         ),
-      ClientArtistOrderPage(
-        profile: _profile,
-        showExtendedAvatarMenu: true,
-        showProfileMenu: true,
-        bottomNavIndex: 4,
-        onNavTap: (i) {
-          if (!mounted) return;
-          setState(() => _clientIndex = i);
-        },
-        onBackHome: () => setState(() => _clientIndex = 0),
-        onOpenProfile: _openUnifiedProfile,
-        onOpenEarnings: _showCampaignsTab
-            ? () {
-                unawaited(_openClientArtistEarnings());
-              }
-            : null,
-        onOpenHistory: () {
-          unawaited(_openClientArtistHistory());
-        },
-        onOpenCalendar: () {
-          unawaited(_openClientArtistCalendar());
-        },
-        onOpenArtist: _openClientArtistArtistSection,
-        onOpenReviews: () {
-          unawaited(_openClientArtistReviews());
-        },
-        onLogout: _logout,
+      _tabFocusBoundary(
+        index: orderNavIndex,
+        child: ordersPage,
       ),
       if (!_showCampaignsTab)
-        ClientArtistEarningsPage(
-          profile: _profile,
-          showContinueProfileCard: false,
-          enableAllTabs: widget.enableAllTabs,
-          showCampaignsTab: _showCampaignsTab,
-          showBottomNav: false,
-          onOpenProfile: _openUnifiedProfile,
-          onLogout: _logout,
+        _tabFocusBoundary(
+          index: 4,
+          child: ClientArtistEarningsPage(
+            profile: _profile,
+            showContinueProfileCard: false,
+            enableAllTabs: widget.enableAllTabs,
+            showCampaignsTab: _showCampaignsTab,
+            showBottomNav: false,
+            onOpenProfile: _openUnifiedProfile,
+            onLogout: _logout,
+          ),
         ),
     ];
 
@@ -673,7 +886,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
     return BottomNavigationBar(
       backgroundColor: AppColors.balletSlippers,
       currentIndex: safeIndex,
-      onTap: (i) => setState(() => _clientIndex = i),
+      onTap: _activateClientTab,
       type: BottomNavigationBarType.fixed,
       selectedItemColor: AppColors.deepPlum,
       unselectedItemColor: Colors.black.withValues(alpha: 0.55),

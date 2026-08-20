@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 class ArtistDetailsModal extends StatefulWidget {
   const ArtistDetailsModal({
@@ -29,6 +31,29 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
   static const double _inputFs = 11.5;
   final int _portfolioPage = 0;
   final SupabaseClient _supabase = Supabase.instance.client;
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'artistDetailsClose');
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'artistDetailsCloseSemantics',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 420));
+      if (!mounted || !requestAccessibilityEnabled(context)) return;
+      _closeFocusNode.requestFocus();
+      _closeSemanticsKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
 
   String _first(List<dynamic> values) {
     for (final raw in values) {
@@ -251,14 +276,12 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                     label: 'Close image preview',
                     hint: 'Double tap to close',
                     onTap: () {
-                      closeFocusNode.dispose();
                       Navigator.of(dialogContext).pop();
                     },
                     child: ExcludeSemantics(
                       child: IconButton(
                         tooltip: 'Close image preview',
                         onPressed: () {
-                          closeFocusNode.dispose();
                           Navigator.of(dialogContext).pop();
                         },
                         icon: const Icon(
@@ -304,7 +327,13 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     !snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return Semantics(
+                    liveRegion: true,
+                    label: 'Loading artist details',
+                    child: ExcludeSemantics(
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  );
                 }
 
                 final data = snapshot.data;
@@ -523,16 +552,22 @@ class _ArtistDetailsModalState extends State<ArtistDetailsModal> {
                           ),
                           Align(
                             alignment: Alignment.centerRight,
-                            child: Semantics(
-                              button: true,
-                              label: 'Close artist details',
-                              child: IconButton(
-                                tooltip: 'Close artist details',
-                                autofocus: MediaQuery.of(
-                                  context,
-                                ).accessibleNavigation,
-                                onPressed: () => Navigator.of(context).pop(),
-                                icon: const Icon(Icons.close_rounded),
+                            child: Focus(
+                              focusNode: _closeFocusNode,
+                              child: Semantics(
+                                key: _closeSemanticsKey,
+                                container: true,
+                                button: true,
+                                label: 'Close artist details',
+                                hint: 'Double tap to close',
+                                onTap: () => Navigator.of(context).pop(),
+                                child: ExcludeSemantics(
+                                  child: IconButton(
+                                    tooltip: 'Close artist details',
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                                ),
                               ),
                             ),
                           ),

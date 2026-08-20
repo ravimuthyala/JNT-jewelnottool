@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -13,6 +14,7 @@ import '../utils/date_format_utils.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 Future<void> showDeliveredRequestSheet({
   required BuildContext context,
@@ -51,6 +53,15 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   );
   final FocusNode _deliveredContentFocusNode = FocusNode(
     debugLabel: 'deliveredDeliveryContent',
+  );
+  final GlobalKey _detailsContentSemanticsKey = GlobalKey(
+    debugLabel: 'deliveredDetailsSemantics',
+  );
+  final GlobalKey _photosContentSemanticsKey = GlobalKey(
+    debugLabel: 'deliveredPhotosSemantics',
+  );
+  final GlobalKey _deliveredContentSemanticsKey = GlobalKey(
+    debugLabel: 'deliveredInformationSemantics',
   );
   bool _didRequestInitialFocus = false;
 
@@ -253,6 +264,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   bool _accessibleNavigation(BuildContext context) {
     final mediaQuery = MediaQuery.maybeOf(context);
     return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding.instance.platformDispatcher.semanticsEnabled ||
         WidgetsBinding
             .instance
             .platformDispatcher
@@ -295,6 +307,11 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
       return;
     }
     setState(() => _selectedTab = index);
+    const labels = <String>['Details', 'Photos', 'Delivered'];
+    announceRequestAccessibilityMessage(
+      context,
+      '${labels[index]} tab selected',
+    );
     _scrollSheetToTop();
     if (!_accessibleNavigation(context)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,15 +322,21 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         _ => _deliveredContentFocusNode,
       };
       node.requestFocus();
+      final semanticsKey = switch (index) {
+        0 => _detailsContentSemanticsKey,
+        1 => _photosContentSemanticsKey,
+        _ => _deliveredContentSemanticsKey,
+      };
+      semanticsKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
-    final sheetMediaQuery = MediaQuery.of(
-      context,
-    ).copyWith(textScaler: const TextScaler.linear(1.0));
+    final sheetMediaQuery = MediaQuery.of(context);
 
     return Semantics(
       scopesRoute: true,
@@ -326,6 +349,14 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           alignment: Alignment.bottomCenter,
           child: Stack(
             children: [
+              Positioned(
+                right: 6,
+                top: 6,
+                child: RequestModalInitialClose(
+                  label: 'Close delivered request details',
+                  onClose: () => Navigator.pop(context),
+                ),
+              ),
               Container(
                 constraints: BoxConstraints(maxHeight: maxH),
                 decoration: const BoxDecoration(
@@ -378,8 +409,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                             label: 'Close delivered request details',
                             hint: 'Double tap to close',
                             onTap: () => Navigator.pop(context),
-                            child: ExcludeSemantics(
-                              child: ElevatedButton(
+                            child: ExcludeSemantics(child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.blackCat,
                                   foregroundColor: AppColors.snow,
@@ -399,8 +429,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
+                            )),
                           ),
                         ),
                       ),
@@ -411,20 +440,13 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               Positioned(
                 right: 6,
                 top: 6,
-                child: Semantics(
-                  button: true,
-                  label: 'Close delivered request details',
-                  hint: 'Double tap to close',
-                  onDidGainAccessibilityFocus: _scrollSheetToTop,
-                  onTap: () => Navigator.pop(context),
-                  child: ExcludeSemantics(
-                    child: IconButton(
+                child: ExcludeSemantics(
+                  child: IconButton(
                       focusNode: _closeFocusNode,
                       tooltip: 'Close delivered request details',
                       icon: const Icon(Icons.close_rounded, size: 30),
                       color: AppColors.blackCat.withValues(alpha: 0.72),
                       onPressed: () => Navigator.pop(context),
-                    ),
                   ),
                 ),
               ),
@@ -453,10 +475,28 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     final avatarLetter = headerName.trim().isEmpty
         ? (isBrandRequest ? 'B' : 'C')
         : headerName.trim()[0].toUpperCase();
+    final requestType = request.requestTypeLabel.isNotEmpty
+        ? request.requestTypeLabel
+        : (request.isDirectRequest ? 'Direct' : 'Standard');
+    final orderType = request.orderType == RequestOrderTypeV2.group
+        ? 'Group'
+        : 'Single';
+    final orderNumber = request.orderNumber.trim().isNotEmpty
+        ? request.orderNumber.trim()
+        : request.id;
+    final summaryLabel =
+        '${headerName.trim().isEmpty ? 'Client' : headerName.trim()}. '
+        'Order number $orderNumber. $requestType request. $orderType order. '
+        'Need by ${_needByLabel(request.neededBy)}. '
+        'Budget ${request.budgetMin} dollars to ${request.budgetMax} dollars.';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
-      child: Column(
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: summaryLabel,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+        child: Column(
         children: [
           SizedBox(
             height: 78,
@@ -493,6 +533,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           const SizedBox(height: 16),
           _needBudgetRow(),
         ],
+        ),
       ),
     );
   }
@@ -848,12 +889,16 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _tabBar() {
-    return Row(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Row(
       children: [
         _tabButton('Details', 0),
         _tabButton('Photos', 1),
         _tabButton('Delivered', 2),
       ],
+      ),
     );
   }
 
@@ -906,6 +951,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         Focus(
           focusNode: _detailsContentFocusNode,
           child: Semantics(
+            key: _detailsContentSemanticsKey,
+            focusable: true,
             label: 'Description. $description',
             child: ExcludeSemantics(
               child: _descriptionAndCompanyBioSection(request),
@@ -937,6 +984,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         Focus(
           focusNode: _photosContentFocusNode,
           child: Semantics(
+            key: _photosContentSemanticsKey,
+            focusable: true,
             container: true,
             explicitChildNodes: true,
             label:
@@ -960,6 +1009,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         Focus(
           focusNode: _deliveredContentFocusNode,
           child: Semantics(
+            key: _deliveredContentSemanticsKey,
+            focusable: true,
             header: true,
             label: 'Delivered information',
             child: const ExcludeSemantics(

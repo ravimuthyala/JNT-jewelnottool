@@ -92,7 +92,7 @@ class _ClientArtistHistoryPageState extends State<ClientArtistHistoryPage> {
   }
 
   Future<void> _openCalendar(BuildContext context) async {
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistCalendarPage(
@@ -107,7 +107,7 @@ class _ClientArtistHistoryPageState extends State<ClientArtistHistoryPage> {
   }
 
   Future<void> _openArtist(BuildContext context) async {
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistArtistPage(
@@ -127,7 +127,7 @@ class _ClientArtistHistoryPageState extends State<ClientArtistHistoryPage> {
   }
 
   Future<void> _openReviews(BuildContext context) async {
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ClientArtistReviewsPage(

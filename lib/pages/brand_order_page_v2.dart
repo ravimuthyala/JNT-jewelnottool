@@ -992,12 +992,18 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
             const SizedBox(height: 16),
 
             if (_pending.isNotEmpty) ...[
-              const Text(
-                'All Orders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: 'All Orders',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    'All Orders',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1015,12 +1021,18 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
             ],
 
             if (_past.isNotEmpty) ...[
-              const Text(
-                'Past Orders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                label: 'Past Orders',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    'Past Orders',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1038,39 +1050,54 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
             if (_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
               const SizedBox(height: 60),
-              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              Semantics(
+                liveRegion: true,
+                label: 'Loading orders',
+                child: const ExcludeSemantics(
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
             ],
 
             if (!_loadingOrders && _pending.isEmpty && _past.isEmpty) ...[
               const SizedBox(height: 28),
-              _Card(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.receipt_long_outlined,
-                      size: 46,
-                      color: AppColors.blackCat.withValues(alpha: 0.35),
+              Semantics(
+                liveRegion: true,
+                label:
+                    'No orders found. Try changing filters or place a new design request.',
+                child: ExcludeSemantics(
+                  child: _Card(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 46,
+                          color: AppColors.blackCat.withValues(alpha: 0.35),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'No orders found',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Try changing filters or place a new design request.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.60),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'No orders found',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppColors.blackCat,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Try changing filters or place a new design request.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.60),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -1312,7 +1339,7 @@ class _AvatarMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: '',
+      tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: AppColors.snow,
@@ -1428,7 +1455,7 @@ class _FilterTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 42,
+      height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -1453,6 +1480,9 @@ class _FilterTabs extends StatelessWidget {
     return Semantics(
       button: true,
       selected: isSelected,
+      label: '$label, $count ${count == 1 ? 'order' : 'orders'}',
+      hint: isSelected ? 'Selected filter' : 'Double tap to show $label',
+      onTap: () => onChanged(value),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: () => onChanged(value),
@@ -1503,6 +1533,14 @@ class _FilterTabs extends StatelessWidget {
   }
 }
 
+/// Reads identifiers character-by-character so screen readers do not
+/// interpret an order number as one large numeric value.
+String _speakIdentifier(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return 'not available';
+  return value.split('').join(' ');
+}
+
 /// ---------------------------
 /// Order Card
 /// ---------------------------
@@ -1523,8 +1561,11 @@ class _OrderCard extends StatelessWidget {
         ? 'Submitted -'
         : 'Submitted ${formatDateMdyShortYear(order.createdAt!)}';
 
-    return _Card(
-      child: Row(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: _Card(
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -1534,20 +1575,25 @@ class _OrderCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        order.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                      child: Semantics(
+                        label: 'Campaign, ${order.title}',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            order.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     if (order.status == OrderStatus.shipped) ...[
                       SizedBox(
-                        height: 30,
+                        height: 48,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.blackCat,
@@ -1585,78 +1631,111 @@ class _OrderCard extends StatelessWidget {
                   const _NfcRequestTag(),
                 ],
                 const SizedBox(height: 6),
-                Text(
-                  order.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.blackCat,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    fontStyle: FontStyle.normal,
-                    fontFamily: 'Arial',
+                Semantics(
+                  label: 'Contact, ${order.subtitle}',
+                  child: ExcludeSemantics(
+                    child: Text(
+                      order.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        fontStyle: FontStyle.normal,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 if (order.orderNumber.trim().isNotEmpty) ...[
-                  Text(
-                    'Order # : ${order.orderNumber}',
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      fontFamily: 'Arial',
+                  Semantics(
+                    label:
+                        'Order number, ${_speakIdentifier(order.orderNumber)}',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        'Order # : ${order.orderNumber}',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          fontFamily: 'Arial',
+                        ),
+                      ),
                     ),
                   ),
                 ],
                 const SizedBox(height: 4),
-                Text(
-                  'Need By: ${compactDateDisplayOrDash(order.needByDisplay)}  ',
-                  style: TextStyle(
-                    color: AppColors.blackCat,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                    fontFamily: 'Arial',
+                Semantics(
+                  label:
+                      'Need By, ${compactDateDisplayOrDash(order.needByDisplay)}',
+                  child: ExcludeSemantics(
+                    child: Text(
+                      'Need By: ${compactDateDisplayOrDash(order.needByDisplay)}  ',
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
                   ),
                 ),
                 if (order.jntRevealDateDisplay.trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    'JNT Reveal Date: ${compactDateDisplay(order.jntRevealDateDisplay)}',
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      fontFamily: 'Arial',
+                  Semantics(
+                    label:
+                        'JNT Reveal Date, ${compactDateDisplay(order.jntRevealDateDisplay)}',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        'JNT Reveal Date: ${compactDateDisplay(order.jntRevealDateDisplay)}',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          fontFamily: 'Arial',
+                        ),
+                      ),
                     ),
                   ),
                 ],
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Text(
-                      submittedLabel,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.70),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                        fontFamily: 'Arial',
+                    Semantics(
+                      label: submittedLabel,
+                      child: ExcludeSemantics(
+                        child: Text(
+                          submittedLabel,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.70),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
                       ),
                     ),
                     const Spacer(),
-                    _OrderDetailsLink(onTap: onDetails),
+                    _OrderDetailsLink(orderTitle: order.title, onTap: onDetails),
                   ],
                 ),
                 if (order.artistAcceptedAmount != null) ...[
                   const SizedBox(height: 6),
-                  Text(
-                    'Final Amount: \$${order.artistAcceptedAmount}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2E8B57),
-                      fontFamily: 'Arial',
+                  Semantics(
+                    label: 'Final Amount, ${order.artistAcceptedAmount} dollars',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        'Final Amount: \$${order.artistAcceptedAmount}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF2E8B57),
+                          fontFamily: 'Arial',
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1666,13 +1745,18 @@ class _OrderCard extends StatelessWidget {
                     .startsWith('submitted'))
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      order.expectedOrDeliveredText,
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.55),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        fontFamily: 'Arial',
+                    child: Semantics(
+                      label: order.expectedOrDeliveredText,
+                      child: ExcludeSemantics(
+                        child: Text(
+                          order.expectedOrDeliveredText,
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.55),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1681,25 +1765,32 @@ class _OrderCard extends StatelessWidget {
                 if (order.status == OrderStatus.delivered &&
                     (order.rating ?? 0) > 0) ...[
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _Stars(rating: order.rating ?? 0),
-                      const SizedBox(width: 8),
-                      Text(
-                        (order.rating ?? 0).toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500, // ✅ match rest of UI
-                          fontSize: 12, // ✅ match rest of UI
-                          fontFamily: 'Arial',
-                        ),
+                  Semantics(
+                    label:
+                        'Rating, ${(order.rating ?? 0).toStringAsFixed(1)} out of 5',
+                    child: ExcludeSemantics(
+                      child: Row(
+                        children: [
+                          _Stars(rating: order.rating ?? 0),
+                          const SizedBox(width: 8),
+                          Text(
+                            (order.rating ?? 0).toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1739,12 +1830,17 @@ class _StatusChip extends StatelessWidget {
         break;
     }
 
-    return Text(
-      text,
-      style: const TextStyle(
-        fontWeight: FontWeight.w700,
-        fontSize: 14,
-        color: AppColors.blackCat,
+    return Semantics(
+      label: 'Status, $text',
+      child: ExcludeSemantics(
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            color: AppColors.blackCat,
+          ),
+        ),
       ),
     );
   }
@@ -1787,40 +1883,53 @@ class _NfcRequestTag extends StatelessWidget {
 }
 
 class _OrderDetailsLink extends StatelessWidget {
-  const _OrderDetailsLink({required this.onTap});
+  const _OrderDetailsLink({
+    required this.orderTitle,
+    required this.onTap,
+  });
 
+  final String orderTitle;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      label: 'Order details for $orderTitle',
+      hint: 'Double tap to open order details',
+      onTap: onTap,
       child: ExcludeSemantics(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.zero,
-          hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
-          splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
-          highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Order details',
-                  style: TextStyle(
-                    color: AppColors.blackCat.withValues(alpha: 0.55),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: 48,
+            minWidth: 48,
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.zero,
+            hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
+            splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
+            highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Order details',
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.blackCat.withValues(alpha: 0.45),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.blackCat.withValues(alpha: 0.45),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

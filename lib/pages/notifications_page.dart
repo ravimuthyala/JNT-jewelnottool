@@ -274,8 +274,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           horizontal: 8,
                           vertical: 6,
                         ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: const Size(48, 48),
+                        tapTargetSize: MaterialTapTargetSize.padded,
                       ),
                       onPressed: _markingAllRead ? null : () => _markAllRead(items),
                       child: const Text(

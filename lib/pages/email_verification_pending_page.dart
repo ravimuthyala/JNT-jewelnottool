@@ -238,6 +238,12 @@ class _EmailVerificationPendingPageState
                     height: 52,
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
+                        // The app-wide OutlinedButtonTheme (main.dart)
+                        // defaults to a dark fill with light text; without
+                        // an explicit backgroundColor override here, dark
+                        // foreground text/icon renders on that same dark
+                        // fill underneath -- invisible.
+                        backgroundColor: AppColors.snow,
                         foregroundColor: AppColors.blackCat,
                         side: const BorderSide(color: AppColors.blackCat),
                         shape: RoundedRectangleBorder(

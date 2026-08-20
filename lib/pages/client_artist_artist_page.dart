@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
+import 'client_artist_custom_request_with_artist_page.dart';
 import 'client_artist_earnings_page.dart';
 import 'client_artist_home_page.dart';
 import 'client_artists_page.dart';
@@ -60,6 +61,24 @@ class ClientArtistArtistPage extends StatelessWidget {
     );
   }
 
+  void _openRequestWithArtist(BuildContext context, String artistName) {
+    final name = artistName.trim();
+    if (name.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientArtistCustomRequestWithArtistPage(
+          profile: profile,
+          artistName: name,
+          showCampaignsTab: showCampaignsTab,
+          showContinueProfileCard: showContinueProfileCard,
+          enableAllTabs: enableAllTabs,
+          onClientNavTap: (ctx, index) async => _openHomeTab(ctx, index),
+        ),
+      ),
+    );
+  }
+
   void _openEarnings(BuildContext context) {
     Navigator.pushReplacement(
       context,
@@ -82,11 +101,13 @@ class ClientArtistArtistPage extends StatelessWidget {
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'Client artist view',
+      label: 'Artists',
       child: Scaffold(
       backgroundColor: AppColors.snow,
       body: ClientArtistsPage(
         profile: profile,
+        onRequestArtist: (artistName) =>
+            _openRequestWithArtist(context, artistName),
         onOpenProfile: onOpenProfile,
         onOpenEarnings: showCampaignsTab ? () => _openEarnings(context) : null,
         onOpenHistory: onOpenHistory,

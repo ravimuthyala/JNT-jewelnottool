@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -13,6 +14,7 @@ import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart'
     show ClientProfileDraft, NailLength, nailShapes;
+import '../widgets/accessible_date_grid.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../services/address_validation_service.dart';
@@ -355,15 +357,18 @@ class _UploadedReferenceImage {
 class _BrandLinkEntry {
   _BrandLinkEntry()
     : labelCtrl = TextEditingController(),
-      urlCtrl = TextEditingController();
+      urlCtrl = TextEditingController(),
+      labelFocusNode = FocusNode(debugLabel: 'brandLinkLabel');
 
   final TextEditingController labelCtrl;
   final TextEditingController urlCtrl;
+  final FocusNode labelFocusNode;
   bool isTapDestination = false;
 
   void dispose() {
     labelCtrl.dispose();
     urlCtrl.dispose();
+    labelFocusNode.dispose();
   }
 }
 
@@ -430,12 +435,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   final Map<String, bool> _artistAcceptsNfcByNameLower = <String, bool>{};
   bool _nfcRequest = false;
   String _groupClientToAdd = '';
-  // Bumped whenever _groupClientToAdd is cleared programmatically (add,
-  // duplicate-add, or eligibility invalidation) so the "Select clients"
-  // field's key can reset just that field's text -- without also keying on
-  // the in-progress query text itself, which would tear the field down on
-  // every keystroke.
-  int _groupClientFieldResetTick = 0;
   final List<String> _groupSelectedClients = <String>[];
   final TextEditingController _shipStreetCtrl = TextEditingController();
   final TextEditingController _shipCityCtrl = TextEditingController();
@@ -456,6 +455,61 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   final FocusNode _requestedArtistFocusNode = FocusNode(
     debugLabel: 'requestedArtistField',
   );
+  final FocusNode _galleryUploadFocusNode = FocusNode(
+    debugLabel: 'inspirationGalleryUpload',
+  );
+  final FocusNode _cameraUploadFocusNode = FocusNode(
+    debugLabel: 'inspirationCameraUpload',
+  );
+  final FocusNode _requiredPhraseFocusNode = FocusNode(
+    debugLabel: 'requiredPhraseField',
+  );
+  final FocusNode _forbiddenPhraseFocusNode = FocusNode(
+    debugLabel: 'forbiddenPhraseField',
+  );
+  final FocusNode _needByFocusNode = FocusNode(
+    debugLabel: 'brandNeedByField',
+  );
+  final FocusNode _descriptionFocusNode = FocusNode(
+    debugLabel: 'brandDescriptionField',
+  );
+  final FocusNode _shipStreetFocusNode = FocusNode(
+    debugLabel: 'brandShippingStreetField',
+  );
+  final FocusNode _shipCityFocusNode = FocusNode(
+    debugLabel: 'brandShippingCityField',
+  );
+  final FocusNode _shipStateFocusNode = FocusNode(
+    debugLabel: 'brandShippingStateField',
+  );
+  final FocusNode _shipZipFocusNode = FocusNode(
+    debugLabel: 'brandShippingZipField',
+  );
+  final FocusNode _shipCountryFocusNode = FocusNode(
+    debugLabel: 'brandShippingCountryField',
+  );
+
+  final GlobalKey _campaignNameSemanticsKey = GlobalKey();
+  final GlobalKey _needBySemanticsKey = GlobalKey();
+  final GlobalKey _descriptionSemanticsKey = GlobalKey();
+  final GlobalKey _requestedClientSemanticsKey = GlobalKey();
+  final GlobalKey _groupClientSemanticsKey = GlobalKey();
+  final GlobalKey _requestedArtistSemanticsKey = GlobalKey();
+  final GlobalKey _specificClientOptionSemanticsKey = GlobalKey();
+  final GlobalKey _groupClientsOptionSemanticsKey = GlobalKey();
+  final GlobalKey _specificArtistOptionSemanticsKey = GlobalKey();
+  final GlobalKey _galleryUploadSemanticsKey = GlobalKey();
+  final GlobalKey _cameraUploadSemanticsKey = GlobalKey();
+  final GlobalKey _requiredPhraseSemanticsKey = GlobalKey();
+  final GlobalKey _forbiddenPhraseSemanticsKey = GlobalKey();
+  final GlobalKey _addBrandLinkButtonKey = GlobalKey();
+  final GlobalKey _shippingDifferentSemanticsKey = GlobalKey();
+  final GlobalKey _shipStreetSemanticsKey = GlobalKey();
+  final GlobalKey _shipCitySemanticsKey = GlobalKey();
+  final GlobalKey _shipStateSemanticsKey = GlobalKey();
+  final GlobalKey _shipZipSemanticsKey = GlobalKey();
+  final GlobalKey _shipCountrySemanticsKey = GlobalKey();
+
   Timer? _shipStreetAutocompleteDebounce;
   List<AddressSuggestion> _shipStreetSuggestions = const [];
   bool _shipStreetSuggestionsLoading = false;
@@ -480,6 +534,14 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   // Brand Collaboration (optional, step 2, collapsed by default)
   // -----------------------------
   bool _brandCollaborationExpanded = false;
+  // Tapping "New Offer" replaces that button with the expanded section in
+  // the same spot -- the button TalkBack/VoiceOver had focus on no longer
+  // exists after the rebuild, so focus doesn't move anywhere on its own
+  // (it was landing on the notification bell in the app bar instead).
+  // Re-focusing the "Posts" heading explicitly puts the user right at the
+  // start of the newly-revealed content, so continuing to swipe forward
+  // proceeds straight through it.
+  final GlobalKey _postsHeadingKey = GlobalKey();
   int _reelPostCount = 0;
   int _storiesPostCount = 0;
   int _carouselPostCount = 0;
@@ -502,6 +564,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   // Pricing -- shown for every request, NFC or not. Repost/competing-brand
   // fees and the paid-ads fee are all percentages of this base fee.
   final TextEditingController _baseFeeCtrl = TextEditingController();
+  final FocusNode _baseFeeFocusNode = FocusNode(debugLabel: 'brandBaseFeeField');
+  final GlobalKey _baseFeeSemanticsKey = GlobalKey(debugLabel: 'brandBaseFeeA11y');
   _RepostDuration? _repostDuration;
   _CompetingBrandsWindow? _competingBrandsWindow;
   bool _hasRepostDurationSelection = false;
@@ -530,6 +594,27 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   // Blank until the brand either prices an offer in step 2 (Due on
   // Delivery flows in automatically) or types a max in directly here.
   bool _clientBudgetMaxIsSet = false;
+  // Once the brand types their own value into Client Budget Max, their
+  // edit wins -- the offer's Due on Delivery total stops overwriting it.
+  bool _clientBudgetMaxUserEdited = false;
+  // Blank until the brand types a max in directly -- same reasoning as
+  // _clientBudgetMaxIsSet, just with no step-2 auto-fill source to wait on.
+  bool _artistBudgetMaxIsSet = false;
+
+  // Keeps Client Budget Max synced to the offer's Due on Delivery total as
+  // the brand fills out pricing (base fee, repost, exclusivity), until the
+  // brand manually edits Max themselves. Callers wrap this in setState.
+  void _syncClientBudgetMaxFromOffer() {
+    if (_clientBudgetMaxUserEdited) return;
+    final dueOnDelivery =
+        _baseFee + _repostFeeAmount + _competingBrandsFeeAmount;
+    if (dueOnDelivery <= 0) return;
+    _clientBudget = RangeValues(
+      _clientBudget.start,
+      dueOnDelivery.clamp(_clientBudget.start, 50000),
+    );
+    _clientBudgetMaxIsSet = true;
+  }
 
   // -----------------------------
   // Nail selections (prefilled)
@@ -564,10 +649,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         (_requestedArtist ?? '').trim().isNotEmpty) {
       _designCreatorMode = _DesignCreatorMode.specificArtist;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      FocusScope.of(context).requestFocus(_campaignNameFocusNode);
-    });
+    // Do not force the first form field on page open. CompanyHeader may
+    // intentionally focus Notifications, while the standalone variant
+    // should begin at its Back/title controls. TalkBack can then follow
+    // the visual reading order into the form without skipping context.
     unawaited(_loadSelectionSources());
   }
 
@@ -591,11 +676,51 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     _talkingPointsCtrl.dispose();
     _forbiddenPhraseCtrl.dispose();
     _baseFeeCtrl.dispose();
+    _baseFeeFocusNode.dispose();
     _campaignNameFocusNode.dispose();
     _requestedClientFocusNode.dispose();
     _groupClientFocusNode.dispose();
     _requestedArtistFocusNode.dispose();
+    _galleryUploadFocusNode.dispose();
+    _cameraUploadFocusNode.dispose();
+    _requiredPhraseFocusNode.dispose();
+    _forbiddenPhraseFocusNode.dispose();
+    _needByFocusNode.dispose();
+    _descriptionFocusNode.dispose();
+    _shipStreetFocusNode.dispose();
+    _shipCityFocusNode.dispose();
+    _shipStateFocusNode.dispose();
+    _shipZipFocusNode.dispose();
+    _shipCountryFocusNode.dispose();
     super.dispose();
+  }
+
+  // SnackBars aren't reliably picked up by screen readers on their own, so
+  // every validation/limit message shown via SnackBar is also announced
+  // explicitly as a live region.
+  void _showSnackAndAnnounce(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+  }
+
+  // For state changes that are already visually obvious (a chip
+  // appearing/disappearing) a SnackBar would just be visual noise on top of
+  // that -- but a screen reader user still needs the same confirmation, so
+  // this announces without one.
+  void _announce(String message) {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
   }
 
   void _focusAfterBuild(FocusNode node) {
@@ -603,6 +728,84 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       if (!mounted) return;
       FocusScope.of(context).requestFocus(node);
     });
+  }
+
+  void _focusSemanticTarget(
+    GlobalKey key, {
+    FocusNode? focusNode,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (focusNode != null) {
+        FocusScope.of(context).requestFocus(focusNode);
+      }
+      final targetContext = key.currentContext;
+      if (targetContext == null) return;
+      await Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.25,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+      if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+      key.currentContext?.findRenderObject()?.sendSemanticsEvent(
+        const FocusSemanticEvent(),
+      );
+      // Android TalkBack may rebuild the semantic tree again after a
+      // conditional field appears or a route finishes closing. Retry twice
+      // so the accessibility cursor stays on the requested real control.
+      Future<void>.delayed(const Duration(milliseconds: 140), () {
+        if (!mounted) return;
+        key.currentContext?.findRenderObject()?.sendSemanticsEvent(
+          const FocusSemanticEvent(),
+        );
+      });
+      Future<void>.delayed(const Duration(milliseconds: 320), () {
+        if (!mounted) return;
+        key.currentContext?.findRenderObject()?.sendSemanticsEvent(
+          const FocusSemanticEvent(),
+        );
+      });
+    });
+  }
+
+  String _spokenDate(DateTime? date) {
+    if (date == null) return 'not selected';
+    return MaterialLocalizations.of(context).formatFullDate(date);
+  }
+
+  Widget _a11yHeading(
+    String text, {
+    double fontSize = 14,
+    String? fontFamily = 'Arialbold',
+    Color color = AppColors.blackCat,
+    TextAlign? textAlign,
+  }) {
+    return Semantics(
+      header: true,
+      label: text,
+      child: ExcludeSemantics(
+        child: Text(
+          text,
+          textAlign: textAlign,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            fontFamily: fontFamily,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Same idea as _focusAfterBuild, but for content with no FocusNode of its
+  // own (e.g. a plain Text used to re-orient the user after a widget they
+  // had focus on gets replaced by a rebuild) -- sends accessibility focus
+  // directly to whatever's under this key once the frame settles.
+  void _requestAccessibilityFocus(GlobalKey key) {
+    _focusSemanticTarget(key);
   }
 
   Future<void> _autofillShippingAddressFromStreet() async {
@@ -755,102 +958,24 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     final initialDate = _needBy != null && !_needBy!.isBefore(minDate)
         ? _needBy!
         : minDate;
-    DateTime tempSelected = initialDate;
 
-    await showDialog<void>(
+    final picked = await showAccessibleDatePickerDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: _requestSnow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280, maxHeight: 380),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: const TextScaler.linear(0.92)),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppColors.blackCat,
-                    onPrimary: Colors.white,
-                    surface: _requestSnow,
-                    onSurface: AppColors.blackCat,
-                  ),
-                  datePickerTheme: const DatePickerThemeData(
-                    headerHeadlineStyle: TextStyle(fontSize: 16),
-                    weekdayStyle: TextStyle(fontSize: 11),
-                    dayStyle: TextStyle(fontSize: 12),
-                    yearStyle: TextStyle(fontSize: 12),
-                  ),
-                ),
-                // CalendarDatePicker's onDateChanged also fires when only a
-                // year is picked (keeping the previous month/day) -- closing
-                // immediately there would never let the user go on to pick
-                // the month/day. Track the latest pick and only commit it
-                // once Confirm is tapped.
-                child: StatefulBuilder(
-                  builder: (context, setDialogState) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: CalendarDatePicker(
-                          initialDate: tempSelected,
-                          firstDate: minDate,
-                          lastDate: now.add(const Duration(days: 365)),
-                          onDateChanged: (picked) {
-                            setDialogState(() => tempSelected = picked);
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCatLight,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _needBy = tempSelected;
-                                _dateCtrl.text =
-                                    '${tempSelected.month.toString().padLeft(2, '0')}/${tempSelected.day.toString().padLeft(2, '0')}/${tempSelected.year}';
-                                if (_jntRevealDate != null &&
-                                    !_jntRevealDate!.isAfter(_needBy!)) {
-                                  _jntRevealDate = null;
-                                  _revealDateCtrl.clear();
-                                }
-                              });
-                              Navigator.of(ctx).pop();
-                            },
-                            child: const Text(
-                              'Confirm',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      fieldLabel: 'Need By Date',
+      firstDate: minDate,
+      lastDate: now.add(const Duration(days: 365)),
+      initialSelectedDate: initialDate,
     );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _needBy = picked;
+      _dateCtrl.text =
+          '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
+      if (_jntRevealDate != null && !_jntRevealDate!.isAfter(_needBy!)) {
+        _jntRevealDate = null;
+        _revealDateCtrl.clear();
+      }
+    });
   }
 
   DateTime? _tryParseMmDdYyyy(String raw) {
@@ -929,110 +1054,36 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         _jntRevealDate != null && !_jntRevealDate!.isBefore(firstDate)
         ? _jntRevealDate!
         : firstDate;
-    DateTime tempSelected = initialDate;
 
-    await showDialog<void>(
+    final picked = await showAccessibleDatePickerDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: _requestSnow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280, maxHeight: 380),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: const TextScaler.linear(0.92)),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppColors.blackCat,
-                    onPrimary: Colors.white,
-                    surface: _requestSnow,
-                    onSurface: AppColors.blackCat,
-                  ),
-                  datePickerTheme: const DatePickerThemeData(
-                    headerHeadlineStyle: TextStyle(fontSize: 16),
-                    weekdayStyle: TextStyle(fontSize: 11),
-                    dayStyle: TextStyle(fontSize: 12),
-                    yearStyle: TextStyle(fontSize: 12),
-                  ),
-                ),
-                // CalendarDatePicker's onDateChanged also fires when only a
-                // year is picked (keeping the previous month/day) -- closing
-                // immediately there would never let the user go on to pick
-                // the month/day. Track the latest pick and only commit it
-                // once Confirm is tapped.
-                child: StatefulBuilder(
-                  builder: (context, setDialogState) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: CalendarDatePicker(
-                          initialDate: tempSelected,
-                          firstDate: firstDate,
-                          lastDate: now.add(const Duration(days: 365 * 2)),
-                          onDateChanged: (picked) {
-                            setDialogState(() => tempSelected = picked);
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCatLight,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _jntRevealDate = tempSelected;
-                                _revealDateCtrl.text =
-                                    '${tempSelected.month.toString().padLeft(2, '0')}/${tempSelected.day.toString().padLeft(2, '0')}/${tempSelected.year}';
-                              });
-                              Navigator.of(ctx).pop();
-                            },
-                            child: const Text(
-                              'Confirm',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      fieldLabel: 'JNT Reveal Date',
+      firstDate: firstDate,
+      lastDate: now.add(const Duration(days: 365 * 2)),
+      initialSelectedDate: initialDate,
     );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _jntRevealDate = picked;
+      _revealDateCtrl.text =
+          '${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}';
+    });
   }
 
   Future<void> _uploadReferenceImages() async {
     final remainingSlots = _maxInspirationPhotos - _uploadedFiles.length;
     if (remainingSlots <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You can upload up to 10 inspiration photos.'),
-        ),
-      );
+      _showSnackAndAnnounce('You can upload up to 10 inspiration photos.');
       return;
     }
     final picked = await _picker.pickMultiImage(imageQuality: 85);
+    // The OS image picker steals accessibility focus; after it returns, put
+    // focus back on the Gallery button (not wherever the platform lands it)
+    // so screen reader users stay in place.
+    _focusSemanticTarget(
+      _galleryUploadSemanticsKey,
+      focusNode: _galleryUploadFocusNode,
+    );
     if (picked.isEmpty) return;
     final pickedToAdd = picked.take(remainingSlots).toList(growable: false);
 
@@ -1049,26 +1100,25 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     });
 
     if (picked.length > pickedToAdd.length && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Extra photos were skipped. Maximum is 10.'),
-        ),
-      );
+      _showSnackAndAnnounce('Extra photos were skipped. Maximum is 10.');
     }
   }
 
   Future<void> _captureReferenceImage() async {
     if (_uploadedFiles.length >= _maxInspirationPhotos) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You can upload up to 10 inspiration photos.'),
-        ),
-      );
+      _showSnackAndAnnounce('You can upload up to 10 inspiration photos.');
       return;
     }
     final picked = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 85,
+    );
+    // The OS camera steals accessibility focus; after it returns, put focus
+    // back on the Camera button (not wherever the platform lands it) so
+    // screen reader users stay in place.
+    _focusSemanticTarget(
+      _cameraUploadSemanticsKey,
+      focusNode: _cameraUploadFocusNode,
     );
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
@@ -1297,7 +1347,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         if (_groupClientToAdd.trim().isNotEmpty &&
             !allowed.contains(_groupClientToAdd.trim().toLowerCase())) {
           _groupClientToAdd = '';
-          _groupClientFieldResetTick++;
         }
         if ((_requestedArtist ?? '').trim().isNotEmpty &&
             !_isArtistNameNfcAccepting(_requestedArtist!)) {
@@ -1502,7 +1551,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         if (_groupClientToAdd.trim().isNotEmpty &&
             !allowed.contains(_groupClientToAdd.trim().toLowerCase())) {
           _groupClientToAdd = '';
-          _groupClientFieldResetTick++;
         }
         _clientEmailByNameLower
           ..clear()
@@ -1531,7 +1579,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         //_allClients = _clientOptions;
         _requestedClient = null;
         _groupClientToAdd = '';
-        _groupClientFieldResetTick++;
         _groupSelectedClients.clear();
         _clientEmailByNameLower.clear();
         _clientNfcEligibleByNameLower.clear();
@@ -1711,9 +1758,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     final value = _groupClientToAdd.trim();
     if (value.isEmpty) return;
     if (_groupSelectedClients.length >= 15) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You can add up to 15 clients only.')),
-      );
+      _showSnackAndAnnounce('You can add up to 15 clients only.');
       return;
     }
     if (_groupSelectedClients.any(
@@ -1721,7 +1766,6 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     )) {
       setState(() {
         _groupClientToAdd = '';
-        _groupClientFieldResetTick++;
       });
       unawaited(
         _showRequestInfoDialog(
@@ -1734,25 +1778,52 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     setState(() {
       _groupSelectedClients.add(value);
       _groupClientToAdd = '';
-      _groupClientFieldResetTick++;
     });
+    // Announce the completed action first, then restore the actual
+    // TalkBack accessibility cursor to the stable Group Client selector.
+    // The selector widget itself is no longer recreated after every Add,
+    // which prevents Android from falling back to the notification bell.
+    _announce(
+      '$value added. ${_groupSelectedClients.length} of 15 clients selected. Select another client or swipe forward to continue.',
+    );
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      _focusSemanticTarget(
+        _groupClientSemanticsKey,
+        focusNode: _groupClientFocusNode,
+      );
+    });
+  }
+
+  void _removeGroupClient(String name) {
+    setState(() => _groupSelectedClients.remove(name));
+    _announce(
+      '$name removed. ${_groupSelectedClients.length} of 15 clients selected.',
+    );
   }
 
   void _addBrandLink() {
     if (_brandLinks.length >= _maxBrandLinks) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('You can add up to $_maxBrandLinks links only.'),
-        ),
-      );
+      _showSnackAndAnnounce('You can add up to $_maxBrandLinks links only.');
       return;
     }
-    setState(() => _brandLinks.add(_BrandLinkEntry()));
+    final entry = _BrandLinkEntry();
+    setState(() => _brandLinks.add(entry));
+    // Land the user straight in the new row's label field, so continuing
+    // to swipe forward proceeds through label -> tap-destination pill ->
+    // remove -> URL field, then back to "Add a link" for the next one --
+    // matching the flow for the other freshly-revealed fields on this page.
+    _focusAfterBuild(entry.labelFocusNode);
   }
 
   void _removeBrandLink(int index) {
     _brandLinks[index].dispose();
     setState(() => _brandLinks.removeAt(index));
+    // Removing a link reveals/keeps the Add a Link button. Move the
+    // accessibility cursor there instead of letting TalkBack fall back to
+    // the section heading or another unrelated node after the removed row
+    // disappears from the semantics tree.
+    _requestAccessibilityFocus(_addBrandLinkButtonKey);
   }
 
   void _setBrandLinkTapDestination(int index) {
@@ -1798,25 +1869,109 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   /// naturally validates "step 1's fields" on Save and "everything" on
   /// Submit, with no separate step-1-only subset needed.
   bool _validateForSubmit() {
-    final campaignOk = _campaignNameCtrl.text.trim().isNotEmpty;
-    final needByOk = _needBy != null;
-    final descOk = _descCtrl.text.trim().isNotEmpty;
-    final clientOk =
-        _clientRecipientMode != _ClientRecipientMode.specificClient ||
-        ((_requestedClient ?? '').trim().isNotEmpty);
-    final groupOk =
-        _clientRecipientMode != _ClientRecipientMode.groupClients ||
-        _groupSelectedClients.length >= 2;
-    final artistOk =
-        _designCreatorMode != _DesignCreatorMode.specificArtist ||
-        ((_requestedArtist ?? '').trim().isNotEmpty);
-    final shippingOk =
-        !_shippingAddressDifferentFromProfile ||
-        (_shipStreetCtrl.text.trim().isNotEmpty &&
-            _shipCityCtrl.text.trim().isNotEmpty &&
-            _shipStateCtrl.text.trim().isNotEmpty &&
-            _shipZipCtrl.text.trim().isNotEmpty &&
-            _shipCountryCtrl.text.trim().isNotEmpty);
+    void fail(
+      String message,
+      GlobalKey key, {
+      FocusNode? focusNode,
+    }) {
+      _showSnackAndAnnounce(message);
+      _focusSemanticTarget(key, focusNode: focusNode);
+    }
+
+    if (_campaignNameCtrl.text.trim().isEmpty) {
+      fail(
+        'Campaign / Collection Name is required.',
+        _campaignNameSemanticsKey,
+        focusNode: _campaignNameFocusNode,
+      );
+      return false;
+    }
+    if (_needBy == null) {
+      fail(
+        'Need By Date is required.',
+        _needBySemanticsKey,
+        focusNode: _needByFocusNode,
+      );
+      return false;
+    }
+    if (_descCtrl.text.trim().isEmpty) {
+      fail(
+        'Description is required.',
+        _descriptionSemanticsKey,
+        focusNode: _descriptionFocusNode,
+      );
+      return false;
+    }
+    if (_clientRecipientMode == _ClientRecipientMode.specificClient &&
+        ((_requestedClient ?? '').trim().isEmpty)) {
+      fail(
+        'Select a specific client.',
+        _requestedClientSemanticsKey,
+        focusNode: _requestedClientFocusNode,
+      );
+      return false;
+    }
+    if (_clientRecipientMode == _ClientRecipientMode.groupClients &&
+        _groupSelectedClients.length < 2) {
+      fail(
+        'Select at least 2 clients for a group request.',
+        _groupClientSemanticsKey,
+        focusNode: _groupClientFocusNode,
+      );
+      return false;
+    }
+    if (_designCreatorMode == _DesignCreatorMode.specificArtist &&
+        ((_requestedArtist ?? '').trim().isEmpty)) {
+      fail(
+        'Select a specific artist.',
+        _requestedArtistSemanticsKey,
+        focusNode: _requestedArtistFocusNode,
+      );
+      return false;
+    }
+    if (_shippingAddressDifferentFromProfile) {
+      if (_shipStreetCtrl.text.trim().isEmpty) {
+        fail(
+          'Shipping Street Address is required.',
+          _shipStreetSemanticsKey,
+          focusNode: _shipStreetFocusNode,
+        );
+        return false;
+      }
+      if (_shipCityCtrl.text.trim().isEmpty) {
+        fail(
+          'Shipping City is required.',
+          _shipCitySemanticsKey,
+          focusNode: _shipCityFocusNode,
+        );
+        return false;
+      }
+      if (_shipStateCtrl.text.trim().isEmpty) {
+        fail(
+          'Shipping State is required.',
+          _shipStateSemanticsKey,
+          focusNode: _shipStateFocusNode,
+        );
+        return false;
+      }
+      if (_shipZipCtrl.text.trim().isEmpty) {
+        fail(
+          'Shipping ZIP Code is required.',
+          _shipZipSemanticsKey,
+          focusNode: _shipZipFocusNode,
+        );
+        return false;
+      }
+      if (_shipCountryCtrl.text.trim().isEmpty) {
+        fail(
+          'Shipping Country is required.',
+          _shipCountrySemanticsKey,
+          focusNode: _shipCountryFocusNode,
+        );
+        return false;
+      }
+    }
+
     final nfcHasEligibleRecipients =
         !_nfcRequest ||
         (_clientRecipientMode == _ClientRecipientMode.pool &&
@@ -1825,22 +1980,21 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             _isClientNameNfcEligible(_requestedClient ?? '')) ||
         (_clientRecipientMode == _ClientRecipientMode.groupClients &&
             _groupSelectedClients.every(_isClientNameNfcEligible));
-
-    if (!campaignOk ||
-        !needByOk ||
-        !descOk ||
-        !clientOk ||
-        !groupOk ||
-        !artistOk ||
-        !shippingOk ||
-        !nfcHasEligibleRecipients) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please complete Campaign Name, Need By Date, Description, required direct selections, and at least 2 group clients when using group mode. NFC requests require NFC-eligible clients only.',
-          ),
-        ),
+    if (!nfcHasEligibleRecipients) {
+      _showSnackAndAnnounce(
+        'NFC requests require NFC-eligible clients. Update the recipient selection.',
       );
+      if (_clientRecipientMode == _ClientRecipientMode.specificClient) {
+        _focusSemanticTarget(
+          _requestedClientSemanticsKey,
+          focusNode: _requestedClientFocusNode,
+        );
+      } else if (_clientRecipientMode == _ClientRecipientMode.groupClients) {
+        _focusSemanticTarget(
+          _groupClientSemanticsKey,
+          focusNode: _groupClientFocusNode,
+        );
+      }
       return false;
     }
     return true;
@@ -2435,15 +2589,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             summary: summary,
             details: details,
           );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Only ${uploadedPhotoUrls.length} of $selectedPhotoCount inspiration photos uploaded.',
-                ),
-              ),
-            );
-          }
+          _showSnackAndAnnounce(
+            'Only ${uploadedPhotoUrls.length} of $selectedPhotoCount inspiration photos uploaded.',
+          );
         }
       }
 
@@ -2453,18 +2601,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         // Leaving step 2 (Brand Collaboration): if the brand actually
         // priced the offer, use that as the starting point for step 3's
         // client budget range instead of the generic $15-$50,000 default.
+        // The live sync on each pricing field normally already covers
+        // this; this is just a fallback for that same transition.
         final leavingBrandCollaboration = _currentStep == 2;
         setState(() {
           if (leavingBrandCollaboration) {
-            final dueOnDelivery =
-                _baseFee + _repostFeeAmount + _competingBrandsFeeAmount;
-            if (dueOnDelivery > 0) {
-              _clientBudget = RangeValues(
-                _clientBudget.start,
-                dueOnDelivery.clamp(_clientBudget.start, 50000),
-              );
-              _clientBudgetMaxIsSet = true;
-            }
+            _syncClientBudgetMaxFromOffer();
           }
           _currentStep += 1;
         });
@@ -2516,15 +2658,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       if (!mounted) return;
       _closeAfterSuccessfulSubmit();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isDraft
-                ? 'Failed to save request: $e'
-                : 'Failed to submit request: $e',
-          ),
-        ),
+      _showSnackAndAnnounce(
+        isDraft ? 'Failed to save request: $e' : 'Failed to submit request: $e',
       );
     } finally {
       if (mounted) {
@@ -3065,24 +3200,36 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   Widget _stepperButton({
     required IconData icon,
     required VoidCallback? onTap,
+    required String targetLabel,
   }) {
     final enabled = onTap != null;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: _requestSnow,
-          border: Border.all(
-            color: AppColors.blackCat.withValues(alpha: enabled ? 0.35 : 0.15),
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: icon == Icons.add
+          ? 'Increase $targetLabel'
+          : 'Decrease $targetLabel',
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _requestSnow,
+              border: Border.all(
+                color: AppColors.blackCat.withValues(
+                  alpha: enabled ? 0.35 : 0.15,
+                ),
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: AppColors.blackCat.withValues(alpha: enabled ? 1 : 0.3),
+            ),
           ),
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: AppColors.blackCat.withValues(alpha: enabled ? 1 : 0.3),
         ),
       ),
     );
@@ -3100,53 +3247,81 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Plain Text inside a ListView item merges into one giant node
+          // covering the whole card by default -- explicitly containing
+          // the title/subtitle/count here (and excluding their raw Text
+          // nodes so the value isn't announced twice) gives this row its
+          // own single, distinct stop, separate from every other
+          // post-count row and from "Posts" above them.
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'Arialbold',
-                    color: AppColors.blackCat,
-                  ),
+            child: Semantics(
+              container: true,
+              label: '$title, $subtitle',
+              value: '$count selected',
+              child: ExcludeSemantics(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Arialbold',
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Arial',
+                        color: AppColors.blackCat.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Arial',
-                    color: AppColors.blackCat.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(width: 10),
           _stepperButton(
             icon: Icons.remove,
+            targetLabel: title,
             onTap: count > 0
-                ? () => onChanged(count - step < 0 ? 0 : count - step)
+                ? () {
+                    final next = count - step < 0 ? 0 : count - step;
+                    onChanged(next);
+                    _announce('$title, $next selected');
+                  }
                 : null,
           ),
           SizedBox(
             width: count >= 100 ? 44 : 32,
-            child: Text(
-              '$count',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-                color: AppColors.blackCat,
+            child: ExcludeSemantics(
+              child: Text(
+                '$count',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                  color: AppColors.blackCat,
+                ),
               ),
             ),
           ),
-          _stepperButton(icon: Icons.add, onTap: () => onChanged(count + step)),
+          _stepperButton(
+            icon: Icons.add,
+            targetLabel: title,
+            onTap: () {
+              final next = count + step;
+              onChanged(next);
+              _announce('$title, $next selected');
+            },
+          ),
         ],
       ),
     );
@@ -3159,41 +3334,50 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   }) {
     final selected = _tapRatePerTap == rate;
     return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _tapRatePerTap = rate),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? AppColors.blackCat : _requestSnow,
-            border: Border.all(
-              color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '$amountLabel $subLabel',
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: () => setState(() => _tapRatePerTap = rate),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.blackCat : _requestSnow,
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(
+                    alpha: selected ? 1 : 0.3,
+                  ),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    amountLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Arialbold',
+                      color: selected ? AppColors.snow : AppColors.blackCat,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subLabel,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                      color: (selected ? AppColors.snow : AppColors.blackCat)
+                          .withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                amountLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                  color: selected ? AppColors.snow : AppColors.blackCat,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subLabel,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'Arial',
-                  color: (selected ? AppColors.snow : AppColors.blackCat)
-                      .withValues(alpha: 0.7),
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -3202,29 +3386,45 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
 
   Widget _tapGoesHerePill(int index) {
     final selected = _brandLinks[index].isTapDestination;
-    return InkWell(
-      // Once a link is saved as the tap destination its pill locks in --
-      // no more tapping it away. Picking a different link's pill is what
-      // moves the destination instead.
+    return Semantics(
+      button: true,
+      enabled: !selected,
       onTap: selected ? null : () => _setBrandLinkTapDestination(index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.blackCat : _requestSnow,
-          border: Border.all(
-            color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
-          ),
-        ),
-        child: Text(
-          'TAP GOES HERE',
-          style: TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arial',
-            letterSpacing: 0.6,
-            color: selected
-                ? AppColors.snow
-                : AppColors.blackCat.withValues(alpha: 0.55),
+      // Excluding a widget's own semantics (below) also drops the
+      // isFocusable flag a real button would otherwise carry -- without
+      // this, a locked-in (selected, therefore enabled:false) pill drops
+      // out of swipe navigation entirely instead of staying reachable as
+      // a disabled stop, same gap found and fixed for the disabled Min
+      // budget field earlier this session.
+      focusable: true,
+      selected: selected,
+      label: selected ? 'Tap goes here, current destination' : 'Tap goes here',
+      child: ExcludeSemantics(
+        child: InkWell(
+          // Once a link is saved as the tap destination its pill locks in --
+          // no more tapping it away. Picking a different link's pill is what
+          // moves the destination instead.
+          onTap: selected ? null : () => _setBrandLinkTapDestination(index),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.blackCat : _requestSnow,
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
+              ),
+            ),
+            child: Text(
+              'TAP GOES HERE',
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arial',
+                letterSpacing: 0.6,
+                color: selected
+                    ? AppColors.snow
+                    : AppColors.blackCat.withValues(alpha: 0.55),
+              ),
+            ),
           ),
         ),
       ),
@@ -3242,8 +3442,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: TextField(
+                child: Semantics(
+                  label: 'Link ${index + 1} label',
+                  textField: true,
+                  child: TextField(
                   controller: entry.labelCtrl,
+                  focusNode: entry.labelFocusNode,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -3256,12 +3460,14 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                     border: InputBorder.none,
                     hintText: 'Label, e.g. Shop the set',
                   ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               _tapGoesHerePill(index),
               const SizedBox(width: 4),
               IconButton(
+                tooltip: 'Remove link ${index + 1}',
                 icon: Icon(
                   Icons.close_rounded,
                   size: 18,
@@ -3275,7 +3481,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             ],
           ),
           const SizedBox(height: 4),
-          TextField(
+          Semantics(
+            label: 'Link ${index + 1} URL',
+            textField: true,
+            child: TextField(
             controller: entry.urlCtrl,
             style: TextStyle(
               fontSize: 12,
@@ -3288,6 +3497,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               filled: false,
               border: InputBorder.none,
               hintText: 'yourbrand.com/…',
+            ),
             ),
           ),
         ],
@@ -3304,24 +3514,34 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         const SizedBox(height: 14),
         Row(
           children: [
-            const Expanded(
-              child: Text(
-                "Links you're giving her",
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                  color: AppColors.blackCat,
+            Expanded(
+              child: Semantics(
+                container: true,
+                header: true,
+                label: "Links you're giving her",
+                value: '${_brandLinks.length}/$_maxBrandLinks links',
+                child: const ExcludeSemantics(
+                  child: Text(
+                    "Links you're giving her",
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Arialbold',
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
             ),
-            Text(
-              '${_brandLinks.length}/$_maxBrandLinks links',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-                color: AppColors.blackCat.withValues(alpha: 0.55),
+            ExcludeSemantics(
+              child: Text(
+                '${_brandLinks.length}/$_maxBrandLinks links',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Arial',
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                ),
               ),
             ),
           ],
@@ -3356,6 +3576,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             width: double.infinity,
             height: 44,
             child: ElevatedButton(
+              key: _addBrandLinkButtonKey,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.blackCat,
                 foregroundColor: AppColors.snow,
@@ -3378,14 +3599,22 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           ),
         ],
         const SizedBox(height: 10),
-        Text(
-          "Every link is rewritten with her tracking code before it reaches "
-          "her, so clicks and taps land in the right column.",
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            fontFamily: 'Arial',
-            color: AppColors.blackCat.withValues(alpha: 0.55),
+        Semantics(
+          container: true,
+          label:
+              "Every link is rewritten with her tracking code before it "
+              "reaches her, so clicks and taps land in the right column.",
+          child: ExcludeSemantics(
+            child: Text(
+              "Every link is rewritten with her tracking code before it reaches "
+              "her, so clicks and taps land in the right column.",
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Arial',
+                color: AppColors.blackCat.withValues(alpha: 0.55),
+              ),
+            ),
           ),
         ),
       ],
@@ -3412,12 +3641,19 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             ),
           ),
           const SizedBox(width: 6),
-          InkWell(
+          Semantics(
+            button: true,
+            label: 'Remove $text',
             onTap: onRemove,
-            child: Icon(
-              Icons.close_rounded,
-              size: 14,
-              color: AppColors.blackCat.withValues(alpha: 0.6),
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: onRemove,
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: AppColors.blackCat.withValues(alpha: 0.6),
+                ),
+              ),
             ),
           ),
         ],
@@ -3428,35 +3664,62 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
   Widget _phraseChipInput({
     required TextEditingController controller,
     required VoidCallback onSubmit,
+    required String semanticLabel,
+    required FocusNode focusNode,
+    required GlobalKey semanticsKey,
   }) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.zero,
       borderSide: BorderSide(color: AppColors.blackCat.withValues(alpha: 0.2)),
     );
-    return TextField(
-      controller: controller,
-      style: const TextStyle(
-        fontSize: 12.5,
-        fontWeight: FontWeight.w600,
-        fontFamily: 'Arial',
-        color: AppColors.blackCat,
-      ),
-      textInputAction: TextInputAction.done,
-      decoration: InputDecoration(
-        hintText: 'Type a phrase, press enter',
-        filled: true,
-        fillColor: _requestSnow,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
+
+    void submitAndKeepFocus() {
+      final valueBeforeSubmit = controller.text.trim();
+      if (valueBeforeSubmit.isEmpty) return;
+      onSubmit();
+
+      // The chip is inserted above this field and the controller is cleared.
+      // Keep both keyboard/input focus and the screen-reader accessibility
+      // cursor on this same field so another phrase can be entered
+      // immediately without navigating back to it.
+      _focusSemanticTarget(semanticsKey, focusNode: focusNode);
+      _announce('$valueBeforeSubmit added. Enter another phrase or swipe forward to continue.');
+    }
+
+    return Semantics(
+      key: semanticsKey,
+      container: true,
+      label: semanticLabel,
+      textField: true,
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Arial',
+          color: AppColors.blackCat,
         ),
-        border: border,
-        enabledBorder: border,
-        focusedBorder: border.copyWith(
-          borderSide: const BorderSide(color: AppColors.blackCat),
+        textInputAction: TextInputAction.done,
+        // Override EditableText's default Done behavior, which otherwise
+        // unfocuses the field before onSubmitted is called.
+        onEditingComplete: () {},
+        decoration: InputDecoration(
+          hintText: 'Type a phrase, press enter',
+          filled: true,
+          fillColor: _requestSnow,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          border: border,
+          enabledBorder: border,
+          focusedBorder: border.copyWith(
+            borderSide: const BorderSide(color: AppColors.blackCat),
+          ),
         ),
+        onSubmitted: (_) => submitAndKeepFocus(),
       ),
-      onSubmitted: (_) => onSubmit(),
     );
   }
 
@@ -3466,23 +3729,38 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       children: [
         Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
         const SizedBox(height: 14),
-        const Text(
-          'Wording',
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        Semantics(
+          container: true,
+          header: true,
+          label: 'Wording',
+          child: const ExcludeSemantics(
+            child: Text(
+              'Wording',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
-          'She must include',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        // The heading's own text semantics are excluded here -- it's
+        // silenced, not removed -- because _phraseChipInput below carries
+        // the same name as its own accessible label (merged with the
+        // field's hint), so landing on the field calls out both together
+        // in one stop instead of the heading and field each announcing
+        // "She must include" separately back to back.
+        const ExcludeSemantics(
+          child: Text(
+            'She must include',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -3502,61 +3780,74 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         ],
         _phraseChipInput(
           controller: _requiredPhraseCtrl,
+          semanticLabel: 'She must include',
+          focusNode: _requiredPhraseFocusNode,
+          semanticsKey: _requiredPhraseSemanticsKey,
           onSubmit: () => _addPhrase(_requiredPhrases, _requiredPhraseCtrl),
         ),
         const SizedBox(height: 16),
-        const Text(
-          "Talking points, if she wants them",
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        const ExcludeSemantics(
+          child: Text(
+            "Talking points, if she wants them",
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: _talkingPointsCtrl,
-          minLines: 3,
-          maxLines: 6,
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w500,
-            fontFamily: 'Arial',
-            color: AppColors.blackCat,
-          ),
-          decoration: InputDecoration(
-            hintText:
-                'e.g. Lasts 10+ days on natural nails. Reusable up to 4 '
-                'times with a fresh glue tab.',
-            filled: true,
-            fillColor: _requestSnow,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.2),
-              ),
+        Semantics(
+          container: true,
+          label: "Talking points, if she wants them",
+          child: TextField(
+            controller: _talkingPointsCtrl,
+            minLines: 3,
+            maxLines: 6,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Arial',
+              color: AppColors.blackCat,
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.2),
+            decoration: InputDecoration(
+              hintText:
+                  'e.g. Lasts 10+ days on natural nails. Reusable up to 4 '
+                  'times with a fresh glue tab.',
+              filled: true,
+              fillColor: _requestSnow,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: AppColors.blackCat.withValues(alpha: 0.2),
+                ),
               ),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: AppColors.blackCat),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: AppColors.blackCat.withValues(alpha: 0.2),
+                ),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.blackCat),
+              ),
             ),
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
-          "Please don't say",
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        const ExcludeSemantics(
+          child: Text(
+            "Please don't say",
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arialbold',
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -3576,17 +3867,28 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         ],
         _phraseChipInput(
           controller: _forbiddenPhraseCtrl,
+          semanticLabel: "Please don't say",
+          focusNode: _forbiddenPhraseFocusNode,
+          semanticsKey: _forbiddenPhraseSemanticsKey,
           onSubmit: () => _addPhrase(_forbiddenPhrases, _forbiddenPhraseCtrl),
         ),
         const SizedBox(height: 10),
-        Text(
-          '#ad and the paid partnership label are required by law and '
-          'already in the agreement. Everything here is on top of that.',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            fontFamily: 'Arial',
-            color: AppColors.blackCat.withValues(alpha: 0.55),
+        Semantics(
+          container: true,
+          label:
+              '#ad and the paid partnership label are required by law and '
+              'already in the agreement. Everything here is on top of that.',
+          child: ExcludeSemantics(
+            child: Text(
+              '#ad and the paid partnership label are required by law and '
+              'already in the agreement. Everything here is on top of that.',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                fontFamily: 'Arial',
+                color: AppColors.blackCat.withValues(alpha: 0.55),
+              ),
+            ),
           ),
         ),
       ],
@@ -3600,41 +3902,50 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? AppColors.blackCat : _requestSnow,
-            border: Border.all(
-              color: AppColors.blackCat.withValues(alpha: selected ? 1 : 0.3),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '$label $subLabel',
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.blackCat : _requestSnow,
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(
+                    alpha: selected ? 1 : 0.3,
+                  ),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Arialbold',
+                      color: selected ? AppColors.snow : AppColors.blackCat,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subLabel,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Arial',
+                      color: (selected ? AppColors.snow : AppColors.blackCat)
+                          .withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                  color: selected ? AppColors.snow : AppColors.blackCat,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subLabel,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Arial',
-                  color: (selected ? AppColors.snow : AppColors.blackCat)
-                      .withValues(alpha: 0.7),
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -3669,81 +3980,120 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       children: [
         Divider(color: AppColors.blackCat.withValues(alpha: 0.12), height: 1),
         const SizedBox(height: 14),
-        const Text(
-          'Pricing',
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        Semantics(
+          container: true,
+          header: true,
+          label: 'Pricing',
+          child: const ExcludeSemantics(
+            child: Text(
+              'Pricing',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
-          'Base Fee',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _baseFeeCtrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
-          ),
-          decoration: InputDecoration(
-            prefixText: '\$ ',
-            prefixStyle: const TextStyle(
-              fontSize: 22,
+        const ExcludeSemantics(
+          child: Text(
+            'Base Fee',
+            style: TextStyle(
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
               fontFamily: 'Arialbold',
               color: AppColors.blackCat,
             ),
-            hintText: '0',
-            filled: true,
-            fillColor: _requestSnow,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.2),
-              ),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.2),
-              ),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: AppColors.blackCat),
-            ),
           ),
-          onChanged: (_) => setState(() {}),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'How long you can repost it',
-                style: TextStyle(
-                  fontSize: 12.5,
+        const SizedBox(height: 8),
+        MergeSemantics(
+          child: Semantics(
+            key: _baseFeeSemanticsKey,
+            label: 'Base Fee, dollars',
+            child: TextField(
+              controller: _baseFeeCtrl,
+              focusNode: _baseFeeFocusNode,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+              decoration: InputDecoration(
+                prefixText: '\$ ',
+                prefixStyle: const TextStyle(
+                  fontSize: 22,
                   fontWeight: FontWeight.w700,
                   fontFamily: 'Arialbold',
                   color: AppColors.blackCat,
                 ),
+                hintText: '0',
+                filled: true,
+                fillColor: _requestSnow,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.2),
+                  ),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(
+                    color: AppColors.blackCat.withValues(alpha: 0.2),
+                  ),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(color: AppColors.blackCat),
+                ),
               ),
+              onChanged: (_) => setState(_syncClientBudgetMaxFromOffer),
+              onSubmitted: (_) {
+                // Keep TalkBack's accessibility cursor on the actual Base Fee
+                // field when the keyboard closes. Sending a FocusSemanticEvent
+                // to the surrounding semantic wrapper here caused Android to
+                // re-resolve focus to the larger Pricing subtree. Leaving the
+                // accessibility cursor in place means the next forward swipe
+                // follows the visual/semantic order: Base Fee -> repost heading
+                // -> the individual repost option boxes.
+                _baseFeeFocusNode.unfocus();
+                final entered = _baseFeeCtrl.text.trim();
+                _announce(
+                  entered.isEmpty
+                      ? 'Base Fee, no value entered.'
+                      : 'Base Fee, $entered dollars.',
+                );
+              },
             ),
-          ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Semantics(
+          header: true,
+          label: 'How long you can repost it',
+          child: const ExcludeSemantics(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'How long you can repost it',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Arialbold',
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 8),
         _pricingOptionRow<_RepostDuration>(
@@ -3754,16 +4104,24 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           onSelected: (d) {
             _hasRepostDurationSelection = true;
             _repostDuration = d;
+            _syncClientBudgetMaxFromOffer();
           },
         ),
         const SizedBox(height: 16),
-        const Text(
-          'No competing brands for',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        Semantics(
+          container: true,
+          header: true,
+          label: 'No competing brands for',
+          child: const ExcludeSemantics(
+            child: Text(
+              'No competing brands for',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -3777,16 +4135,24 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           onSelected: (w) {
             _hasCompetingBrandsSelection = true;
             _competingBrandsWindow = w;
+            _syncClientBudgetMaxFromOffer();
           },
         ),
         const SizedBox(height: 16),
-        const Text(
-          'Paid Ads',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Arialbold',
-            color: AppColors.blackCat,
+        Semantics(
+          container: true,
+          header: true,
+          label: 'Paid Ads',
+          child: const ExcludeSemantics(
+            child: Text(
+              'Paid Ads',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arialbold',
+                color: AppColors.blackCat,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -3820,28 +4186,36 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                     height: 32,
                     child: FittedBox(
                       fit: BoxFit.contain,
-                      child: Switch(
-                        value: _runAsAd,
-                        activeThumbColor: AppColors.blackCat,
-                        inactiveThumbColor: AppColors.blackCatLight,
-                        inactiveTrackColor: AppColors.blackCatLight.withValues(
-                          alpha: 0.35,
+                      child: Semantics(
+                        label: 'Run it as an ad',
+                        child: Switch(
+                          value: _runAsAd,
+                          activeThumbColor: AppColors.blackCat,
+                          inactiveThumbColor: AppColors.blackCatLight,
+                          inactiveTrackColor: AppColors.blackCatLight
+                              .withValues(alpha: 0.35),
+                          onChanged: (v) => setState(() => _runAsAd = v),
                         ),
-                        onChanged: (v) => setState(() => _runAsAd = v),
                       ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                _paidAdsInstructionText,
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.25,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.6),
+              Semantics(
+                container: true,
+                label: _paidAdsInstructionText,
+                child: ExcludeSemantics(
+                  child: Text(
+                    _paidAdsInstructionText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.25,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                      color: AppColors.blackCat.withValues(alpha: 0.6),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -3889,6 +4263,50 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         _nfcCardTapsEnabled &&
         (_tapRatePerTap ?? 0) > 0 &&
         _tapCap > 0;
+
+    // This is a read-only cost summary, not a form -- there's nothing to
+    // individually interact with, so (unlike the rest of this Card) it's
+    // read as one combined stop rather than field-by-field, ending with
+    // the Due On Delivery total.
+    final summary = StringBuffer(
+      'What this costs you. Base fee \$${_baseFee.toStringAsFixed(0)}.',
+    );
+    if (_hasRepostDurationSelection && _repostFeeAmount > 0) {
+      summary.write(
+        ' Reposting, ${_repostDuration!.label}: '
+        '+\$${_repostFeeAmount.toStringAsFixed(0)}.',
+      );
+    }
+    if (_hasCompetingBrandsSelection && _competingBrandsFeeAmount > 0) {
+      summary.write(
+        ' Exclusivity, ${_competingBrandsWindow!.label}: '
+        '+\$${_competingBrandsFeeAmount.toStringAsFixed(0)}.',
+      );
+    }
+    if (_runAsAd) {
+      summary.write(
+        ' Paid Ads Fee: +\$${_paidAdsFeeAmount.toStringAsFixed(0)}.',
+      );
+    }
+    summary.write(' Due on delivery, \$${total.toStringAsFixed(0)}.');
+    if (showTapBonus) {
+      summary.write(
+        ' Plus up to \$${maxTapBonus.toStringAsFixed(0)} in tap bonuses -- '
+        '$_tapCap taps times \$${_tapRatePerTap!.toStringAsFixed(2)}, '
+        'billed monthly as they happen.',
+      );
+    }
+
+    return Semantics(
+      container: true,
+      label: summary.toString(),
+      child: ExcludeSemantics(child: _costBreakdownContent(showTapBonus)),
+    );
+  }
+
+  Widget _costBreakdownContent(bool showTapBonus) {
+    final total = _baseFee + _repostFeeAmount + _competingBrandsFeeAmount;
+    final maxTapBonus = _tapCap * (_tapRatePerTap ?? 0);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -4035,6 +4453,55 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
         ? 'Flat'
         : '\$${_tapRatePerTap!.toStringAsFixed(2)} · cap $_tapCap';
 
+    // Same reasoning as _costBreakdownSection: read-only summary, one
+    // combined stop instead of field-by-field.
+    final summary = StringBuffer(
+      "What she'll see. Her fee \$${total.toStringAsFixed(0)}. "
+      'Posts due $postsDue.',
+    );
+    if (showPerTap) {
+      summary.write(' Per card tap $perTapValue.');
+    }
+    summary.write(
+      ' Links to use $linksToUse. '
+      'Required wording ${_requiredPhrases.length} phrases.',
+    );
+    if (_hasRepostDurationSelection && _repostDuration != null) {
+      summary.write(' You can repost for $_repostDurationDisplay.');
+    }
+    if (_hasCompetingBrandsSelection && _competingBrandsWindow != null) {
+      summary.write(
+        ' No competing brands ${_competingBrandsWindow!.label}.',
+      );
+    }
+    if (_runAsAd) {
+      summary.write(
+        ' Paid Ads Fee \$${_paidAdsFeeAmount.toStringAsFixed(0)}.',
+      );
+    }
+
+    return Semantics(
+      container: true,
+      label: summary.toString(),
+      child: ExcludeSemantics(
+        child: _whatSheSeesContent(
+          total: total,
+          linksToUse: linksToUse,
+          postsDue: postsDue,
+          showPerTap: showPerTap,
+          perTapValue: perTapValue,
+        ),
+      ),
+    );
+  }
+
+  Widget _whatSheSeesContent({
+    required double total,
+    required int linksToUse,
+    required String postsDue,
+    required bool showPerTap,
+    required String perTapValue,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -4091,7 +4558,10 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               fontFamily: 'Arial',
             ),
           ),
-          onPressed: () => setState(() => _brandCollaborationExpanded = true),
+          onPressed: () {
+            setState(() => _brandCollaborationExpanded = true);
+            _requestAccessibilityFocus(_postsHeadingKey);
+          },
           child: const Text(
             'New Offer',
             style: TextStyle(color: AppColors.snow),
@@ -4104,42 +4574,62 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Posts',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'Arialbold',
-                    color: AppColors.blackCat,
+          Builder(
+            builder: (context) {
+              final totalPosts =
+                  _reelPostCount +
+                  _storiesPostCount +
+                  _carouselPostCount +
+                  _tiktokPostCount;
+              return Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      key: _postsHeadingKey,
+                      container: true,
+                      header: true,
+                      label: 'Posts',
+                      value: '$totalPosts posts',
+                      child: const ExcludeSemantics(
+                        child: Text(
+                          'Posts',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Arialbold',
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Text(
-                '${_reelPostCount + _storiesPostCount + _carouselPostCount + _tiktokPostCount} posts',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Collapse',
-                icon: Icon(
-                  Icons.expand_less_rounded,
-                  size: 20,
-                  color: AppColors.blackCat.withValues(alpha: 0.6),
-                ),
-                onPressed: () =>
-                    setState(() => _brandCollaborationExpanded = false),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                splashRadius: 18,
-              ),
-            ],
+                  ExcludeSemantics(
+                    child: Text(
+                      '$totalPosts posts',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Arial',
+                        color: AppColors.blackCat.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Collapse',
+                    icon: Icon(
+                      Icons.expand_less_rounded,
+                      size: 20,
+                      color: AppColors.blackCat.withValues(alpha: 0.6),
+                    ),
+                    onPressed: () =>
+                        setState(() => _brandCollaborationExpanded = false),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    splashRadius: 18,
+                  ),
+                ],
+              );
+            },
           ),
           Divider(
             color: AppColors.blackCat.withValues(alpha: 0.12),
@@ -4178,13 +4668,20 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               color: AppColors.blackCat.withValues(alpha: 0.12),
               height: 18,
             ),
-            const Text(
-              'In Person',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-                color: AppColors.blackCat,
+            Semantics(
+              container: true,
+              header: true,
+              label: 'In Person',
+              child: const ExcludeSemantics(
+                child: Text(
+                  'In Person',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -4201,39 +4698,53 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                       color: AppColors.blackCat.withValues(alpha: 0.2),
                     ),
                   ),
-                  child: Icon(
-                    Icons.nfc_rounded,
-                    size: 18,
-                    color: AppColors.blackCat.withValues(alpha: 0.75),
+                  child: ExcludeSemantics(
+                    child: Icon(
+                      Icons.nfc_rounded,
+                      size: 18,
+                      color: AppColors.blackCat.withValues(alpha: 0.75),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'NFC card taps',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'Arialbold',
-                          color: AppColors.blackCat,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
+                  child: Semantics(
+                    container: true,
+                    label: 'NFC card taps',
+                    value:
                         'She keeps a card at her chair. A client taps it, '
                         'your page opens on their phone, the tap is '
                         'credited to her.',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          fontFamily: 'Arial',
-                          color: AppColors.blackCat.withValues(alpha: 0.6),
-                        ),
+                    child: ExcludeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'NFC card taps',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Arialbold',
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'She keeps a card at her chair. A client taps '
+                            'it, your page opens on their phone, the tap '
+                            'is credited to her.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Arial',
+                              color: AppColors.blackCat.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -4242,14 +4753,17 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                   height: 32,
                   child: FittedBox(
                     fit: BoxFit.contain,
-                    child: Switch(
-                      value: _nfcCardTapsEnabled,
-                      activeThumbColor: AppColors.blackCat,
-                      inactiveThumbColor: AppColors.blackCatLight,
-                      inactiveTrackColor: AppColors.blackCatLight.withValues(
-                        alpha: 0.35,
+                    child: Semantics(
+                      label: 'NFC card taps',
+                      child: Switch(
+                        value: _nfcCardTapsEnabled,
+                        activeThumbColor: AppColors.blackCat,
+                        inactiveThumbColor: AppColors.blackCatLight,
+                        inactiveTrackColor: AppColors.blackCatLight
+                            .withValues(alpha: 0.35),
+                        onChanged: (v) =>
+                            setState(() => _nfcCardTapsEnabled = v),
                       ),
-                      onChanged: (v) => setState(() => _nfcCardTapsEnabled = v),
                     ),
                   ),
                 ),
@@ -4392,15 +4906,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
             children: [
               const SizedBox(height: 2),
-              const Center(
-                child: Text(
+              Center(
+                child: _a11yHeading(
                   'Create Brand Request',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'times-new-roman',
-                    color: AppColors.blackCat,
-                  ),
+                  fontSize: 16,
+                  fontFamily: 'times-new-roman',
+                  textAlign: TextAlign.center,
                 ),
               ),
               const SizedBox(height: 8),
@@ -4417,88 +4928,90 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Campaign Details',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                  color: AppColors.blackCat,
-                ),
-              ),
+              _a11yHeading('Campaign Details'),
               const SizedBox(height: 10),
               _Card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _fieldLabel('Campaign / Collection Name *'),
-                    const SizedBox(height: 2),
-                    _InputField(
-                      controller: _campaignNameCtrl,
-                      hint: 'e.g. Spring 2025 Heritage Collection',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      focusNode: _campaignNameFocusNode,
+                    _labeledField(
+                      visibleLabel: 'Campaign / Collection Name *',
+                      semanticLabel: 'Campaign / Collection Name',
+                      required: true,
+                      semanticsKey: _campaignNameSemanticsKey,
+                      field: _InputField(
+                        controller: _campaignNameCtrl,
+                        hint: 'e.g. Spring 2025 Heritage Collection',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                        focusNode: _campaignNameFocusNode,
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    _fieldLabel('Need By Date *'),
-                    const SizedBox(height: 2),
-                    _DateField(
-                      controller: _dateCtrl,
-                      onCalendarTap: _pickDate,
-                      onChanged: (value) {
-                        final parsed = _tryParseMmDdYyyy(value);
-                        setState(() {
-                          _needBy = parsed;
-                          if (_jntRevealDate != null &&
-                              (_needBy == null ||
-                                  !_jntRevealDate!.isAfter(_needBy!))) {
-                            _jntRevealDate = null;
-                            _revealDateCtrl.clear();
-                          }
-                        });
-                      },
+                    _labeledField(
+                      visibleLabel: 'Need By Date *',
+                      semanticLabel:
+                          'Need By Date, ${_spokenDate(_needBy)}',
+                      required: true,
+                      semanticsKey: _needBySemanticsKey,
+                      field: _DateField(
+                        controller: _dateCtrl,
+                        focusNode: _needByFocusNode,
+                        onCalendarTap: _pickDate,
+                        onChanged: (value) {
+                          final parsed = _tryParseMmDdYyyy(value);
+                          setState(() {
+                            _needBy = parsed;
+                            if (_jntRevealDate != null &&
+                                (_needBy == null ||
+                                    !_jntRevealDate!.isAfter(_needBy!))) {
+                              _jntRevealDate = null;
+                              _revealDateCtrl.clear();
+                            }
+                          });
+                        },
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    _fieldLabel(
-                      'JNT reveal Date (Date the artwork is published publicly)',
+                    _labeledField(
+                      visibleLabel:
+                          'JNT reveal Date (Date the artwork is published publicly)',
+                      semanticLabel:
+                          'JNT Reveal Date, date the artwork is published publicly, ${_spokenDate(_jntRevealDate)}',
+                      field: _DateField(
+                        controller: _revealDateCtrl,
+                        onCalendarTap: _pickRevealDate,
+                        onChanged: (value) {
+                          final parsed = _tryParseMmDdYyyy(value);
+                          setState(() {
+                            _jntRevealDate =
+                                parsed != null &&
+                                    _needBy != null &&
+                                    parsed.isAfter(_needBy!)
+                                ? parsed
+                                : null;
+                          });
+                        },
+                      ),
                     ),
                     const SizedBox(height: 2),
-                    _DateField(
-                      controller: _revealDateCtrl,
-                      onCalendarTap: _pickRevealDate,
-                      onChanged: (value) {
-                        final parsed = _tryParseMmDdYyyy(value);
-                        setState(() {
-                          _jntRevealDate =
-                              parsed != null &&
-                                  _needBy != null &&
-                                  parsed.isAfter(_needBy!)
-                              ? parsed
-                              : null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 2),
-                    _fieldLabel('Description *'),
-                    const SizedBox(height: 2),
-                    _TextArea(
-                      controller: _descCtrl,
-                      hint:
-                          'Describe your campaign vision, color palette, cultural references, and any specific design requirements...',
+                    _labeledField(
+                      visibleLabel: 'Description *',
+                      semanticLabel: 'Description',
+                      required: true,
+                      semanticsKey: _descriptionSemanticsKey,
+                      field: _TextArea(
+                        controller: _descCtrl,
+                        focusNode: _descriptionFocusNode,
+                        hint:
+                            'Describe your campaign vision, color palette, cultural references, and any specific design requirements...',
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Inspiration & References',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
+              _a11yHeading('Inspiration & References'),
               const SizedBox(height: 6),
               Text(
                 'Upload mood board photos, artwork scans, or reference images.',
@@ -4516,7 +5029,15 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                     Row(
                       children: [
                         Expanded(
-                          child: ElevatedButton.icon(
+                          child: Semantics(
+                            key: _galleryUploadSemanticsKey,
+                            button: true,
+                            label: 'Gallery',
+                            hint: 'Double tap to upload inspiration photos from the gallery',
+                            onTap: _uploadReferenceImages,
+                            child: ExcludeSemantics(
+                              child: ElevatedButton.icon(
+                            focusNode: _galleryUploadFocusNode,
                             onPressed: _uploadReferenceImages,
                             icon: const Icon(
                               Icons.photo_library_outlined,
@@ -4539,11 +5060,21 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                 borderRadius: BorderRadius.zero,
                               ),
                             ),
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: ElevatedButton.icon(
+                          child: Semantics(
+                            key: _cameraUploadSemanticsKey,
+                            button: true,
+                            label: 'Camera',
+                            hint: 'Double tap to capture an inspiration photo',
+                            onTap: _captureReferenceImage,
+                            child: ExcludeSemantics(
+                              child: ElevatedButton.icon(
+                            focusNode: _cameraUploadFocusNode,
                             onPressed: _captureReferenceImage,
                             icon: const Icon(
                               Icons.photo_camera_outlined,
@@ -4562,6 +5093,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.zero,
+                              ),
+                            ),
                               ),
                             ),
                           ),
@@ -4589,7 +5122,11 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                           spacing: 8,
                           runSpacing: 8,
                           children: _uploadedFiles
-                              .map((file) {
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                                final index = entry.key;
+                                final file = entry.value;
                                 return Stack(
                                   children: [
                                     Container(
@@ -4602,7 +5139,8 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                           ),
                                         ),
                                       ),
-                                      child: Image.memory(
+                                      child: ExcludeSemantics(
+                                        child: Image.memory(
                                         file.bytes,
                                         fit: BoxFit.cover,
                                         // Cap decode resolution to the
@@ -4618,6 +5156,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                         errorBuilder: (_, _, _) => const Icon(
                                           Icons.broken_image_outlined,
                                         ),
+                                        ),
                                       ),
                                     ),
                                     Positioned(
@@ -4625,7 +5164,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                       top: 2,
                                       child: Semantics(
                                         button: true,
-                                        label: 'Remove photo',
+                                        label: 'Remove inspiration photo ${index + 1}, ${file.name}',
                                         onTap: () => setState(
                                           () => _uploadedFiles.remove(file),
                                         ),
@@ -4657,45 +5196,44 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Who receives the order?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
+              _a11yHeading('Who receives the order?'),
               const SizedBox(height: 10),
-              _Card(
-                child: Column(
+              // Accessibility boundary only. It prevents TalkBack from exposing the entire recipient card as a grouped stop. The boundary has no spoken properties, so the next stop after the heading is the NFC request checkbox.
+              Semantics(
+                container: true,
+                explicitChildNodes: true,
+                child: _Card(
+                  child: Column(
                   children: [
-                    Material(
-                      color: Colors.transparent,
-                      child: CheckboxListTile(
-                        value: _nfcRequest,
-                        activeColor: AppColors.blackCat,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: const Text(
-                          'NFC request',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Arial',
-                            color: AppColors.blackCat,
+                    MergeSemantics(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: CheckboxListTile(
+                          value: _nfcRequest,
+                          activeColor: AppColors.blackCat,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text(
+                            'NFC request',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Arial',
+                              color: AppColors.blackCat,
+                            ),
                           ),
-                        ),
-                        subtitle: Text(
-                          'Only clients with one or more nail dimensions of 8 mm or more are eligible.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Arial',
-                            color: AppColors.blackCat.withValues(alpha: 0.62),
+                          subtitle: Text(
+                            'Only clients with one or more nail dimensions of 8 mm or more are eligible.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Arial',
+                              color: AppColors.blackCat.withValues(alpha: 0.62),
+                            ),
                           ),
+                          onChanged: (v) => _setNfcRequest(v ?? false),
                         ),
-                        onChanged: (v) => _setNfcRequest(v ?? false),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -4706,194 +5244,279 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                       badge: 'POOL',
                       subtitle:
                           'Any client in the marketplace can claim this request. First to accept proceeds.',
-                      onTap: () => setState(
-                        () => _clientRecipientMode = _ClientRecipientMode.pool,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _OptionCard(
-                      selected:
-                          _clientRecipientMode ==
-                          _ClientRecipientMode.specificClient,
-                      title: 'Designate a specific client',
-                      badge: 'DIRECT',
-                      subtitle:
-                          'Only this client will see and be able to accept the request.',
                       onTap: () {
-                        setState(
-                          () => _clientRecipientMode =
-                              _ClientRecipientMode.specificClient,
+                        setState(() {
+                          _clientRecipientMode = _ClientRecipientMode.pool;
+                          _requestedClient = null;
+                          _groupClientToAdd = '';
+                          _groupSelectedClients.clear();
+                        });
+                        _announce(
+                          'Open to client pool selected. Direct client selections cleared.',
                         );
-                        _focusAfterBuild(_requestedClientFocusNode);
-                        unawaited(_loadSelectionSources());
                       },
                     ),
-                    if (_clientRecipientMode ==
-                        _ClientRecipientMode.specificClient)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: _SearchableSelectField(
-                          value: _requestedClient ?? '',
-                          hint: 'Select Client',
-                          items: _nfcFilteredBrandPartnerClients,
-                          focusNode: _requestedClientFocusNode,
-                          onChanged: (v) => setState(
-                            () => _requestedClient = v.trim().isEmpty
-                                ? null
-                                : v.trim(),
-                          ),
-                        ),
-                      ),
                     const SizedBox(height: 10),
-                    _OptionCard(
-                      selected:
-                          _clientRecipientMode ==
-                          _ClientRecipientMode.groupClients,
-                      title: 'Group clients (up to 15)',
-                      badge: 'DIRECT',
-                      subtitle:
-                          'Send to a curated list. Each client receives and accepts their own request.',
-                      onTap: () {
-                        setState(
-                          () => _clientRecipientMode =
-                              _ClientRecipientMode.groupClients,
-                        );
-                        _focusAfterBuild(_groupClientFocusNode);
-                        unawaited(_loadSelectionSources());
-                      },
-                    ),
-                    if (_clientRecipientMode ==
-                        _ClientRecipientMode.groupClients) ...[
-                      const SizedBox(height: 10),
-                      Row(
+
+                    // Keep each radio option and the controls it reveals in
+                    // the same explicit semantics scope. This prevents
+                    // TalkBack from skipping a newly inserted selector and
+                    // jumping to the next radio option.
+                    Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: _SearchableSelectField(
-                              // Keyed only on the selected-count, not on the
-                              // in-progress query text: this field must reset
-                              // (clear its text) after "Add" changes the
-                              // selection, but must NOT be torn down and
-                              // recreated on every keystroke -- doing so
-                              // discarded and rebuilt the Autocomplete/
-                              // FocusNode wiring on every character typed,
-                              // which could leave duplicate stale focus
-                              // listeners registered on the shared external
-                              // FocusNode (a rebuild churn bug, not a text
-                              // filtering requirement).
-                              key: ValueKey<int>(_groupClientFieldResetTick),
-                              value: _groupClientToAdd,
-                              hint: 'Select clients',
-                              focusNode: _groupClientFocusNode,
-                              items: _nfcFilteredBrandPartnerClients
-                                  .where(
-                                    (name) => !_groupSelectedClients.any(
-                                      (picked) =>
-                                          picked.toLowerCase() ==
-                                          name.toLowerCase(),
-                                    ),
-                                  )
-                                  .toList(growable: false),
-                              onChanged: (v) =>
-                                  setState(() => _groupClientToAdd = v.trim()),
-                            ),
+                          _OptionCard(
+                            semanticsKey: _specificClientOptionSemanticsKey,
+                            sortKey: OrdinalSortKey(1),
+                            selected:
+                                _clientRecipientMode ==
+                                _ClientRecipientMode.specificClient,
+                            title: 'Designate a specific client',
+                            badge: 'DIRECT',
+                            subtitle:
+                                'Only this client will see and be able to accept the request.',
+                            onTap: () {
+                              setState(() {
+                                _clientRecipientMode =
+                                    _ClientRecipientMode.specificClient;
+                                _groupClientToAdd = '';
+                              });
+                              // The option remains the current TalkBack stop
+                              // after the selector is inserted. One forward
+                              // swipe therefore lands on Client.
+                              _focusSemanticTarget(
+                                _specificClientOptionSemanticsKey,
+                              );
+                            },
                           ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: _addGroupClientSelection,
-                              style: ElevatedButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                                backgroundColor: AppColors.blackCat,
-                                foregroundColor: AppColors.snow,
-                                textStyle: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Arial',
-                                ),
+                          if (_clientRecipientMode ==
+                              _ClientRecipientMode.specificClient) ...[
+                            const SizedBox(height: 10),
+                            _SearchableSelectField(
+                              key: const ValueKey<String>(
+                                'brand-specific-client-selector',
                               ),
-                              child: const Text('Add'),
+                              sortKey: OrdinalSortKey(2),
+                              value: _requestedClient ?? '',
+                              hint: 'Select Client',
+                              semanticLabel: 'Client',
+                              pickerTitle: 'Select Client',
+                              searchLabel: 'Search clients',
+                              semanticHint:
+                                  'Double tap to open the client list and swipe through available clients.',
+                              semanticsKey: _requestedClientSemanticsKey,
+                              items: _nfcFilteredBrandPartnerClients,
+                              focusNode: _requestedClientFocusNode,
+                              onChanged: (v) => setState(
+                                () => _requestedClient = v.trim().isEmpty
+                                    ? null
+                                    : v.trim(),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                      if (_groupSelectedClients.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: _groupSelectedClients
-                                .map((name) {
-                                  return MergeSemantics(
-                                    child: Semantics(
-                                      button: true,
-                                      label: 'Remove $name',
-                                      onTap: () => setState(
-                                        () =>
-                                            _groupSelectedClients.remove(name),
+                    ),
+                    const SizedBox(height: 10),
+                    Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      child: Column(
+                        children: [
+                          _OptionCard(
+                            semanticsKey: _groupClientsOptionSemanticsKey,
+                            sortKey: OrdinalSortKey(1),
+                            selected:
+                                _clientRecipientMode ==
+                                _ClientRecipientMode.groupClients,
+                            title: 'Group clients (up to 15)',
+                            badge: 'DIRECT',
+                            subtitle:
+                                'Send to a curated list. Each client receives and accepts their own request.',
+                            onTap: () {
+                              setState(() {
+                                _clientRecipientMode =
+                                    _ClientRecipientMode.groupClients;
+                                _groupClientToAdd = '';
+                              });
+                              // Keep the selected radio as the current
+                              // accessibility stop after the selector appears.
+                              // The next swipe is forced to the Group Client
+                              // selector by the local semantic order below.
+                              _focusSemanticTarget(
+                                _groupClientsOptionSemanticsKey,
+                              );
+                            },
+                          ),
+                          if (_clientRecipientMode ==
+                              _ClientRecipientMode.groupClients) ...[
+                            const SizedBox(height: 10),
+                            Semantics(
+                              container: true,
+                              explicitChildNodes: true,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _SearchableSelectField(
+                                      // Stable key: the modal-picker version
+                                      // has no internal text controller that
+                                      // needs to be destroyed after Add. A
+                                      // stable element is essential for
+                                      // reliable TalkBack focus restoration.
+                                      key: const ValueKey<String>(
+                                        'brand-group-client-selector',
                                       ),
+                                      sortKey: OrdinalSortKey(1),
+                                      value: _groupClientToAdd,
+                                      hint: 'Select clients',
+                                      semanticLabel: 'Group client selector',
+                                      pickerTitle: 'Select Group Client',
+                                      searchLabel: 'Search clients',
+                                      semanticHint:
+                                          'Double tap to choose a client. After selecting, swipe forward to Add client to group.',
+                                      semanticsKey: _groupClientSemanticsKey,
+                                      focusNode: _groupClientFocusNode,
+                                      items: _nfcFilteredBrandPartnerClients
+                                          .where(
+                                            (name) => !_groupSelectedClients
+                                                .any(
+                                                  (picked) =>
+                                                      picked.toLowerCase() ==
+                                                      name.toLowerCase(),
+                                                ),
+                                          )
+                                          .toList(growable: false),
+                                      onChanged: (v) => setState(
+                                        () => _groupClientToAdd = v.trim(),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  SizedBox(
+                                    height: 48,
+                                    child: Semantics(
+                                      sortKey: OrdinalSortKey(2),
+                                      button: true,
+                                      label: 'Add client to group',
+                                      hint:
+                                          'Double tap to add the selected client. Focus returns to the client selector so you can add another client.',
+                                      onTap: _addGroupClientSelection,
                                       child: ExcludeSemantics(
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.zero,
-                                          onTap: () => setState(
-                                            () => _groupSelectedClients.remove(
-                                              name,
+                                        child: ElevatedButton(
+                                          onPressed: _addGroupClientSelection,
+                                          style: ElevatedButton.styleFrom(
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.zero,
+                                            ),
+                                            backgroundColor:
+                                                AppColors.blackCat,
+                                            foregroundColor: AppColors.snow,
+                                            textStyle: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              fontFamily: 'Arial',
                                             ),
                                           ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 2,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  name,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w500,
-                                                    fontFamily: 'Arial',
-                                                    color: AppColors.blackCat,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                const Icon(
-                                                  Icons.close_rounded,
-                                                  size: 14,
-                                                  color: AppColors.blackCat,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
+                                          child: const Text('Add'),
                                         ),
                                       ),
                                     ),
-                                  );
-                                })
-                                .toList(growable: false),
-                          ),
-                        ),
-                      ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            ExcludeSemantics(
+                              child: Text(
+                                '${_groupSelectedClients.length} of 15 clients selected',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Arial',
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_groupSelectedClients.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  children: _groupSelectedClients
+                                      .map((name) {
+                                        return MergeSemantics(
+                                          child: Semantics(
+                                            button: true,
+                                            label: 'Remove $name',
+                                            onTap: () =>
+                                                _removeGroupClient(name),
+                                            child: ExcludeSemantics(
+                                              child: InkWell(
+                                                borderRadius:
+                                                    BorderRadius.zero,
+                                                onTap: () =>
+                                                    _removeGroupClient(name),
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(vertical: 2),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        name,
+                                                        style:
+                                                            const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          fontFamily: 'Arial',
+                                                          color: AppColors
+                                                              .blackCat,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      const Icon(
+                                                        Icons.close_rounded,
+                                                        size: 14,
+                                                        color:
+                                                            AppColors.blackCat,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      })
+                                      .toList(growable: false),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
                     ],
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Who creates the design?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
+              _a11yHeading('Who creates the design?'),
               const SizedBox(height: 10),
-              _Card(
-                child: Column(
+              // Accessibility boundary only. It prevents TalkBack from exposing the entire artist-choice card as a grouped stop. The next stop after the heading is Open to artist pool.
+              Semantics(
+                container: true,
+                explicitChildNodes: true,
+                child: _Card(
+                  child: Column(
                   children: [
                     _OptionCard(
                       selected: _designCreatorMode == _DesignCreatorMode.pool,
@@ -4901,36 +5524,57 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                       badge: 'POOL',
                       subtitle:
                           'Any qualified artist can accept and fulfill this request.',
-                      onTap: () => setState(
-                        () => _designCreatorMode = _DesignCreatorMode.pool,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _OptionCard(
-                      selected:
-                          _designCreatorMode ==
-                          _DesignCreatorMode.specificArtist,
-                      title: 'Request a specific artist',
-                      badge: 'DIRECT',
-                      subtitle:
-                          'Only this artist will receive the request. If declined, it returns to the artist pool.',
                       onTap: () {
-                        setState(
-                          () => _designCreatorMode =
-                              _DesignCreatorMode.specificArtist,
+                        setState(() {
+                          _designCreatorMode = _DesignCreatorMode.pool;
+                          _requestedArtist = null;
+                          _fallbackToPool = true;
+                        });
+                        _announce(
+                          'Open to artist pool selected. Specific artist selection cleared.',
                         );
-                        _focusAfterBuild(_requestedArtistFocusNode);
                       },
                     ),
-                    if (_designCreatorMode == _DesignCreatorMode.specificArtist)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                    const SizedBox(height: 10),
+                    Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _OptionCard(
+                            semanticsKey: _specificArtistOptionSemanticsKey,
+                            sortKey: OrdinalSortKey(1),
+                            selected:
+                                _designCreatorMode ==
+                                _DesignCreatorMode.specificArtist,
+                            title: 'Request a specific artist',
+                            badge: 'DIRECT',
+                            subtitle:
+                                'Only this artist will receive the request. If declined, it returns to the artist pool.',
+                            onTap: () {
+                              setState(
+                                () => _designCreatorMode =
+                                    _DesignCreatorMode.specificArtist,
+                              );
+                              _focusSemanticTarget(
+                                _specificArtistOptionSemanticsKey,
+                              );
+                            },
+                          ),
+                          if (_designCreatorMode ==
+                              _DesignCreatorMode.specificArtist) ...[
+                            const SizedBox(height: 10),
                             _SearchableSelectField(
+                              sortKey: OrdinalSortKey(2),
                               value: _requestedArtist ?? '',
                               hint: 'Select Artist',
+                              semanticLabel: 'Artist',
+                              pickerTitle: 'Select Artist',
+                              searchLabel: 'Search artists',
+                              semanticHint:
+                                  'Double tap to open the artist list and swipe through available artists.',
+                              semanticsKey: _requestedArtistSemanticsKey,
                               items: _nfcFilteredDirectRequestArtists,
                               focusNode: _requestedArtistFocusNode,
                               onChanged: (v) => setState(
@@ -4964,8 +5608,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                     selectedColor: AppColors.blackCat,
                                     backgroundColor: _requestSnow,
                                     checkmarkColor: AppColors.snow,
-                                    onSelected: (_) =>
-                                        setState(() => _fallbackToPool = true),
+                                    onSelected: (_) => setState(
+                                      () => _fallbackToPool = true,
+                                    ),
                                     labelStyle: TextStyle(
                                       fontWeight: FontWeight.w400,
                                       color: _fallbackToPool == true
@@ -4988,8 +5633,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                     selectedColor: AppColors.blackCat,
                                     backgroundColor: _requestSnow,
                                     checkmarkColor: AppColors.snow,
-                                    onSelected: (_) =>
-                                        setState(() => _fallbackToPool = false),
+                                    onSelected: (_) => setState(
+                                      () => _fallbackToPool = false,
+                                    ),
                                     labelStyle: TextStyle(
                                       fontWeight: FontWeight.w400,
                                       color: _fallbackToPool == false
@@ -5006,24 +5652,18 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                               ),
                             ],
                           ],
-                        ),
+                        ],
                       ),
-                  ],
+                    ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'Brand Collaboration',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Arialbold',
-                        color: AppColors.blackCat,
-                      ),
-                    ),
+                  Expanded(
+                    child: _a11yHeading('Brand Collaboration'),
                   ),
                   if (_brandCollaborationExpanded)
                     IconButton(
@@ -5054,14 +5694,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               const SizedBox(height: 10),
               _brandCollaborationSection(),
               const SizedBox(height: 16),
-              const Text(
-                'Client Budget Range',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
+              _a11yHeading('Client Budget Range'),
               const SizedBox(height: 6),
               Text(
                 'Set the budget range for each client',
@@ -5074,24 +5707,19 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               ),
               const SizedBox(height: 10),
               _BudgetCard(
+                semanticPrefix: 'Client Budget',
                 values: _clientBudget,
                 maxValue: 50000,
                 maxIsSet: _clientBudgetMaxIsSet,
                 onChanged: (v) => setState(() {
                   _clientBudget = v;
                   _clientBudgetMaxIsSet = true;
+                  _clientBudgetMaxUserEdited = true;
                 }),
                 onChangeEnd: (_) {},
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Artist Budget Range',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
+              _a11yHeading('Artist Budget Range'),
               const SizedBox(height: 6),
               Text(
                 'Set the artist budget range.',
@@ -5104,21 +5732,19 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
               ),
               const SizedBox(height: 10),
               _BudgetCard(
+                semanticPrefix: 'Artist Budget',
                 values: _artistBudget,
                 maxValue: 5000,
+                maxIsSet: _artistBudgetMaxIsSet,
                 displayStartOffset: _nfcRequest ? _nfcBudgetSurcharge : 0,
-                onChanged: (v) => setState(() => _artistBudget = v),
+                onChanged: (v) => setState(() {
+                  _artistBudget = v;
+                  _artistBudgetMaxIsSet = true;
+                }),
                 onChangeEnd: (_) {},
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Where you want the Art work to be Shipped?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Arialbold',
-                ),
-              ),
+              _a11yHeading('Where you want the Art work to be Shipped?'),
               const SizedBox(height: 10),
               _Card(
                 child: Column(
@@ -5134,18 +5760,16 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                       value: _ShippingDestination.brandMailingAddress,
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Checkbox(
+                    Semantics(
+                      key: _shippingDifferentSemanticsKey,
+                      child: MergeSemantics(
+                        child: CheckboxListTile(
                           value: _shippingAddressDifferentFromProfile,
                           activeColor: AppColors.blackCat,
-                          onChanged: (v) => setState(
-                            () => _shippingAddressDifferentFromProfile =
-                                v ?? false,
-                          ),
-                        ),
-                        const Expanded(
-                          child: Text(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text(
                             'Shipping address is different from profile',
                             style: TextStyle(
                               fontSize: 12.5,
@@ -5154,19 +5778,31 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                               color: AppColors.blackCat,
                             ),
                           ),
+                          onChanged: (v) => setState(
+                            () => _shippingAddressDifferentFromProfile =
+                                v ?? false,
+                          ),
                         ),
-                      ],
+                      ),
                     ),
                     if (_shippingAddressDifferentFromProfile) ...[
                       const SizedBox(height: 6),
-                      _fieldLabel('Shipping Address *'),
-                      const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipStreetCtrl,
-                        hint: 'Street',
-                        minHeight: 52,
-                        verticalPadding: 14,
-                        onChanged: (_) => _autofillShippingAddressFromStreet(),
+                      _a11yHeading('Shipping Address', fontSize: 13),
+                      const SizedBox(height: 6),
+                      _labeledField(
+                        visibleLabel: 'Shipping Street Address *',
+                        semanticLabel: 'Shipping Street Address',
+                        required: true,
+                        semanticsKey: _shipStreetSemanticsKey,
+                        field: _InputField(
+                          controller: _shipStreetCtrl,
+                          hint: 'Street',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          focusNode: _shipStreetFocusNode,
+                          onChanged: (_) =>
+                              _autofillShippingAddressFromStreet(),
+                        ),
                       ),
                       if (_shipStreetSuggestionsLoading)
                         const Padding(
@@ -5209,61 +5845,97 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                                 itemCount: suggestionCount,
                                 separatorBuilder: (_, _) =>
                                     const Divider(height: 1),
-                                itemBuilder: (_, i) => ListTile(
-                                  dense: true,
-                                  title: Text(
-                                    _shipStreetSuggestions[i].displayLabel,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  onTap: () => _selectShippingStreetSuggestion(
-                                    _shipStreetSuggestions[i],
-                                  ),
-                                ),
+                                itemBuilder: (_, i) {
+                                  final suggestion = _shipStreetSuggestions[i];
+                                  return Semantics(
+                                    button: true,
+                                    label:
+                                        '${suggestion.displayLabel}, address suggestion ${i + 1} of $suggestionCount',
+                                    child: ExcludeSemantics(
+                                      child: ListTile(
+                                        dense: true,
+                                        title: Text(
+                                          suggestion.displayLabel,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        onTap: () =>
+                                            _selectShippingStreetSuggestion(
+                                              suggestion,
+                                            ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             );
                           },
                         ),
                       const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipCityCtrl,
-                        hint: 'City',
-                        minHeight: 52,
-                        verticalPadding: 14,
+                      _labeledField(
+                        visibleLabel: 'Shipping City *',
+                        semanticLabel: 'Shipping City',
+                        required: true,
+                        semanticsKey: _shipCitySemanticsKey,
+                        field: _InputField(
+                          controller: _shipCityCtrl,
+                          hint: 'City',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          focusNode: _shipCityFocusNode,
+                        ),
                       ),
                       const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipStateCtrl,
-                        hint: 'State',
-                        minHeight: 52,
-                        verticalPadding: 14,
+                      _labeledField(
+                        visibleLabel: 'Shipping State *',
+                        semanticLabel: 'Shipping State',
+                        required: true,
+                        semanticsKey: _shipStateSemanticsKey,
+                        field: _InputField(
+                          controller: _shipStateCtrl,
+                          hint: 'State',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          focusNode: _shipStateFocusNode,
+                        ),
                       ),
                       const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipZipCtrl,
-                        hint: 'Zip',
-                        minHeight: 52,
-                        verticalPadding: 14,
+                      _labeledField(
+                        visibleLabel: 'Shipping ZIP Code *',
+                        semanticLabel: 'Shipping ZIP Code',
+                        required: true,
+                        semanticsKey: _shipZipSemanticsKey,
+                        field: _InputField(
+                          controller: _shipZipCtrl,
+                          hint: 'Zip',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          focusNode: _shipZipFocusNode,
+                        ),
                       ),
                       const SizedBox(height: 4),
-                      _InputField(
-                        controller: _shipCountryCtrl,
-                        hint: 'Country',
-                        minHeight: 52,
-                        verticalPadding: 14,
+                      _labeledField(
+                        visibleLabel: 'Shipping Country *',
+                        semanticLabel: 'Shipping Country',
+                        required: true,
+                        semanticsKey: _shipCountrySemanticsKey,
+                        field: _InputField(
+                          controller: _shipCountryCtrl,
+                          hint: 'Country',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          focusNode: _shipCountryFocusNode,
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              const Center(
-                child: Text(
+              Center(
+                child: _a11yHeading(
                   'Nail Specifications',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'times-new-roman',
-                  ),
+                  fontFamily: 'times-new-roman',
+                  textAlign: TextAlign.center,
                 ),
               ),
               const SizedBox(height: 8),
@@ -5376,6 +6048,35 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     );
   }
 
+  /// Merges a visible `_fieldLabel` into the field's own semantics node so
+  /// a screen reader announces label + hint as a single stop instead of a
+  /// separate label-only stop before the field. Deliberately a plain
+  /// `Semantics(label:)` rather than `MergeSemantics` -- `MergeSemantics`
+  /// would also swallow any interactive descendant (e.g. `_DateField`'s
+  /// calendar icon button) into this same node, making it unreachable on
+  /// its own; this pattern leaves such descendants as independent stops.
+  Widget _labeledField({
+    required String visibleLabel,
+    required String semanticLabel,
+    required Widget field,
+    bool required = false,
+    GlobalKey? semanticsKey,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExcludeSemantics(child: _fieldLabel(visibleLabel)),
+        const SizedBox(height: 2),
+        Semantics(
+          key: semanticsKey,
+          label: semanticLabel,
+          isRequired: required,
+          child: field,
+        ),
+      ],
+    );
+  }
+
   Widget _shippingDestinationOption({
     required String label,
     required _ShippingDestination value,
@@ -5448,6 +6149,8 @@ class _OptionCard extends StatelessWidget {
     required this.badge,
     required this.subtitle,
     required this.onTap,
+    this.semanticsKey,
+    this.sortKey,
   });
 
   final bool selected;
@@ -5455,15 +6158,19 @@ class _OptionCard extends StatelessWidget {
   final String badge;
   final String subtitle;
   final VoidCallback onTap;
+  final Key? semanticsKey;
+  final SemanticsSortKey? sortKey;
 
   @override
   Widget build(BuildContext context) {
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        onTap: onTap,
-        child: ExcludeSemantics(
+    return Semantics(
+      key: semanticsKey,
+      sortKey: sortKey,
+      button: true,
+      selected: selected,
+      label: '$title, $badge. $subtitle',
+      onTap: onTap,
+      child: ExcludeSemantics(
           child: InkWell(
             onTap: onTap,
             child: Container(
@@ -5544,7 +6251,6 @@ class _OptionCard extends StatelessWidget {
               ),
             ),
           ),
-        ),
       ),
     );
   }
@@ -5558,6 +6264,12 @@ class _SearchableSelectField extends StatefulWidget {
     required this.items,
     required this.onChanged,
     this.focusNode,
+    this.semanticLabel,
+    this.semanticsKey,
+    this.pickerTitle,
+    this.searchLabel,
+    this.semanticHint,
+    this.sortKey,
   });
 
   final String value;
@@ -5565,211 +6277,433 @@ class _SearchableSelectField extends StatefulWidget {
   final List<String> items;
   final ValueChanged<String> onChanged;
   final FocusNode? focusNode;
+  final String? semanticLabel;
+  final GlobalKey? semanticsKey;
+  final String? pickerTitle;
+  final String? searchLabel;
+  final String? semanticHint;
+  final SemanticsSortKey? sortKey;
 
   @override
   State<_SearchableSelectField> createState() => _SearchableSelectFieldState();
 }
 
 class _SearchableSelectFieldState extends State<_SearchableSelectField> {
-  // Autocomplete gates its options-overlay visibility on
-  // `_focusNode.hasFocus` for the *exact* FocusNode instance it was given.
-  // When an external FocusNode is attached only to the TextField built in
-  // fieldViewBuilder (as this used to do) but never passed to Autocomplete
-  // itself, Autocomplete falls back to an internal FocusNode that never
-  // receives focus, so the options overlay never shows even though the
-  // options list is populated correctly. Passing a FocusNode to Autocomplete
-  // requires pairing it with an explicit TextEditingController (Flutter's
-  // "split field" API), so this field owns both together.
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.value.trim(),
-  );
   FocusNode? _internalFocusNode;
+  final GlobalKey _internalSemanticsKey = GlobalKey();
 
   FocusNode get _effectiveFocusNode =>
       widget.focusNode ?? (_internalFocusNode ??= FocusNode());
 
+  GlobalKey get _effectiveSemanticsKey =>
+      widget.semanticsKey ?? _internalSemanticsKey;
+
+  List<String> get _normalizedItems {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final raw in widget.items) {
+      final item = raw.trim();
+      if (item.isEmpty) continue;
+      if (seen.add(item.toLowerCase())) result.add(item);
+    }
+    return result;
+  }
+
   @override
   void dispose() {
-    _controller.dispose();
     _internalFocusNode?.dispose();
     super.dispose();
   }
 
+  Future<void> _restoreSelectorAccessibilityFocus() async {
+    if (!mounted) return;
+    // Give the bottom-sheet route time to finish removing its semantics
+    // nodes before restoring the main-page accessibility cursor.
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_effectiveFocusNode);
+    final targetContext = _effectiveSemanticsKey.currentContext;
+    if (targetContext == null) return;
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.30,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (!mounted) return;
+      _effectiveSemanticsKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+      if (attempt < 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+  }
+
+  Future<void> _openPicker() async {
+    final items = _normalizedItems;
+    if (items.isEmpty) {
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        'No options available.',
+        Directionality.of(context),
+      );
+      return;
+    }
+
+    // Remove keyboard focus before opening a new semantic route. The picker
+    // itself is the only active interaction surface until it closes.
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _AccessibleSelectionPickerSheet(
+        title: widget.pickerTitle ?? widget.hint,
+        searchLabel: widget.searchLabel ?? 'Search options',
+        items: items,
+        selectedValue: widget.value,
+      ),
+    );
+
+    if (!mounted) return;
+    if (selected != null && selected.trim().isNotEmpty) {
+      widget.onChanged(selected.trim());
+    }
+
+    // Whether the user selected an option or closed the picker, return to
+    // the exact field that opened it. For group clients the Add button is
+    // the very next semantic child, so one forward swipe lands on Add.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_restoreSelectorAccessibilityFocus());
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final normalizedItems = widget.items
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
+    final value = widget.value.trim();
+    final count = _normalizedItems.length;
+    final displayText = value.isEmpty ? widget.hint : value;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final fieldWidth = constraints.maxWidth;
-        return Autocomplete<String>(
+    return Semantics(
+      key: _effectiveSemanticsKey,
+      sortKey: widget.sortKey,
+      button: true,
+      label: widget.semanticLabel ?? widget.hint,
+      value: value.isEmpty ? 'Not selected' : value,
+      hint: widget.semanticHint ??
+          (count == 0
+              ? 'No options available'
+              : 'Double tap to open. $count ${count == 1 ? 'option' : 'options'} available.'),
+      onTap: () => unawaited(_openPicker()),
+      child: ExcludeSemantics(
+        child: InkWell(
           focusNode: _effectiveFocusNode,
-          textEditingController: _controller,
-          optionsBuilder: (textEditingValue) {
-            final query = textEditingValue.text.trim().toLowerCase();
-            if (query.isEmpty) return normalizedItems;
-            final ranked = normalizedItems
-                .map(
-                  (item) => MapEntry(item, item.toLowerCase().indexOf(query)),
-                )
-                .where((entry) => entry.value >= 0)
-                .toList(growable: false);
-            ranked.sort((a, b) {
-              final aStarts = a.key.toLowerCase().startsWith(query);
-              final bStarts = b.key.toLowerCase().startsWith(query);
-              if (aStarts != bStarts) return aStarts ? -1 : 1;
-              if (a.value != b.value) return a.value.compareTo(b.value);
-              return a.key.length.compareTo(b.key.length);
-            });
-            if (ranked.isEmpty) return normalizedItems;
-            return ranked.map((entry) => entry.key);
-          },
-          onSelected: widget.onChanged,
-          fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: (text) {
-                final normalizedText = text.trim();
-                final matchesExisting = normalizedItems.any(
-                  (item) =>
-                      item.toLowerCase() == normalizedText.toLowerCase(),
-                );
-                if (normalizedText.isEmpty || !matchesExisting) {
-                  widget.onChanged('');
-                }
-              },
-              onTap: () async {
-                if (controller.text.trim().isEmpty &&
-                    normalizedItems.isNotEmpty) {
-                  // Autocomplete only calls optionsBuilder in response to a
-                  // real text change (empty -> empty is a no-op, so tapping
-                  // an already-empty field wouldn't otherwise populate the
-                  // options list at all). Mutating to ' ' and back to ''
-                  // forces that change so the full list populates before the
-                  // options overlay becomes visible.
-                  controller.value = const TextEditingValue(
-                    text: ' ',
-                    selection: TextSelection.collapsed(offset: 1),
-                  );
-                  await Future<void>.delayed(
-                    const Duration(milliseconds: 16),
-                  );
-                  controller.value = const TextEditingValue(text: '');
-                }
-              },
-              onSubmitted: (_) => onSubmit(),
-              onTapOutside: (_) => focusNode.unfocus(),
-              style: const TextStyle(
+          onTap: _openPicker,
+          borderRadius: BorderRadius.zero,
+          child: InputDecorator(
+            isEmpty: value.isEmpty,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: AppColors.snow,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+              constraints: const BoxConstraints(minHeight: 52),
+              suffixIcon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: AppColors.blackCat.withValues(alpha: 0.45),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: _requestBorder,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: _requestBorder,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: _requestBorder,
+              ),
+            ),
+            child: Text(
+              displayText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w400,
                 fontFamily: 'Arial',
-                color: AppColors.blackCat,
+                color: value.isEmpty
+                    ? AppColors.blackCat.withValues(alpha: 0.35)
+                    : AppColors.blackCat,
               ),
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                hintStyle: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w400,
-                  fontFamily: 'Arial',
-                  color: AppColors.blackCat.withValues(alpha: 0.35),
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: AppColors.snow,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                suffixIcon: Icon(
-                  Icons.search_rounded,
-                  size: 16,
-                  color: AppColors.blackCat.withValues(alpha: 0.45),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: _requestBorder,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: _requestBorder,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.zero,
-                  borderSide: _requestBorder,
-                ),
-              ),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-            final list = options.toList(growable: false);
-            final menuHeight = AutocompleteDropdownSizing.menuHeight(
-              itemCount: list.length,
-              itemExtent: 40,
-            );
-            return TextFieldTapRegion(
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Material(
-                  elevation: 6,
-                  color: AppColors.snow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                    side: _requestBorder,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: menuHeight,
-                      minWidth: fieldWidth,
-                      maxWidth: fieldWidth,
-                    ),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
-                        list.length,
-                      ),
-                      physics: AutocompleteDropdownSizing.scrollPhysics(
-                        list.length,
-                      ),
-                      itemCount: list.length,
-                      itemBuilder: (context, index) {
-                        final item = list[index];
-                        return Semantics(
-                          button: true,
-                          child: ExcludeSemantics(
-                            child: InkWell(
-                              onTap: () => onSelected(item),
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                child: Text(
-                                  item,
-                                  style: const TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w400,
-                                    fontFamily: 'Arial',
-                                  ),
+class _AccessibleSelectionPickerSheet extends StatefulWidget {
+  const _AccessibleSelectionPickerSheet({
+    required this.title,
+    required this.searchLabel,
+    required this.items,
+    required this.selectedValue,
+  });
+
+  final String title;
+  final String searchLabel;
+  final List<String> items;
+  final String selectedValue;
+
+  @override
+  State<_AccessibleSelectionPickerSheet> createState() =>
+      _AccessibleSelectionPickerSheetState();
+}
+
+class _AccessibleSelectionPickerSheetState
+    extends State<_AccessibleSelectionPickerSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'pickerClose');
+  final GlobalKey _closeSemanticsKey = GlobalKey();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_closeFocusNode);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      _closeSemanticsKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
+
+  List<String> get _filteredItems {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return widget.items;
+    final ranked = widget.items
+        .map((item) => MapEntry(item, item.toLowerCase().indexOf(query)))
+        .where((entry) => entry.value >= 0)
+        .toList(growable: false);
+    ranked.sort((a, b) {
+      final aStarts = a.key.toLowerCase().startsWith(query);
+      final bStarts = b.key.toLowerCase().startsWith(query);
+      if (aStarts != bStarts) return aStarts ? -1 : 1;
+      if (a.value != b.value) return a.value.compareTo(b.value);
+      return a.key.toLowerCase().compareTo(b.key.toLowerCase());
+    });
+    return ranked.map((entry) => entry.key).toList(growable: false);
+  }
+
+  void _close() => Navigator.of(context).pop();
+
+  void _select(String item) => Navigator.of(context).pop(item);
+
+  @override
+  Widget build(BuildContext context) {
+    final options = _filteredItems;
+    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: widget.title,
+      child: SafeArea(
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: keyboardInset),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: FractionallySizedBox(
+              heightFactor: 0.78,
+              child: Material(
+                color: AppColors.snow,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ExcludeSemantics(
+                              child: Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: 'Arialbold',
+                                  color: AppColors.blackCat,
                                 ),
                               ),
                             ),
                           ),
-                        );
-                      },
+                          Semantics(
+                            key: _closeSemanticsKey,
+                            button: true,
+                            label: 'Close ${widget.title}',
+                            onTap: _close,
+                            child: ExcludeSemantics(
+                              child: IconButton(
+                                focusNode: _closeFocusNode,
+                                tooltip: 'Close ${widget.title}',
+                                onPressed: _close,
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                      child: Semantics(
+                        textField: true,
+                        label: widget.searchLabel,
+                        child: TextField(
+                          controller: _searchController,
+                          textInputAction: TextInputAction.search,
+                          onChanged: (value) => setState(() => _query = value),
+                          decoration: InputDecoration(
+                            hintText: widget.searchLabel,
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            isDense: true,
+                            filled: true,
+                            fillColor: AppColors.snow,
+                            constraints: const BoxConstraints(minHeight: 52),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: _requestBorder,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: _requestBorder,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: _requestBorder,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Semantics(
+                        liveRegion: true,
+                        label:
+                            '${options.length} ${options.length == 1 ? 'option' : 'options'} available',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            '${options.length} ${options.length == 1 ? 'option' : 'options'} available',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.blackCat.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: options.isEmpty
+                          ? Center(
+                              child: Semantics(
+                                label: 'No results',
+                                child: ExcludeSemantics(
+                                  child: Text('No results'),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              itemCount: options.length,
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final item = options[index];
+                                final selected = widget.selectedValue
+                                        .trim()
+                                        .toLowerCase() ==
+                                    item.toLowerCase();
+                                return Semantics(
+                                  button: true,
+                                  selected: selected,
+                                  label:
+                                      '$item, option ${index + 1} of ${options.length}',
+                                  hint: 'Double tap to select',
+                                  onTap: () => _select(item),
+                                  child: ExcludeSemantics(
+                                    child: InkWell(
+                                      onTap: () => _select(item),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 14,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                item,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                  fontFamily: 'Arial',
+                                                  color: AppColors.blackCat,
+                                                ),
+                                              ),
+                                            ),
+                                            if (selected)
+                                              const Icon(
+                                                Icons.check_rounded,
+                                                size: 18,
+                                                color: AppColors.blackCat,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -5779,15 +6713,18 @@ class _DateField extends StatelessWidget {
     required this.controller,
     required this.onCalendarTap,
     this.onChanged,
+    this.focusNode,
   });
   final TextEditingController controller;
   final VoidCallback onCalendarTap;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       keyboardType: TextInputType.datetime,
       onChanged: onChanged,
       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
@@ -5834,14 +6771,20 @@ class _DateField extends StatelessWidget {
 }
 
 class _TextArea extends StatelessWidget {
-  const _TextArea({required this.controller, required this.hint});
+  const _TextArea({
+    required this.controller,
+    required this.hint,
+    this.focusNode,
+  });
   final TextEditingController controller;
   final String hint;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       maxLines: 5,
       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w400),
       decoration: InputDecoration(
@@ -5935,6 +6878,7 @@ class _InputField extends StatelessWidget {
 
 class _BudgetCard extends StatefulWidget {
   const _BudgetCard({
+    required this.semanticPrefix,
     required this.values,
     required this.maxValue,
     this.displayStartOffset = 0,
@@ -5943,6 +6887,7 @@ class _BudgetCard extends StatefulWidget {
     this.maxIsSet = true,
   });
 
+  final String semanticPrefix;
   final RangeValues values;
   final double maxValue;
   final int displayStartOffset;
@@ -6017,12 +6962,30 @@ class _BudgetCardState extends State<_BudgetCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: TextFormField(
-              controller: _minCtrl,
+            // The native field's own semantics value is just the raw
+            // controller text ("15"), not "$15" -- InputDecoration's
+            // prefixText is visual only, it isn't merged into the
+            // announced value. Since this field is disabled (no editing
+            // to preserve), ExcludeSemantics + a hand-built value is safe
+            // here; `focusable: true` is required to keep it a real swipe
+            // stop, since excluding a field's semantics also drops the
+            // isFocusable flag the native TextField would otherwise set.
+            child: Semantics(
+              label: '${widget.semanticPrefix} minimum',
+              value: '\$$_minText',
               enabled: false,
-              decoration: const InputDecoration(
-                labelText: 'Min',
-                prefixText: '\$',
+              readOnly: true,
+              textField: true,
+              focusable: true,
+              child: ExcludeSemantics(
+                child: TextFormField(
+                  controller: _minCtrl,
+                  enabled: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Min',
+                    prefixText: '\$',
+                  ),
+                ),
               ),
             ),
           ),
@@ -6031,7 +6994,10 @@ class _BudgetCardState extends State<_BudgetCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextFormField(
+                Semantics(
+                  label: '${widget.semanticPrefix} maximum, dollars',
+                  textField: true,
+                  child: TextFormField(
                   controller: _maxCtrl,
                   focusNode: _maxFocusNode,
                   keyboardType: TextInputType.number,
@@ -6060,6 +7026,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                       FocusManager.instance.primaryFocus?.unfocus(),
                   onFieldSubmitted: (_) =>
                       FocusManager.instance.primaryFocus?.unfocus(),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

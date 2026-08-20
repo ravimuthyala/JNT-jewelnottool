@@ -17,7 +17,7 @@ extension _CompletedRequestPhotosTab on _CompletedRequestSheetState {
         16,
         0,
         16,
-        16 + math.max(0, bottomInset),
+        16 + math.max(0.0, bottomInset),
       ),
       children: [
         Focus(

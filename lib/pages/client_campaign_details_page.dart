@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 class ClientCampaignDetailsPage extends StatefulWidget {
   const ClientCampaignDetailsPage({
@@ -46,16 +47,23 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     _vmFuture = _RequestDetailsVm.load(widget.request);
   }
 
+  void _setBrandCollaborationAcceptance(bool checked) {
+    setState(() => _acceptedBrandCollaborationContract = checked);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      announceRequestAccessibilityMessage(
+        context,
+        'I accept the brand collaboration contract, '
+        '${checked ? 'checked' : 'not checked'}',
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final safeBottom = MediaQuery.of(context).viewPadding.bottom;
     final maxH = MediaQuery.of(context).size.height * 0.96;
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      namesRoute: true,
-      label: 'Campaign details',
-      child: Align(
+    return Align(
         alignment: Alignment.bottomCenter,
         child: Container(
           constraints: BoxConstraints(maxHeight: maxH),
@@ -67,10 +75,14 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                 return Column(
                   children: [
                     _headerBar(context),
-                    const Expanded(
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.blackCat,
+                    Expanded(
+                      child: Semantics(
+                        liveRegion: true,
+                        label: 'Loading campaign details',
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.blackCat,
+                          ),
                         ),
                       ),
                     ),
@@ -86,13 +98,19 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       child: Center(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            'Unable to load campaign request details.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.blackCat,
+                          child: Semantics(
+                            liveRegion: true,
+                            label: 'Unable to load campaign request details',
+                            child: const ExcludeSemantics(
+                              child: Text(
+                                'Unable to load campaign request details.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -108,6 +126,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   _headerBar(context),
                   Expanded(
                     child: ListView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
                       children: [
                         _overviewCard(vm),
@@ -156,6 +176,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                           const SizedBox(height: 12),
                           _brandCollaborationStepSection(vm),
                         ],
+                        const SizedBox(height: 12),
+                        _paymentSection(vm),
                       ],
                     ),
                   ),
@@ -262,7 +284,6 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             },
           ),
         ),
-      ),
     );
   }
 
@@ -274,6 +295,14 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       child: Stack(
         alignment: Alignment.center,
         children: [
+          Positioned(
+            top: 4,
+            right: 0,
+            child: RequestModalInitialClose(
+              label: 'Close campaign details',
+              onClose: () => Navigator.of(context).pop(),
+            ),
+          ),
           Center(
             child: Image.asset(
               'assets/images/jnt_logo_black.png',
@@ -282,12 +311,14 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
-          Align(
+          ExcludeSemantics(
+            child: Align(
             alignment: Alignment.centerRight,
             child: IconButton(
               tooltip: 'Close',
               icon: const Icon(Icons.close_rounded, size: 28),
               onPressed: () => Navigator.of(context).pop(),
+            ),
             ),
           ),
         ],
@@ -326,12 +357,15 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Nail Dimensions',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
+        Semantics(
+          header: true,
+          child: const Text(
+            'Nail Dimensions',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -385,7 +419,11 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   }
 
   Widget _summaryValue(String label, String value) {
-    return Row(
+    return Semantics(
+      container: true,
+      label: '$label, ${value == '-' ? 'not provided' : value}',
+      child: ExcludeSemantics(
+        child: Row(
       children: [
         Expanded(
           child: Text(
@@ -408,6 +446,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           ),
         ),
       ],
+        ),
+      ),
     );
   }
 
@@ -428,9 +468,21 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     }
 
     Widget row(String label, String raw, {bool showNfc = false}) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
+      final displayValue = value(raw);
+      final numericValue = displayValue
+          .replaceAll(RegExp(r'\s*mm$', caseSensitive: false), '')
+          .trim();
+      final spokenValue = numericValue.isEmpty || numericValue == '-'
+          ? 'measurement not provided'
+          : '$numericValue millimeters';
+      return Semantics(
+        container: true,
+        label:
+            '$title, $label, $spokenValue${showNfc ? ', NFC eligible' : ''}',
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
           children: [
             Expanded(
               child: Row(
@@ -456,7 +508,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             ),
             const SizedBox(width: 10),
             Text(
-              value(raw),
+              displayValue,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -465,6 +517,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
               ),
             ),
           ],
+            ),
+          ),
         ),
       );
     }
@@ -475,14 +529,17 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-            fontFamily: 'ArialBold',
-            color: AppColors.blackCat,
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontFamily: 'ArialBold',
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -615,13 +672,16 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   }
 
   Widget _sectionHeader({required String text}) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        color: AppColors.blackCat,
-        letterSpacing: 0.2,
+    return Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }
@@ -760,27 +820,77 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   }
 
   Widget _plainSection({required String title, required String body}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
+    final spokenBody = body.trim().isEmpty ? 'not provided' : body.trim();
+    return Semantics(
+      container: true,
+      label: '$title, $spokenBody',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              body,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.blackCat.withValues(alpha: 0.88),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          body,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.blackCat.withValues(alpha: 0.88),
+      ),
+    );
+  }
+
+  Widget _paymentSection(_RequestDetailsVm vm) {
+    return _sectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader(text: 'Payment'),
+          const SizedBox(height: 12),
+          Semantics(
+            container: true,
+            label: 'Client Budget, ${vm.clientBudgetLabel}',
+            child: ExcludeSemantics(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Client Budget',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat.withValues(alpha: 0.68),
+                    ),
+                  ),
+                  const Spacer(),
+                  Flexible(
+                    child: Text(
+                      vm.clientBudgetLabel,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.blackCat,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -788,12 +898,15 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Number of Sets',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
+        Semantics(
+          header: true,
+          child: const Text(
+            'Number of Sets',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -819,24 +932,30 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   }
 
   Widget _bcHeader(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.6,
-        color: AppColors.blackCat.withValues(alpha: 0.5),
+    return Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: AppColors.blackCat.withValues(alpha: 0.5),
+        ),
       ),
     );
   }
 
   Widget _bcSubhead(String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: AppColors.blackCat.withValues(alpha: 0.55),
+    return Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: AppColors.blackCat.withValues(alpha: 0.55),
+        ),
       ),
     );
   }
@@ -883,7 +1002,11 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
+        Semantics(
+          button: true,
+          expanded: expanded,
+          label: 'Section $number, $title',
+          hint: expanded ? 'Double tap to collapse' : 'Double tap to expand',
           onTap: () => setState(() {
             if (expanded) {
               _expandedTerms.remove(number);
@@ -891,7 +1014,16 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
               _expandedTerms.add(number);
             }
           }),
-          child: Padding(
+          child: ExcludeSemantics(
+            child: InkWell(
+              onTap: () => setState(() {
+                if (expanded) {
+                  _expandedTerms.remove(number);
+                } else {
+                  _expandedTerms.add(number);
+                }
+              }),
+              child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
               children: [
@@ -922,6 +1054,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   color: AppColors.blackCat.withValues(alpha: 0.6),
                 ),
               ],
+            ),
+              ),
             ),
           ),
         ),
@@ -1165,25 +1299,37 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         ? dueRaw.round()
         : int.tryParse((dueRaw ?? '').toString()) ?? 0;
     final maxTapBonus = (tapCap ?? 0) * (tapRate ?? 0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 2, bottom: 8),
-          child: Text(
-            'Brand Collaboration',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+        Semantics(
+          header: true,
+          child: const Padding(
+            padding: EdgeInsets.only(left: 2, bottom: 8),
+            child: Text(
+              'Brand Collaboration',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
             ),
           ),
         ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          color: AppColors.blackCat,
-          child: Column(
+        Semantics(
+          container: true,
+          label: nfcCardTapsEnabled && tapCap != null && tapRate != null
+              ? 'Client Offer, \$$due. Plus up to \$${maxTapBonus.toStringAsFixed(0)} in tap bonuses, $tapCap taps at \$${tapRate.toStringAsFixed(2)}, paid monthly'
+              : 'Client Offer, \$$due',
+          child: ExcludeSemantics(
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: AppColors.blackCat,
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
@@ -1219,6 +1365,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                 ),
               ],
             ],
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1451,7 +1599,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                 const SizedBox(width: 8),
                               if (url.isNotEmpty)
                                 SizedBox(
-                                  height: 30,
+                                  height: 48,
                                   child: ElevatedButton(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.blackCat,
@@ -1460,9 +1608,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
                                       ),
-                                      minimumSize: Size.zero,
+                                      minimumSize: const Size(48, 48),
                                       tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
+                                          MaterialTapTargetSize.padded,
                                       shape: const RoundedRectangleBorder(
                                         borderRadius: BorderRadius.zero,
                                       ),
@@ -1529,7 +1677,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       Builder(
                         builder: (context) {
                           return SizedBox(
-                            height: 30,
+                            height: 48,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.blackCat,
@@ -1538,8 +1686,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                 ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                minimumSize: const Size(48, 48),
+                                tapTargetSize: MaterialTapTargetSize.padded,
                                 shape: const RoundedRectangleBorder(
                                   borderRadius: BorderRadius.zero,
                                 ),
@@ -1673,39 +1821,48 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         const SizedBox(height: 12),
         _termsSection(vm),
         const SizedBox(height: 14),
-        InkWell(
-          onTap: () => setState(
-            () => _acceptedBrandCollaborationContract =
-                !_acceptedBrandCollaborationContract,
+        Semantics(
+          container: true,
+          checked: _acceptedBrandCollaborationContract,
+          label: 'I accept the brand collaboration contract',
+          onTap: () => _setBrandCollaborationAcceptance(
+            !_acceptedBrandCollaborationContract,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Checkbox(
-                value: _acceptedBrandCollaborationContract,
-                activeColor: AppColors.blackCat,
-                onChanged: (v) => setState(
-                  () => _acceptedBrandCollaborationContract = v ?? false,
-                ),
+          child: ExcludeSemantics(
+            child: InkWell(
+              onTap: () => _setBrandCollaborationAcceptance(
+                !_acceptedBrandCollaborationContract,
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: Text(
-                    'I accept the brand collaboration contract',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blackCat.withValues(alpha: 0.85),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _acceptedBrandCollaborationContract,
+                    activeColor: AppColors.blackCat,
+                    onChanged: (v) =>
+                        _setBrandCollaborationAcceptance(v ?? false),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Text(
+                        'I accept the brand collaboration contract',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.blackCat.withValues(alpha: 0.85),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1718,7 +1875,11 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
-      child: child,
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        child: child,
+      ),
     );
   }
 
@@ -1761,46 +1922,12 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                 child: Semantics(
                   button: true,
                   label: 'View campaign image full screen',
-                  child: InkWell(
+                  hint: 'Double tap to open image preview',
+                  onTap: () => _showCampaignImagePreview(context, imageProvider),
+                  child: ExcludeSemantics(
+                    child: InkWell(
                     onTap: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (dialogContext) => Dialog(
-                          backgroundColor: Colors.black,
-                          insetPadding: const EdgeInsets.all(8),
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: InteractiveViewer(
-                                  minScale: 0.8,
-                                  maxScale: 4,
-                                  child: Center(
-                                    child: Image(
-                                      image: imageProvider,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, _, _) =>
-                                          const SizedBox.shrink(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: IconButton(
-                                  tooltip: 'Close image preview',
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(),
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
+                      _showCampaignImagePreview(context, imageProvider);
                     },
                     child: Container(
                       width: size,
@@ -1818,6 +1945,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
+                    ),
                     ),
                   ),
                 ),
@@ -1845,6 +1973,68 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
               buildTile(photos[index], size: tileSize),
         );
       },
+    );
+  }
+
+  void _showCampaignImagePreview(
+    BuildContext context,
+    ImageProvider<Object> imageProvider,
+  ) {
+    showDialog<void>(
+      context: context,
+      barrierLabel: 'Close campaign image preview',
+      builder: (dialogContext) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Campaign image preview',
+        child: Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(8),
+          child: Stack(
+          children: [
+            Positioned(
+              top: 8,
+              right: 8,
+              child: RequestModalInitialClose(
+                label: 'Close campaign image preview',
+                onClose: () => Navigator.of(dialogContext).pop(),
+              ),
+            ),
+            Positioned.fill(
+              child: Semantics(
+                image: true,
+                label: 'Campaign image preview. Pinch to zoom',
+                child: ExcludeSemantics(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4,
+                    child: Center(
+                      child: Image(
+                        image: imageProvider,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: ExcludeSemantics(
+                child: IconButton(
+                  tooltip: 'Close image preview',
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2190,9 +2380,24 @@ class _RequestDetailsVm {
     final order = asMap(payload['order']).isNotEmpty
         ? asMap(payload['order'])
         : asMap(details['order']);
-    final clientBudget = asMap(payload['clientBudget']).isNotEmpty
-        ? asMap(payload['clientBudget'])
-        : asMap(details['clientBudget']);
+    final clientBudget = <Map<String, dynamic>>[
+      asMap(root['client_budget']),
+      asMap(root['clientBudget']),
+      asMap(payload['clientBudget']),
+      asMap(payload['client_budget']),
+      asMap(requestDetails['clientBudget']),
+      asMap(requestDetails['client_budget']),
+      asMap(details['clientBudget']),
+      asMap(details['client_budget']),
+      // Brand Request pages can store the submitted range under `budget`.
+      asMap(root['budget']),
+      asMap(payload['budget']),
+      asMap(requestDetails['budget']),
+      asMap(details['budget']),
+    ].firstWhere(
+      (candidate) => candidate.isNotEmpty,
+      orElse: () => const <String, dynamic>{},
+    );
     final rootNailPrefs = asMap(root['nailPreferences']);
     final detailNailPrefs = asMap(details['nailPreferences']);
     final requestDetailNailPrefs = asMap(requestDetails['nailPreferences']);
@@ -2688,16 +2893,54 @@ class _RequestDetailsVm {
         asDate(requestDetails['needBy']) ??
         asDate(root['needBy']) ??
         request.neededBy;
-    final cMin = asInt(clientBudget['min']) > 0
-        ? asInt(clientBudget['min'])
-        : (asInt(root['clientBudgetMin']) > 0
-              ? asInt(root['clientBudgetMin'])
-              : (request.clientBudgetMin ?? request.budgetMin));
-    final cMax = asInt(clientBudget['max']) > 0
-        ? asInt(clientBudget['max'])
-        : (asInt(root['clientBudgetMax']) > 0
-              ? asInt(root['clientBudgetMax'])
-              : (request.clientBudgetMax ?? request.budgetMax));
+    final cMin = <Object?>[
+      clientBudget['min'],
+      clientBudget['minimum'],
+      clientBudget['clientBudgetMin'],
+      clientBudget['budgetMin'],
+      root['client_budget_min'],
+      root['clientBudgetMin'],
+      root['budget_min'],
+      root['budgetMin'],
+      payload['clientBudgetMin'],
+      payload['client_budget_min'],
+      payload['budgetMin'],
+      payload['budget_min'],
+      requestDetails['clientBudgetMin'],
+      requestDetails['client_budget_min'],
+      requestDetails['budgetMin'],
+      requestDetails['budget_min'],
+      details['clientBudgetMin'],
+      details['client_budget_min'],
+      details['budgetMin'],
+      details['budget_min'],
+      request.clientBudgetMin,
+      request.budgetMin,
+    ].map(asInt).firstWhere((value) => value > 0, orElse: () => 15);
+    final cMax = <Object?>[
+      clientBudget['max'],
+      clientBudget['maximum'],
+      clientBudget['clientBudgetMax'],
+      clientBudget['budgetMax'],
+      root['client_budget_max'],
+      root['clientBudgetMax'],
+      root['budget_max'],
+      root['budgetMax'],
+      payload['clientBudgetMax'],
+      payload['client_budget_max'],
+      payload['budgetMax'],
+      payload['budget_max'],
+      requestDetails['clientBudgetMax'],
+      requestDetails['client_budget_max'],
+      requestDetails['budgetMax'],
+      requestDetails['budget_max'],
+      details['clientBudgetMax'],
+      details['client_budget_max'],
+      details['budgetMax'],
+      details['budget_max'],
+      request.clientBudgetMax,
+      request.budgetMax,
+    ].map(asInt).firstWhere((value) => value > 0, orElse: () => 5000);
     final orderTypeRaw = firstNonEmpty([
       order['type'],
       root['orderType'],

@@ -7,51 +7,100 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
     BuildContext context,
     GlobalKey fieldKey,
   ) async {
-    final fieldContext = fieldKey.currentContext;
-    if (fieldContext == null) return;
-    final fieldBox = fieldContext.findRenderObject() as RenderBox?;
-    final overlayBox =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (fieldBox == null || overlayBox == null) return;
-
-    final topLeft = fieldBox.localToGlobal(Offset.zero, ancestor: overlayBox);
-    final bottomLeft = fieldBox.localToGlobal(
-      Offset(0, fieldBox.size.height),
-      ancestor: overlayBox,
-    );
-
-    final selected = await showMenu<String>(
+    FocusManager.instance.primaryFocus?.unfocus();
+    final firstItemKey = GlobalKey();
+    var initialFocusRequested = false;
+    final selected = await showModalBottomSheet<String>(
       context: context,
-      color: AppColors.snow,
-      surfaceTintColor: AppColors.snow,
-      elevation: 8,
-      position: RelativeRect.fromLTRB(
-        topLeft.dx,
-        bottomLeft.dy + 4,
-        overlayBox.size.width - topLeft.dx - fieldBox.size.width,
-        overlayBox.size.height - bottomLeft.dy,
-      ),
-      items: _couriers
-          .map(
-            (c) => PopupMenuItem<String>(
-              value: c,
-              height: 44,
-              child: Text(
-                c,
-                style: const TextStyle(
-                  color: AppColors.blackCat,
-                  fontWeight: FontWeight.w400,
-                  fontSize: 14,
-                ),
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        if (!initialFocusRequested && _accessibleNavigation(sheetContext)) {
+          initialFocusRequested = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            firstItemKey.currentContext
+                ?.findRenderObject()
+                ?.sendSemanticsEvent(const FocusSemanticEvent());
+          });
+        }
+        return Semantics(
+          scopesRoute: true,
+          namesRoute: true,
+          explicitChildNodes: true,
+          label: 'Select courier',
+          child: Container(
+            color: AppColors.snow,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Semantics(
+                    header: true,
+                    label: 'Select courier',
+                    child: const ExcludeSemantics(
+                      child: Text(
+                        'Select courier',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  for (var i = 0; i < _couriers.length; i++) ...[
+                    Semantics(
+                      key: i == 0 ? firstItemKey : null,
+                      button: true,
+                      selected: _courier == _couriers[i],
+                      label: '${_couriers[i]} courier',
+                      value: _courier == _couriers[i]
+                          ? 'Currently selected'
+                          : 'Not selected',
+                      onTap: () => Navigator.pop(sheetContext, _couriers[i]),
+                      child: ExcludeSemantics(
+                        child: InkWell(
+                          onTap: () =>
+                              Navigator.pop(sheetContext, _couriers[i]),
+                          child: SizedBox(
+                            height: 52,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                _couriers[i],
+                                style: const TextStyle(
+                                  color: AppColors.blackCat,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (i < _couriers.length - 1)
+                      const Divider(height: 1),
+                  ],
+                ],
               ),
             ),
-          )
-          .toList(growable: false),
+          ),
+        );
+      },
     );
 
     if (selected != null && mounted) {
       setState(() => _courier = selected);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      fieldKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
   }
 
   Widget _courierField(BuildContext context) {
@@ -60,6 +109,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
     final hasValue = displayText.isNotEmpty;
 
     return Semantics(
+      key: fieldKey,
       button: true,
       label: 'Courier',
       value: hasValue ? displayText : 'Not selected',
@@ -67,7 +117,6 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
       onTap: () => _openCourierMenu(context, fieldKey),
       child: ExcludeSemantics(
         child: InkWell(
-          key: fieldKey,
           borderRadius: BorderRadius.zero,
           onTap: () => _openCourierMenu(context, fieldKey),
           child: Container(
@@ -118,11 +167,13 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
         16,
         0,
         16,
-        16 + math.max(0, bottomInset),
+        16,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      child: Focus(
+        focusNode: _shippingContentFocusNode,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
         completedSoftBox(_shippingLabelSection()),
         const SizedBox(height: 12),
         completedSoftBox(
@@ -163,12 +214,18 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
               const SizedBox(height: 8),
               TextField(
                 controller: _trackingCtrl,
+                textInputAction: TextInputAction.done,
                 onChanged: (_) => setState(() {}),
+                onSubmitted: (_) {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                },
                 style: const TextStyle(
                   fontWeight: FontWeight.w400,
                   fontSize: 14,
                 ),
                 decoration: InputDecoration(
+                  labelText: 'Tracking number',
+                  floatingLabelBehavior: FloatingLabelBehavior.never,
                   hintText: 'Enter tracking number',
                   hintStyle: const TextStyle(
                     fontWeight: FontWeight.w400,
@@ -318,7 +375,8 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
             ],
           ),
         ),
-        ],
+          ],
+        ),
       ),
     );
   }

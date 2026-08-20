@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/full_hand_measurement_service.dart';
 import '../theme/app_colors.dart';
 import 'coin_selector_page.dart';
+import 'request_modal_accessibility.dart';
 
 /// Shared "Measure Your Nail" flow: 2 photos per hand (4 fingers together,
 /// then thumb alone) instead of one photo per finger.
@@ -71,6 +72,7 @@ Future<Map<String, double>?> showFullHandMeasurementFlow({
     backgroundColor: AppColors.blackCat,
     isDismissible: false,
     enableDrag: false,
+    barrierLabel: 'Nail measurement capture',
     builder: (_) => _FullHandMeasurementSheet(
       initialMeasured: Map<String, double>.from(initialMeasured),
       photosOut: photosOut,
@@ -218,45 +220,53 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     final ctrl = TextEditingController();
     final value = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.snow,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text('Enter $title (mm)'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            hintText: 'e.g. 14.5',
-            border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+      barrierLabel: 'Manual nail measurement',
+      builder: (ctx) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Enter $title measurement',
+        child: AlertDialog(
+          backgroundColor: AppColors.snow,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          title: Text('Enter $title (mm)'),
+          content: TextField(
+            autofocus: true,
+            controller: ctrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              hintText: 'e.g. 14.5',
+              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+            ),
           ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCatLight,
+                foregroundColor: AppColors.snow,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final parsed = double.tryParse(ctrl.text.trim());
+                Navigator.pop(ctx, parsed);
+              },
+              style: ElevatedButton.styleFrom(
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCatLight,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final parsed = double.tryParse(ctrl.text.trim());
-              Navigator.pop(ctx, parsed);
-            },
-            style: ElevatedButton.styleFrom(
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-            ),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
     ctrl.dispose();
@@ -279,24 +289,32 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     final shotLabel = check.shotType == 'thumb' ? 'Thumb' : '4 Fingers';
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.snow,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text('Retake Photo — $handLabel Hand ($shotLabel)'),
-        content: Text(message),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+      barrierLabel: 'Retake photo',
+      builder: (ctx) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Retake $handLabel hand $shotLabel photo',
+        child: AlertDialog(
+          backgroundColor: AppColors.snow,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          title: Text('Retake Photo — $handLabel Hand ($shotLabel)'),
+          content: Text(message),
+          actions: [
+            ElevatedButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
               ),
+              child: const Text('Retake'),
             ),
-            child: const Text('Retake'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -319,24 +337,32 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
               : 'Measurement failed for the $handLabel hand. Please retake.');
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.snow,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: Text('$handLabel Hand Needs a Retake'),
-        content: Text(body),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+      barrierLabel: '$handLabel hand measurement failed',
+      builder: (ctx) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: '$handLabel hand needs a retake',
+        child: AlertDialog(
+          backgroundColor: AppColors.snow,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          title: Text('$handLabel Hand Needs a Retake'),
+          content: Text(body),
+          actions: [
+            ElevatedButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
               ),
+              child: const Text('Retake'),
             ),
-            child: const Text('Retake'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -521,75 +547,83 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
       backgroundColor: AppColors.snow,
       isDismissible: false,
       enableDrag: false,
+      barrierLabel: '$handLabel hand measurement results',
       builder: (sheetCtx) {
         return StatefulBuilder(
           builder: (rowCtx, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  16,
-                  16,
-                  16 + MediaQuery.of(rowCtx).viewInsets.bottom,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$handLabel Hand Results',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                        color: AppColors.blackCat,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Auto-measured from your photos. You can override any finger manually.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.blackCatLight,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (result.issues != null && result.issues!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Text(
-                          result.issues!.join(', '),
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 12,
-                          ),
+            return Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              explicitChildNodes: true,
+              label: '$handLabel hand measurement results',
+              child: SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    16 + MediaQuery.of(rowCtx).viewInsets.bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$handLabel Hand Results',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          color: AppColors.blackCat,
                         ),
                       ),
-                    for (final apiKey in _fingerLabels.keys)
-                      _resultRow(
-                        rowCtx,
-                        setSheetState,
-                        apiKey: apiKey,
-                        label: _fingerLabels[apiKey]!,
-                        dimKey: '$prefix${_fingerLabels[apiKey]}',
-                        measurement: result.measurements?[apiKey],
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Auto-measured from your photos. You can override any finger manually.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCatLight,
+                        ),
                       ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(sheetCtx).pop(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat,
-                          foregroundColor: AppColors.snow,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
+                      const SizedBox(height: 12),
+                      if (result.issues != null && result.issues!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            result.issues!.join(', '),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                        child: const Text('Continue'),
+                      for (final apiKey in _fingerLabels.keys)
+                        _resultRow(
+                          rowCtx,
+                          setSheetState,
+                          apiKey: apiKey,
+                          label: _fingerLabels[apiKey]!,
+                          dimKey: '$prefix${_fingerLabels[apiKey]}',
+                          measurement: result.measurements?[apiKey],
+                        ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          autofocus: true,
+                          onPressed: () => Navigator.of(sheetCtx).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          child: const Text('Continue'),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -657,229 +691,270 @@ class _FullHandMeasurementSheetState extends State<_FullHandMeasurementSheet> {
     final step = _steps[_stepIndex];
     final progressLabel = '${_checkedOk.length}/${_steps.length}';
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        // Any dismissal path (system/browser back, not just the explicit
-        // close icon) must still return whatever was already captured —
-        // otherwise a partial single-hand result is silently discarded.
-        Navigator.of(context).pop(_measured);
-      },
-      child: SafeArea(
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.snow,
-            borderRadius: BorderRadius.zero,
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Nail measurement capture',
+      child: Stack(
+        children: [
+          RequestModalInitialClose(
+            label: 'Close nail measurement',
+            onClose: () => Navigator.of(context).pop(_measured),
           ),
-          padding: EdgeInsets.fromLTRB(
-            16,
-            14,
-            16,
-            16 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Measure Your Nail',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: AppColors.blackCat,
+          PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              // Any dismissal path (system/browser back, not just the explicit
+              // close icon) must still return whatever was already captured —
+              // otherwise a partial single-hand result is silently discarded.
+              Navigator.of(context).pop(_measured);
+            },
+            child: SafeArea(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.snow,
+                  borderRadius: BorderRadius.zero,
+                ),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  14,
+                  16,
+                  16 + MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Measure Your Nail',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                                color: AppColors.blackCat,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            progressLabel,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ExcludeSemantics(
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: AppColors.blackCat,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              tooltip: 'Close',
+                              onPressed: () =>
+                                  Navigator.of(context).pop(_measured),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 48,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemBuilder: (_, i) {
+                            final s = _steps[i];
+                            final done = _checkedOk.contains(s.key);
+                            final current = i == _stepIndex;
+                            return Semantics(
+                              button: true,
+                              selected: current,
+                              label: '${s.bigTitle} step',
+                              value: done
+                                  ? 'Completed'
+                                  : (current ? 'Current' : 'Not completed'),
+                              hint: current
+                                  ? 'Selected'
+                                  : 'Double tap to open this measurement step',
+                              onTap: () => setState(() => _stepIndex = i),
+                              child: ExcludeSemantics(
+                                child: InkWell(
+                                  onTap: () => setState(() => _stepIndex = i),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: current
+                                          ? AppColors.blackCat
+                                          : (done
+                                                ? AppColors.balletSlippers
+                                                : AppColors.snow),
+                                      border: Border.all(
+                                        color: current
+                                            ? AppColors.blackCat
+                                            : AppColors.blackCat.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                      ),
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (done) ...[
+                                          const Icon(
+                                            Icons.check_circle,
+                                            size: 14,
+                                            color: Colors.green,
+                                          ),
+                                          const SizedBox(width: 4),
+                                        ],
+                                        Text(
+                                          s.tabLabel,
+                                          style: TextStyle(
+                                            color: current
+                                                ? AppColors.snow
+                                                : AppColors.blackCat,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
+                          itemCount: _steps.length,
                         ),
                       ),
-                    ),
-                    Text(
-                      progressLabel,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: AppColors.blackCat,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: AppColors.blackCat),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.of(context).pop(_measured),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 40,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemBuilder: (_, i) {
-                      final s = _steps[i];
-                      final done = _checkedOk.contains(s.key);
-                      final current = i == _stepIndex;
-                      return InkWell(
-                        onTap: () => setState(() => _stepIndex = i),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: current
-                                ? AppColors.blackCat
-                                : (done
-                                      ? AppColors.balletSlippers
-                                      : AppColors.snow),
-                            border: Border.all(
-                              color: current
-                                  ? AppColors.blackCat
-                                  : AppColors.blackCat.withValues(alpha: 0.12),
-                            ),
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          child: Row(
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        height: 320,
+                        decoration: const BoxDecoration(
+                          color: AppColors.blackCat,
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        child: Center(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (done) ...[
-                                const Icon(
-                                  Icons.check_circle,
-                                  size: 14,
-                                  color: Colors.green,
-                                ),
-                                const SizedBox(width: 4),
-                              ],
+                              const Icon(
+                                Icons.camera_alt_rounded,
+                                size: 70,
+                                color: AppColors.snow,
+                              ),
+                              const SizedBox(height: 10),
                               Text(
-                                s.tabLabel,
-                                style: TextStyle(
-                                  color: current
-                                      ? AppColors.snow
-                                      : AppColors.blackCat,
+                                'Scan your ${step.bigTitle}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: AppColors.snow,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                                  fontSize: 18,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    },
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemCount: _steps.length,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  height: 320,
-                  decoration: const BoxDecoration(
-                    color: AppColors.blackCat,
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.camera_alt_rounded,
-                          size: 70,
-                          color: AppColors.snow,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Reference: $_coinName',
+                        style: const TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
                         ),
-                        const SizedBox(height: 10),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        step.shotType == 'fourFinger'
+                            ? 'Line up index, middle, ring, and pinky together with the coin.'
+                            : 'Capture your thumb alone with the coin.',
+                        style: const TextStyle(
+                          color: AppColors.blackCat,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (_lastIssues.isNotEmpty) ...[
+                        const SizedBox(height: 8),
                         Text(
-                          'Scan your ${step.bigTitle}',
-                          textAlign: TextAlign.center,
+                          _lastIssues.join(', '),
                           style: const TextStyle(
-                            color: AppColors.snow,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
+                            color: Colors.red,
+                            fontSize: 12,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Reference: $_coinName',
-                  style: const TextStyle(
-                    color: AppColors.blackCat,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  step.shotType == 'fourFinger'
-                      ? 'Line up index, middle, ring, and pinky together with the coin.'
-                      : 'Capture your thumb alone with the coin.',
-                  style: const TextStyle(
-                    color: AppColors.blackCat,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (_lastIssues.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _lastIssues.join(', '),
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: AppColors.snow,
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  child: const Text(
-                    'Captured photos will upload with your account when you sign up.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _busy ? null : _captureCurrentStep,
-                    icon: _busy
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.camera_alt_outlined),
-                    label: Text(
-                      _busy
-                          ? 'Analyzing ${step.bigTitle}... up to 30s'
-                          : (_checkedOk.contains(step.key)
-                                ? 'Re-image'
-                                : 'Capture'),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: AppColors.snow,
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        child: const Text(
+                          'Captured photos will upload with your account when you sign up.',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
-                      backgroundColor: AppColors.blackCat,
-                      foregroundColor: AppColors.snow,
-                    ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _busy ? null : _captureCurrentStep,
+                          icon: _busy
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.camera_alt_outlined),
+                          label: Text(
+                            _busy
+                                ? 'Analyzing ${step.bigTitle}... up to 30s'
+                                : (_checkedOk.contains(step.key)
+                                      ? 'Re-image'
+                                      : 'Capture'),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            backgroundColor: AppColors.blackCat,
+                            foregroundColor: AppColors.snow,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _busy ? null : _changeCoin,
+                        child: const Text('Change Coin/Currency'),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _busy ? null : _changeCoin,
-                  child: const Text('Change Coin/Currency'),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -890,114 +965,120 @@ class _MeasurementGuidePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: AppBar(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Nail measurement guide',
+      child: Scaffold(
         backgroundColor: AppColors.snow,
-        elevation: 0,
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context, false),
+        appBar: AppBar(
+          backgroundColor: AppColors.snow,
+          elevation: 0,
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          centerTitle: true,
+          title: const Text(
+            'Nail Measurement',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
         ),
-        centerTitle: true,
-        title: const Text(
-          'Nail Measurement',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.snow,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(
-                            color: AppColors.blackCat.withValues(alpha: 0.10),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.snow,
+                            borderRadius: BorderRadius.zero,
+                            border: Border.all(
+                              color: AppColors.blackCat.withValues(alpha: 0.10),
+                            ),
+                          ),
+                          child: const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.straighten_rounded, size: 26),
+                              SizedBox(height: 12),
+                              Text(
+                                'How to Measure Your Nails',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                "You'll take 2 photos per hand: your 4 fingers together, "
+                                "then your thumb alone, each with a coin for scale.",
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            ],
                           ),
                         ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.straighten_rounded, size: 26),
-                            SizedBox(height: 12),
-                            Text(
-                              'How to Measure Your Nails',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              "You'll take 2 photos per hand: your 4 fingers together, "
-                              "then your thumb alone, each with a coin for scale.",
-                              style: TextStyle(fontSize: 14),
-                            ),
-                          ],
+                        const SizedBox(height: 16),
+                        const _MeasureStepTile(
+                          step: 1,
+                          title: 'Keep It Flat',
+                          subtitle:
+                              'Position your hand flat on a table for maximum accuracy.',
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      const _MeasureStepTile(
-                        step: 1,
-                        title: 'Keep It Flat',
-                        subtitle:
-                            'Position your hand flat on a table for maximum accuracy.',
-                      ),
-                      const _MeasureStepTile(
-                        step: 2,
-                        title: 'Use a Reference Coin',
-                        subtitle:
-                            'Place the coin next to your fingernails to use as a measurement guide.',
-                      ),
-                      const _MeasureStepTile(
-                        step: 3,
-                        title: 'Scan with Camera',
-                        subtitle:
-                            'Capture 4 fingers together, then your thumb alone, for each hand.',
-                      ),
-                      const _MeasureStepTile(
-                        step: 4,
-                        title: 'Review Your Results',
-                        subtitle:
-                            "We'll auto-fill all 5 fingers per hand; you can adjust any of them manually.",
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat,
-                    foregroundColor: AppColors.snow,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                  ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.snow,
+                        const _MeasureStepTile(
+                          step: 2,
+                          title: 'Use a Reference Coin',
+                          subtitle:
+                              'Place the coin next to your fingernails to use as a measurement guide.',
+                        ),
+                        const _MeasureStepTile(
+                          step: 3,
+                          title: 'Scan with Camera',
+                          subtitle:
+                              'Capture 4 fingers together, then your thumb alone, for each hand.',
+                        ),
+                        const _MeasureStepTile(
+                          step: 4,
+                          title: 'Review Your Results',
+                          subtitle:
+                              "We'll auto-fill all 5 fingers per hand; you can adjust any of them manually.",
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat,
+                      foregroundColor: AppColors.snow,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    child: const Text(
+                      'Continue',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.snow,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1106,7 +1106,12 @@ class _BaseOrderDetails extends StatelessWidget {
         order.artistAcceptedAmount == null;
     final acceptedArtistMetaFuture = _loadAcceptedArtistMeta(order);
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Brand order details',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntModalAppBar(
         onClose: () => Navigator.pop(context),
@@ -1765,6 +1770,7 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }

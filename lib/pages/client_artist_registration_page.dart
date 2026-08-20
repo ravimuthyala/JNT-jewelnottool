@@ -13,6 +13,7 @@ import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
+import '../utils/date_format_utils.dart';
 import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
 import '../widgets/registration_profile_upload.dart';
@@ -98,6 +99,97 @@ class _ClientArtistRegistrationPageState
   final ImagePicker _picker = ImagePicker();
   final FocusNode _profilePhotoFocusNode = FocusNode(
     debugLabel: 'clientArtistProfilePhotoUpload',
+  );
+  final GlobalKey _profilePhotoSemanticsKey = GlobalKey(
+    debugLabel: 'clientArtistProfilePhotoSemantics',
+  );
+
+  final GlobalKey _timeZoneFieldKey = GlobalKey(
+    debugLabel: 'clientArtistTimeZoneField',
+  );
+  final FocusNode _timeZoneFieldFocusNode = FocusNode(
+    debugLabel: 'clientArtistTimeZoneFieldFocus',
+  );
+
+  final GlobalKey _payoutMethodFieldKey = GlobalKey(
+    debugLabel: 'clientArtistPayoutMethodField',
+  );
+  final FocusNode _payoutMethodFieldFocusNode = FocusNode(
+    debugLabel: 'clientArtistPayoutMethodFieldFocus',
+  );
+
+  final GlobalKey _basicProfileHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistBasicProfileHeading',
+  );
+  final FocusNode _basicProfileHeadingFocusNode = FocusNode(
+    debugLabel: 'clientArtistBasicProfileHeadingFocus',
+  );
+
+  final GlobalKey _nailMeasurementApiHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistNailMeasurementApiHeading',
+  );
+  final FocusNode _nailMeasurementApiHeadingFocusNode = FocusNode(
+    debugLabel: 'clientArtistNailMeasurementApiHeadingFocus',
+  );
+
+  final GlobalKey _portfolioHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistPortfolioHeading',
+  );
+  final FocusNode _portfolioHeadingFocusNode = FocusNode(
+    debugLabel: 'clientArtistPortfolioHeadingFocus',
+  );
+
+  final GlobalKey _specializationPricingHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistSpecializationPricingHeading',
+  );
+  final FocusNode _specializationPricingHeadingFocusNode = FocusNode(
+    debugLabel: 'clientArtistSpecializationPricingHeadingFocus',
+  );
+
+  final GlobalKey _paymentMethodHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistPaymentMethodHeading',
+  );
+  final FocusNode _paymentMethodHeadingFocusNode = FocusNode(
+    debugLabel: 'clientArtistPaymentMethodHeadingFocus',
+  );
+
+  final GlobalKey _accountCredentialsHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistAccountCredentialsHeading',
+  );
+  final FocusNode _accountCredentialsHeadingFocusNode = FocusNode(
+    debugLabel: 'clientArtistAccountCredentialsHeadingFocus',
+  );
+
+  final GlobalKey _jurisdictionFieldKey = GlobalKey(
+    debugLabel: 'clientArtistJurisdictionField',
+  );
+  final FocusNode _jurisdictionFieldFocusNode = FocusNode(
+    debugLabel: 'clientArtistJurisdictionFieldFocus',
+  );
+
+  final GlobalKey _proYearsExperienceFieldKey = GlobalKey(
+    debugLabel: 'clientArtistYearsExperienceField',
+  );
+  final FocusNode _proYearsExperienceFieldFocusNode = FocusNode(
+    debugLabel: 'clientArtistYearsExperienceFieldFocus',
+  );
+
+  final GlobalKey _practiceDurationFieldKey = GlobalKey(
+    debugLabel: 'clientArtistPracticeDurationField',
+  );
+  final FocusNode _practiceDurationFieldFocusNode = FocusNode(
+    debugLabel: 'clientArtistPracticeDurationFieldFocus',
+  );
+
+  final GlobalKey _uploadInspirationHeadingKey = GlobalKey(
+    debugLabel: 'clientArtistUploadInspirationHeading',
+  );
+
+  final GlobalKey _addPortfolioImageKey = GlobalKey(
+    debugLabel: 'clientArtistAddPortfolioImage',
+  );
+  final FocusNode _addPortfolioImageFocusNode = FocusNode(
+    debugLabel: 'clientArtistAddPortfolioImageFocus',
   );
   Uint8List? _profileBytes;
   final Map<String, Uint8List> _guidedMeasurementPhotos = {};
@@ -448,13 +540,20 @@ class _ClientArtistRegistrationPageState
   // -----------------------
   final Set<String> _services = <String>{};
   final _minPriceCtrl = TextEditingController(text: '15');
-  final _maxPriceCtrl = TextEditingController(text: '5000');
+  final _maxPriceCtrl = TextEditingController();
   bool _rush = false;
 
   bool _directRequestsEnabled = true;
   bool _nfcRequestEnabled = true;
   bool _showYearCalendar = false;
   int _yearCalendarNonce = 0;
+
+  final GlobalKey _yearCalendarToggleKey = GlobalKey(
+    debugLabel: 'clientArtistYearCalendarToggle',
+  );
+  final FocusNode _yearCalendarToggleFocusNode = FocusNode(
+    debugLabel: 'clientArtistYearCalendarToggleFocus',
+  );
   int _directRequestYear = DateTime.now().year;
   final Set<DateTime> _blockedDates = <DateTime>{};
 
@@ -494,6 +593,14 @@ class _ClientArtistRegistrationPageState
   // Artist payment/bundle/payout gates (kept)
   // -----------------------
   String _paymentMethod = 'PayPal';
+  bool _paymentMethodDropdownOpen = false;
+
+  final GlobalKey _paymentMethodSelectorKey = GlobalKey(
+    debugLabel: 'clientArtistPaymentMethodSelector',
+  );
+  final FocusNode _paymentMethodSelectorFocusNode = FocusNode(
+    debugLabel: 'clientArtistPaymentMethodSelectorFocus',
+  );
 
   final _paypalEmailCtrl = TextEditingController();
   final _venmoHandleCtrl = TextEditingController();
@@ -512,7 +619,20 @@ class _ClientArtistRegistrationPageState
   String _selectedBundle = 'Starter';
   bool _bundlePurchased = false;
 
+  final Map<String, GlobalKey> _bundleSemanticsKeys = <String, GlobalKey>{
+    'Starter': GlobalKey(debugLabel: 'starterBundleSemantics'),
+    'Pro': GlobalKey(debugLabel: 'proBundleSemantics'),
+    'Elite': GlobalKey(debugLabel: 'eliteBundleSemantics'),
+  };
+
+  final Map<String, FocusNode> _bundleFocusNodes = <String, FocusNode>{
+    'Starter': FocusNode(debugLabel: 'starterBundleFocus'),
+    'Pro': FocusNode(debugLabel: 'proBundleFocus'),
+    'Elite': FocusNode(debugLabel: 'eliteBundleFocus'),
+  };
+
   PayoutMethod _payoutMethod = PayoutMethod.paypal;
+  bool _payoutMethodDropdownOpen = false;
 
   final _legalNameCtrl = TextEditingController();
   final _payoutEmailCtrl = TextEditingController();
@@ -1177,6 +1297,7 @@ class _ClientArtistRegistrationPageState
   InputDecoration _dec(String label, String hint, {Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
       hintText: hint,
       hintStyle: TextStyle(
         fontSize: _hintFs - 0.5,
@@ -1222,79 +1343,70 @@ class _ClientArtistRegistrationPageState
     return Semantics(isRequired: required, child: child);
   }
 
-  /// Wraps a DropdownButtonFormField-style widget so screen readers announce
-  /// it as a dropdown (with its current value) instead of a generic button.
-  Widget _dropdownSemantics({
-    required String label,
-    required String? value,
-    required Widget child,
-    bool required = false,
-  }) {
-    return Semantics(
-      label: label,
-      value: (value == null || value.trim().isEmpty) ? 'Not selected' : value,
-      hint: 'Dropdown. Double tap to open.',
-      isRequired: required,
-      child: ExcludeSemantics(child: child),
-    );
-  }
 
   Widget _countryCodeDropdown({
     required String value,
     required ValueChanged<CountryCode> onChanged,
     bool embedded = false,
   }) {
-    return Localizations.override(
-      context: context,
-      locale: const Locale('en'),
-      child: Container(
-        height: _fieldHeight,
-        decoration: BoxDecoration(
-          color: _snow,
-          borderRadius: BorderRadius.zero,
-          border: embedded
-              ? null
-              : Border.all(color: AppColors.blackCatBorderLight),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: CountryCodePicker(
-          onChanged: onChanged,
-          initialSelection: value == '+1' ? 'US' : value,
-          favorite: const ['US', '+1', '+44', '+91'],
-          countryList: _phonePickerCountries,
-          showFlag: false,
-          showFlagMain: false,
-          showFlagDialog: true,
-          showCountryOnly: true,
-          hideMainText: true,
-          alignLeft: true,
-          flagWidth: 20,
-          padding: EdgeInsets.zero,
-          builder: (code) {
-            final flagUri = code?.flagUri;
-            final countryAbbr = (code?.code ?? 'US').toUpperCase();
-            return Row(
-              children: [
-                if (flagUri != null)
-                  Image.asset(
-                    flagUri,
-                    package: 'country_code_picker',
-                    width: 20,
-                    height: 14,
-                    fit: BoxFit.cover,
-                  ),
-                const SizedBox(width: 8),
-                Text(
-                  countryAbbr,
-                  style: const TextStyle(
-                    fontFamily: 'Arial',
-                    fontSize: _inputFs,
-                    color: Colors.black,
-                  ),
-                ),
-              ],
-            );
-          },
+    return MergeSemantics(
+      child: Semantics(
+        label: 'Phone country code',
+        value: value,
+        hint: 'Double tap to change country code',
+        child: Localizations.override(
+          context: context,
+          locale: const Locale('en'),
+          child: Container(
+            height: _fieldHeight,
+            decoration: BoxDecoration(
+              color: _snow,
+              borderRadius: BorderRadius.zero,
+              border: embedded
+                  ? null
+                  : Border.all(color: AppColors.blackCatBorderLight),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: CountryCodePicker(
+              onChanged: onChanged,
+              initialSelection: value == '+1' ? 'US' : value,
+              favorite: const ['US', '+1', '+44', '+91'],
+              countryList: _phonePickerCountries,
+              showFlag: false,
+              showFlagMain: false,
+              showFlagDialog: true,
+              showCountryOnly: true,
+              hideMainText: true,
+              alignLeft: true,
+              flagWidth: 20,
+              padding: EdgeInsets.zero,
+              builder: (code) {
+                final flagUri = code?.flagUri;
+                final countryAbbr = (code?.code ?? 'US').toUpperCase();
+                return Row(
+                  children: [
+                    if (flagUri != null)
+                      Image.asset(
+                        flagUri,
+                        package: 'country_code_picker',
+                        width: 20,
+                        height: 14,
+                        fit: BoxFit.cover,
+                      ),
+                    const SizedBox(width: 8),
+                    Text(
+                      countryAbbr,
+                      style: const TextStyle(
+                        fontFamily: 'Arial',
+                        fontSize: _inputFs,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -1305,75 +1417,52 @@ class _ClientArtistRegistrationPageState
     return null;
   }
 
-  String? _firstExactMatch(List<String> options, String input) {
-    final needle = input.trim().toLowerCase();
-    if (needle.isEmpty) return null;
-    for (final option in options) {
-      if (option.trim().toLowerCase() == needle) return option;
-    }
-    return null;
-  }
 
-  Widget _snowPopupDropdown<T>({
+
+  Future<void> _restoreSelectedFieldFocus({
+    required GlobalKey semanticsKey,
+    required FocusNode focusNode,
     required String label,
-    required String hint,
-    required T value,
-    required List<T> items,
-    required String Function(T) itemLabel,
-    required ValueChanged<T?> onChanged,
-  }) {
-    final menuHeight = AutocompleteDropdownSizing.menuHeight(
-      itemCount: items.length,
-      itemExtent: 40,
+    required String value,
+  }) async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+
+    final targetContext = semanticsKey.currentContext;
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.35,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
     );
-    return _dropdownSemantics(
-      label: label,
-      value: itemLabel(value),
-      required: true,
-      child: PopupMenuButton<T>(
-        color: _snow,
-        surfaceTintColor: _snow,
-        elevation: 4,
-        offset: const Offset(0, _fieldHeight + 6),
-        constraints: BoxConstraints(maxHeight: menuHeight),
-        onSelected: onChanged,
-        itemBuilder: (context) => items
-            .map(
-              (item) => PopupMenuItem<T>(
-                value: item,
-                child: Text(
-                  itemLabel(item),
-                  style: const TextStyle(
-                    fontSize: _inputFs,
-                    color: _blackCat,
-                    fontFamily: 'Arial',
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ),
-            )
-            .toList(growable: false),
-        child: InputDecorator(
-          decoration: _dec(label, hint),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  itemLabel(value),
-                  style: const TextStyle(
-                    fontSize: _inputFs,
-                    color: _blackCat,
-                    fontFamily: 'Arial',
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ),
-              const Icon(Icons.arrow_drop_down, color: _blackCat),
-            ],
-          ),
-        ),
-      ),
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      '$label, $value selected',
+      Directionality.of(context),
     );
+
+    targetContext
+        .findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    // Reassert after the dropdown/modal removal has fully settled. Without
+    // this, TalkBack can fall back to the route Close button.
+    await Future<void>.delayed(const Duration(milliseconds: 170));
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    semanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
   }
 
   Widget _inlineSnowDropdown<T>({
@@ -1386,6 +1475,8 @@ class _ClientArtistRegistrationPageState
     required bool isOpen,
     required VoidCallback onToggle,
     String? Function(T?)? validator,
+    GlobalKey? fieldSemanticsKey,
+    FocusNode? fieldFocusNode,
   }) {
     return FormField<T>(
       initialValue: value,
@@ -1397,17 +1488,24 @@ class _ClientArtistRegistrationPageState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(
-              label: label,
-              value: hasValue ? itemLabel(selected as T) : 'Not selected',
-              hint: 'Dropdown. Double tap to open.',
-              isRequired: validator != null,
-              child: ExcludeSemantics(
-                child: InkWell(
-                  borderRadius: BorderRadius.zero,
-                  onTap: onToggle,
-                  child: InputDecorator(
-                    decoration: _dec(label, hint),
+            Focus(
+              focusNode: fieldFocusNode,
+              child: Semantics(
+                key: fieldSemanticsKey,
+                button: true,
+                label: label.replaceAll('*', '').trim(),
+                value: hasValue
+                    ? '${itemLabel(selected as T)}, selected'
+                    : 'Not selected',
+                hint: 'Dropdown. Double tap to open.',
+                isRequired: validator != null,
+                onTap: onToggle,
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    borderRadius: BorderRadius.zero,
+                    onTap: onToggle,
+                    child: InputDecorator(
+                      decoration: _dec(label, hint),
                     child: Row(
                       children: [
                         Expanded(
@@ -1428,6 +1526,7 @@ class _ClientArtistRegistrationPageState
                           color: _blackCat,
                         ),
                       ],
+                    ),
                     ),
                   ),
                 ),
@@ -1476,10 +1575,22 @@ class _ClientArtistRegistrationPageState
                           button: true,
                           selected: selectedItem,
                           child: InkWell(
-                            onTap: () {
+                            onTap: () async {
                               field.didChange(item);
                               onChanged(item);
                               onToggle();
+
+                              if (fieldSemanticsKey == null ||
+                                  fieldFocusNode == null) {
+                                return;
+                              }
+
+                              await _restoreSelectedFieldFocus(
+                                semanticsKey: fieldSemanticsKey,
+                                focusNode: fieldFocusNode,
+                                label: label.replaceAll('*', '').trim(),
+                                value: itemLabel(item),
+                              );
                             },
                             child: Container(
                               color: selectedItem
@@ -1531,6 +1642,8 @@ class _ClientArtistRegistrationPageState
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
     bool required = false,
+    GlobalKey? fieldSemanticsKey,
+    FocusNode? fieldFocusNode,
   }) {
     return _req(
       required,
@@ -1541,6 +1654,9 @@ class _ClientArtistRegistrationPageState
         selectedValue: selectedValue,
         onChanged: onChanged,
         validator: validator,
+        required: required,
+        fieldSemanticsKey: fieldSemanticsKey,
+        fieldFocusNode: fieldFocusNode,
       ),
     );
   }
@@ -1552,116 +1668,116 @@ class _ClientArtistRegistrationPageState
     required String? selectedValue,
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
+    bool required = false,
+    GlobalKey? fieldSemanticsKey,
+    FocusNode? fieldFocusNode,
   }) {
+    final normalizedSelectedValue = (selectedValue ?? '').trim();
+
     return FormField<String>(
-      initialValue: selectedValue,
-      validator: validator,
+      // Include the externally selected value in the key so values populated
+      // by address lookup/autofill become the FormField's real initial value
+      // instead of leaving the field stuck with its original null state.
+      key: ValueKey<String>(
+        'registration-choice-$label-$normalizedSelectedValue',
+      ),
+      initialValue: normalizedSelectedValue.isEmpty
+          ? null
+          : normalizedSelectedValue,
+      // Validate the current external value as well as the FormField value.
+      // This matters when State is populated by an address suggestion rather
+      // than by opening this picker directly.
+      validator: (value) {
+        if (validator == null) return null;
+        final effectiveValue = (value ?? normalizedSelectedValue).trim();
+        return validator(effectiveValue.isEmpty ? null : effectiveValue);
+      },
       builder: (field) {
+        final current = (field.value ?? normalizedSelectedValue).trim();
+        final visualLabel = required && !label.trim().endsWith('*')
+            ? '${label.trim()} *'
+            : label.trim();
+
+        Future<void> openPicker() async {
+          FocusScope.of(context).unfocus();
+
+          final picked = await showModalBottomSheet<String>(
+            context: context,
+            isScrollControlled: true,
+            useSafeArea: true,
+            requestFocus: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => _ClientArtistRegistrationChoiceSheet(
+              title: label.replaceAll('*', '').trim(),
+              options: options,
+              currentValue: current,
+            ),
+          );
+
+          if (!mounted || picked == null) return;
+
+          field.didChange(picked);
+          onChanged(picked);
+
+          if (fieldSemanticsKey != null && fieldFocusNode != null) {
+            await _restoreSelectedFieldFocus(
+              semanticsKey: fieldSemanticsKey,
+              focusNode: fieldFocusNode,
+              label: label.replaceAll('*', '').trim(),
+              value: picked,
+            );
+          }
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Autocomplete<String>(
-              initialValue: TextEditingValue(text: field.value ?? ''),
-              optionsBuilder: (textEditingValue) {
-                final query = textEditingValue.text.trim().toLowerCase();
-                if (query.isEmpty) return const Iterable<String>.empty();
-                return options.where(
-                  (option) => option.toLowerCase().contains(query),
-                );
-              },
-              onSelected: (value) {
-                field.didChange(value);
-                onChanged(value);
-              },
-              fieldViewBuilder:
-                  (context, textController, focusNode, onSubmitted) {
-                    return TextFormField(
-                      controller: textController,
-                      focusNode: focusNode,
-                      style: const TextStyle(
-                        fontSize: _inputFs,
+            Focus(
+              focusNode: fieldFocusNode,
+              child: Semantics(
+                key: fieldSemanticsKey,
+                button: true,
+                label: label.replaceAll('*', '').trim(),
+                value: current.isEmpty
+                    ? 'Not selected'
+                    : '$current, selected',
+                hint: 'Double tap to select',
+                isRequired: required,
+                onTap: () => unawaited(openPicker()),
+                child: ExcludeSemantics(
+                child: InkWell(
+                  onTap: openPicker,
+                  borderRadius: BorderRadius.zero,
+                  child: InputDecorator(
+                    decoration: _dec(
+                      visualLabel,
+                      hint,
+                      suffixIcon: const Icon(
+                        Icons.arrow_drop_down_rounded,
+                        size: 24,
                         color: _blackCat,
-                        fontFamily: 'Arial',
                       ),
-                      decoration: _dec(label, hint),
-                      onTapOutside: (_) => focusNode.unfocus(),
-                      onEditingComplete: () {
-                        final match = _firstExactMatch(
-                          options,
-                          textController.text,
-                        );
-                        if (match != null) {
-                          field.didChange(match);
-                          onChanged(match);
-                        }
-                      },
-                    );
-                  },
-              optionsViewBuilder: (context, onSelected, optionsList) {
-                final maxW = MediaQuery.of(context).size.width - 48;
-                final optionCount = optionsList.length;
-                final menuHeight = AutocompleteDropdownSizing.menuHeight(
-                  itemCount: optionCount,
-                  itemExtent: 40,
-                );
-                return TextFieldTapRegion(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        color: _snow,
-                        elevation: 4,
-                        borderRadius: BorderRadius.zero,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: menuHeight,
-                            maxWidth: maxW < 260 ? 260 : maxW,
-                          ),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
-                              optionCount,
-                            ),
-                            physics: AutocompleteDropdownSizing.scrollPhysics(
-                              optionCount,
-                            ),
-                            itemCount: optionCount,
-                            itemBuilder: (context, index) {
-                              final option = optionsList.elementAt(index);
-                              return ListTile(
-                                dense: true,
-                                tileColor: _snow,
-                                title: Text(
-                                  option,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    color: _blackCat,
-                                    fontFamily: 'Arial',
-                                  ),
-                                ),
-                                onTap: () => onSelected(option),
-                              );
-                            },
-                          ),
-                        ),
+                    ).copyWith(
+                      errorText: field.errorText,
+                    ),
+                    isEmpty: current.isEmpty,
+                    child: Text(
+                      current.isEmpty ? hint : current,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: _inputFs,
+                        color: current.isEmpty
+                            ? _blackCat.withValues(alpha: 0.45)
+                            : _blackCat,
+                        fontFamily: 'Arial',
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-            if (field.hasError) ...[
-              const SizedBox(height: 4),
-              Text(
-                field.errorText ?? '',
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  color: Colors.red,
-                  fontFamily: 'Arial',
+                  ),
                 ),
               ),
-            ],
+            ),
           ],
         );
       },
@@ -1703,20 +1819,63 @@ class _ClientArtistRegistrationPageState
   }
 
   Future<void> _pickDateOfBirth() async {
-    final selected = await showRegistrationDateOfBirthPicker(
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Use Flutter's picker directly on this page. The shared registration DOB
+    // picker currently opens its calendar view at January 1900 even when an
+    // initialDate is supplied. Starting here guarantees that an empty DOB
+    // opens on the actual current month/date.
+    final selected = await showDatePicker(
       context: context,
-      initialDate: _dateOfBirth,
+      helpText: 'Select Date of Birth',
+      initialDate: _dateOfBirth ?? today,
+      firstDate: DateTime(1900, 1, 1),
+      lastDate: today,
+      currentDate: today,
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+      builder: (pickerContext, child) {
+        final baseTheme = Theme.of(pickerContext);
+        return Theme(
+          data: baseTheme.copyWith(
+            colorScheme: baseTheme.colorScheme.copyWith(
+              primary: AppColors.blackCat,
+              onPrimary: AppColors.snow,
+              surface: AppColors.snow,
+              onSurface: AppColors.blackCat,
+            ),
+            datePickerTheme: baseTheme.datePickerTheme.copyWith(
+              backgroundColor: AppColors.snow,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
+
     if (selected == null || !mounted) return;
+
     setState(() {
       _dateOfBirth = selected;
       _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(
         selected,
       );
     });
+
     if (!RegistrationInputUtils.isEligibleByDateOfBirth(selected) && mounted) {
       await _showAgeIneligibleDialog();
     }
+  }
+
+  // Lets a sighted or screen-reader user type the date directly instead of
+  // requiring the calendar picker. Age-eligibility is re-checked at submit
+  // time regardless of entry method, so this only needs to track the parsed
+  // value -- not repeat that check on every keystroke.
+  void _onDateOfBirthTyped(String value) {
+    setState(() => _dateOfBirth = tryParseMmDdYyyy(value));
   }
 
   void _onEmailChanged(String value) {
@@ -1881,6 +2040,30 @@ class _ClientArtistRegistrationPageState
     return null;
   }
 
+  String? _maxPriceValidator(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return 'Maximum price is required';
+
+    final amount = double.tryParse(raw.replaceAll(',', ''));
+    if (amount == null || !amount.isFinite || amount <= 0) {
+      return 'Enter a valid maximum price';
+    }
+    if (amount > 5000) {
+      return 'Maximum price cannot exceed \$5,000';
+    }
+
+    final minRaw = _minPriceCtrl.text.trim().replaceAll(',', '');
+    final minAmount = double.tryParse(minRaw);
+    if (minAmount != null &&
+        minAmount.isFinite &&
+        minAmount > 0 &&
+        amount < minAmount) {
+      return 'Maximum price must be at least the minimum price';
+    }
+
+    return null;
+  }
+
   String? _cardNumberValidator(String? value) {
     final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return 'Card Number is required';
@@ -1916,6 +2099,8 @@ class _ClientArtistRegistrationPageState
     required String subtitle,
     required Widget child,
     LinearGradient? gradient,
+    GlobalKey? titleSemanticsKey,
+    FocusNode? titleFocusNode,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1935,12 +2120,25 @@ class _ClientArtistRegistrationPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontFamily: 'Arial',
-              fontSize: _titleFs,
-              fontWeight: FontWeight.w800,
+          Semantics(
+            key: titleSemanticsKey,
+            container: true,
+            explicitChildNodes: false,
+            header: true,
+            label: title,
+            child: Focus(
+              focusNode: titleFocusNode,
+              skipTraversal: true,
+              child: ExcludeSemantics(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontFamily: 'Arial',
+                    fontSize: _titleFs,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 2),
@@ -1960,6 +2158,7 @@ class _ClientArtistRegistrationPageState
   }
 
   Widget _bundleCard({
+    required String bundleKey,
     required String title,
     required String subtitle,
     required String price,
@@ -1970,122 +2169,206 @@ class _ClientArtistRegistrationPageState
     required VoidCallback onTap,
     required VoidCallback onAdd,
   }) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.zero,
-        child: Container(
-          width: 220,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _snow,
-            borderRadius: BorderRadius.zero,
-            border: Border.all(
-              color: selected
-                  ? _blackCat.withValues(alpha: 0.55)
-                  : _blackCat.withValues(alpha: 0.24),
-              width: selected ? 1.4 : 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.blackCat.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 10),
+    final semanticKey = _bundleSemanticsKeys[bundleKey];
+    final focusNode = _bundleFocusNodes[bundleKey];
+
+    Widget bundleInfoVisual() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: _snow,
+                borderRadius: BorderRadius.zero,
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Container(
+              alignment: Alignment.center,
+              child: ClipRRect(
+                borderRadius: BorderRadius.zero,
+                child: Image.asset(
+                  imageAsset,
+                  fit: BoxFit.cover,
                   width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: _snow,
-                    borderRadius: BorderRadius.zero,
+                  height: double.infinity,
+                  errorBuilder: (_, _, _) => Text(
+                    'Image',
+                    style: TextStyle(
+                      color: _blackCat.withValues(alpha: 0.45),
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Arial',
+                    ),
                   ),
-                  alignment: Alignment.center,
-                  child: ClipRRect(
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Arial',
+              fontSize: _titleFs,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Arial',
+              fontSize: _subFs,
+              color: _blackCat.withValues(alpha: 0.68),
+              height: 1.25,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            price,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Color(0xFFF06C7A),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget cardShell({required Widget child}) {
+      return Container(
+        width: 220,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: selected
+                ? _blackCat.withValues(alpha: 0.55)
+                : _blackCat.withValues(alpha: 0.24),
+            width: selected ? 1.4 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.blackCat.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: child,
+      );
+    }
+
+    final accessibleCard = cardShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Focus(
+              focusNode: focusNode,
+              child: Semantics(
+                key: semanticKey,
+                button: !purchased,
+                selected: selected,
+                label: title,
+                value: purchased
+                    ? '$subtitle, $price, purchased'
+                    : '$subtitle, $price${selected ? ', selected' : ''}',
+                hint: purchased
+                    ? 'Purchased bundle'
+                    : 'Double tap to select this bundle',
+                onTap: purchased ? null : onTap,
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    onTap: purchased ? null : onTap,
                     borderRadius: BorderRadius.zero,
-                    child: Image.asset(
-                      imageAsset,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                      errorBuilder: (_, _, _) => Text(
-                        'Image',
-                        style: TextStyle(
-                          color: _blackCat.withValues(alpha: 0.45),
-                          fontWeight: FontWeight.w800,
-                          fontFamily: 'Arial',
-                        ),
+                    child: bundleInfoVisual(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (!purchased)
+            Semantics(
+              button: true,
+              label: 'Add $title to cart',
+              hint: 'Double tap to open checkout',
+              onTap: disableAdd ? null : onAdd,
+              child: ExcludeSemantics(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _blackCat,
+                      foregroundColor: _snow,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                    onPressed: disableAdd ? null : onAdd,
+                    child: const Text(
+                      'Add to cart',
+                      style: TextStyle(
+                        fontFamily: 'Arial',
+                        fontSize: _inputFs,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontFamily: 'Arial',
-                  fontSize: _titleFs,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: 'Arial',
-                  fontSize: _subFs,
-                  color: _blackCat.withValues(alpha: 0.68),
-                  height: 1.25,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                price,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFFF06C7A),
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
+            )
+          else
+            const ExcludeSemantics(
+              child: SizedBox(
                 height: 40,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: purchased
-                        ? _blackCat.withValues(alpha: 0.85)
-                        : _blackCat,
-                    foregroundColor: _snow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                  ),
-                  onPressed: disableAdd ? null : onAdd,
+                child: Center(
                   child: Text(
-                    purchased ? 'Purchased' : 'Add to cart',
-                    style: const TextStyle(
+                    'Purchased',
+                    style: TextStyle(
                       fontFamily: 'Arial',
                       fontSize: _inputFs,
                       fontWeight: FontWeight.w700,
+                      color: _blackCat,
                     ),
                   ),
                 ),
               ),
-            ],
+            ),
+        ],
+      ),
+    );
+
+    // After one bundle is purchased, the other bundles are no longer
+    // actionable. Keep them visually present but remove them from the
+    // accessibility tree so forward swipe leaves the bundle chooser.
+    if (_bundlePurchased && !purchased) {
+      return ExcludeSemantics(
+        child: IgnorePointer(
+          child: cardShell(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: bundleInfoVisual()),
+                const SizedBox(height: 6),
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
-      ),
+      );
+    }
+
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: accessibleCard,
     );
   }
 
@@ -2223,6 +2506,8 @@ class _ClientArtistRegistrationPageState
             options: usStates,
             selectedValue: _jurisdiction,
             onChanged: (v) => setState(() => _jurisdiction = v),
+            fieldSemanticsKey: _jurisdictionFieldKey,
+            fieldFocusNode: _jurisdictionFieldFocusNode,
             validator: (v) =>
                 (v == null || v.isEmpty) ? 'Jurisdiction is required' : null,
           ),
@@ -2239,6 +2524,8 @@ class _ClientArtistRegistrationPageState
               _practiceDurationDropdownOpen = false;
             }),
             onChanged: (v) => setState(() => _proYearsExp = v),
+            fieldSemanticsKey: _proYearsExperienceFieldKey,
+            fieldFocusNode: _proYearsExperienceFieldFocusNode,
             validator: (v) => (v == null || v.isEmpty)
                 ? 'Years of experience is required'
                 : null,
@@ -2268,6 +2555,8 @@ class _ClientArtistRegistrationPageState
             _proYearsDropdownOpen = false;
           }),
           onChanged: (v) => setState(() => _practiceDuration = v),
+          fieldSemanticsKey: _practiceDurationFieldKey,
+          fieldFocusNode: _practiceDurationFieldFocusNode,
           validator: (v) =>
               (v == null || v.isEmpty) ? 'Practice duration is required' : null,
         ),
@@ -2276,50 +2565,192 @@ class _ClientArtistRegistrationPageState
   }
 
   Widget _profilePicTile() {
-    return RegistrationProfileUpload(
-      onTap: _pickProfilePhoto,
-      imageBytes: _profileBytes,
-      label: 'Profile picture',
-      helperText: _profileBytes == null
-          ? 'Tap to upload your profile photo'
-          : 'Profile photo selected',
+    return Focus(
       focusNode: _profilePhotoFocusNode,
+      child: Semantics(
+        key: _profilePhotoSemanticsKey,
+        button: true,
+        label: 'Profile picture',
+        value: _profileBytes == null ? 'Not selected' : 'Photo selected',
+        hint: 'Double tap to choose a profile photo',
+        onTap: _pickProfilePhoto,
+        child: ExcludeSemantics(
+          child: RegistrationProfileUpload(
+            onTap: _pickProfilePhoto,
+            imageBytes: _profileBytes,
+            label: 'Profile picture',
+            helperText: _profileBytes == null
+                ? 'Tap to upload your profile photo'
+                : 'Profile photo selected',
+          ),
+        ),
+      ),
     );
   }
 
   // -----------------------
   // Image pickers
   // -----------------------
-  Future<void> _pickProfilePhoto() async {
-    final XFile? img = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-      maxWidth: 2000,
-      maxHeight: 2000,
-    );
-    if (img == null) return;
-    final raw = await img.readAsBytes();
-    final bytes =
-        _optimizePortfolioBytes(raw, maxEdge: 900, maxBytes: 650 * 1024) ?? raw;
+  Future<void> _restoreProfilePhotoFocus({
+    String? announcement,
+  }) async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 260));
     if (!mounted) return;
-    setState(() => _profileBytes = bytes);
-    // The OS image picker steals accessibility focus; put it back on the
-    // avatar (not wherever the platform happens to land it) so screen
-    // reader users stay in place.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+    if (announcement != null && announcement.trim().isNotEmpty) {
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        announcement,
+        Directionality.of(context),
+      );
+    }
+
+    final targetContext = _profilePhotoSemanticsKey.currentContext;
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.35,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_profilePhotoFocusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    targetContext
+        .findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_profilePhotoFocusNode);
+    _profilePhotoSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 2000,
+        maxHeight: 2000,
+      );
+
       if (!mounted) return;
-      FocusScope.of(context).requestFocus(_profilePhotoFocusNode);
-    });
+
+      if (picked == null) {
+        await _restoreProfilePhotoFocus(
+          announcement: 'No profile photo selected.',
+        );
+        return;
+      }
+
+      final raw = await picked.readAsBytes();
+      final bytes =
+          _optimizePortfolioBytes(
+            raw,
+            maxEdge: 900,
+            maxBytes: 650 * 1024,
+          ) ??
+          raw;
+
+      if (!mounted) return;
+
+      setState(() => _profileBytes = bytes);
+
+      await _restoreProfilePhotoFocus(
+        announcement: 'Profile photo selected.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      const message =
+          'Unable to select profile photo. Please check photo permissions.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(message)),
+      );
+      await _restoreProfilePhotoFocus(announcement: message);
+    }
+  }
+
+  Future<void> _restorePortfolioPickerFocus({
+    String? announcement,
+  }) async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 260));
+    if (!mounted || _registrationStep != 2) return;
+
+    if (announcement != null && announcement.trim().isNotEmpty) {
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        announcement,
+        Directionality.of(context),
+      );
+    }
+
+    // Keep the screen reader in the Portfolio section after the platform
+    // image picker closes. If more images may be added, return to the same
+    // Add control the user activated. At the 10-photo limit that control is
+    // no longer rendered, so return to the Upload inspiration photos heading.
+    final canAddMore = _portfolioImages.length < _maxPortfolioImages;
+    final targetContext = canAddMore
+        ? _addPortfolioImageKey.currentContext
+        : _uploadInspirationHeadingKey.currentContext;
+
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.45,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+
+    if (canAddMore) {
+      FocusScope.of(context).requestFocus(_addPortfolioImageFocusNode);
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    targetContext
+        .findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    // The platform gallery can return accessibility focus slightly after
+    // Flutter's first frame. Reassert once after that race has settled.
+    await Future<void>.delayed(const Duration(milliseconds: 170));
+    if (!mounted || _registrationStep != 2) return;
+
+    if (canAddMore) {
+      FocusScope.of(context).requestFocus(_addPortfolioImageFocusNode);
+    }
+
+    final retryContext = canAddMore
+        ? _addPortfolioImageKey.currentContext
+        : _uploadInspirationHeadingKey.currentContext;
+
+    retryContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
   }
 
   Future<void> _pickPortfolioImages() async {
     final remainingSlots = _maxPortfolioImages - _portfolioImages.length;
     if (remainingSlots <= 0) {
+      const message = 'You can upload up to 10 inspiration photos.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You can upload up to 10 inspiration photos.'),
-        ),
+        const SnackBar(content: Text(message)),
       );
+      await _restorePortfolioPickerFocus(announcement: message);
       return;
     }
 
@@ -2335,36 +2766,113 @@ class _ClientArtistRegistrationPageState
       maxWidth: 2000,
       maxHeight: 2000,
     );
-    if (files.isEmpty) return;
+
+    if (!mounted) return;
+
+    if (files.isEmpty) {
+      await _restorePortfolioPickerFocus(
+        announcement: 'No inspiration photos added.',
+      );
+      return;
+    }
 
     final selectedFiles = files.take(remainingSlots).toList(growable: false);
     final bytesList = <Uint8List>[];
+
     for (final file in selectedFiles) {
       final raw = await file.readAsBytes();
       if (raw.isEmpty) continue;
+
       final optimized = _optimizePortfolioBytes(raw);
       bytesList.add(
         optimized != null && optimized.isNotEmpty ? optimized : raw,
       );
     }
 
-    if (!mounted || bytesList.isEmpty) return;
+    if (!mounted) return;
+
+    if (bytesList.isEmpty) {
+      await _restorePortfolioPickerFocus(
+        announcement: 'No inspiration photos added.',
+      );
+      return;
+    }
+
     setState(() => _portfolioImages.addAll(bytesList));
 
+    final addedCount = bytesList.length;
+    final totalCount = _portfolioImages.length;
+    final addedLabel =
+        '$addedCount inspiration ${addedCount == 1 ? 'photo' : 'photos'} added. '
+        '$totalCount of $_maxPortfolioImages photos selected.';
+
     if (files.length > remainingSlots) {
+      const limitMessage =
+          'Only 10 inspiration photos are allowed. Extra photos were not added.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Only 10 inspiration photos are allowed. Extra photos were not added.',
-          ),
-        ),
+        const SnackBar(content: Text(limitMessage)),
       );
+      await _restorePortfolioPickerFocus(
+        announcement: '$addedLabel $limitMessage',
+      );
+      return;
     }
+
+    await _restorePortfolioPickerFocus(announcement: addedLabel);
   }
 
   // -----------------------
   // âœ… Checkout process (UPDATED to support kit + bundle at same time)
   // -----------------------
+  Future<void> _focusPurchasedBundle(String bundleKey) async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (!mounted || !_bundlePurchased || _selectedBundle != bundleKey) return;
+
+    final semanticKey = _bundleSemanticsKeys[bundleKey];
+    final focusNode = _bundleFocusNodes[bundleKey];
+    final targetContext = semanticKey?.currentContext;
+
+    if (semanticKey == null || focusNode == null || targetContext == null) {
+      return;
+    }
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.55,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final announcement =
+        '${_bundleTitle(bundleKey)}, ${_bundlePrice(bundleKey)}, purchased';
+
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      announcement,
+      Directionality.of(context),
+    );
+
+    targetContext
+        .findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    // Checkout route pop can restore TalkBack to the route Close button a
+    // fraction later. Reassert once after that route transition settles.
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted || !_bundlePurchased || _selectedBundle != bundleKey) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    semanticKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
   Future<void> _addBundleToCart(String bundleKey) async {
     if (_bundlePurchased) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2448,6 +2956,8 @@ class _ClientArtistRegistrationPageState
     });
 
     if (!mounted) return false;
+
+    await _focusPurchasedBundle(bundleKey);
     return true;
   }
 
@@ -3218,6 +3728,100 @@ class _ClientArtistRegistrationPageState
     );
   }
 
+  Future<void> _focusFirstInvalidRegistrationField() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final rootContext = _formKey.currentContext;
+    if (rootContext is! Element) return;
+
+    FormFieldState? firstInvalidState;
+    Element? firstInvalidElement;
+
+    void findInvalid(Element element) {
+      if (firstInvalidState != null) return;
+
+      if (element is StatefulElement && element.state is FormFieldState) {
+        final state = element.state as FormFieldState;
+        if (state.hasError) {
+          firstInvalidState = state;
+          firstInvalidElement = element;
+          return;
+        }
+      }
+
+      element.visitChildren(findInvalid);
+    }
+
+    findInvalid(rootContext);
+
+    final invalidState = firstInvalidState;
+    final invalidElement = firstInvalidElement;
+    if (invalidState == null || invalidElement == null) return;
+
+    await Scrollable.ensureVisible(
+      invalidElement,
+      alignment: 0.25,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+
+    FocusNode? targetFocusNode;
+
+    void findFocusTarget(Element element) {
+      if (targetFocusNode != null) return;
+
+      final widget = element.widget;
+      if (widget is EditableText) {
+        targetFocusNode = widget.focusNode;
+        return;
+      }
+
+      if (widget is Focus && widget.focusNode != null) {
+        targetFocusNode = widget.focusNode;
+        return;
+      }
+
+      element.visitChildren(findFocusTarget);
+    }
+
+    findFocusTarget(invalidElement);
+
+    final focusNode = targetFocusNode;
+    if (focusNode != null) {
+      FocusScope.of(context).requestFocus(focusNode);
+    }
+
+    final errorText = (invalidState.errorText ?? '').trim();
+    if (errorText.isNotEmpty) {
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        errorText,
+        Directionality.of(context),
+      );
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+
+    final semanticContext = focusNode?.context ?? invalidElement;
+    semanticContext
+        .findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+
+    if (focusNode != null) {
+      FocusScope.of(context).requestFocus(focusNode);
+    }
+    (focusNode?.context ?? invalidElement)
+        .findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
   Future<bool> _validateCurrentRegistrationStep() async {
     if (_validationTriggeredStep != _registrationStep) {
       setState(() => _validationTriggeredStep = _registrationStep);
@@ -3230,6 +3834,7 @@ class _ClientArtistRegistrationPageState
           'Please correct the highlighted fields before continuing.',
           Directionality.of(context),
         );
+        await _focusFirstInvalidRegistrationField();
       }
       return false;
     }
@@ -3279,9 +3884,16 @@ class _ClientArtistRegistrationPageState
     }
 
     if (_registrationStep == 4 && !_paymentSaved) {
-      return _showPaymentRequiredMessage(
+      _showPaymentRequiredMessage(
         'Please enter and save at least one payment method before continuing.',
       );
+      await _restoreSelectedFieldFocus(
+        semanticsKey: _paymentMethodSelectorKey,
+        focusNode: _paymentMethodSelectorFocusNode,
+        label: 'Select a method',
+        value: _paymentMethod,
+      );
+      return false;
     }
 
     return true;
@@ -3599,6 +4211,23 @@ class _ClientArtistRegistrationPageState
     _emailAvailabilityDebounce?.cancel();
     _registrationScrollController.dispose();
     _profilePhotoFocusNode.dispose();
+    _timeZoneFieldFocusNode.dispose();
+    _payoutMethodFieldFocusNode.dispose();
+    _basicProfileHeadingFocusNode.dispose();
+    _nailMeasurementApiHeadingFocusNode.dispose();
+    _portfolioHeadingFocusNode.dispose();
+    _specializationPricingHeadingFocusNode.dispose();
+    _paymentMethodHeadingFocusNode.dispose();
+    _accountCredentialsHeadingFocusNode.dispose();
+    _jurisdictionFieldFocusNode.dispose();
+    _proYearsExperienceFieldFocusNode.dispose();
+    _practiceDurationFieldFocusNode.dispose();
+    _addPortfolioImageFocusNode.dispose();
+    _yearCalendarToggleFocusNode.dispose();
+    _paymentMethodSelectorFocusNode.dispose();
+    for (final node in _bundleFocusNodes.values) {
+      node.dispose();
+    }
     _emailCtrl.dispose();
     _dateOfBirthCtrl.dispose();
     _passCtrl.dispose();
@@ -3655,6 +4284,8 @@ class _ClientArtistRegistrationPageState
       builder: (context) => _sectionCard(
         title: 'Basic Profile',
         subtitle: 'Enter your profile details.',
+        titleSemanticsKey: _basicProfileHeadingKey,
+        titleFocusNode: _basicProfileHeadingFocusNode,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -3662,46 +4293,46 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 16),
 
             _FieldLabel.required('Full Name / Studio Name'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
                 controller: _fullNameOrStudioCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('Name', 'Enter Name'),
+                decoration: _dec('Full Name / Studio Name *', 'Enter Name'),
                 validator: (v) => _requiredValidator(v, 'Name'),
               ),
             ),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Display Name'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
                 controller: _displayNameCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('Display Name', 'Enter Display Name'),
+                decoration: _dec('Display Name *', 'Enter Display Name'),
                 validator: (v) => _requiredValidator(v, 'Display Name'),
               ),
             ),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Language Spoken'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
                 controller: _languageSpokenCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('Language Spoken', 'Enter language(s) spoken'),
+                decoration: _dec('Language Spoken *', 'Enter language(s) spoken'),
                 validator: (v) => _requiredValidator(v, 'Language Spoken'),
               ),
             ),
             const SizedBox(height: 16),
 
             _FieldLabel.required('Currency'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             _typeAheadPicker(
               label: 'Currency',
               hint: 'Select Currency',
@@ -3716,7 +4347,7 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 16),
 
             _FieldLabel.normal('Bio'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             TextFormField(
               controller: _bioCtrl,
               style: const TextStyle(fontSize: _inputFs),
@@ -3726,87 +4357,136 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 16),
 
             _FieldLabel.required('Phone'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             FormField<String>(
               validator: (value) => _phoneValidator(_phoneCtrl.text),
               builder: (field) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      height: _fieldHeight,
-                      decoration: BoxDecoration(
-                        color: AppColors.snow,
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: AppColors.blackCatBorderLight,
-                        ),
-                      ),
-                      child: Row(
+                    Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      child: Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          SizedBox(
-                            width: 132,
-                            child: _countryCodeDropdown(
-                              value: _phoneAreaCode,
-                              embedded: true,
-                              onChanged: (code) => setState(
-                                () => _phoneAreaCode = code.dialCode ?? '+1',
+                          Container(
+                            constraints: const BoxConstraints(
+                              minHeight: _fieldHeight,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _snow,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color: field.hasError
+                                    ? Theme.of(context).colorScheme.error
+                                    : AppColors.blackCatBorderLight,
                               ),
                             ),
+                            child: Row(
+                              children: [
+                                Semantics(
+                                  sortKey: OrdinalSortKey(0),
+                                  child: SizedBox(
+                                    width: 132,
+                                    child: _countryCodeDropdown(
+                                      value: _phoneAreaCode,
+                                      embedded: true,
+                                      onChanged: (code) => setState(
+                                        () => _phoneAreaCode =
+                                            code.dialCode ?? '+1',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  width: 1,
+                                  height: _fieldHeight - 8,
+                                  color: AppColors.blackCatBorderLight,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Semantics(
+                                    sortKey: OrdinalSortKey(1),
+                                    label: 'Phone number, 10 digits',
+                                    isRequired: true,
+                                    child: TextFormField(
+                                      controller: _phoneCtrl,
+                                      style: const TextStyle(
+                                        fontSize: _inputFs,
+                                      ),
+                                      keyboardType: TextInputType.phone,
+                                      textInputAction: TextInputAction.next,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(10),
+                                        UsPhoneTextInputFormatter(),
+                                      ],
+                                      onChanged: field.didChange,
+                                      decoration: InputDecoration(
+                                        hintText: 'Enter 10-digit phone',
+                                        hintStyle: TextStyle(
+                                          fontSize: _hintFs - 0.5,
+                                          color: _blackCat.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                          fontFamily: 'Arial',
+                                        ),
+                                        border: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              vertical:
+                                                  _fieldVerticalPadding,
+                                            ),
+                                        isDense: false,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                              ],
+                            ),
                           ),
-                          Container(
-                            width: 1,
-                            color: AppColors.blackCatBorderLight,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Semantics(
-                              isRequired: true,
-                              child: TextFormField(
-                                controller: _phoneCtrl,
-                                style: const TextStyle(fontSize: _inputFs),
-                                keyboardType: TextInputType.phone,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(10),
-                                  UsPhoneTextInputFormatter(),
-                                ],
-                                onChanged: field.didChange,
-                                decoration: InputDecoration(
-                                  hintText: 'Enter 10-digit phone',
-                                  hintStyle: TextStyle(
-                                    fontSize: _hintFs - 0.5,
-                                    color: _blackCat.withValues(alpha: 0.45),
+                          Positioned(
+                            left: 12,
+                            top: -8,
+                            child: ExcludeSemantics(
+                              child: Container(
+                                color: _snow,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: const Text(
+                                  'Phone *',
+                                  style: TextStyle(
+                                    fontSize: _labelFs,
+                                    color: _blackCat,
                                     fontFamily: 'Arial',
                                   ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: _fieldVerticalPadding,
-                                  ),
-                                  isDense: false,
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
                         ],
                       ),
                     ),
-                    if (field.hasError)
+                    if (field.hasError) ...[
+                      const SizedBox(height: 6),
                       Padding(
-                        padding: const EdgeInsets.only(top: 6, left: 4),
+                        padding: const EdgeInsets.only(left: 12),
                         child: Text(
                           field.errorText!,
-                          style: const TextStyle(
-                            color: Color(0xFFB3261E),
+                          style: TextStyle(
                             fontSize: 10.5,
                             height: 1.1,
+                            color: Theme.of(context).colorScheme.error,
                             fontFamily: 'Arial',
                           ),
                         ),
                       ),
+                    ],
                   ],
                 );
               },
@@ -3814,14 +4494,14 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 16),
 
             _FieldLabel.required('Email ID'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
                 controller: _emailCtrl,
                 style: const TextStyle(fontSize: _inputFs),
                 keyboardType: TextInputType.emailAddress,
-                decoration: _dec('Email', 'Enter Email'),
+                decoration: _dec('Email ID *', 'Enter Email'),
                 validator: _accountEmailValidator,
                 onChanged: _onEmailChanged,
               ),
@@ -3834,14 +4514,22 @@ class _ClientArtistRegistrationPageState
               true,
               TextFormField(
                 controller: _dateOfBirthCtrl,
-                readOnly: true,
-                onTap: _pickDateOfBirth,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  _DateOfBirthTextInputFormatter(),
+                ],
+                style: const TextStyle(fontSize: _inputFs),
+                onChanged: _onDateOfBirthTyped,
                 decoration: _dec(
-                  'Date of Birth',
+                  'Date of Birth *',
                   'MM/DD/YYYY',
-                  suffixIcon: const Icon(
-                    Icons.calendar_today_outlined,
-                    size: 18,
+                  suffixIcon: IconButton(
+                    tooltip: 'Pick date of birth',
+                    onPressed: _pickDateOfBirth,
+                    icon: const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 18,
+                    ),
                   ),
                 ),
                 validator: _dateOfBirthValidator,
@@ -3858,18 +4546,20 @@ class _ClientArtistRegistrationPageState
       builder: (context) => _sectionCard(
         title: 'Account Credentials',
         subtitle: 'Enter your details.',
+        titleSemanticsKey: _accountCredentialsHeadingKey,
+        titleFocusNode: _accountCredentialsHeadingFocusNode,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _FieldLabel.required('Email'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
                 controller: _emailCtrl,
                 style: const TextStyle(fontSize: _inputFs),
                 keyboardType: TextInputType.emailAddress,
-                decoration: _dec('Email', 'Enter Email'),
+                decoration: _dec('Email *', 'Enter Email'),
                 validator: _accountEmailValidator,
                 onChanged: _onEmailChanged,
               ),
@@ -3886,7 +4576,7 @@ class _ClientArtistRegistrationPageState
                 style: const TextStyle(fontSize: _inputFs),
                 obscureText: _obscurePassword,
                 decoration: _dec(
-                  'Password',
+                  'Password *',
                   'Enter Password',
                   suffixIcon: IconButton(
                     iconSize: 18,
@@ -3918,7 +4608,7 @@ class _ClientArtistRegistrationPageState
                 style: const TextStyle(fontSize: _inputFs),
                 obscureText: _obscureConfirmPassword,
                 decoration: _dec(
-                  'Confirm Password',
+                  'Confirm Password *',
                   'Re-enter Password',
                   suffixIcon: IconButton(
                     iconSize: 18,
@@ -3961,7 +4651,7 @@ class _ClientArtistRegistrationPageState
               TextFormField(
                 controller: _streetCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('Street Address', 'Enter Street Address'),
+                decoration: _dec('Street Address *', 'Enter Street Address'),
                 onChanged: (_) => _autofillAddressFromStreet(),
                 validator: (v) => _requiredValidator(v, 'Street Address'),
               ),
@@ -4020,7 +4710,7 @@ class _ClientArtistRegistrationPageState
               TextFormField(
                 controller: _cityCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('City', 'City'),
+                decoration: _dec('City *', 'City'),
                 validator: (v) => _requiredValidator(v, 'City'),
               ),
             ),
@@ -4125,19 +4815,26 @@ class _ClientArtistRegistrationPageState
 
             _FieldLabel.required('Time Zone'),
             const SizedBox(height: 6),
-            _snowPopupDropdown<String>(
+            _typeAheadPicker(
               label: 'Time Zone',
               hint: 'Select Time Zone',
-              value: _timeZone,
-              items: const [
+              options: const <String>[
                 'America/New_York',
                 'America/Chicago',
                 'America/Denver',
                 'America/Los_Angeles',
               ],
-              itemLabel: (v) => v,
-              onChanged: (v) =>
-                  setState(() => _timeZone = v ?? 'America/New_York'),
+              selectedValue: _timeZone,
+              required: true,
+              fieldSemanticsKey: _timeZoneFieldKey,
+              fieldFocusNode: _timeZoneFieldFocusNode,
+              onChanged: (v) {
+                if (v == null || v.trim().isEmpty) return;
+                setState(() => _timeZone = v);
+              },
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Time Zone is required'
+                  : null,
             ),
           ],
         ),
@@ -4164,6 +4861,8 @@ class _ClientArtistRegistrationPageState
       builder: (context) => _sectionCard(
         title: 'Nail Measurement API',
         subtitle: 'Nail measurement with camera.',
+        titleSemanticsKey: _nailMeasurementApiHeadingKey,
+        titleFocusNode: _nailMeasurementApiHeadingFocusNode,
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(14),
@@ -4194,6 +4893,8 @@ class _ClientArtistRegistrationPageState
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
                 value: _consentToStoreNailImages,
+                activeColor: AppColors.blackCat,
+                checkColor: AppColors.snow,
                 onChanged: (value) =>
                     setState(() => _consentToStoreNailImages = value ?? false),
                 title: const Text(
@@ -4229,6 +4930,8 @@ class _ClientArtistRegistrationPageState
         title: 'Portfolio',
         subtitle:
             'Upload inspiration photos. (${_portfolioImages.length}/$_maxPortfolioImages photo(s))',
+        titleSemanticsKey: _portfolioHeadingKey,
+        titleFocusNode: _portfolioHeadingFocusNode,
         gradient: const LinearGradient(colors: [_snow, _snow]),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4237,19 +4940,28 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 6),
             _techTypeFields(),
             const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Upload inspiration photos',
-                    style: TextStyle(
-                      fontSize: _inputFs,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat.withValues(alpha: 0.8),
+            Semantics(
+              key: _uploadInspirationHeadingKey,
+              container: true,
+              explicitChildNodes: false,
+              header: true,
+              label: 'Upload inspiration photos',
+              child: ExcludeSemantics(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Upload inspiration photos',
+                        style: TextStyle(
+                          fontSize: _inputFs,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat.withValues(alpha: 0.8),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
             Text(
               'Allowed: JPG, JPEG, PNG, WEBP. Each file must be <2MB. Maximum 10 photos.',
@@ -4319,15 +5031,21 @@ class _ClientArtistRegistrationPageState
                   );
                 }),
                 if (_portfolioImages.length < _maxPortfolioImages)
-                  Semantics(
-                    button: true,
-                    label: 'Add portfolio image',
-                    onTap: _pickPortfolioImages,
-                    child: ExcludeSemantics(
-                      child: InkWell(
-                        onTap: _pickPortfolioImages,
-                        borderRadius: BorderRadius.zero,
-                        child: Container(
+                  Focus(
+                    focusNode: _addPortfolioImageFocusNode,
+                    child: Semantics(
+                      key: _addPortfolioImageKey,
+                      button: true,
+                      label: 'Add portfolio image',
+                      value:
+                          '${_portfolioImages.length} of $_maxPortfolioImages photos selected',
+                      hint: 'Double tap to select inspiration photos',
+                      onTap: _pickPortfolioImages,
+                      child: ExcludeSemantics(
+                        child: InkWell(
+                          onTap: _pickPortfolioImages,
+                          borderRadius: BorderRadius.zero,
+                          child: Container(
                           width: 86,
                           height: 86,
                           decoration: BoxDecoration(
@@ -4356,6 +5074,7 @@ class _ClientArtistRegistrationPageState
                               ),
                             ],
                           ),
+                          ),
                         ),
                       ),
                     ),
@@ -4367,6 +5086,8 @@ class _ClientArtistRegistrationPageState
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               value: _consentToStoreAndPublishPortfolio,
+              activeColor: AppColors.blackCat,
+              checkColor: AppColors.snow,
               onChanged: (value) => setState(
                 () => _consentToStoreAndPublishPortfolio = value ?? false,
               ),
@@ -4433,6 +5154,41 @@ class _ClientArtistRegistrationPageState
     );
   }
 
+  Future<void> _toggleYearCalendarAccessible() async {
+    final nextExpanded = !_showYearCalendar;
+
+    setState(() {
+      _showYearCalendar = nextExpanded;
+      if (_showYearCalendar) {
+        _yearCalendarNonce = DateTime.now().millisecondsSinceEpoch;
+      }
+    });
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_yearCalendarToggleFocusNode);
+
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Year calendar ${nextExpanded ? 'expanded' : 'collapsed'}',
+      Directionality.of(context),
+    );
+
+    _yearCalendarToggleKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_yearCalendarToggleFocusNode);
+    _yearCalendarToggleKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
   Widget _yearCalendarSection() {
     return Builder(
       builder: (context) => _sectionCard(
@@ -4483,32 +5239,47 @@ class _ClientArtistRegistrationPageState
             ),
             const SizedBox(height: 6),
 
-            Semantics(
-              button: true,
-              child: InkWell(
-                onTap: () => setState(() {
-                  _showYearCalendar = !_showYearCalendar;
-                  if (_showYearCalendar) {
-                    _yearCalendarNonce = DateTime.now().millisecondsSinceEpoch;
-                  }
-                }),
-                child: Row(
-                  children: [
-                    Icon(
-                      _showYearCalendar ? Icons.expand_less : Icons.expand_more,
-                      color: AppColors.blackCat.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _showYearCalendar
-                          ? 'Hide year calendar'
-                          : 'Show year calendar',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
+            Focus(
+              focusNode: _yearCalendarToggleFocusNode,
+              child: Semantics(
+                key: _yearCalendarToggleKey,
+                button: true,
+                expanded: _showYearCalendar,
+                label: 'Year calendar',
+                value: _showYearCalendar ? 'Expanded' : 'Collapsed',
+                hint: _showYearCalendar
+                    ? 'Double tap to collapse year calendar'
+                    : 'Double tap to expand year calendar',
+                onTap: () => unawaited(_toggleYearCalendarAccessible()),
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    onTap: () => unawaited(_toggleYearCalendarAccessible()),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _showYearCalendar
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color:
+                                AppColors.blackCat.withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _showYearCalendar
+                                ? 'Hide year calendar'
+                                : 'Show year calendar',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -4603,19 +5374,26 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 16),
             _FieldLabel.required('Time Zone'),
             const SizedBox(height: 6),
-            _snowPopupDropdown<String>(
+            _typeAheadPicker(
               label: 'Time Zone',
               hint: 'Select Time Zone',
-              value: _timeZone,
-              items: const [
+              options: const <String>[
                 'America/New_York',
                 'America/Chicago',
                 'America/Denver',
                 'America/Los_Angeles',
               ],
-              itemLabel: (v) => v,
-              onChanged: (v) =>
-                  setState(() => _timeZone = v ?? 'America/New_York'),
+              selectedValue: _timeZone,
+              required: true,
+              fieldSemanticsKey: _timeZoneFieldKey,
+              fieldFocusNode: _timeZoneFieldFocusNode,
+              onChanged: (v) {
+                if (v == null || v.trim().isEmpty) return;
+                setState(() => _timeZone = v);
+              },
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Time Zone is required'
+                  : null,
             ),
           ],
         ),
@@ -4628,6 +5406,8 @@ class _ClientArtistRegistrationPageState
       builder: (context) => _sectionCard(
         title: 'Specialization & Pricing',
         subtitle: 'Select services and set your range.',
+        titleSemanticsKey: _specializationPricingHeadingKey,
+        titleFocusNode: _specializationPricingHeadingFocusNode,
         gradient: const LinearGradient(colors: [_snow, _snow]),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4754,25 +5534,38 @@ class _ClientArtistRegistrationPageState
             const SizedBox(height: 6),
 
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _FieldLabel.required('Min Price'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _minPriceCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec('Min Price (\$) *', '15'),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
-                              : null,
+                      Semantics(
+                        label: 'Minimum price',
+                        value: '15 dollars, fixed',
+                        isRequired: true,
+                        child: ExcludeSemantics(
+                          child: InputDecorator(
+                            decoration: _dec(
+                              'Min Price (\$) *',
+                              '',
+                            ),
+                            isEmpty: false,
+                            child: const Text(
+                              '\$15',
+                              style: TextStyle(
+                                fontSize: _inputFs,
+                                color: AppColors.blackCat,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                          ),
                         ),
                       ),
+                      // Reserve the same helper-text height as Max Price so
+                      // both outlined fields remain vertically aligned.
+                      const SizedBox(height: 4),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -4781,18 +5574,52 @@ class _ClientArtistRegistrationPageState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _FieldLabel.required('Max Price'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
+                      Semantics(
+                        isRequired: true,
+                        label: 'Maximum price',
+                        hint:
+                            'Enter a maximum price in dollars. Maximum up to 5,000 dollars.',
+                        textField: true,
+                        child: TextFormField(
                           controller: _maxPriceCtrl,
                           style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec('Max Price (\$) *', '5000'),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Required'
-                              : null,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(
+                                r'^\d{0,4}(?:\.\d{0,2})?$|^5000(?:\.0{0,2})?$',
+                              ),
+                            ),
+                          ],
+                          decoration: _dec(
+                            'Max Price (\$) *',
+                            'Enter maximum price',
+                          ).copyWith(
+                            prefixText: '\$',
+                            prefixStyle: const TextStyle(
+                              fontSize: _inputFs,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                          validator: _maxPriceValidator,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Semantics(
+                        label: 'Maximum up to 5,000 dollars',
+                        child: const ExcludeSemantics(
+                          child: Text(
+                            'Maximum up to \$5,000',
+                            style: TextStyle(
+                              fontSize: _smallFs,
+                              color: AppColors.blackCat,
+                              fontFamily: 'Arial',
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -4801,44 +5628,51 @@ class _ClientArtistRegistrationPageState
               ],
             ),
             const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Rush availability',
-                        style: TextStyle(
-                          fontSize: _subFs,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Enable if you can take expedited requests.',
-                        style: TextStyle(
-                          fontSize: _smallFs,
-                          color: AppColors.blackCat.withValues(alpha: 0.6),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+            MergeSemantics(
+              child: Semantics(
+                container: true,
+                toggled: _rush,
+                label: 'Rush availability',
+                hint:
+                    'Enable if you can take expedited requests. Double tap to toggle.',
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: false,
+                  value: _rush,
+                  onChanged: (v) {
+                    setState(() => _rush = v);
+                    SemanticsService.sendAnnouncement(
+                      View.of(context),
+                      'Rush availability ${v ? 'on' : 'off'}',
+                      Directionality.of(context),
+                    );
+                  },
+                  activeThumbColor: AppColors.blackCat,
+                  activeTrackColor:
+                      AppColors.blackCat.withValues(alpha: 0.45),
+                  inactiveThumbColor:
+                      AppColors.blackCat.withValues(alpha: 0.55),
+                  inactiveTrackColor:
+                      AppColors.blackCat.withValues(alpha: 0.25),
+                  title: const Text(
+                    'Rush availability',
+                    style: TextStyle(
+                      fontSize: _subFs,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Enable if you can take expedited requests.',
+                    style: TextStyle(
+                      fontSize: _smallFs,
+                      color: AppColors.blackCat.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Arial',
+                    ),
                   ),
                 ),
-                Transform.scale(
-                  scale: 0.9,
-                  child: Switch(
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    value: _rush,
-                    onChanged: (v) => setState(() => _rush = v),
-                    activeThumbColor: _blackCat,
-                    activeTrackColor: _blackCat.withValues(alpha: 0.45),
-                    inactiveThumbColor: _blackCat.withValues(alpha: 0.55),
-                    inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -4851,263 +5685,225 @@ class _ClientArtistRegistrationPageState
       builder: (context) => _sectionCard(
         title: 'Payment Method',
         subtitle: 'Select a method and save it (required).',
+        titleSemanticsKey: _paymentMethodHeadingKey,
+        titleFocusNode: _paymentMethodHeadingFocusNode,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            RadioTheme(
-              data: RadioThemeData(
-                fillColor: WidgetStateProperty.resolveWith((_) => _blackCat),
-              ),
-              child: RadioGroup<String>(
-                groupValue: _paymentMethod,
-                onChanged: (value) => setState(() {
-                  if (value == null) return;
+            _inlineSnowDropdown<String>(
+              label: 'Select a method *',
+              hint: 'Select payment method',
+              value: _paymentMethod,
+              items: const <String>[
+                'PayPal',
+                'Venmo',
+                'Apple Pay',
+                'Credit Card',
+              ],
+              itemLabel: (item) => item,
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
                   _paymentMethod = value;
                   _paymentSaved = false;
-                }),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RadioListTile<String>(
-                      value: 'PayPal',
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'PayPal',
-                        style: TextStyle(
-                          fontSize: _inputFs,
-                          color: _blackCat,
-                          fontFamily: 'Arial',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (_paymentMethod == 'PayPal') ...[
-                      _FieldLabel.required('PayPal Email'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _paypalEmailCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('PayPal Email', 'name@email.com'),
-                          validator: _emailValidator,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    RadioListTile<String>(
-                      value: 'Venmo',
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Venmo',
-                        style: TextStyle(
-                          fontSize: _inputFs,
-                          color: _blackCat,
-                          fontFamily: 'Arial',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (_paymentMethod == 'Venmo') ...[
-                      _FieldLabel.required('Venmo Handle'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _venmoHandleCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Venmo', '@handle or phone/email'),
-                          validator: (v) =>
-                              _requiredValidator(v, 'Venmo Handle'),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    RadioListTile<String>(
-                      value: 'Apple Pay',
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Apple Pay',
-                        style: TextStyle(
-                          fontSize: _inputFs,
-                          color: _blackCat,
-                          fontFamily: 'Arial',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (_paymentMethod == 'Apple Pay') ...[
-                      _FieldLabel.required('Apple Pay Name'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _applePayPaymentNameCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Name', 'Name on Apple Pay'),
-                          validator: (v) =>
-                              _requiredValidator(v, 'Apple Pay Name'),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      _FieldLabel.required('Apple Pay Phone'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _applePayPaymentPhoneCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(10),
-                            UsPhoneTextInputFormatter(),
-                          ],
-                          decoration: _dec('Phone', 'Phone'),
-                          validator: _phoneValidator,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      _FieldLabel.required('Apple Pay Email'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _applePayPaymentEmailCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Email', 'Email'),
-                          validator: _emailValidator,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    RadioListTile<String>(
-                      value: 'Credit Card',
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Credit Card',
-                        style: TextStyle(
-                          fontSize: _inputFs,
-                          color: _blackCat,
-                          fontFamily: 'Arial',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (_paymentMethod == 'Credit Card') ...[
-                      _FieldLabel.required('Card Name'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _cardNameCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          decoration: _dec('Name', 'Name on card'),
-                          validator: (v) => _requiredValidator(v, 'Card Name'),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      _FieldLabel.required('Card Number'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _cardNumberCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(19),
-                            CardNumberTextInputFormatter(),
-                          ],
-                          decoration: _dec('Number', '1234 5678 9012 3456'),
-                          validator: _cardNumberValidator,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _FieldLabel.required('Expiration Date'),
-                                const SizedBox(height: 6),
-                                _req(
-                                  true,
-                                  TextFormField(
-                                    controller: _cardExpiryCtrl,
-                                    style: const TextStyle(fontSize: _inputFs),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                      LengthLimitingTextInputFormatter(4),
-                                      ExpiryDateTextInputFormatter(),
-                                    ],
-                                    decoration: _dec(
-                                      'Expiration Date',
-                                      'MM/YY',
-                                    ),
-                                    validator: _expiryValidator,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _FieldLabel.required('CVV'),
-                                const SizedBox(height: 6),
-                                _req(
-                                  true,
-                                  TextFormField(
-                                    controller: _cardCvvCtrl,
-                                    style: const TextStyle(fontSize: _inputFs),
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                      LengthLimitingTextInputFormatter(4),
-                                    ],
-                                    decoration: _dec('CVV', '123'),
-                                    validator: _cvvValidator,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      _FieldLabel.required('Billing Zip'),
-                      const SizedBox(height: 6),
-                      _req(
-                        true,
-                        TextFormField(
-                          controller: _cardZipCtrl,
-                          style: const TextStyle(fontSize: _inputFs),
-                          keyboardType: TextInputType.number,
-                          decoration: _dec('Zip', 'Zip'),
-                          validator: (v) =>
-                              _requiredValidator(v, 'Billing Zip'),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                  ],
+                });
+              },
+              isOpen: _paymentMethodDropdownOpen,
+              onToggle: () => setState(
+                () => _paymentMethodDropdownOpen =
+                    !_paymentMethodDropdownOpen,
+              ),
+              validator: (value) =>
+                  value == null || value.trim().isEmpty
+                      ? 'Payment method is required'
+                      : null,
+              fieldSemanticsKey: _paymentMethodSelectorKey,
+              fieldFocusNode: _paymentMethodSelectorFocusNode,
+            ),
+            const SizedBox(height: 8),
+
+            if (_paymentMethod == 'PayPal') ...[
+              _req(
+                true,
+                TextFormField(
+                  controller: _paypalEmailCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _dec(
+                    'PayPal Email *',
+                    'name@email.com',
+                  ),
+                  validator: _emailValidator,
                 ),
               ),
-            ),
+              const SizedBox(height: 6),
+            ],
+
+            if (_paymentMethod == 'Venmo') ...[
+              _req(
+                true,
+                TextFormField(
+                  controller: _venmoHandleCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  decoration: _dec(
+                    'Venmo Handle *',
+                    '@handle or phone/email',
+                  ),
+                  validator: (v) =>
+                      _requiredValidator(v, 'Venmo Handle'),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+
+            if (_paymentMethod == 'Apple Pay') ...[
+              _req(
+                true,
+                TextFormField(
+                  controller: _applePayPaymentNameCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  decoration: _dec(
+                    'Apple Pay Name *',
+                    'Name on Apple Pay',
+                  ),
+                  validator: (v) =>
+                      _requiredValidator(v, 'Apple Pay Name'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              _req(
+                true,
+                TextFormField(
+                  controller: _applePayPaymentPhoneCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                    UsPhoneTextInputFormatter(),
+                  ],
+                  decoration: _dec(
+                    'Apple Pay Phone *',
+                    'Phone',
+                  ),
+                  validator: _phoneValidator,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _req(
+                true,
+                TextFormField(
+                  controller: _applePayPaymentEmailCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _dec(
+                    'Apple Pay Email *',
+                    'Email',
+                  ),
+                  validator: _emailValidator,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+
+            if (_paymentMethod == 'Credit Card') ...[
+              _req(
+                true,
+                TextFormField(
+                  controller: _cardNameCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  decoration: _dec(
+                    'Card Name *',
+                    'Name on card',
+                  ),
+                  validator: (v) =>
+                      _requiredValidator(v, 'Card Name'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              _req(
+                true,
+                TextFormField(
+                  controller: _cardNumberCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(19),
+                    CardNumberTextInputFormatter(),
+                  ],
+                  decoration: _dec(
+                    'Card Number *',
+                    '1234 5678 9012 3456',
+                  ),
+                  validator: _cardNumberValidator,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _req(
+                      true,
+                      TextFormField(
+                        controller: _cardExpiryCtrl,
+                        style:
+                            const TextStyle(fontSize: _inputFs),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                          ExpiryDateTextInputFormatter(),
+                        ],
+                        decoration: _dec(
+                          'Expiration Date *',
+                          'MM/YY',
+                        ),
+                        validator: _expiryValidator,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _req(
+                      true,
+                      TextFormField(
+                        controller: _cardCvvCtrl,
+                        style:
+                            const TextStyle(fontSize: _inputFs),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
+                        decoration: _dec(
+                          'CVV *',
+                          '123',
+                        ),
+                        validator: _cvvValidator,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              _req(
+                true,
+                TextFormField(
+                  controller: _cardZipCtrl,
+                  style: const TextStyle(fontSize: _inputFs),
+                  keyboardType: TextInputType.number,
+                  decoration: _dec(
+                    'Billing Zip *',
+                    'Zip',
+                  ),
+                  validator: (v) =>
+                      _requiredValidator(v, 'Billing Zip'),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
 
             const SizedBox(height: 6),
 
@@ -5191,6 +5987,7 @@ class _ClientArtistRegistrationPageState
                 scrollDirection: Axis.horizontal,
                 children: [
                   _bundleCard(
+                    bundleKey: 'Starter',
                     title: 'Starter Material Bundle',
                     subtitle: 'Perfect for new artists.',
                     price: '\$50',
@@ -5205,6 +6002,7 @@ class _ClientArtistRegistrationPageState
                   ),
                   const SizedBox(width: 12),
                   _bundleCard(
+                    bundleKey: 'Pro',
                     title: 'Pro Material Bundle',
                     subtitle: 'Gel, tools & tips.',
                     price: '\$100',
@@ -5219,6 +6017,7 @@ class _ClientArtistRegistrationPageState
                   ),
                   const SizedBox(width: 12),
                   _bundleCard(
+                    bundleKey: 'Elite',
                     title: 'Elite Bundle',
                     subtitle: 'For high volume artists.',
                     price: '\$150',
@@ -5271,72 +6070,41 @@ class _ClientArtistRegistrationPageState
         gradient: const LinearGradient(colors: [_snow, _snow]),
         child: Column(
           children: [
-            _dropdownSemantics(
-              label: 'Payout Method',
-              value: _payoutMethod.name,
-              required: true,
-              child: DropdownButtonFormField<PayoutMethod>(
-                initialValue: _payoutMethod,
-                dropdownColor: _snow,
-                style: const TextStyle(
-                  fontSize: _inputFs,
-                  color: Colors.black,
-                  fontWeight: FontWeight.w700,
-                ),
-                hint: Text(
-                  'Select state',
-                  style: TextStyle(
-                    fontSize: _inputFs,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.blackCat.withValues(alpha: 0.45),
-                  ),
-                ),
-                decoration: _dec('Payout Method *', 'Select payout method'),
-                items: const [
-                  DropdownMenuItem(
-                    value: PayoutMethod.paypal,
-                    child: Text(
-                      'PayPal',
-                      style: TextStyle(
-                        fontSize: _inputFs,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: PayoutMethod.venmo,
-                    child: Text(
-                      'Venmo',
-                      style: TextStyle(
-                        fontSize: _inputFs,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: PayoutMethod.bankTransfer,
-                    child: Text(
-                      'Bank Transfer',
-                      style: TextStyle(
-                        fontSize: _inputFs,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: PayoutMethod.applePay,
-                    child: Text(
-                      'Apple Pay',
-                      style: TextStyle(
-                        fontSize: _inputFs,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                ],
-                onChanged: (v) =>
-                    setState(() => _payoutMethod = v ?? PayoutMethod.paypal),
+            _inlineSnowDropdown<PayoutMethod>(
+              label: 'Payout Method *',
+              hint: 'Select payout method',
+              value: _payoutMethod,
+              items: const <PayoutMethod>[
+                PayoutMethod.paypal,
+                PayoutMethod.venmo,
+                PayoutMethod.bankTransfer,
+                PayoutMethod.applePay,
+              ],
+              itemLabel: (method) {
+                switch (method) {
+                  case PayoutMethod.paypal:
+                    return 'PayPal';
+                  case PayoutMethod.venmo:
+                    return 'Venmo';
+                  case PayoutMethod.bankTransfer:
+                    return 'Bank Transfer';
+                  case PayoutMethod.applePay:
+                    return 'Apple Pay';
+                }
+              },
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _payoutMethod = value);
+              },
+              isOpen: _payoutMethodDropdownOpen,
+              onToggle: () => setState(
+                () => _payoutMethodDropdownOpen =
+                    !_payoutMethodDropdownOpen,
               ),
+              validator: (value) =>
+                  value == null ? 'Payout Method is required' : null,
+              fieldSemanticsKey: _payoutMethodFieldKey,
+              fieldFocusNode: _payoutMethodFieldFocusNode,
             ),
             const SizedBox(height: 6),
 
@@ -5623,6 +6391,81 @@ class _ClientArtistRegistrationPageState
     );
   }
 
+  (GlobalKey, FocusNode)? _headingTargetForRegistrationStep(int step) {
+    switch (step) {
+      case 0:
+        return (_basicProfileHeadingKey, _basicProfileHeadingFocusNode);
+      case 1:
+        return (
+          _nailMeasurementApiHeadingKey,
+          _nailMeasurementApiHeadingFocusNode,
+        );
+      case 2:
+        return (_portfolioHeadingKey, _portfolioHeadingFocusNode);
+      case 3:
+        return (
+          _specializationPricingHeadingKey,
+          _specializationPricingHeadingFocusNode,
+        );
+      case 4:
+        return (_paymentMethodHeadingKey, _paymentMethodHeadingFocusNode);
+      case 5:
+        return (
+          _accountCredentialsHeadingKey,
+          _accountCredentialsHeadingFocusNode,
+        );
+    }
+    return null;
+  }
+
+  Future<void> _focusRegistrationStepHeading(int step) async {
+    // All wizard steps render inside the same scrollable. The previously
+    // activated Next/Back button remains focused unless we explicitly move
+    // both Flutter focus and accessibility focus to the new step heading.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || _registrationStep != step) return;
+
+    final target = _headingTargetForRegistrationStep(step);
+    if (target == null) return;
+
+    final semanticKey = target.$1;
+    final focusNode = target.$2;
+    final headingContext = semanticKey.currentContext;
+    if (headingContext == null) return;
+
+    if (_registrationScrollController.hasClients) {
+      _registrationScrollController.jumpTo(0);
+    }
+
+    FocusScope.of(context).requestFocus(focusNode);
+
+    await Scrollable.ensureVisible(
+      headingContext,
+      alignment: 0.0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted || _registrationStep != step) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    semanticKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+
+    // Reassert once after the semantics tree settles. This prevents TalkBack
+    // from falling back to the newly rendered Next button.
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    if (!mounted || _registrationStep != step) return;
+
+    FocusScope.of(context).requestFocus(focusNode);
+    semanticKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
   Future<void> _goToNextRegistrationStep() async {
     if (!await _validateCurrentRegistrationStep()) return;
     await _persistRegistrationDraftStep(step: _registrationStep + 1);
@@ -5632,18 +6475,7 @@ class _ClientArtistRegistrationPageState
       _validationTriggeredStep = null;
     });
     _announceStep(_registrationStep);
-    _scrollRegistrationToTop();
-  }
-
-  /// Advancing/going back a step swaps which fields render within the same
-  /// single scrollable, so without this the new step opens at whatever
-  /// scroll offset the Next/Back button happened to be at (often the
-  /// bottom), instead of showing the step from its top.
-  void _scrollRegistrationToTop() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_registrationScrollController.hasClients) return;
-      _registrationScrollController.jumpTo(0);
-    });
+    await _focusRegistrationStepHeading(_registrationStep);
   }
 
   Widget _wizardNavButtons() {
@@ -5666,13 +6498,13 @@ class _ClientArtistRegistrationPageState
                     borderRadius: BorderRadius.zero,
                   ),
                 ),
-                onPressed: () {
+                onPressed: () async {
                   setState(() {
                     _registrationStep -= 1;
                     _validationTriggeredStep = null;
                   });
                   _announceStep(_registrationStep);
-                  _scrollRegistrationToTop();
+                  await _focusRegistrationStepHeading(_registrationStep);
                 },
                 child: const Text(
                   'Back',
@@ -5761,8 +6593,6 @@ class _ClientArtistRegistrationPageState
       case 3:
         return <Widget>[
           _specializationPricingSection(),
-          const SizedBox(height: 8),
-          _locationServiceAreaSection(),
           const SizedBox(height: 8),
           _locationServiceAreaSection(),
           const SizedBox(height: 8),
@@ -6169,6 +6999,346 @@ class _CoinSelectorPageState extends State<_CoinSelectorPage> {
   }
 }
 
+
+/// Formats manual Date of Birth entry as MM/DD/YYYY.
+///
+/// 1        -> 1
+/// 12       -> 12/
+/// 120      -> 12/0
+/// 1205     -> 12/05/
+/// 12051990 -> 12/05/1990
+
+class _ClientArtistRegistrationChoiceSheet extends StatefulWidget {
+  const _ClientArtistRegistrationChoiceSheet({
+    required this.title,
+    required this.options,
+    required this.currentValue,
+  });
+
+  final String title;
+  final List<String> options;
+  final String currentValue;
+
+  @override
+  State<_ClientArtistRegistrationChoiceSheet> createState() =>
+      _ClientArtistRegistrationChoiceSheetState();
+}
+
+class _ClientArtistRegistrationChoiceSheetState
+    extends State<_ClientArtistRegistrationChoiceSheet> {
+  late final TextEditingController _searchController;
+  late final FocusNode _closeFocusNode;
+  String _query = '';
+  bool _closing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _closeFocusNode = FocusNode(
+      debugLabel: '${widget.title}PickerClose',
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted || _closing) return;
+
+      FocusScope.of(context).requestFocus(_closeFocusNode);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+
+      _closeFocusNode.context
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
+
+  List<String> get _filteredOptions {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return widget.options;
+    return widget.options
+        .where((option) => option.toLowerCase().contains(query))
+        .toList(growable: false);
+  }
+
+  Future<void> _finishWith(String value) async {
+    if (_closing) return;
+    _closing = true;
+
+    FocusScope.of(context).unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    Navigator.of(context).pop(value);
+  }
+
+  Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
+
+    FocusScope.of(context).unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    Navigator.of(context).pop();
+  }
+
+  void _submitSearch(String raw) {
+    final typed = raw.trim().toLowerCase();
+    if (typed.isEmpty) return;
+
+    String? exact;
+    for (final option in widget.options) {
+      if (option.trim().toLowerCase() == typed) {
+        exact = option;
+        break;
+      }
+    }
+
+    if (exact != null) {
+      unawaited(_finishWith(exact));
+      return;
+    }
+
+    final filtered = _filteredOptions;
+    if (filtered.length == 1) {
+      unawaited(_finishWith(filtered.first));
+      return;
+    }
+
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      filtered.isEmpty
+          ? 'No matching ${widget.title} found.'
+          : '${filtered.length} matching ${widget.title} options. Swipe forward to review them.',
+      Directionality.of(context),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filteredOptions;
+
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: '${widget.title} selector',
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Material(
+            color: AppColors.snow,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.82,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            sortKey: OrdinalSortKey(1),
+                            label: widget.title,
+                            child: ExcludeSemantics(
+                              child: Text(
+                                widget.title,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.blackCat,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Semantics(
+                          button: true,
+                          sortKey: OrdinalSortKey(0),
+                          label: 'Close ${widget.title} selector',
+                          onTap: () => unawaited(_close()),
+                          child: ExcludeSemantics(
+                            child: IconButton(
+                              focusNode: _closeFocusNode,
+                              tooltip: 'Close ${widget.title} selector',
+                              onPressed: _closing
+                                  ? null
+                                  : () => unawaited(_close()),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: Semantics(
+                      sortKey: OrdinalSortKey(2),
+                      label: 'Search ${widget.title}',
+                      textField: true,
+                      child: TextField(
+                        controller: _searchController,
+                        keyboardType: TextInputType.text,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          labelText: 'Search ${widget.title}',
+                          hintText: 'Type ${widget.title}',
+                          floatingLabelBehavior: FloatingLabelBehavior.always,
+                          filled: true,
+                          fillColor: AppColors.snow,
+                          border: const OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          enabledBorder: const OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: BorderSide(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: BorderSide(
+                              color: AppColors.blackCat,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          if (!mounted || _closing) return;
+                          setState(() => _query = value);
+                        },
+                        onSubmitted: _submitSearch,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      sortKey: OrdinalSortKey(3),
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text('No matching options found.'),
+                            )
+                          : ListView.builder(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final option = filtered[index];
+                                final selected =
+                                    option.trim().toLowerCase() ==
+                                    widget.currentValue
+                                        .trim()
+                                        .toLowerCase();
+
+                                return Semantics(
+                                  button: true,
+                                  selected: selected,
+                                  label:
+                                      '$option, option ${index + 1} of ${filtered.length}',
+                                  hint: 'Double tap to select',
+                                  onTap: _closing
+                                      ? null
+                                      : () => unawaited(
+                                            _finishWith(option),
+                                          ),
+                                  child: ExcludeSemantics(
+                                    child: ListTile(
+                                      minVerticalPadding: 12,
+                                      title: Text(
+                                        option,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: AppColors.blackCat,
+                                          fontFamily: 'Arial',
+                                        ),
+                                      ),
+                                      trailing: selected
+                                          ? const Icon(Icons.check_rounded)
+                                          : null,
+                                      onTap: _closing
+                                          ? null
+                                          : () => unawaited(
+                                                _finishWith(option),
+                                              ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateOfBirthTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final deleting = newValue.text.length < oldValue.text.length;
+
+    var digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length > 8) {
+      digits = digits.substring(0, 8);
+    }
+
+    // If the user backspaces one of the automatically inserted slashes,
+    // remove the digit immediately before it too. Otherwise the slash would
+    // be immediately reinserted and backspace would appear stuck.
+    final removedGeneratedSlash =
+        deleting &&
+        oldValue.text.endsWith('/') &&
+        newValue.text == oldValue.text.substring(0, oldValue.text.length - 1);
+
+    if (removedGeneratedSlash && digits.isNotEmpty) {
+      digits = digits.substring(0, digits.length - 1);
+    }
+
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if (i == 1 || i == 3) {
+        buffer.write('/');
+      }
+    }
+
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+      composing: TextRange.empty,
+    );
+  }
+}
+
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel._(this.text, this.requiredField);
 
@@ -6180,24 +7350,10 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        text: text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.blackCat,
-        ),
-        children: requiredField
-            ? const [
-                TextSpan(
-                  text: ' *',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ]
-            : null,
-      ),
-    );
+    // Match ClientRegistrationPage: the visible field name is rendered by
+    // InputDecoration.labelText inside the outlined field, not as a separate
+    // heading above it.
+    return const SizedBox.shrink();
   }
 }
 

@@ -20,6 +20,7 @@ import 'simple_status_request_sheet.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 class ArtistHistoryPage extends StatefulWidget {
   const ArtistHistoryPage({
@@ -753,6 +754,10 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         );
         _isLoadingDb = false;
       });
+      announceRequestAccessibilityMessage(
+        context,
+        '${_all.length} history ${_all.length == 1 ? 'request' : 'requests'} available.',
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingDb = false);
@@ -1105,6 +1110,25 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     }
   }
 
+  void _selectFilter(ArtistHistoryFilter filter) {
+    setState(() => _filter = filter);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final label = switch (filter) {
+        ArtistHistoryFilter.all => 'All',
+        ArtistHistoryFilter.delivered => 'Delivered',
+        ArtistHistoryFilter.declined => 'Declined',
+        ArtistHistoryFilter.expired => 'Expired',
+        ArtistHistoryFilter.cancelled => 'Cancelled',
+      };
+      final count = _countForFilter(filter);
+      announceRequestAccessibilityMessage(
+        context,
+        '$label selected. $count ${count == 1 ? 'request' : 'requests'} shown.',
+      );
+    });
+  }
+
   Future<void> _openHistoryPopup(
     BuildContext context,
     ClientRequestV2 request,
@@ -1350,7 +1374,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
               focusNode: _historyTabsFocusNode,
               child: _HistoryTabs(
               selected: _filter,
-              onChanged: (f) => setState(() => _filter = f),
+              onChanged: _selectFilter,
               allCount: _countForFilter(ArtistHistoryFilter.all),
               deliveredCount: _countForFilter(ArtistHistoryFilter.delivered),
               declinedCount: _countForFilter(ArtistHistoryFilter.declined),
@@ -1360,9 +1384,15 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
             ),
             const SizedBox(height: 16),
             if (_isLoadingDb && filtered.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 24),
-                child: Center(child: CircularProgressIndicator()),
+              Semantics(
+                liveRegion: true,
+                label: 'Loading history',
+                child: const ExcludeSemantics(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
               )
             else if (filtered.isEmpty)
               Semantics(
@@ -1489,8 +1519,11 @@ class _HistoryTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: SizedBox(
+      height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -1528,6 +1561,7 @@ class _HistoryTabs extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -1541,6 +1575,8 @@ class _HistoryTabs extends StatelessWidget {
     final requestWord = count == 1 ? 'request' : 'requests';
 
     return Semantics(
+      container: true,
+      focusable: true,
       button: true,
       selected: isSelected,
       label: '$label tab, $position of 5',

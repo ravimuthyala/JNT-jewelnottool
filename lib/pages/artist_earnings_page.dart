@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -11,6 +12,7 @@ import '../utils/jnt_ascension_engine.dart';
 import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'jnt_ascension_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -62,8 +64,6 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   bool _isLoading = true;
   _EarningsRange _range = _EarningsRange.allTime;
   final List<ClientRequestV2> _allVisible = <ClientRequestV2>[];
-  final FocusNode _earningsSummaryFocusNode = FocusNode(debugLabel: 'earningsSummary');
-  bool _requestedInitialAdaFocus = false;
 
   RealtimeChannel? _requestsChannel;
   int _portfolioUploads = 0;
@@ -86,8 +86,79 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   @override
   void dispose() {
     _requestsChannel?.unsubscribe();
-    _earningsSummaryFocusNode.dispose();
     super.dispose();
+  }
+
+  void _changeRange(_EarningsRange value) {
+    setState(() => _range = value);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final summary = _summary;
+      announceRequestAccessibilityMessage(
+        context,
+        '${value.label} selected. ${summary.paidOrders} paid orders. '
+        'Paid earnings ${summary.totalEarnings.toStringAsFixed(2)} dollars. '
+        'Pending earnings ${summary.pendingAmount.toStringAsFixed(2)} dollars.',
+      );
+    });
+  }
+
+  Widget _responsiveRangeSelector(_EarningsSummary summary) {
+    final rangeText = Semantics(
+      label: 'Earnings date range, ${summary.rangeLabel}',
+      child: ExcludeSemantics(
+        child: Text(
+          summary.rangeLabel,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: AppColors.blackCat.withValues(alpha: 0.70),
+          ),
+        ),
+      ),
+    );
+    final selector = _RangeDropdown(value: _range, onChanged: _changeRange);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+        if (constraints.maxWidth < 390 || textScale > 1.25) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [rangeText, const SizedBox(height: 8), selector],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: rangeText),
+            const SizedBox(width: 8),
+            selector,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _accessibleStatPair(BuildContext context, Widget first, Widget second) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    // Preserve the two-card visual design at normal text sizes. Reflow only
+    // when the user's accessibility font setting would otherwise truncate
+    // labels or values.
+    if (textScale > 1.30) {
+      return Column(
+        children: [
+          first,
+          const SizedBox(height: 12),
+          second,
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: first),
+        const SizedBox(width: 12),
+        Expanded(child: second),
+      ],
+    );
   }
 
   void _bindRealtimeChannel() {
@@ -639,18 +710,13 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
   @override
   Widget build(BuildContext context) {
     final summary = _summary;
-    final isAdaUser = MediaQuery.of(context).accessibleNavigation;
-    if (isAdaUser && !_isLoading && !_requestedInitialAdaFocus) {
-      _requestedInitialAdaFocus = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _earningsSummaryFocusNode.requestFocus();
-      });
-    }
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'Artist earnings',
+      label: widget.clientArtistMenuStyle
+          ? 'Client artist earnings'
+          : 'Artist earnings',
       child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: JntStandardAppBar(
@@ -722,19 +788,24 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
               )
             : null,
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            ? Semantics(
+                liveRegion: true,
+                label: 'Loading earnings',
+                child: const ExcludeSemantics(
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
             : ScrollConfiguration(
                 behavior: const _NoGlowScrollBehavior(),
                 child: ListView(
                   physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
                   children: [
-                    Focus(
-                      focusNode: _earningsSummaryFocusNode,
-                      child: _TotalEarningsCard(
-                        total: summary.totalEarnings,
-                        deltaLabel: '${_money(summary.monthEarnings)} this month',
-                      ),
+                    _TotalEarningsCard(
+                      total: summary.totalEarnings,
+                      deltaLabel: '${_money(summary.monthEarnings)} this month',
                     ),
                     const SizedBox(height: 12),
                     _AscensionSummaryCard(
@@ -759,75 +830,42 @@ class _ArtistEarningsPageState extends State<ArtistEarningsPage> {
                     const SizedBox(height: 12),
                     _AscensionStagesCard(summary: _stageSummary),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Semantics(
-                            label: 'Earnings date range, ${summary.rangeLabel}',
-                            child: ExcludeSemantics(
-                              child: Text(
-                            summary.rangeLabel,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.blackCat.withValues(alpha: 0.70),
-                            ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        _RangeDropdown(
-                          value: _range,
-                          onChanged: (v) => setState(() => _range = v),
-                        ),
-                      ],
-                    ),
+                    _responsiveRangeSelector(summary),
                     const SizedBox(height: 12),
                     const _SectionLabel(title: 'Money in'),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _StatCard(
-                            title: 'Paid Earning',
-                            value: _money(summary.totalEarnings),
-                            subtitle: '${summary.paidOrders} paid orders',
-                            icon: Icons.attach_money_rounded,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            title: 'Pending Earning',
-                            value: _money(summary.pendingAmount),
-                            subtitle: 'Awaiting payment',
-                            icon: Icons.schedule_rounded,
-                          ),
-                        ),
-                      ],
+                    _accessibleStatPair(
+                      context,
+                      _StatCard(
+                        title: 'Paid Earning',
+                        value: _money(summary.totalEarnings),
+                        subtitle: '${summary.paidOrders} paid orders',
+                        icon: Icons.attach_money_rounded,
+                      ),
+                      _StatCard(
+                        title: 'Pending Earning',
+                        value: _money(summary.pendingAmount),
+                        subtitle: 'Awaiting payment',
+                        icon: Icons.schedule_rounded,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     const _SectionLabel(title: 'Performance'),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _StatCard(
-                            title: 'Average order',
-                            value: _money(summary.averageOrder),
-                            subtitle: 'Paid order average',
-                            icon: Icons.analytics_outlined,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            title: 'Orders delivered',
-                            value: '${summary.deliveredPaidOrders}',
-                            subtitle: 'Delivered successfully',
-                            icon: Icons.check_circle_outline_rounded,
-                          ),
-                        ),
-                      ],
+                    _accessibleStatPair(
+                      context,
+                      _StatCard(
+                        title: 'Average order',
+                        value: _money(summary.averageOrder),
+                        subtitle: 'Paid order average',
+                        icon: Icons.analytics_outlined,
+                      ),
+                      _StatCard(
+                        title: 'Orders delivered',
+                        value: '${summary.deliveredPaidOrders}',
+                        subtitle: 'Delivered successfully',
+                        icon: Icons.check_circle_outline_rounded,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _PerformanceTrendCard(points: _lastSixMonthPaidTrend()),
@@ -1312,32 +1350,89 @@ class _AscensionSummaryCard extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(child: Semantics(container: true, label: 'JNT Ascension. Tier, $_tierLabel. ${points.toStringAsFixed(2)} points. $subtitle.', child: ExcludeSemantics(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('JNT Ascension', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)), const SizedBox(height: 5), Text('$_tierLabel · ${points.toStringAsFixed(2)} pts', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.blackCat)), const SizedBox(height: 4), Text(subtitle, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.blackCat.withValues(alpha: 0.6)))])))),
         const SizedBox(width: 8),
-        Semantics(button: true, label: 'View Ascension', hint: 'Double tap to open Ascension details', onTap: onViewAscension, child: ExcludeSemantics(child: TextButton(onPressed: onViewAscension, style: TextButton.styleFrom(backgroundColor: Colors.transparent, foregroundColor: AppColors.blackCat, textStyle: const TextStyle(fontWeight: FontWeight.w700), shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)), child: const Text('View Ascension')))),
+        Semantics(button: true, label: 'View Ascension', hint: 'Double tap to open Ascension details', onTap: onViewAscension, child: ExcludeSemantics(child: TextButton(onPressed: onViewAscension, style: TextButton.styleFrom(backgroundColor: Colors.transparent, foregroundColor: AppColors.blackCat, minimumSize: const Size(48, 48), tapTargetSize: MaterialTapTargetSize.padded, textStyle: const TextStyle(fontWeight: FontWeight.w700), shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)), child: const Text('View Ascension')))),
       ]),
     );
   }
 }
 
-class _RangeDropdown extends StatelessWidget {
+class _RangeDropdown extends StatefulWidget {
   const _RangeDropdown({required this.value, required this.onChanged});
   final _EarningsRange value;
   final ValueChanged<_EarningsRange> onChanged;
 
   @override
+  State<_RangeDropdown> createState() => _RangeDropdownState();
+}
+
+class _RangeDropdownState extends State<_RangeDropdown> {
+  final GlobalKey _selectedOptionKey = GlobalKey();
+
+  void _focusCurrentSelection() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!mounted) return;
+      _selectedOptionKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Earnings date range',
-      value: value.label,
-      hint: 'Double tap to select a date range',
-      child: PopupMenuButton<_EarningsRange>(
-        tooltip: 'Select earnings date range',
-        onSelected: onChanged,
-        color: AppColors.snow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        itemBuilder: (_) => _EarningsRange.values.map((v) => PopupMenuItem<_EarningsRange>(value: v, child: Semantics(selected: v == value, label: '${v.label}${v == value ? ', selected' : ''}', child: ExcludeSemantics(child: Text(v.label))))).toList(growable: false),
+    return PopupMenuButton<_EarningsRange>(
+      tooltip: 'Earnings date range, ${widget.value.label}',
+      initialValue: widget.value,
+      onOpened: _focusCurrentSelection,
+      onSelected: widget.onChanged,
+      color: AppColors.snow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      itemBuilder: (_) => _EarningsRange.values
+          .map(
+            (v) => PopupMenuItem<_EarningsRange>(
+              value: v,
+              child: Semantics(
+                key: v == widget.value ? _selectedOptionKey : null,
+                selected: v == widget.value,
+                label: v.label,
+                child: ExcludeSemantics(child: Text(v.label)),
+              ),
+            ),
+          )
+          .toList(growable: false),
+      child: Semantics(
+        button: true,
+        label: 'Earnings date range',
+        value: widget.value.label,
+        hint: 'Double tap to select a date range',
         child: ExcludeSemantics(
-          child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: AppColors.snow, borderRadius: BorderRadius.zero, border: Border.all(color: AppColors.blackCatBorderLight)), child: Row(mainAxisSize: MainAxisSize.min, children: [Text(value.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)), const SizedBox(width: 6), Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.blackCat.withValues(alpha: 0.55))])),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatBorderLight),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.value.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1383,15 +1478,27 @@ class _BreakdownCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Semantics(header: true, label: 'Earnings Breakdown', child: const ExcludeSemantics(child: Text('Earnings Breakdown', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)))),
         const SizedBox(height: 12),
-        Semantics(label: 'Paid, ${paidAmount.toStringAsFixed(2)} dollars, ${(paidPct * 100).round()} percent.', child: ExcludeSemantics(child: Column(children: [_row('Paid', paidAmount), const SizedBox(height: 8), _bar(paidPct, AppColors.blackCat)]))),
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          label: 'Paid, ${paidAmount.toStringAsFixed(2)} dollars.',
+          child: Column(children: [_row('Paid', paidAmount), const SizedBox(height: 8), _bar(paidPct, AppColors.blackCat)]),
+        ),
         const SizedBox(height: 12),
-        Semantics(label: 'Pending, ${unpaidAmount.toStringAsFixed(2)} dollars, ${(unpaidPct * 100).round()} percent.', child: ExcludeSemantics(child: Column(children: [_row('Pending', unpaidAmount), const SizedBox(height: 8), _bar(unpaidPct, AppColors.balletSlippers)]))),
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          label: 'Pending, ${unpaidAmount.toStringAsFixed(2)} dollars.',
+          child: Column(children: [_row('Pending', unpaidAmount), const SizedBox(height: 8), _bar(unpaidPct, AppColors.balletSlippers)]),
+        ),
       ]),
     );
   }
 
   static Widget _row(String label, double amount) => Row(children: [Expanded(child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))), Text('\$${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))]);
-  static Widget _bar(double pct, Color color) => Container(height: 10, decoration: const BoxDecoration(color: AppColors.alabaster, borderRadius: BorderRadius.zero), child: FractionallySizedBox(alignment: Alignment.centerLeft, widthFactor: pct.clamp(0.0, 1.0), child: Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.zero))));
+  static Widget _bar(double pct, Color color) => ExcludeSemantics(
+    child: Container(height: 10, decoration: const BoxDecoration(color: AppColors.alabaster, borderRadius: BorderRadius.zero), child: FractionallySizedBox(alignment: Alignment.centerLeft, widthFactor: pct.clamp(0.0, 1.0), child: Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.zero)))),
+  );
 }
 
 class _RecentPayoutsCard extends StatelessWidget {

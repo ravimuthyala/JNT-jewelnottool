@@ -11,19 +11,24 @@ class LandingPage extends StatelessWidget {
     final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Welcome to Jewel Not Tool',
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Stack(
         fit: StackFit.expand,
         children: [
           // Background image (your generated nails image)
-          Image.asset(
+          ExcludeSemantics(child: Image.asset(
             'assets/images/homepage.png',
             fit: BoxFit.cover,
-          ),
+          )),
 
           // Optional: subtle gradient for readability (can remove if not needed)
-          Container(
+          ExcludeSemantics(child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -36,16 +41,20 @@ class LandingPage extends StatelessWidget {
                 stops: const [0.0, 0.55, 1.0],
               ),
             ),
-          ),
+          )),
 
           // Header logo only
           Positioned(
             top: safeTop + 12,
             left: 16,
-            child: Image.asset(
+            child: Semantics(
+              image: true,
+              label: 'Jewel Not Tool logo',
+              child: ExcludeSemantics(child: Image.asset(
               'assets/images/jnt_logo_black.png',
               height: 50, // adjust as needed
               fit: BoxFit.contain,
+            )),
             ),
           ),
 
@@ -70,8 +79,7 @@ class LandingPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(18),
                           ),
                         ),
-                        onPressed: () {
-                        },
+                        onPressed: () => Navigator.of(context).pushNamed('/login'),
                         child: const Text(
                           'Login',
                           style: TextStyle(
@@ -95,8 +103,7 @@ class LandingPage extends StatelessWidget {
                           ),
                           backgroundColor: AppColors.snow.withValues(alpha: 0.95),
                         ),
-                        onPressed: () {
-                        },
+                        onPressed: () => Navigator.of(context).pushNamed('/register'),
                         child: const Text(
                           'Register',
                           style: TextStyle(
@@ -113,7 +120,7 @@ class LandingPage extends StatelessWidget {
           ),
         ],
       ),
+        ),
     );
   }
 }
-

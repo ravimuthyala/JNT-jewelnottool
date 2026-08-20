@@ -894,8 +894,13 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.snow,
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Brand orders',
+      child: Scaffold(
+        backgroundColor: AppColors.snow,
 
       // ✅ Header same as Artists page: logo + centered title + notification + avatar menu
       appBar: widget.showCompanyChrome
@@ -1044,6 +1049,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               onTap: (i) => widget.onNavTap?.call(i),
             )
           : null,
+      ),
     );
   }
 
@@ -1388,20 +1394,25 @@ class _FilterTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _tab('All Orders', OrdersFilter.all),
-            _tab('Pending', OrdersFilter.pending),
-            _tab('In Progress', OrdersFilter.inProgress),
-            _tab('Shipped', OrdersFilter.shipped),
-            _tab('Delivered', OrdersFilter.delivered),
-            _tab('Cancelled/Expired', OrdersFilter.cancelledExpired),
-            _tab('Declined', OrdersFilter.declined),
-          ],
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: 'Order status filters',
+      child: SizedBox(
+        height: 48,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _tab('All Orders', OrdersFilter.all),
+              _tab('Pending', OrdersFilter.pending),
+              _tab('In Progress', OrdersFilter.inProgress),
+              _tab('Shipped', OrdersFilter.shipped),
+              _tab('Delivered', OrdersFilter.delivered),
+              _tab('Cancelled/Expired', OrdersFilter.cancelledExpired),
+              _tab('Declined', OrdersFilter.declined),
+            ],
+          ),
         ),
       ),
     );
@@ -1411,9 +1422,19 @@ class _FilterTabs extends StatelessWidget {
     final bool isSelected = selected == value;
     final count = counts[value] ?? 0;
 
-    return InkWell(
+    return Semantics(
+      container: true,
+      focusable: true,
+      button: true,
+      selected: isSelected,
+      label: '$label tab',
+      value: '$count ${count == 1 ? 'order' : 'orders'}',
+      hint: isSelected ? 'Selected' : 'Double tap to filter orders',
       onTap: () => onChanged(value),
-      borderRadius: BorderRadius.zero,
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: () => onChanged(value),
+          borderRadius: BorderRadius.zero,
       hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
       splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
       highlightColor: AppColors.balletSlippers.withValues(alpha: 0.30),
@@ -1447,6 +1468,8 @@ class _FilterTabs extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -1703,8 +1726,16 @@ class _OrderDetailsLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: 'Order details',
+      hint: 'Double tap to open order details',
       onTap: onTap,
+      child: ExcludeSemantics(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          child: InkWell(
+            onTap: onTap,
       borderRadius: BorderRadius.zero,
       hoverColor: AppColors.balletSlippers.withValues(alpha: 0.35),
       splashColor: AppColors.balletSlippers.withValues(alpha: 0.45),
@@ -1728,6 +1759,9 @@ class _OrderDetailsLink extends StatelessWidget {
               color: AppColors.blackCat.withValues(alpha: 0.45),
             ),
           ],
+        ),
+      ),
+          ),
         ),
       ),
     );

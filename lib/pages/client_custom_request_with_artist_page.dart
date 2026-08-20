@@ -16,6 +16,7 @@ import 'notifications_page.dart';
 import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
+import '../widgets/accessible_date_grid.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
@@ -42,6 +43,8 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
     this.onSubmitted,
     this.showClientBottomNav = true,
     this.onClientNavTap,
+    this.customBottomNavigationBar,
+    this.onOpenArtist,
     this.isActiveTab = true,
     this.excludeCurrentUserFromArtistDropdown = false,
   }) : profile = profile ?? ClientProfileDraft.mock();
@@ -52,6 +55,14 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
   final Future<void> Function(BuildContext context)? onSubmitted;
   final bool showClientBottomNav;
   final Future<void> Function(BuildContext context, int index)? onClientNavTap;
+  // Overrides the default (Client-role-labeled) bottom nav entirely --
+  // used by the Client-Artist role, whose tabs/labels don't match the
+  // plain Client shell's Home/Design/Artists/Orders/Profile bar.
+  final Widget? customBottomNavigationBar;
+  // Overrides the account menu's "Artist" entry -- used by the Client-Artist
+  // role so it opens the same Artists page it reaches everywhere else
+  // (with its own bottom nav), instead of the plain Client's bare page.
+  final Future<void> Function(BuildContext context)? onOpenArtist;
   final bool isActiveTab;
 
   /// Only used by the Client-Artist role. A client-artist can submit a
@@ -73,6 +84,12 @@ class _ClientCustomRequestWithArtistPageState
   final TextEditingController _descCtrl = TextEditingController();
   final FocusNode _notificationsFocusNode = FocusNode(
     debugLabel: 'designWithArtistNotifications',
+  );
+  final FocusNode _avatarMenuFocusNode = FocusNode(
+    debugLabel: 'designWithArtistAccountMenu',
+  );
+  final FocusNode _addClientFocusNode = FocusNode(
+    debugLabel: 'addGroupClientWithArtist',
   );
   final FocusNode _needByFocusNode = FocusNode(debugLabel: 'needByDateField');
   final FocusNode _descriptionFocusNode = FocusNode(
@@ -187,6 +204,7 @@ class _ClientCustomRequestWithArtistPageState
   final _shipCityCtrl = TextEditingController();
   final _shipZipCtrl = TextEditingController();
   final _shipStateCtrl = TextEditingController();
+  final _shipZipFocusNode = FocusNode(debugLabel: 'shippingZip');
   String _shipState = '';
   String _shipCountry = 'United States';
   Timer? _shipStreetAutocompleteDebounce;
@@ -326,6 +344,14 @@ class _ClientCustomRequestWithArtistPageState
             .platformDispatcher
             .accessibilityFeatures
             .accessibleNavigation;
+  }
+
+  void _restoreAvatarMenuFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _shouldRunInitialA11yFocus()) {
+        _avatarMenuFocusNode.requestFocus();
+      }
+    });
   }
 
   void _scheduleInitialA11yFocus() {
@@ -1070,12 +1096,15 @@ class _ClientCustomRequestWithArtistPageState
     _shipCityCtrl.dispose();
     _shipZipCtrl.dispose();
     _shipStateCtrl.dispose();
+    _shipZipFocusNode.dispose();
     for (final slot in _groupSelections) {
       slot.dispose();
     }
     _needByFocusNode.dispose();
     _descriptionFocusNode.dispose();
     _notificationsFocusNode.dispose();
+    _avatarMenuFocusNode.dispose();
+    _addClientFocusNode.dispose();
     super.dispose();
   }
 
@@ -1106,6 +1135,10 @@ class _ClientCustomRequestWithArtistPageState
       return;
     }
     if (value == 'artist') {
+      if (widget.onOpenArtist != null) {
+        unawaited(widget.onOpenArtist!(context));
+        return;
+      }
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ClientArtistsPage(profile: widget.profile),
@@ -1136,14 +1169,12 @@ class _ClientCustomRequestWithArtistPageState
         ? _needBy!
         : firstEnabledDate;
 
-    final picked = await showDialog<DateTime>(
+    final picked = await showAccessibleDatePickerDialog(
       context: context,
-      builder: (ctx) => _AccessibleRequestDatePickerDialog(
-        fieldLabel: 'Need By Date',
-        firstDate: firstEnabledDate,
-        lastDate: now.add(const Duration(days: 365)),
-        initialSelectedDate: initialSelectedDate,
-      ),
+      fieldLabel: 'Need By Date',
+      firstDate: firstEnabledDate,
+      lastDate: now.add(const Duration(days: 365)),
+      initialSelectedDate: initialSelectedDate,
     );
 
     if (!mounted || picked == null) return;
@@ -1178,14 +1209,12 @@ class _ClientCustomRequestWithArtistPageState
         ? _jntRevealDate!
         : firstEnabledDate;
 
-    final picked = await showDialog<DateTime>(
+    final picked = await showAccessibleDatePickerDialog(
       context: context,
-      builder: (ctx) => _AccessibleRequestDatePickerDialog(
-        fieldLabel: 'JNT Reveal Date',
-        firstDate: firstEnabledDate,
-        lastDate: now.add(const Duration(days: 730)),
-        initialSelectedDate: initialSelectedDate,
-      ),
+      fieldLabel: 'JNT Reveal Date',
+      firstDate: firstEnabledDate,
+      lastDate: now.add(const Duration(days: 730)),
+      initialSelectedDate: initialSelectedDate,
     );
 
     if (!mounted || picked == null) return;
@@ -1315,7 +1344,12 @@ class _ClientCustomRequestWithArtistPageState
 
   void _addClientSlot() {
     if (_groupSelections.length >= _maxGroupClients) return;
-    setState(() => _groupSelections.add(GroupClientSelection()));
+    final slot = GroupClientSelection();
+    setState(() => _groupSelections.add(slot));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_groupSelections.contains(slot)) return;
+      slot.dropdownKey.currentState?.focusField();
+    });
   }
 
   void _removeClientSlot(int index) {
@@ -1388,6 +1422,10 @@ class _ClientCustomRequestWithArtistPageState
           ? 0
           : _nfcSelectedCount(_groupSelections[index].draftNails!.dimensions);
       _applyNfcBudgetDelta(oldCount: oldNfcCount, newCount: newNfcCount);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || index >= _groupSelections.length) return;
+      _groupSelections[index].deleteFocusNode.requestFocus();
     });
   }
 
@@ -2501,6 +2539,8 @@ class _ClientCustomRequestWithArtistPageState
                 right: JntHeaderMetrics.rightPadding,
               ),
               child: _AvatarMenu(
+                focusNode: _avatarMenuFocusNode,
+                onCanceled: _restoreAvatarMenuFocus,
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
                 displayName: widget.profile.basic.name,
@@ -2518,14 +2558,18 @@ class _ClientCustomRequestWithArtistPageState
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
           children: [
             const SizedBox(height: 6),
-            const Center(
-              child: Text(
-                'Request Custom Design',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'times-new-roman',
-                  color: AppColors.blackCat,
+            Semantics(
+              header: true,
+              sortKey: OrdinalSortKey(3),
+              child: Center(
+                child: Text(
+                  'Request Custom Design',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'times-new-roman',
+                    color: AppColors.blackCat,
+                  ),
                 ),
               ),
             ),
@@ -2535,7 +2579,7 @@ class _ClientCustomRequestWithArtistPageState
                 "Tell artists exactly what you're looking for and get custom proposals.",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                   fontFamily: 'Arial',
@@ -2655,7 +2699,7 @@ class _ClientCustomRequestWithArtistPageState
             Text(
               'Upload photos that inspire your vision.',
               style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 fontFamily: 'Arial',
@@ -2692,7 +2736,7 @@ class _ClientCustomRequestWithArtistPageState
             Text(
               'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo.',
               style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
                 fontWeight: FontWeight.w600,
                 fontSize: 11.5,
                 fontFamily: 'Arial',
@@ -2753,7 +2797,11 @@ class _ClientCustomRequestWithArtistPageState
                                       right: 4,
                                       child: Semantics(
                                         button: true,
-                                        label: 'Remove inspiration photo',
+                                        label:
+                                            'Remove inspiration photo ${i + 1} of ${photos.length}',
+                                        onTap: () => _removeInspirationPhoto(
+                                          photos[i],
+                                        ),
                                         child: ExcludeSemantics(
                                           child: GestureDetector(
                                             onTap: () =>
@@ -2761,8 +2809,10 @@ class _ClientCustomRequestWithArtistPageState
                                                   photos[i],
                                                 ),
                                             child: Container(
-                                              height: 20,
-                                              width: 20,
+                                              constraints: const BoxConstraints(
+                                                minHeight: 48,
+                                                minWidth: 48,
+                                              ),
                                               decoration: const BoxDecoration(
                                                 color: Colors.black54,
                                                 shape: BoxShape.circle,
@@ -2883,6 +2933,7 @@ class _ClientCustomRequestWithArtistPageState
                     ),
                   ),
                   TextButton(
+                    focusNode: _addClientFocusNode,
                     style: TextButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       foregroundColor: AppColors.blackCat,
@@ -2957,9 +3008,6 @@ class _ClientCustomRequestWithArtistPageState
                 final selectedClient = _findClient(slot.clientId);
                 final draft = slot.draftNails;
                 final saved = slot.savedNails != null;
-                final suggestions = _searchCompletedClients(
-                  slot.searchController.text,
-                );
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -2978,149 +3026,46 @@ class _ClientCustomRequestWithArtistPageState
                               ),
                             ),
                             const Spacer(),
-                            IconButton(
-                              tooltip: 'Remove client ${i + 1}',
-                              onPressed: () => _removeClientSlot(i),
-                              icon: const Icon(Icons.delete_outline, size: 22),
+                            Semantics(
+                              sortKey: const OrdinalSortKey(2),
+                              onDidLoseAccessibilityFocus: () {
+                                if (_groupSelections.length >=
+                                    _maxGroupClients) {
+                                  return;
+                                }
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (mounted) {
+                                    _addClientFocusNode.requestFocus();
+                                  }
+                                });
+                              },
+                              child: IconButton(
+                                focusNode: slot.deleteFocusNode,
+                                tooltip: 'Remove client ${i + 1}',
+                                onPressed: () => _removeClientSlot(i),
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 22,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 10),
 
-                        TextFormField(
-                          controller: slot.searchController,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                            ),
-                            onTap: () {
-                              setState(() => slot.showSuggestions = true);
+                        Semantics(
+                          sortKey: const OrdinalSortKey(1),
+                          child: _AccessibleClientDropdown(
+                            key: slot.dropdownKey,
+                            controller: slot.searchController,
+                            selectedClientId: slot.clientId,
+                            clients: _searchCompletedClients(''),
+                            label: 'Select client',
+                            onSelected: (clientId) {
+                              unawaited(_onSelectClientForSlot(i, clientId));
                             },
-                            onChanged: (_) {
-                              setState(() {
-                                slot.showSuggestions = true;
-                                final selected = _findClient(slot.clientId);
-                                final typed = slot.searchController.text
-                                    .trim()
-                                    .toLowerCase();
-                                if (selected == null ||
-                                    typed !=
-                                        selected.name.trim().toLowerCase()) {
-                                  final oldNfcCount = slot.draftNails == null
-                                      ? 0
-                                      : _nfcSelectedCount(
-                                          slot.draftNails!.dimensions,
-                                        );
-                                  slot.clientId = null;
-                                  slot.draftNails = null;
-                                  slot.savedNails = null;
-                                  _applyNfcBudgetDelta(
-                                    oldCount: oldNfcCount,
-                                    newCount: 0,
-                                  );
-                                }
-                              });
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Type client name',
-                              hintStyle: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w400,
-                                fontFamily: 'Arial',
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.35,
-                                ),
-                              ),
-                              filled: true,
-                              fillColor: _requestSnow,
-                              focusColor: _requestSnow,
-                              hoverColor: _requestSnow,
-                              suffixIcon: Icon(
-                                Icons.search_rounded,
-                                size: 22,
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.45,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 6,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.04,
-                                  ),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.04,
-                                  ),
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.04,
-                                  ),
-                                ),
-                              ),
-                            ),
                           ),
-
-                        if (slot.showSuggestions) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            constraints: const BoxConstraints(maxHeight: 180),
-                            decoration: BoxDecoration(
-                              color: _requestSnow,
-                              borderRadius: BorderRadius.zero,
-                              border: Border.all(
-                                color: AppColors.blackCatBorderLight,
-                              ),
-                            ),
-                            child: suggestions.isEmpty
-                                ? Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Text(
-                                      'No matching clients found.',
-                                      style: TextStyle(
-                                        color: AppColors.blackCat.withValues(
-                                          alpha: 0.60,
-                                        ),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w400,
-                                      ),
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    shrinkWrap: true,
-                                    itemCount: suggestions.length,
-                                    itemBuilder: (context, idx) {
-                                      final c = suggestions[idx];
-                                      return ListTile(
-                                        dense: true,
-                                        title: Text(
-                                          c.name,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                        ),
-                                        onTap: () =>
-                                            _onSelectClientForSlot(i, c.id),
-                                      );
-                                    },
-                                  ),
-                          ),
-                        ],
+                        ),
 
                         if (selectedClient == null || draft == null) ...[
                           const SizedBox(height: 10),
@@ -3200,12 +3145,18 @@ class _ClientCustomRequestWithArtistPageState
             const SizedBox(height: 18),
 
             // ✅ Request a Specific Artist (optional with clear selection)
-            const Text(
-              'Request a Specific Artist',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
+            Semantics(
+              header: true,
+              label: 'Request a Specific Artist',
+              child: const ExcludeSemantics(
+                child: Text(
+                  'Request a Specific Artist',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Arialbold',
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -3221,10 +3172,10 @@ class _ClientCustomRequestWithArtistPageState
                     builder: (context) {
                       final selected = (_selectedArtist ?? '').trim();
                       final options = _filteredArtistOptions();
-                      return _SearchableSelectField(
+                      return _AccessibleSearchableSelectField(
                         value: selected,
                         hint: 'Select Artist',
-                        semanticLabel: 'Artist',
+                        semanticLabel: 'Requested artist',
                         items: options,
                         onChanged: (v) => setState(() {
                           final next = v.trim();
@@ -3345,7 +3296,7 @@ class _ClientCustomRequestWithArtistPageState
             Text(
               'Set your budget range for the request.',
               style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.55),
+                color: AppColors.blackCat.withValues(alpha: 0.70),
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
                 fontFamily: 'Arialbold',
@@ -3477,9 +3428,12 @@ class _ClientCustomRequestWithArtistPageState
                     _InlineError(text: _fieldErrors['shipCity']),
                     const SizedBox(height: 4),
                     if (_isShipCountryUs) ...[
-                      _SearchableSelectField(
+                      _AccessibleSearchableSelectField(
                         value: _shipState,
                         hint: 'State',
+                        semanticLabel: 'Shipping state',
+                        textInputAction: TextInputAction.next,
+                        nextFocusNode: _shipZipFocusNode,
                         minHeight: 56,
                         verticalPadding: 8,
                         items: usStates,
@@ -3502,6 +3456,7 @@ class _ClientCustomRequestWithArtistPageState
                     const SizedBox(height: 4),
                     _InputField(
                       controller: _shipZipCtrl,
+                      focusNode: _shipZipFocusNode,
                       minHeight: 56,
                       verticalPadding: 8,
                       hint: _isShipCountryUs ? 'Zip' : 'Zip (Optional)',
@@ -3511,9 +3466,10 @@ class _ClientCustomRequestWithArtistPageState
                     ),
                     _InlineError(text: _fieldErrors['shipZip']),
                     const SizedBox(height: 4),
-                    _SearchableSelectField(
+                    _AccessibleSearchableSelectField(
                       value: _shipCountry,
                       hint: 'Country',
+                      semanticLabel: 'Shipping country',
                       minHeight: 56,
                       verticalPadding: 8,
                       items: countries,
@@ -3567,30 +3523,31 @@ class _ClientCustomRequestWithArtistPageState
             ),
           ],
         ),
-        bottomNavigationBar: widget.showClientBottomNav
-            ? ClientBottomNavBar(
-                currentIndex: 1, // ✅ Design selected on this page
-                onTap: (i) async {
-                  if (widget.onClientNavTap != null) {
-                    await widget.onClientNavTap!(context, i);
-                    return;
-                  }
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                      builder: (_) => ClientShellPage(
-                        profile: widget.profile,
-                        initialIndex: i,
-                        forceEnableAllTabs: true,
-                        // keep artist preselected if going back to Design
-                        initialArtistName:
-                            null, // ✅ you said NO preselect in ClientCustomRequestPage
-                      ),
-                    ),
-                    (route) => false,
-                  );
-                },
-              )
-            : null,
+        bottomNavigationBar: widget.customBottomNavigationBar ??
+            (widget.showClientBottomNav
+                ? ClientBottomNavBar(
+                    currentIndex: 1, // ✅ Design selected on this page
+                    onTap: (i) async {
+                      if (widget.onClientNavTap != null) {
+                        await widget.onClientNavTap!(context, i);
+                        return;
+                      }
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => ClientShellPage(
+                            profile: widget.profile,
+                            initialIndex: i,
+                            forceEnableAllTabs: true,
+                            // keep artist preselected if going back to Design
+                            initialArtistName:
+                                null, // ✅ you said NO preselect in ClientCustomRequestPage
+                          ),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                  )
+                : null),
       ),
     );
   }
@@ -3637,12 +3594,16 @@ class GroupClientSelection {
   NailPreferences? draftNails;
   NailPreferences? savedNails;
   final TextEditingController searchController = TextEditingController();
+  final GlobalKey<_AccessibleClientDropdownState> dropdownKey =
+      GlobalKey<_AccessibleClientDropdownState>();
+  final FocusNode deleteFocusNode = FocusNode(debugLabel: 'deleteGroupClient');
   bool showSuggestions = false;
 
   GroupClientSelection({this.clientId, this.draftNails, this.savedNails});
 
   void dispose() {
     searchController.dispose();
+    deleteFocusNode.dispose();
   }
 }
 
@@ -3695,7 +3656,7 @@ class _DateField extends StatelessWidget {
         hintText: 'MM/DD/YYYY',
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: AppColors.blackCat.withValues(alpha: 0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.60),
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
         ),
@@ -3760,7 +3721,7 @@ class _TextArea extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: AppColors.blackCat.withValues(alpha: 0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.60),
           fontFamily: 'Arial',
         ),
         errorText: (errorText ?? '').trim().isEmpty ? null : errorText,
@@ -3793,12 +3754,14 @@ class _InputField extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.onChanged,
+    this.focusNode,
     this.minHeight = 52,
     this.verticalPadding = 6,
   });
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
   final double minHeight;
   final double verticalPadding;
 
@@ -3806,6 +3769,7 @@ class _InputField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       onChanged: onChanged,
       textAlignVertical: TextAlignVertical.center,
       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
@@ -3813,7 +3777,7 @@ class _InputField extends StatelessWidget {
         hintText: hint,
         hintStyle: TextStyle(
           fontSize: 12.5,
-          color: AppColors.blackCat.withValues(alpha: 0.35),
+          color: AppColors.blackCat.withValues(alpha: 0.60),
           fontWeight: FontWeight.w400,
           fontFamily: 'Arial',
         ),
@@ -3865,12 +3829,13 @@ class _SoftButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.zero,
           child: Container(
-            height: 44,
+            constraints: const BoxConstraints(minHeight: 48),
             decoration: BoxDecoration(
               color: backgroundColor,
               borderRadius: BorderRadius.zero,
@@ -3903,414 +3868,11 @@ class _SoftButton extends StatelessWidget {
   }
 }
 
-
-class _AccessibleRequestDatePickerDialog extends StatefulWidget {
-  const _AccessibleRequestDatePickerDialog({
-    required this.fieldLabel,
-    required this.firstDate,
-    required this.lastDate,
-    required this.initialSelectedDate,
-  });
-
-  final String fieldLabel;
-  final DateTime firstDate;
-  final DateTime lastDate;
-  final DateTime initialSelectedDate;
-
-  @override
-  State<_AccessibleRequestDatePickerDialog> createState() =>
-      _AccessibleRequestDatePickerDialogState();
-}
-
-class _AccessibleRequestDatePickerDialogState
-    extends State<_AccessibleRequestDatePickerDialog> {
-  final GlobalKey _monthNavigationKey = GlobalKey();
-  final GlobalKey _firstEnabledDateKey = GlobalKey();
-  late DateTime _displayMonth;
-  late DateTime _selectedDate;
-  bool _sentInitialA11yFocus = false;
-
-  static const List<String> _months = <String>[
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-
-  static const List<String> _weekdays = <String>[
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedDate = _dateOnly(widget.initialSelectedDate);
-    // Start on the month that contains the first enabled date.
-    // TalkBack first focuses the month navigation control, then the
-    // next swipe moves to the first enabled date.
-    _displayMonth = DateTime(widget.firstDate.year, widget.firstDate.month, 1);
-    _queueMonthNavigationFocus();
-  }
-
-  static DateTime _dateOnly(DateTime value) =>
-      DateTime(value.year, value.month, value.day);
-
-  bool _sameDate(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  String _fullDateLabel(DateTime date) {
-    return '${_weekdays[date.weekday - 1]}, '
-        '${_months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  void _queueMonthNavigationFocus() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || _sentInitialA11yFocus) return;
-      await WidgetsBinding.instance.endOfFrame;
-      await Future<void>.delayed(const Duration(milliseconds: 220));
-      if (!mounted || _sentInitialA11yFocus) return;
-      final renderObject =
-          _monthNavigationKey.currentContext?.findRenderObject();
-      if (renderObject == null) return;
-      _sentInitialA11yFocus = true;
-      renderObject.sendSemanticsEvent(const FocusSemanticEvent());
-    });
-  }
-
-  String _monthYearLabel(DateTime date) {
-    return '${_months[date.month - 1]} ${date.year}';
-  }
-
-  String _monthNavigationHint() {
-    final hints = <String>[];
-    if (_canGoPrevious) {
-      hints.add('Swipe down to go to the previous month');
-    }
-    if (_canGoNext) {
-      hints.add('Swipe up to go to the next month');
-    }
-    hints.add('Swipe right to move to the first available date');
-    return hints.join('. ');
-  }
-
-  DateTime get _firstMonth =>
-      DateTime(widget.firstDate.year, widget.firstDate.month, 1);
-
-  DateTime get _lastMonth =>
-      DateTime(widget.lastDate.year, widget.lastDate.month, 1);
-
-  bool get _canGoPrevious => _displayMonth.isAfter(_firstMonth);
-  bool get _canGoNext => _displayMonth.isBefore(_lastMonth);
-
-  void _previousMonth() {
-    if (!_canGoPrevious) return;
-    setState(() {
-      _displayMonth = DateTime(_displayMonth.year, _displayMonth.month - 1, 1);
-    });
-  }
-
-  void _nextMonth() {
-    if (!_canGoNext) return;
-    setState(() {
-      _displayMonth = DateTime(_displayMonth.year, _displayMonth.month + 1, 1);
-    });
-  }
-
-  List<DateTime?> _calendarCells() {
-    final firstOfMonth = DateTime(_displayMonth.year, _displayMonth.month, 1);
-    final daysInMonth = DateTime(
-      _displayMonth.year,
-      _displayMonth.month + 1,
-      0,
-    ).day;
-    final leading = firstOfMonth.weekday % 7; // Sunday-first visual grid.
-    final cells = <DateTime?>[
-      for (var i = 0; i < leading; i++) null,
-      for (var day = 1; day <= daysInMonth; day++)
-        DateTime(_displayMonth.year, _displayMonth.month, day),
-    ];
-    while (cells.length % 7 != 0) {
-      cells.add(null);
-    }
-    return cells;
-  }
-
-  bool _isEnabled(DateTime date) {
-    final day = _dateOnly(date);
-    return !day.isBefore(_dateOnly(widget.firstDate)) &&
-        !day.isAfter(_dateOnly(widget.lastDate));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cells = _calendarCells();
-    final monthLabel = '${_months[_displayMonth.month - 1]} ${_displayMonth.year}';
-
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      child: Dialog(
-        backgroundColor: _requestSnow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360, maxHeight: 540),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ExcludeSemantics(
-                  child: Text(
-                    'Select ${widget.fieldLabel}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Semantics(
-                  key: _monthNavigationKey,
-                  container: true,
-                  sortKey: const OrdinalSortKey(1),
-                  label: '${widget.fieldLabel} calendar month',
-                  value: monthLabel,
-                  increasedValue: _canGoNext
-                      ? _monthYearLabel(
-                          DateTime(
-                            _displayMonth.year,
-                            _displayMonth.month + 1,
-                            1,
-                          ),
-                        )
-                      : null,
-                  decreasedValue: _canGoPrevious
-                      ? _monthYearLabel(
-                          DateTime(
-                            _displayMonth.year,
-                            _displayMonth.month - 1,
-                            1,
-                          ),
-                        )
-                      : null,
-                  onIncrease: _canGoNext ? _nextMonth : null,
-                  onDecrease: _canGoPrevious ? _previousMonth : null,
-                  hint: _monthNavigationHint(),
-                  child: ExcludeSemantics(
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Previous month',
-                          onPressed: _canGoPrevious ? _previousMonth : null,
-                          icon: const Icon(Icons.chevron_left_rounded),
-                        ),
-                        Expanded(
-                          child: Text(
-                            monthLabel,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Next month',
-                          onPressed: _canGoNext ? _nextMonth : null,
-                          icon: const Icon(Icons.chevron_right_rounded),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ExcludeSemantics(
-                  child: Row(
-                    children: <Widget>[
-                      for (final day in const <String>[
-                        'S',
-                        'M',
-                        'T',
-                        'W',
-                        'T',
-                        'F',
-                        'S',
-                      ])
-                        Expanded(
-                          child: Center(
-                            child: Text(
-                              day,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.blackCatLight,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Flexible(
-                  child: GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7,
-                      childAspectRatio: 1,
-                    ),
-                    itemCount: cells.length,
-                    itemBuilder: (context, index) {
-                      final date = cells[index];
-                      if (date == null) return const SizedBox.shrink();
-
-                      final enabled = _isEnabled(date);
-                      final selected = _sameDate(date, _selectedDate);
-                      final isFirstEnabled = _sameDate(
-                        date,
-                        _dateOnly(widget.firstDate),
-                      );
-
-                      if (!enabled) {
-                        return ExcludeSemantics(
-                          child: Center(
-                            child: Text(
-                              '${date.day}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.blackCat.withValues(alpha: 0.25),
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      final label = isFirstEnabled
-                          ? '${widget.fieldLabel}, ${_fullDateLabel(date)}'
-                          : _fullDateLabel(date);
-
-                      return Semantics(
-                        key: isFirstEnabled ? _firstEnabledDateKey : null,
-                        sortKey: OrdinalSortKey(
-                          10.0 +
-                              _dateOnly(date)
-                                  .difference(_dateOnly(widget.firstDate))
-                                  .inDays
-                                  .toDouble(),
-                        ),
-                        button: true,
-                        selected: selected,
-                        label: label,
-                        hint: selected
-                            ? 'Selected. Double tap to keep this date'
-                            : 'Double tap to select this date',
-                        onTap: () => setState(() => _selectedDate = date),
-                        child: ExcludeSemantics(
-                          child: InkWell(
-                            onTap: () => setState(() => _selectedDate = date),
-                            child: Center(
-                              child: Container(
-                                height: 34,
-                                width: 34,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? AppColors.blackCat
-                                      : Colors.transparent,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Text(
-                                  '${date.day}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: selected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: selected
-                                        ? AppColors.snow
-                                        : AppColors.blackCat,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Semantics(
-                      sortKey: const OrdinalSortKey(10000),
-                      button: true,
-                      label: 'Cancel date selection',
-                      child: ExcludeSemantics(
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            backgroundColor: AppColors.blackCatLight,
-                            foregroundColor: AppColors.snow,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Semantics(
-                      sortKey: const OrdinalSortKey(10001),
-                      button: true,
-                      label:
-                          'Confirm ${widget.fieldLabel}, ${_fullDateLabel(_selectedDate)}',
-                      child: ExcludeSemantics(
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                          ),
-                          onPressed: () =>
-                              Navigator.of(context).pop(_selectedDate),
-                          child: const Text(
-                            'Confirm',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-
 class _AvatarMenu extends StatelessWidget {
   const _AvatarMenu({
     required this.onSelected,
+    required this.focusNode,
+    required this.onCanceled,
     this.avatarUrl = '',
     this.displayName = '',
     this.showProfile = true,
@@ -4320,6 +3882,8 @@ class _AvatarMenu extends StatelessWidget {
     this.showReviews = true,
   });
   final ValueChanged<String> onSelected;
+  final FocusNode focusNode;
+  final VoidCallback onCanceled;
   final String avatarUrl;
   final String displayName;
   final bool showProfile;
@@ -4330,13 +3894,20 @@ class _AvatarMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
+    return Semantics(
+      sortKey: const OrdinalSortKey(2),
+      button: true,
+      label: 'Account menu',
+      child: Focus(
+        focusNode: focusNode,
+        child: PopupMenuButton<String>(
       tooltip: 'Account menu',
       offset: const Offset(0, 55),
       elevation: 8,
       color: _requestSnow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       onSelected: onSelected,
+      onCanceled: onCanceled,
       itemBuilder: (context) => [
         if (showProfile)
           PopupMenuItem<String>(
@@ -4445,6 +4016,8 @@ class _AvatarMenu extends StatelessWidget {
           ),
         ),
       ),
+        ),
+      ),
     );
   }
 }
@@ -4512,13 +4085,65 @@ class _FocusRingWrapper extends StatelessWidget {
   }
 }
 
-class _SearchableSelectField extends StatelessWidget {
-  const _SearchableSelectField({
+
+mixin _AccessibleDropdownLifecycle<T extends StatefulWidget> on State<T> {
+  final FocusNode dropdownFocusNode = FocusNode(
+    debugLabel: 'accessibleSearchableDropdown',
+  );
+  final MenuController dropdownMenuController = MenuController();
+  int _accessibilityFocusEpoch = 0;
+
+  void markAccessibilityFocusInside() {
+    _accessibilityFocusEpoch++;
+  }
+
+  void scheduleCloseAfterAccessibilityExit() {
+    final epoch = ++_accessibilityFocusEpoch;
+    Future<void>.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted || epoch != _accessibilityFocusEpoch) return;
+      closeDropdownAndKeyboard();
+    });
+  }
+
+  void closeDropdownAndKeyboard() {
+    dropdownMenuController.close();
+    dropdownFocusNode.unfocus();
+    unawaited(
+      SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
+    );
+  }
+
+  Widget accessibilityDropdownBoundary({required Widget child}) {
+    return Semantics(
+      onDidGainAccessibilityFocus: markAccessibilityFocusInside,
+      onDidLoseAccessibilityFocus: scheduleCloseAfterAccessibilityExit,
+      child: child,
+    );
+  }
+
+  Widget accessibilityDropdownOption(String label) {
+    return Semantics(
+      onDidGainAccessibilityFocus: markAccessibilityFocusInside,
+      onDidLoseAccessibilityFocus: scheduleCloseAfterAccessibilityExit,
+      child: Text(label),
+    );
+  }
+
+  void disposeDropdownLifecycle() {
+    _accessibilityFocusEpoch++;
+    dropdownFocusNode.dispose();
+  }
+}
+
+class _AccessibleSearchableSelectField extends StatefulWidget {
+  const _AccessibleSearchableSelectField({
     required this.value,
     required this.hint,
     required this.items,
     required this.onChanged,
     this.semanticLabel,
+    this.textInputAction = TextInputAction.done,
+    this.nextFocusNode,
     this.minHeight = 52,
     this.verticalPadding = 6,
   });
@@ -4528,163 +4153,275 @@ class _SearchableSelectField extends StatelessWidget {
   final List<String> items;
   final ValueChanged<String> onChanged;
   final String? semanticLabel;
+  final TextInputAction textInputAction;
+  final FocusNode? nextFocusNode;
   final double minHeight;
   final double verticalPadding;
 
   @override
+  State<_AccessibleSearchableSelectField> createState() =>
+      _AccessibleSearchableSelectFieldState();
+}
+
+class _AccessibleSearchableSelectFieldState
+    extends State<_AccessibleSearchableSelectField>
+    with _AccessibleDropdownLifecycle<_AccessibleSearchableSelectField> {
+  Future<void> _openAccessiblePicker(
+    List<String> items,
+    String label,
+    String selectedValue,
+  ) async {
+    dropdownMenuController.close();
+    dropdownFocusNode.unfocus();
+    final selection = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _requestSnow,
+      builder: (sheetContext) => _AccessibleOptionPicker(
+        label: label,
+        items: items,
+        selectedValue: selectedValue,
+      ),
+    );
+    if (!mounted || selection == null) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (!mounted) return;
+    widget.onChanged(selection);
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      '$selection selected',
+      Directionality.of(context),
+    );
+  }
+
+  @override
+  void dispose() {
+    disposeDropdownLifecycle();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final normalizedItems = items
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
+    final normalizedItems = widget.items
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
         .toList(growable: false);
-    final initialValue = value.trim();
-    final a11yLabel = (semanticLabel ?? hint).trim();
+    final selectedValue = widget.value.trim();
+    final label = (widget.semanticLabel ?? widget.hint).trim();
 
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: initialValue),
-      optionsBuilder: (textEditingValue) {
-        final query = textEditingValue.text.trim().toLowerCase();
-        if (query.isEmpty) return normalizedItems;
-        return normalizedItems.where(
-          (item) => item.toLowerCase().contains(query),
-        );
-      },
-      onSelected: onChanged,
-      fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-        void openForA11y() {
-          focusNode.requestFocus();
-          if (controller.text.trim().isEmpty && normalizedItems.isNotEmpty) {
-            controller.value = const TextEditingValue(text: ' ');
-            controller.selection = const TextSelection.collapsed(offset: 1);
-            controller.value = const TextEditingValue(text: '');
-          }
-        }
-
-        return Semantics(
-          container: true,
-          textField: true,
-          label: a11yLabel,
-          value: controller.text.trim().isEmpty
-              ? 'Not selected'
-              : controller.text.trim(),
-          hint: 'Double tap to search and select $a11yLabel',
-          onTap: openForA11y,
-          excludeSemantics: true,
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            textAlignVertical: TextAlignVertical.center,
-            onChanged: (text) {
-              final normalizedText = text.trim();
-              final matchesExisting = normalizedItems.any(
-                (item) => item.toLowerCase() == normalizedText.toLowerCase(),
-              );
-              if (normalizedText.isEmpty || !matchesExisting) {
-                onChanged('');
-              }
-            },
-            onTap: openForA11y,
-            onSubmitted: (_) => onSubmit(),
-            onTapOutside: (_) => focusNode.unfocus(),
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w400,
-              color: AppColors.blackCat,
-            ),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: TextStyle(
-                fontSize: 12.5,
-                color: AppColors.blackCat.withValues(alpha: 0.35),
-                fontWeight: FontWeight.w400,
-                fontFamily: 'Arial',
-              ),
-              isDense: true,
-              filled: true,
-              fillColor: _requestSnow,
-              focusColor: _requestSnow,
-              hoverColor: _requestSnow,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: verticalPadding,
-              ),
-              constraints: BoxConstraints(minHeight: minHeight),
-              suffixIcon: Icon(
-                Icons.search_rounded,
-                size: 16,
-                color: AppColors.blackCat.withValues(alpha: 0.45),
-              ),
-              suffixIconConstraints: const BoxConstraints(
-                minHeight: 32,
-                minWidth: 32,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: _requestBorder,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: _requestBorder,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: _requestBorder,
-              ),
-            ),
+    // Do not attach the accessibility-exit close timer to the searchable
+    // field. Its semantics update for every typed character, which otherwise
+    // closes the keyboard while the user is still entering a search.
+    return Semantics(
+      child: Semantics(
+        button: true,
+        label: label,
+        value: selectedValue.isEmpty ? 'Not selected' : selectedValue,
+        hint: 'Double tap to search and select $label',
+        onTap: () => unawaited(
+          _openAccessiblePicker(normalizedItems, label, selectedValue),
+        ),
+        child: ExcludeSemantics(
+          child: DropdownMenu<String>(
+        key: ValueKey<String>(
+          '$label|$selectedValue|${normalizedItems.length}',
+        ),
+        focusNode: dropdownFocusNode,
+        menuController: dropdownMenuController,
+        initialSelection:
+            normalizedItems.contains(selectedValue) ? selectedValue : null,
+        // Keep every option available when a value is already selected.
+        // Typing still searches/highlights matches, but users never have to
+        // erase the current State or Country before swiping the full list.
+        enableFilter: false,
+        enableSearch: true,
+        requestFocusOnTap: true,
+        textInputAction: widget.textInputAction,
+        expandedInsets: EdgeInsets.zero,
+        menuHeight: 240,
+        label: Text(label),
+        hintText: widget.hint,
+        textStyle: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w400,
+          color: AppColors.blackCat,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          isDense: true,
+          filled: true,
+          fillColor: _requestSnow,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: widget.verticalPadding,
           ),
-        );
-      },
-      optionsViewBuilder: (context, onSelected, options) {
-        final list = options.toList(growable: false);
-        final menuHeight = AutocompleteDropdownSizing.menuHeight(
-          itemCount: list.length,
-          itemExtent: 40,
-        );
-        return TextFieldTapRegion(
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: Material(
-              elevation: 6,
-              color: _requestSnow,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-                side: _requestBorder,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: menuHeight,
-                  minWidth: 220,
+          constraints: BoxConstraints(minHeight: widget.minHeight),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+        ),
+        menuStyle: const MenuStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(_requestSnow),
+          shape: WidgetStatePropertyAll<OutlinedBorder>(
+            RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          ),
+        ),
+        dropdownMenuEntries: normalizedItems
+            .map(
+              (item) => DropdownMenuEntry<String>(
+                value: item,
+                label: item,
+                labelWidget: accessibilityDropdownOption(item),
+                style: const ButtonStyle(
+                  minimumSize: WidgetStatePropertyAll<Size>(
+                    Size.fromHeight(48),
+                  ),
                 ),
+              ),
+            )
+            .toList(growable: false),
+        onSelected: (selection) {
+          if (selection == null) return;
+          widget.onChanged(selection);
+          dropdownMenuController.close();
+          dropdownFocusNode.unfocus();
+          unawaited(
+            SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
+          );
+          SemanticsService.sendAnnouncement(
+            View.of(context),
+            '$selection selected',
+            Directionality.of(context),
+          );
+        },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccessibleOptionPicker extends StatefulWidget {
+  const _AccessibleOptionPicker({
+    required this.label,
+    required this.items,
+    required this.selectedValue,
+  });
+
+  final String label;
+  final List<String> items;
+  final String selectedValue;
+
+  @override
+  State<_AccessibleOptionPicker> createState() =>
+      _AccessibleOptionPickerState();
+}
+
+class _AccessibleOptionPickerState extends State<_AccessibleOptionPicker> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.trim().toLowerCase();
+    final filteredItems = query.isEmpty
+        ? widget.items
+        : widget.items
+              .where((item) => item.toLowerCase().contains(query))
+              .toList(growable: false);
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.72,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + 12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                header: true,
+                label: 'Select ${widget.label}',
+                child: ExcludeSemantics(
+                  child: Text(
+                    'Select ${widget.label}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  labelText: 'Search ${widget.label}',
+                  prefixIcon: const ExcludeSemantics(
+                    child: Icon(Icons.search),
+                  ),
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
-                    list.length,
-                  ),
-                  physics: AutocompleteDropdownSizing.scrollPhysics(
-                    list.length,
-                  ),
-                  itemCount: list.length,
+                  itemCount: filteredItems.length,
                   itemBuilder: (context, index) {
-                    final item = list[index];
+                    final item = filteredItems[index];
+                    final selected = item == widget.selectedValue;
+                    void choose() {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      unawaited(
+                        SystemChannels.textInput.invokeMethod<void>(
+                          'TextInput.hide',
+                        ),
+                      );
+                      Navigator.of(context).pop(item);
+                    }
                     return Semantics(
                       button: true,
-                      label: '$a11yLabel, $item',
+                      selected: selected,
+                      label: item,
                       hint: 'Double tap to select',
-                      onTap: () => onSelected(item),
+                      onTap: choose,
                       child: ExcludeSemantics(
                         child: InkWell(
-                          onTap: () => onSelected(item),
+                          onTap: choose,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
-                              vertical: 10,
+                              vertical: 14,
                             ),
-                            child: Text(
-                              item,
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w400,
-                              ),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(item)),
+                                if (selected) const Icon(Icons.check, size: 20),
+                              ],
                             ),
                           ),
                         ),
@@ -4693,14 +4430,133 @@ class _SearchableSelectField extends StatelessWidget {
                   },
                 ),
               ),
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
 
+class _AccessibleClientDropdown extends StatefulWidget {
+  const _AccessibleClientDropdown({
+    super.key,
+    required this.controller,
+    required this.selectedClientId,
+    required this.clients,
+    required this.label,
+    required this.onSelected,
+  });
+
+  final TextEditingController controller;
+  final String? selectedClientId;
+  final List<CompletedClient> clients;
+  final String label;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  State<_AccessibleClientDropdown> createState() =>
+      _AccessibleClientDropdownState();
+}
+
+class _AccessibleClientDropdownState extends State<_AccessibleClientDropdown>
+    with _AccessibleDropdownLifecycle<_AccessibleClientDropdown> {
+  void focusField() {
+    dropdownFocusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    disposeDropdownLifecycle();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedExists = widget.clients.any(
+      (client) => client.id == widget.selectedClientId,
+    );
+
+    return accessibilityDropdownBoundary(
+      child: DropdownMenu<String>(
+        controller: widget.controller,
+        focusNode: dropdownFocusNode,
+        menuController: dropdownMenuController,
+        initialSelection:
+            selectedExists ? widget.selectedClientId : null,
+        enableFilter: true,
+        enableSearch: true,
+        requestFocusOnTap: true,
+        expandedInsets: EdgeInsets.zero,
+        menuHeight: 240,
+        label: Text(widget.label),
+        hintText: 'Select client',
+        textStyle: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w400,
+          color: AppColors.blackCat,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          isDense: true,
+          filled: true,
+          fillColor: _requestSnow,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 6,
+          ),
+          constraints: const BoxConstraints(minHeight: 52),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.zero,
+            borderSide: _requestBorder,
+          ),
+        ),
+        menuStyle: const MenuStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(_requestSnow),
+          shape: WidgetStatePropertyAll<OutlinedBorder>(
+            RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          ),
+        ),
+        dropdownMenuEntries: widget.clients
+            .map(
+              (client) => DropdownMenuEntry<String>(
+                value: client.id,
+                label: client.name,
+                labelWidget: accessibilityDropdownOption(client.name),
+                style: const ButtonStyle(
+                  minimumSize: WidgetStatePropertyAll<Size>(
+                    Size.fromHeight(48),
+                  ),
+                ),
+              ),
+            )
+            .toList(growable: false),
+        onSelected: (clientId) {
+          widget.onSelected(clientId);
+          closeDropdownAndKeyboard();
+          final selected = widget.clients.where(
+            (client) => client.id == clientId,
+          );
+          final selectedName = selected.isEmpty
+              ? 'Client selection cleared'
+              : '${selected.first.name} selected';
+          SemanticsService.sendAnnouncement(
+            View.of(context),
+            selectedName,
+            Directionality.of(context),
+          );
+        },
+      ),
+    );
+  }
+}
 
 class _BudgetCard extends StatelessWidget {
   const _BudgetCard({
@@ -4724,17 +4580,27 @@ class _BudgetCard extends StatelessWidget {
         borderRadius: BorderRadius.zero,
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
-      child: Row(
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        label: 'Maximum allowed, 5,000 dollars',
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: TextFormField(
-              key: ValueKey<int>(start.round()),
-              initialValue: start.round().toString(),
-              enabled: false,
-              decoration: const InputDecoration(
-                labelText: 'Min',
-                prefixText: '\$',
+            child: Semantics(
+              sortKey: const OrdinalSortKey(1),
+              label: 'Minimum ${start.round()} dollars, disabled',
+              child: ExcludeSemantics(
+                child: TextFormField(
+                  key: ValueKey<int>(start.round()),
+                  initialValue: start.round().toString(),
+                  enabled: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Min',
+                    prefixText: '\$',
+                  ),
+                ),
               ),
             ),
           ),
@@ -4743,7 +4609,9 @@ class _BudgetCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextFormField(
+                Semantics(
+                  sortKey: const OrdinalSortKey(2),
+                  child: TextFormField(
                   key: ValueKey<String>('max-${start.round()}'),
                   initialValue: '',
                   keyboardType: TextInputType.number,
@@ -4753,7 +4621,7 @@ class _BudgetCard extends StatelessWidget {
                   ],
                   decoration: const InputDecoration(
                     labelText: 'Max',
-                    prefixText: '\$',
+                    prefix: ExcludeSemantics(child: Text('\$')),
                   ),
                   onChanged: (raw) {
                     final parsed = double.tryParse(raw);
@@ -4763,20 +4631,24 @@ class _BudgetCard extends StatelessWidget {
                     onChanged(range);
                     onChangeEnd(range);
                   },
+                  ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Maximum allowed: \$5,000',
-                  style: TextStyle(
-                    color: AppColors.blackCat.withValues(alpha: 0.60),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
+                ExcludeSemantics(
+                  child: Text(
+                    'Maximum allowed: \$5,000',
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.60),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -4800,15 +4672,16 @@ class _RadioPill extends StatelessWidget {
         : AppColors.blackCat.withValues(alpha: 0.08);
 
     return Semantics(
-      button: true,
-      selected: selected,
+      checked: selected,
+      inMutuallyExclusiveGroup: true,
       label: label,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.zero,
           child: Container(
-            height: 30,
+            constraints: const BoxConstraints(minHeight: 48),
             decoration: BoxDecoration(
               color: bg,
               borderRadius: BorderRadius.zero,

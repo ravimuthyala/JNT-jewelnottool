@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import 'accessible_date_grid.dart';
 
 Future<void> showRegistrationAgeIneligibleDialog({
   required BuildContext context,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (dialogContext) => Dialog(
-      backgroundColor: AppColors.snow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: ConstrainedBox(
+    barrierLabel: 'Age eligibility alert',
+    builder: (dialogContext) => Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      liveRegion: true,
+      label: 'Age eligibility alert',
+      child: Dialog(
+        backgroundColor: AppColors.snow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 330),
         child: Container(
           color: AppColors.snow,
@@ -31,8 +39,9 @@ Future<void> showRegistrationAgeIneligibleDialog({
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
-                height: 46,
+                height: 48,
                 child: ElevatedButton(
+                  autofocus: true,
                   onPressed: () => Navigator.of(dialogContext).pop(),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.blackCat,
@@ -55,187 +64,31 @@ Future<void> showRegistrationAgeIneligibleDialog({
             ],
           ),
         ),
+        ),
       ),
     ),
   );
 }
 
+/// Shows the accessible calendar-grid picker for date of birth. The
+/// underlying registration field is directly typable too (see
+/// `RegistrationInputUtils.formatDateOfBirth` / `tryParseMmDdYyyy`), so this
+/// modal only needs to cover the tap-to-pick path -- no separate in-modal
+/// keyboard-entry toggle is needed here anymore.
 Future<DateTime?> showRegistrationDateOfBirthPicker({
   required BuildContext context,
   DateTime? initialDate,
-}) async {
+}) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  DateTime tempSelected = initialDate ?? today;
-  bool useTextInput = false;
-  final formKey = GlobalKey<FormState>();
+  final initial = initialDate ?? today;
+  final clampedInitial = initial.isAfter(today) ? today : initial;
 
-  return showDialog<DateTime>(
+  return showAccessibleDatePickerDialog(
     context: context,
-    builder: (dialogContext) => Semantics(
-      scopesRoute: true,
-      namesRoute: true,
-      explicitChildNodes: true,
-      label: 'Select date of birth',
-      child: Dialog(
-        backgroundColor: AppColors.snow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: Container(
-          color: AppColors.snow,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 330, maxHeight: 440),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  colorScheme: const ColorScheme.light(
-                    primary: AppColors.blackCat,
-                    onPrimary: AppColors.snow,
-                    surface: AppColors.snow,
-                    onSurface: AppColors.blackCat,
-                  ),
-                  datePickerTheme: const DatePickerThemeData(
-                    backgroundColor: AppColors.snow,
-                    surfaceTintColor: AppColors.snow,
-                    weekdayStyle: TextStyle(
-                      color: AppColors.blackCat,
-                      fontSize: 12,
-                    ),
-                    dayStyle: TextStyle(
-                      color: AppColors.blackCat,
-                      fontSize: 13,
-                    ),
-                    yearStyle: TextStyle(
-                      color: AppColors.blackCat,
-                      fontSize: 12,
-                    ),
-                    todayBorder: BorderSide(
-                      color: AppColors.blackCat,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-                // CalendarDatePicker's onDateChanged also fires when the user
-                // only picks a year from the year grid (keeping today's
-                // month/day) -- popping immediately there would never let
-                // them go on to pick the month/day. So we just track the
-                // latest selection here and only return it once the user
-                // taps Confirm below.
-                child: StatefulBuilder(
-                  builder: (context, setDialogState) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Date of Birth',
-                              style: TextStyle(
-                                color: AppColors.blackCat,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'Arial',
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: useTextInput
-                                ? 'Switch to calendar'
-                                : 'Switch to keyboard input',
-                            icon: Icon(
-                              useTextInput
-                                  ? Icons.calendar_month_outlined
-                                  : Icons.edit_outlined,
-                              color: AppColors.blackCat,
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setDialogState(
-                                () => useTextInput = !useTextInput,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      Flexible(
-                        child: useTextInput
-                            ? Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                child: Form(
-                                  key: formKey,
-                                  child: InputDatePickerFormField(
-                                    initialDate: tempSelected,
-                                    firstDate: DateTime(1900),
-                                    lastDate: today,
-                                    fieldLabelText: 'Date of birth',
-                                    fieldHintText: 'MM/DD/YYYY',
-                                    onDateSaved: (value) => tempSelected = value,
-                                    onDateSubmitted: (value) {
-                                      setDialogState(
-                                        () => tempSelected = value,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              )
-                            : CalendarDatePicker(
-                                initialDate: tempSelected,
-                                currentDate: today,
-                                firstDate: DateTime(1900),
-                                lastDate: today,
-                                onDateChanged: (value) {
-                                  setDialogState(() => tempSelected = value);
-                                },
-                              ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCatLight,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () =>
-                                Navigator.of(dialogContext).pop(),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () {
-                              if (useTextInput) {
-                                final isValid =
-                                    formKey.currentState?.validate() ??
-                                    false;
-                                if (!isValid) return;
-                                formKey.currentState?.save();
-                              }
-                              Navigator.of(
-                                dialogContext,
-                              ).pop(tempSelected);
-                            },
-                            child: const Text(
-                              'Confirm',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+    fieldLabel: 'Date of Birth',
+    firstDate: DateTime(1900),
+    lastDate: today,
+    initialSelectedDate: clampedInitial,
   );
 }

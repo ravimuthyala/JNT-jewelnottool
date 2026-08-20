@@ -111,7 +111,7 @@ class CompanyClientRequestCard extends StatelessWidget {
                         italic: true,
                       ),
                       _field(
-                        'Needed By',
+                        'Need By',
                         compactDateDisplayOrDash(needByLabel),
                       ),
                       if (jntRevealDateLabel.trim().isNotEmpty)

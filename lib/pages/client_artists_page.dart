@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -13,6 +14,7 @@ import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 String _artistLocationText(String city, String state) {
   return <String>[
@@ -89,10 +91,16 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
   void initState() {
     super.initState();
     _loadArtists();
-    _scheduleInitialA11yFocus();
+    // _isAccessibilityNavigationEnabled() reads MediaQuery, which can't be
+    // done synchronously from initState -- defer to the first frame, after
+    // dependencies are established.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scheduleInitialA11yFocus();
+    });
   }
 
   void _scheduleInitialA11yFocus() {
+    if (!_isAccessibilityNavigationEnabled(context)) return;
     if (_didSetInitialA11yFocus || _focusRequestQueued || !widget.isActiveTab) {
       return;
     }
@@ -192,6 +200,10 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
         }
         _loadingArtists = false;
       });
+      announceRequestAccessibilityMessage(
+        context,
+        '${resolvedProfiles.length} ${resolvedProfiles.length == 1 ? 'artist' : 'artists'} available.',
+      );
     } catch (e, st) {
       debugPrint('ClientArtistsPage Supabase _loadArtists error: $e');
       debugPrint(st.toString());
@@ -789,6 +801,8 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
 
   Future<void> _openAccessibleArtistPicker() async {
     final selectedId = _selectedArtistId;
+    final initialOptionKey = GlobalKey(debugLabel: 'initialArtistOption');
+    var didFocusInitialOption = false;
     final options = _artists
         .where((artist) => artist.name.trim().isNotEmpty)
         .toList(growable: false);
@@ -801,6 +815,18 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       enableDrag: true,
       backgroundColor: AppColors.snow,
       builder: (sheetContext) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (didFocusInitialOption ||
+              !requestAccessibilityEnabled(sheetContext)) {
+            return;
+          }
+          didFocusInitialOption = true;
+          await Future<void>.delayed(const Duration(milliseconds: 320));
+          if (!sheetContext.mounted) return;
+          initialOptionKey.currentContext
+              ?.findRenderObject()
+              ?.sendSemanticsEvent(const FocusSemanticEvent());
+        });
         return Semantics(
           scopesRoute: true,
           namesRoute: true,
@@ -872,6 +898,10 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                               ];
 
                               return Semantics(
+                                key: selected ||
+                                        (selectedId == null && index == 0)
+                                    ? initialOptionKey
+                                    : null,
                                 button: true,
                                 selected: selected,
                                 label: labelParts.join(', '),
@@ -921,6 +951,15 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
                         height: 48,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
+                            // The app-wide OutlinedButtonTheme (main.dart)
+                            // defaults to a dark fill with light text; this
+                            // button's light border signals it was meant
+                            // to be the opposite (light fill, dark text)
+                            // but never overrode backgroundColor, so it
+                            // inherited the dark fill underneath its own
+                            // dark text -- invisible on both sighted and
+                            // screen-reader-explored views.
+                            backgroundColor: AppColors.snow,
                             foregroundColor: AppColors.blackCat,
                             side: const BorderSide(
                               color: AppColors.blackCatBorderLight,
@@ -946,9 +985,17 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
     if (picked == null) return;
     if (picked.trim().isEmpty) {
       setState(() => _selectedArtistId = null);
+      announceRequestAccessibilityMessage(
+        context,
+        '${_artists.length} ${_artists.length == 1 ? 'artist' : 'artists'} available.',
+      );
       return;
     }
     setState(() => _selectedArtistId = picked);
+    announceRequestAccessibilityMessage(
+      context,
+      '${_selectedArtistName()} selected. 1 artist shown.',
+    );
   }
 
   Widget _buildAccessibleArtistPickerField() {
@@ -1113,14 +1160,21 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
           children: [
-            Center(
-              child: Text(
+            Semantics(
+              header: true,
+              label:
+                  'Artists. Browse artists, view their past work, and start a custom request.',
+              child: ExcludeSemantics(
+                child: Center(
+                  child: Text(
                 'Browse artists, view their past work, and start a custom request.',
                 style: TextStyle(
                   color: AppColors.blackCat,
                   fontWeight: FontWeight.w700,
                   fontSize: 16,
                   fontFamily: 'ArialBold',
+                ),
+                  ),
                 ),
               ),
             ),
@@ -1319,19 +1373,37 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
             ),
 
             const SizedBox(height: 16),
+            if (!_loadingArtists)
+              Semantics(
+                liveRegion: true,
+                label:
+                    '${_filtered.length} ${_filtered.length == 1 ? 'artist' : 'artists'} shown',
+                child: const SizedBox.shrink(),
+              ),
             if (_loadingArtists)
-              const Padding(
-                padding: EdgeInsets.only(top: 40),
-                child: Center(child: CircularProgressIndicator()),
+              Semantics(
+                liveRegion: true,
+                label: 'Loading artists',
+                child: ExcludeSemantics(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
               )
             else if (_filtered.isEmpty)
-              _Card(
-                child: Text(
+              Semantics(
+                label: 'No registered artists found.',
+                child: ExcludeSemantics(
+                  child: _Card(
+                    child: Text(
                   'No registered artists found.',
                   style: TextStyle(
                     color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w400,
                     fontSize: 13,
+                  ),
+                    ),
                   ),
                 ),
               )
@@ -1821,7 +1893,7 @@ class _ArtistCard extends StatelessWidget {
       label: label,
       child: ExcludeSemantics(
         child: SizedBox(
-          height: 40,
+          height: 48,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: canRequest
@@ -1852,10 +1924,19 @@ class _ArtistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(1.0) > 1.30;
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (largeText) ...[
+            _artistSummary(context),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _requestButton(),
+            ),
+          ] else
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2366,7 +2447,12 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
         .where((project) => _safeText(project.imageUrl).isNotEmpty)
         .toList(growable: false);
 
-    return SafeArea(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Artist details for $artistName',
+      child: SafeArea(
       top: false,
       child: Container(
         color: AppColors.snow,
@@ -2388,10 +2474,16 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
+                  Semantics(
+                    button: true,
+                    label: 'Close artist details',
+                    hint: 'Double tap to close',
+                    child: IconButton(
+                      tooltip: 'Close artist details',
+                      autofocus: MediaQuery.of(context).accessibleNavigation,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
                   ),
                 ],
               ),
@@ -2627,6 +2719,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -2741,7 +2834,10 @@ class _SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Semantics(
+      header: true,
+      label: title,
+      child: ExcludeSemantics(child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
       child: Text(
         title,
@@ -2751,6 +2847,7 @@ class _SectionHeading extends StatelessWidget {
           color: AppColors.blackCat,
         ),
       ),
+      )),
     );
   }
 }

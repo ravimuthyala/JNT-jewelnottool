@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import '../theme/app_colors.dart';
 import '../services/storage_url_resolver.dart';
 
@@ -124,25 +125,39 @@ class BrandingCompanyHomePage extends StatelessWidget {
           const SizedBox(height: 16),
 
           if (loadingTrendingLooks)
-            const SizedBox(
-              height: 220,
-              child: Center(child: CircularProgressIndicator()),
+            Semantics(
+              liveRegion: true,
+              label: 'Loading artist looks',
+              child: const ExcludeSemantics(
+                child: SizedBox(
+                  height: 220,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
             )
           else if (looks.isEmpty)
-            Container(
-              height: 220,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
-              ),
-              child: Text(
-                'No artist uploads available right now.',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat.withValues(alpha: 0.55),
+            Semantics(
+              liveRegion: true,
+              label: 'No artist uploads available right now.',
+              child: ExcludeSemantics(
+                child: Container(
+                  height: 220,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                    border: Border.all(
+                      color: AppColors.blackCat.withValues(alpha: 0.05),
+                    ),
+                  ),
+                  child: Text(
+                    'No artist uploads available right now.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                    ),
+                  ),
                 ),
               ),
             )
@@ -160,6 +175,8 @@ class BrandingCompanyHomePage extends StatelessWidget {
               itemBuilder: (context, index) => _TrendingCard(
                 artist: looks[index].artist,
                 imageUrl: looks[index].imageUrl,
+                index: index,
+                total: looks.length,
               ),
             ),
         ],
@@ -181,7 +198,10 @@ class _OverviewTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Semantics(
+      label: '$title, $value',
+      child: ExcludeSemantics(
+        child: Container(
       height: 74,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -219,163 +239,175 @@ class _OverviewTile extends StatelessWidget {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 }
 
-class _TrendingCard extends StatelessWidget {
+class _TrendingCard extends StatefulWidget {
   const _TrendingCard({
     required this.artist,
     required this.imageUrl,
+    required this.index,
+    required this.total,
   });
+
   final CompanyTrendingArtist artist;
   final String imageUrl;
+  final int index;
+  final int total;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'View ${artist.name} photo full screen',
-      child: ExcludeSemantics(
-        child: InkWell(
-      onTap: () => _openPhotoPreview(context, imageUrl),
-      borderRadius: BorderRadius.zero,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.05)),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: AppColors.blackCat.withValues(alpha: 0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.zero,
-                      child: _buildAnyImage(
-                        imageUrl,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        fallback: Container(
-                          width: double.infinity,
-                          color: AppColors.blackCat.withValues(alpha: 0.04),
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.image_not_supported_outlined),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.zero,
-                      child: _buildAnyImage(
-                        artist.avatarUrl,
-                        width: 26,
-                        height: 26,
-                        fit: BoxFit.cover,
-                        fallback: _fallbackAvatarChip(artist.name),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            artist.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      ),
-      ),
+  State<_TrendingCard> createState() => _TrendingCardState();
+}
+
+class _TrendingCardState extends State<_TrendingCard> {
+  final FocusNode _cardFocusNode = FocusNode(debugLabel: 'companyHomeArtistLook');
+  final GlobalKey _cardSemanticsKey = GlobalKey(
+    debugLabel: 'companyHomeArtistLookA11y',
+  );
+
+  @override
+  void dispose() {
+    _cardFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _restoreCardFocus() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final targetContext = _cardSemanticsKey.currentContext;
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.45,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_cardFocusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    targetContext.findRenderObject()?.sendSemanticsEvent(
+      FocusSemanticEvent(),
     );
   }
 
-  Future<void> _openPhotoPreview(BuildContext context, String imageSrc) async {
-    final image = imageSrc.trim();
+  Future<void> _openPhotoPreview() async {
+    final image = widget.imageUrl.trim();
     if (image.isEmpty) return;
+
     await showDialog<void>(
       context: context,
       barrierColor: AppColors.blackCat.withValues(alpha: 0.9),
-      builder: (_) => Dialog(
-        backgroundColor: AppColors.blackCat,
-        surfaceTintColor: AppColors.blackCat,
-        insetPadding: const EdgeInsets.all(12),
-        child: SizedBox.expand(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: InteractiveViewer(
-                  minScale: 0.8,
-                  maxScale: 4,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.zero,
-                    child: _buildAnyImage(
-                      image,
-                      fit: BoxFit.contain,
-                      fallback: const ColoredBox(
-                        color: AppColors.blackCat,
-                        child: Center(
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            color: AppColors.snow,
+      builder: (_) => _ArtistPhotoPreviewDialog(
+        imageSrc: image,
+        artistName: widget.artist.name,
+      ),
+    );
+
+    if (!mounted) return;
+    await _restoreCardFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final position = widget.index + 1;
+
+    return Semantics(
+      key: _cardSemanticsKey,
+      button: true,
+      label:
+          'Artist look by ${widget.artist.name}, photo $position of ${widget.total}',
+      hint: 'Double tap to view full screen',
+      onTap: _openPhotoPreview,
+      child: ExcludeSemantics(
+        child: InkWell(
+          focusNode: _cardFocusNode,
+          onTap: _openPhotoPreview,
+          borderRadius: BorderRadius.zero,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(
+                color: AppColors.blackCat.withValues(alpha: 0.05),
+              ),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: AppColors.blackCat.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.zero,
+                          child: _buildAnyImage(
+                            widget.imageUrl,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            fallback: Container(
+                              width: double.infinity,
+                              color: AppColors.blackCat.withValues(alpha: 0.04),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.image_not_supported_outlined,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Material(
-                  color: Colors.transparent,
-                  child: IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: AppColors.snow),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.blackCat.withValues(alpha: 0.65),
-                    ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.zero,
+                          child: _buildAnyImage(
+                            widget.artist.avatarUrl,
+                            width: 26,
+                            height: 26,
+                            fit: BoxFit.cover,
+                            fallback: _fallbackAvatarChip(widget.artist.name),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.artist.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -395,6 +427,166 @@ class _TrendingCard extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w700,
           color: AppColors.blackCat,
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtistPhotoPreviewDialog extends StatefulWidget {
+  const _ArtistPhotoPreviewDialog({
+    required this.imageSrc,
+    required this.artistName,
+  });
+
+  final String imageSrc;
+  final String artistName;
+
+  @override
+  State<_ArtistPhotoPreviewDialog> createState() =>
+      _ArtistPhotoPreviewDialogState();
+}
+
+class _ArtistPhotoPreviewDialogState extends State<_ArtistPhotoPreviewDialog> {
+  final FocusNode _closeFocusNode = FocusNode(
+    debugLabel: 'companyHomePhotoPreviewClose',
+  );
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'companyHomePhotoPreviewCloseA11y',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return;
+      await _focusClose();
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _focusClose() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final closeContext = _closeSemanticsKey.currentContext;
+    if (closeContext == null) return;
+
+    FocusScope.of(context).requestFocus(_closeFocusNode);
+    closeContext.findRenderObject()?.sendSemanticsEvent(
+      FocusSemanticEvent(),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _closeSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(FocusSemanticEvent());
+  }
+
+  void _close() => Navigator.of(context).pop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Artist photo preview',
+      child: Dialog(
+        backgroundColor: AppColors.blackCat,
+        surfaceTintColor: AppColors.blackCat,
+        insetPadding: const EdgeInsets.all(12),
+        child: Semantics(
+          container: true,
+          explicitChildNodes: true,
+          child: SizedBox.expand(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Semantics(
+                    sortKey: OrdinalSortKey(1),
+                    image: true,
+                    label: 'Artwork by ${widget.artistName}',
+                    hint: 'Zoomable image',
+                    child: ExcludeSemantics(
+                      child: InteractiveViewer(
+                        minScale: 0.8,
+                        maxScale: 4,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.zero,
+                          child: _buildAnyImage(
+                            widget.imageSrc,
+                            fit: BoxFit.contain,
+                            fallback: const ColoredBox(
+                              color: AppColors.blackCat,
+                              child: Center(
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  color: AppColors.snow,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Semantics(
+                    key: _closeSemanticsKey,
+                    sortKey: OrdinalSortKey(0),
+                    button: true,
+                    label: 'Close artist photo preview',
+                    hint: 'Double tap to close',
+                    onTap: _close,
+                    child: ExcludeSemantics(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: IconButton(
+                          focusNode: _closeFocusNode,
+                          tooltip: 'Close artist photo preview',
+                          onPressed: _close,
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColors.snow,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                AppColors.blackCat.withValues(alpha: 0.65),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 1,
+                  child: Semantics(
+                    sortKey: OrdinalSortKey(2),
+                    button: true,
+                    label: 'Close artist photo preview',
+                    onTap: _close,
+                    onDidGainAccessibilityFocus: _focusClose,
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

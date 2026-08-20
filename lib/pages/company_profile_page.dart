@@ -70,6 +70,18 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   Map<String, dynamic> _companyRowData = const <String, dynamic>{};
   String _profileImageUrl = '';
   bool _uploadingPhoto = false;
+  final FocusNode _logoUploadFocusNode = FocusNode(
+    debugLabel: 'companyProfileLogoUpload',
+  );
+  final GlobalKey _logoUploadSemanticsKey = GlobalKey(
+    debugLabel: 'companyProfileLogoUploadA11yKey',
+  );
+  final FocusNode _communicationPreferenceFocusNode = FocusNode(
+    debugLabel: 'companyCommunicationPreferenceTile',
+  );
+  final GlobalKey _communicationPreferenceSemanticsKey = GlobalKey(
+    debugLabel: 'companyCommunicationPreferenceTileA11yKey',
+  );
 
   @override
   void initState() {
@@ -81,6 +93,58 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     _profileImageUrl = widget.profileImageUrl.trim();
     unawaited(_hydrateProfileImageUrl());
     unawaited(_hydrateDraftsFromCompanyRow());
+  }
+
+  @override
+  void dispose() {
+    _logoUploadFocusNode.dispose();
+    _communicationPreferenceFocusNode.dispose();
+    super.dispose();
+  }
+
+  // The OS image picker steals both Flutter input focus and Android
+  // accessibility focus. Restore both so TalkBack returns to the same
+  // Change company logo control instead of jumping elsewhere on the page.
+  void _restoreLogoUploadFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_logoUploadFocusNode);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      _logoUploadSemanticsKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  Future<void> _restoreCommunicationPreferenceFocus() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final targetContext = _communicationPreferenceSemanticsKey.currentContext;
+    if (targetContext == null) return;
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.45,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_communicationPreferenceFocusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    targetContext.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _communicationPreferenceSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
   }
 
   @override
@@ -597,6 +661,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     final updated = await showModalBottomSheet<CompanyBusinessInfoDraft>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCompanyBusinessInfoPopup(initial: _businessInfo),
     );
@@ -621,6 +686,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     final updated = await showModalBottomSheet<CompanyBillingDraft>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCompanyBillingPopup(initial: _billingInfo),
     );
@@ -766,6 +832,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     final updated = await showModalBottomSheet<CompanyAddressesDraft>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCompanyAddressesPopup(initial: _addressInfo),
     );
@@ -834,12 +901,17 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     final updated = await showModalBottomSheet<CompanyCommunicationPreferences>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CompanyCommunicationPreferencesPopup(
         initial: _communicationPreferences,
       ),
     );
-    if (updated == null) return;
+
+    if (updated == null) {
+      await _restoreCommunicationPreferenceFocus();
+      return;
+    }
 
     final payload = updated.toMap();
     final currentProfile = _asMap(_companyRowData['profile']);
@@ -868,11 +940,25 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to save communication preferences: $e')),
       );
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        'Failed to save communication preferences.',
+        Directionality.of(context),
+      );
+      await _restoreCommunicationPreferenceFocus();
       return;
     }
     if (!mounted) return;
     setState(() => _communicationPreferences = updated);
     await _hydrateDraftsFromCompanyRow();
+    if (!mounted) return;
+
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Communication preferences saved.',
+      Directionality.of(context),
+    );
+    await _restoreCommunicationPreferenceFocus();
   }
 
   Future<void> _pickAndUploadProfilePhoto() async {
@@ -887,13 +973,20 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         maxWidth: 960,
         maxHeight: 960,
       );
-      if (picked == null) return;
+      if (picked == null) {
+        _restoreLogoUploadFocus();
+        return;
+      }
       final bytes = await picked.readAsBytes();
-      if (bytes.isEmpty) return;
+      if (bytes.isEmpty) {
+        _restoreLogoUploadFocus();
+        return;
+      }
       final nextUrl = await _uploadCompanyProfilePhoto(_uid, bytes);
       await _persistProfilePhoto(nextUrl);
       if (!mounted) return;
       setState(() => _profileImageUrl = nextUrl);
+      _restoreLogoUploadFocus();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Profile photo updated.')));
@@ -902,6 +995,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       final msg = e is TimeoutException
           ? 'Upload timed out. Please retry with a stable connection.'
           : 'Failed to upload photo: $e';
+      _restoreLogoUploadFocus();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _uploadingPhoto = false);
@@ -1051,14 +1145,14 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
           autoFocusNotifications: widget.autoFocusNotifications,
           notificationFocusRequestKey: widget.notificationFocusRequestKey,
           trailing: IconButton(
-            onPressed: () => widget.onClose?.call(),
+            onPressed: widget.onClose,
             icon: const Icon(
               Icons.close_rounded,
               size: 26,
               color: AppColors.blackCat,
             ),
-            splashRadius: 20,
-            tooltip: 'Close',
+            splashRadius: 24,
+            tooltip: 'Close company profile',
           ),
           onLogout: widget.onLogout,
         ),
@@ -1077,45 +1171,62 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: _safeProfileAvatar(
-                          imageUrl: _profileImageUrl,
-                          displayName: companyName,
+                        child: ExcludeSemantics(
+                          child: _safeProfileAvatar(
+                            imageUrl: _profileImageUrl,
+                            displayName: companyName,
+                          ),
                         ),
                       ),
                       Positioned(
                         right: 0,
                         bottom: 0,
                         child: Material(
-                          color: AppColors.snow,
-                          borderRadius: BorderRadius.zero,
+                          color: Colors.transparent,
                           child: Semantics(
+                            key: _logoUploadSemanticsKey,
                             button: true,
-                            label: 'Change company logo',
+                            enabled: !_uploadingPhoto,
+                            label: _uploadingPhoto
+                                ? 'Changing company logo'
+                                : 'Change company logo',
+                            hint: _uploadingPhoto
+                                ? null
+                                : 'Double tap to choose a company logo',
                             onTap: _uploadingPhoto
                                 ? null
                                 : _pickAndUploadProfilePhoto,
                             child: ExcludeSemantics(
                               child: InkWell(
+                                focusNode: _logoUploadFocusNode,
                                 onTap: _uploadingPhoto
                                     ? null
                                     : _pickAndUploadProfilePhoto,
-                                child: Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: AppColors.blackCatBorderLight,
+                                child: SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: Container(
+                                      width: 24,
+                                      height: 24,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.snow,
+                                        border: Border.all(
+                                          color: AppColors.blackCatBorderLight,
+                                        ),
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      child: _uploadingPhoto
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(5),
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 1.8,
+                                              ),
+                                            )
+                                          : const Icon(Icons.edit, size: 14),
                                     ),
-                                    borderRadius: BorderRadius.zero,
                                   ),
-                                  child: _uploadingPhoto
-                                      ? const Padding(
-                                          padding: EdgeInsets.all(5),
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 1.8,
-                                          ),
-                                        )
-                                      : const Icon(Icons.edit, size: 14),
                                 ),
                               ),
                             ),
@@ -1174,6 +1285,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
               icon: Icons.notifications_active_outlined,
               title: 'Communication Preference',
               onTap: _editCommunicationPreferences,
+              focusNode: _communicationPreferenceFocusNode,
+              semanticsKey: _communicationPreferenceSemanticsKey,
             ),
 
             const SizedBox(height: 22),
@@ -1253,19 +1366,27 @@ class _RowChevronTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
+    this.focusNode,
+    this.semanticsKey,
   });
 
   final IconData icon;
   final String title;
   final VoidCallback onTap;
+  final FocusNode? focusNode;
+  final GlobalKey? semanticsKey;
 
   @override
   Widget build(BuildContext context) {
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        onTap: onTap,
+    return Semantics(
+      key: semanticsKey,
+      button: true,
+      label: title,
+      hint: 'Double tap to open $title',
+      onTap: onTap,
+      child: ExcludeSemantics(
         child: InkWell(
+          focusNode: focusNode,
           onTap: onTap,
           borderRadius: BorderRadius.zero,
           child: Container(
@@ -1367,85 +1488,209 @@ class _CompanyCommunicationPreferencesPopupState
   late bool _emailNotifications;
   late bool _smsNotifications;
 
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _closeButtonFocusNode = FocusNode(
+    debugLabel: 'companyCommunicationPreferencesClose',
+  );
+  final GlobalKey _closeButtonKey = GlobalKey(
+    debugLabel: 'companyCommunicationPreferencesCloseA11yKey',
+  );
+
   @override
   void initState() {
     super.initState();
     _emailNotifications = widget.initial.emailNotifications;
     _smsNotifications = widget.initial.smsNotifications;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      if (!mounted) return;
+      await _moveAccessibilityFocusToClose(scrollToTop: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _closeButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _moveAccessibilityFocusToClose({
+    bool scrollToTop = false,
+  }) async {
+    if (!mounted) return;
+
+    if (scrollToTop && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final closeContext = _closeButtonKey.currentContext;
+    if (closeContext == null) return;
+
+    await Scrollable.ensureVisible(
+      closeContext,
+      alignment: 0,
+      duration: Duration.zero,
+    );
+    if (!mounted) return;
+
+    FocusScope.of(context).requestFocus(_closeButtonFocusNode);
+    closeContext.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _closeButtonKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  void _close() => Navigator.pop(context);
+
+  void _save() {
+    Navigator.pop(
+      context,
+      CompanyCommunicationPreferences(
+        emailNotifications: _emailNotifications,
+        smsNotifications: _smsNotifications,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
       label: 'Communication preferences',
       child: SafeArea(
+        top: false,
         child: Container(
+          padding: EdgeInsets.only(bottom: bottomInset),
           decoration: const BoxDecoration(color: AppColors.snow),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Center(
-                      child: Text(
-                        'Communication Preferences',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.blackCat,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  sortKey: OrdinalSortKey(0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          sortKey: OrdinalSortKey(1),
+                          header: true,
+                          label: 'Communication Preferences',
+                          child: const ExcludeSemantics(
+                            child: Center(
+                              child: Text(
+                                'Communication Preferences',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      Semantics(
+                        key: _closeButtonKey,
+                        sortKey: OrdinalSortKey(0),
+                        button: true,
+                        label: 'Close communication preferences',
+                        hint: 'Double tap to close without saving',
+                        onTap: _close,
+                        child: ExcludeSemantics(
+                          child: IconButton(
+                            focusNode: _closeButtonFocusNode,
+                            tooltip: 'Close communication preferences',
+                            onPressed: _close,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    tooltip: 'Close communication preferences',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _toggleTile(
-                title: 'Email Notifications',
-                value: _emailNotifications,
-                onChanged: (value) =>
-                    setState(() => _emailNotifications = value),
-              ),
-              _toggleTile(
-                title: 'SMS Notifications',
-                value: _smsNotifications,
-                onChanged: (value) =>
-                    setState(() => _smsNotifications = value),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat,
-                    foregroundColor: AppColors.snow,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                  ),
-                  onPressed: () => Navigator.pop(
-                    context,
-                    CompanyCommunicationPreferences(
-                      emailNotifications: _emailNotifications,
-                      smsNotifications: _smsNotifications,
-                    ),
-                  ),
-                  child: const Text('Save'),
                 ),
-              ),
-            ],
+                Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  sortKey: OrdinalSortKey(1),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      _toggleTile(
+                        title: 'Email Notifications',
+                        value: _emailNotifications,
+                        onChanged: (value) =>
+                            setState(() => _emailNotifications = value),
+                      ),
+                      _toggleTile(
+                        title: 'SMS Notifications',
+                        value: _smsNotifications,
+                        onChanged: (value) =>
+                            setState(() => _smsNotifications = value),
+                      ),
+                      const SizedBox(height: 10),
+                      Semantics(
+                        button: true,
+                        label: 'Save communication preferences',
+                        hint: 'Double tap to save',
+                        onTap: _save,
+                        child: ExcludeSemantics(
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed: _save,
+                              child: const Text('Save'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Semantics(
+                  sortKey: OrdinalSortKey(2),
+                  button: true,
+                  label: 'Close communication preferences',
+                  onTap: _close,
+                  onDidGainAccessibilityFocus: () {
+                    _moveAccessibilityFocusToClose(scrollToTop: true);
+                  },
+                  child: const SizedBox(
+                    height: 1,
+                    width: double.infinity,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1461,23 +1706,27 @@ class _CompanyCommunicationPreferencesPopupState
       onChanged(next);
       SemanticsService.sendAnnouncement(
         View.of(context),
-        '$title toggle ${next ? 'on' : 'off'}',
+        '$title ${next ? 'on' : 'off'}',
         Directionality.of(context),
       );
     }
 
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        label: '$title toggle ${value ? 'on' : 'off'}',
+    return Semantics(
+      button: true,
+      label: title,
+      value: value ? 'On' : 'Off',
+      hint: 'Double tap to turn ${value ? 'off' : 'on'}',
+      onTap: () => handleChanged(!value),
+      child: ExcludeSemantics(
         child: InkWell(
           onTap: () => handleChanged(!value),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ExcludeSemantics(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
                     child: Text(
                       title,
                       style: const TextStyle(
@@ -1487,15 +1736,13 @@ class _CompanyCommunicationPreferencesPopupState
                       ),
                     ),
                   ),
-                ),
-                ExcludeSemantics(
-                  child: Switch(
+                  Switch(
                     value: value,
                     onChanged: handleChanged,
                     activeThumbColor: AppColors.blackCat,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1645,8 +1892,11 @@ class EditCompanyBillingPopup extends StatefulWidget {
 }
 
 class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
+  final ScrollController _scrollController = ScrollController();
+
   late String _method;
   late bool _saveForFutureUse;
+
   late final TextEditingController _nameOnCardCtrl;
   late final TextEditingController _cardNumberCtrl;
   late final TextEditingController _expiryCtrl;
@@ -1656,6 +1906,54 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
   late final TextEditingController _achAccountCtrl;
   late final TextEditingController _applePayEmailCtrl;
   late final TextEditingController _googlePayEmailCtrl;
+
+  final FocusNode _nameOnCardFocusNode = FocusNode(
+    debugLabel: 'billingNameOnCard',
+  );
+  final FocusNode _cardNumberFocusNode = FocusNode(
+    debugLabel: 'billingCardNumber',
+  );
+  final FocusNode _expiryFocusNode = FocusNode(debugLabel: 'billingExpiry');
+  final FocusNode _cvvFocusNode = FocusNode(debugLabel: 'billingCvv');
+  final FocusNode _achAccountNameFocusNode = FocusNode(
+    debugLabel: 'billingAchAccountHolderName',
+  );
+  final FocusNode _achRoutingFocusNode = FocusNode(
+    debugLabel: 'billingAchRoutingNumber',
+  );
+  final FocusNode _achAccountFocusNode = FocusNode(
+    debugLabel: 'billingAchAccountNumber',
+  );
+  final FocusNode _applePayEmailFocusNode = FocusNode(
+    debugLabel: 'billingApplePayEmail',
+  );
+  final FocusNode _googlePayEmailFocusNode = FocusNode(
+    debugLabel: 'billingGooglePayEmail',
+  );
+
+  final GlobalKey _nameOnCardKey = GlobalKey(
+    debugLabel: 'billingNameOnCardA11y',
+  );
+  final GlobalKey _cardNumberKey = GlobalKey(
+    debugLabel: 'billingCardNumberA11y',
+  );
+  final GlobalKey _expiryKey = GlobalKey(debugLabel: 'billingExpiryA11y');
+  final GlobalKey _cvvKey = GlobalKey(debugLabel: 'billingCvvA11y');
+  final GlobalKey _achAccountNameKey = GlobalKey(
+    debugLabel: 'billingAchAccountHolderNameA11y',
+  );
+  final GlobalKey _achRoutingKey = GlobalKey(
+    debugLabel: 'billingAchRoutingNumberA11y',
+  );
+  final GlobalKey _achAccountKey = GlobalKey(
+    debugLabel: 'billingAchAccountNumberA11y',
+  );
+  final GlobalKey _applePayEmailKey = GlobalKey(
+    debugLabel: 'billingApplePayEmailA11y',
+  );
+  final GlobalKey _googlePayEmailKey = GlobalKey(
+    debugLabel: 'billingGooglePayEmailA11y',
+  );
 
   static const List<String> _methods = [
     'Credit/Debit Card',
@@ -1667,7 +1965,9 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
   @override
   void initState() {
     super.initState();
-    _method = widget.initial.method;
+    _method = _methods.contains(widget.initial.method)
+        ? widget.initial.method
+        : _methods.first;
     _saveForFutureUse = widget.initial.saveForFutureUse;
     _nameOnCardCtrl = TextEditingController(text: widget.initial.nameOnCard);
     _cardNumberCtrl = TextEditingController(text: widget.initial.cardNumber);
@@ -1692,6 +1992,7 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _nameOnCardCtrl.dispose();
     _cardNumberCtrl.dispose();
     _expiryCtrl.dispose();
@@ -1701,6 +2002,16 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
     _achAccountCtrl.dispose();
     _applePayEmailCtrl.dispose();
     _googlePayEmailCtrl.dispose();
+
+    _nameOnCardFocusNode.dispose();
+    _cardNumberFocusNode.dispose();
+    _expiryFocusNode.dispose();
+    _cvvFocusNode.dispose();
+    _achAccountNameFocusNode.dispose();
+    _achRoutingFocusNode.dispose();
+    _achAccountFocusNode.dispose();
+    _applePayEmailFocusNode.dispose();
+    _googlePayEmailFocusNode.dispose();
     super.dispose();
   }
 
@@ -1734,24 +2045,197 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
     );
   }
 
+  String _digitsForSpeech(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return raw.trim();
+    return digits.split('').join(' ');
+  }
+
+  String _expiryForSpeech(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '';
+    final buffer = StringBuffer();
+    for (var i = 0; i < value.length; i++) {
+      final ch = value[i];
+      if (RegExp(r'[0-9]').hasMatch(ch)) {
+        if (buffer.isNotEmpty) buffer.write(' ');
+        buffer.write(ch);
+      } else if (ch == '/') {
+        buffer.write(' slash');
+      } else if (ch.trim().isNotEmpty) {
+        buffer.write(' $ch');
+      }
+    }
+    return buffer.toString().trim();
+  }
+
+  Widget _billingField({
+    required String label,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required GlobalKey semanticKey,
+    TextInputType? keyboardType,
+    bool speakDigits = false,
+    bool speakExpiry = false,
+  }) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final raw = value.text.trim();
+        final spokenValue = raw.isEmpty
+            ? 'Not entered'
+            : speakDigits
+            ? _digitsForSpeech(raw)
+            : speakExpiry
+            ? _expiryForSpeech(raw)
+            : raw;
+
+        return Semantics(
+          key: semanticKey,
+          container: true,
+          textField: true,
+          isRequired: true,
+          label: label,
+          value: spokenValue,
+          hint: 'Double tap to edit.',
+          onTap: () => FocusScope.of(context).requestFocus(focusNode),
+          child: ExcludeSemantics(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              keyboardType: keyboardType,
+              style: const TextStyle(fontSize: 11),
+              decoration: _dec(label),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _selectMethod(String method) {
+    if (_method == method) return;
+    setState(() => _method = method);
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      '$method selected',
+      Directionality.of(context),
+    );
+  }
+
+  Future<void> _focusInvalidField({
+    required GlobalKey semanticKey,
+    required FocusNode focusNode,
+    required String announcement,
+  }) async {
+    FocusScope.of(context).requestFocus(focusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    semanticKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      announcement,
+      Directionality.of(context),
+    );
+  }
+
   bool _validate() {
     if (_method == 'Credit/Debit Card') {
-      if (_nameOnCardCtrl.text.trim().isEmpty ||
-          _cardNumberCtrl.text.trim().isEmpty ||
-          _expiryCtrl.text.trim().isEmpty ||
-          _cvvCtrl.text.trim().isEmpty) {
+      if (_nameOnCardCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _nameOnCardKey,
+            focusNode: _nameOnCardFocusNode,
+            announcement: 'Name on Card is required.',
+          ),
+        );
+        return false;
+      }
+      if (_cardNumberCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _cardNumberKey,
+            focusNode: _cardNumberFocusNode,
+            announcement: 'Card Number is required.',
+          ),
+        );
+        return false;
+      }
+      if (_expiryCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _expiryKey,
+            focusNode: _expiryFocusNode,
+            announcement: 'Expiry date is required.',
+          ),
+        );
+        return false;
+      }
+      if (_cvvCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _cvvKey,
+            focusNode: _cvvFocusNode,
+            announcement: 'CVV is required.',
+          ),
+        );
         return false;
       }
     } else if (_method == 'ACH Transfer') {
-      if (_achAccountNameCtrl.text.trim().isEmpty ||
-          _achRoutingCtrl.text.trim().isEmpty ||
-          _achAccountCtrl.text.trim().isEmpty) {
+      if (_achAccountNameCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _achAccountNameKey,
+            focusNode: _achAccountNameFocusNode,
+            announcement: 'Account Holder Name is required.',
+          ),
+        );
+        return false;
+      }
+      if (_achRoutingCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _achRoutingKey,
+            focusNode: _achRoutingFocusNode,
+            announcement: 'Routing Number is required.',
+          ),
+        );
+        return false;
+      }
+      if (_achAccountCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _achAccountKey,
+            focusNode: _achAccountFocusNode,
+            announcement: 'Account Number is required.',
+          ),
+        );
         return false;
       }
     } else if (_method == 'Apple Pay') {
-      if (_applePayEmailCtrl.text.trim().isEmpty) return false;
+      if (_applePayEmailCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _applePayEmailKey,
+            focusNode: _applePayEmailFocusNode,
+            announcement: 'Apple Pay Email is required.',
+          ),
+        );
+        return false;
+      }
     } else if (_method == 'Google Pay') {
-      if (_googlePayEmailCtrl.text.trim().isEmpty) return false;
+      if (_googlePayEmailCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusInvalidField(
+            semanticKey: _googlePayEmailKey,
+            focusNode: _googlePayEmailFocusNode,
+            announcement: 'Google Pay Email is required.',
+          ),
+        );
+        return false;
+      }
     }
     return true;
   }
@@ -1765,6 +2249,7 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
       );
       return;
     }
+
     Navigator.pop(
       context,
       widget.initial.copyWith(
@@ -1788,18 +2273,31 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
     return _CompanyPopupScaffold(
       title: 'Billing',
       subtitle: 'Select payment method and update details.',
+      scrollController: _scrollController,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Semantics(
+            header: true,
+            child: const Text(
+              'Payment Method',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           RadioGroup<String>(
             groupValue: _method,
             onChanged: (value) {
               if (value == null) return;
-              setState(() => _method = value);
+              _selectMethod(value);
             },
             child: Column(
-              children: _methods.map((m) {
-                final selected = _method == m;
+              children: _methods.map((method) {
+                final selected = _method == method;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Column(
@@ -1807,20 +2305,25 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                     children: [
                       Semantics(
                         button: true,
-                        label: m,
+                        selected: selected,
+                        label: '$method payment method',
+                        hint: selected
+                            ? 'Selected.'
+                            : 'Double tap to select $method.',
+                        onTap: () => _selectMethod(method),
                         child: ExcludeSemantics(
                           child: InkWell(
-                            onTap: () => setState(() => _method = m),
+                            onTap: () => _selectMethod(method),
                             borderRadius: BorderRadius.zero,
                             child: Row(
                               children: [
                                 Radio<String>(
-                                  value: m,
+                                  value: method,
                                   activeColor: AppColors.blackCat,
                                 ),
                                 Expanded(
                                   child: Text(
-                                    m,
+                                    method,
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
@@ -1838,70 +2341,91 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
                       ),
                       if (selected) ...[
                         const SizedBox(height: 8),
-                        if (m == 'Credit/Debit Card') ...[
-                          TextField(
+                        if (method == 'Credit/Debit Card') ...[
+                          _billingField(
+                            label: 'Name on Card',
                             controller: _nameOnCardCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Name on Card'),
+                            focusNode: _nameOnCardFocusNode,
+                            semanticKey: _nameOnCardKey,
+                            keyboardType: TextInputType.name,
                           ),
                           const SizedBox(height: 8),
-                          TextField(
+                          _billingField(
+                            label: 'Card Number',
                             controller: _cardNumberCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Card Number'),
+                            focusNode: _cardNumberFocusNode,
+                            semanticKey: _cardNumberKey,
+                            keyboardType: TextInputType.number,
+                            speakDigits: true,
                           ),
                           const SizedBox(height: 8),
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
+                                child: _billingField(
+                                  label: 'Expiry MM slash YY',
                                   controller: _expiryCtrl,
-                                  style: const TextStyle(fontSize: 11),
-                                  decoration: _dec('Expiry MM/YY'),
+                                  focusNode: _expiryFocusNode,
+                                  semanticKey: _expiryKey,
+                                  keyboardType: TextInputType.number,
+                                  speakExpiry: true,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: TextField(
+                                child: _billingField(
+                                  label: 'CVV',
                                   controller: _cvvCtrl,
-                                  style: const TextStyle(fontSize: 11),
-                                  decoration: _dec('CVV'),
+                                  focusNode: _cvvFocusNode,
+                                  semanticKey: _cvvKey,
+                                  keyboardType: TextInputType.number,
+                                  speakDigits: true,
                                 ),
                               ),
                             ],
                           ),
                         ],
-                        if (m == 'ACH Transfer') ...[
-                          TextField(
+                        if (method == 'ACH Transfer') ...[
+                          _billingField(
+                            label: 'Account Holder Name',
                             controller: _achAccountNameCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Account Holder Name'),
+                            focusNode: _achAccountNameFocusNode,
+                            semanticKey: _achAccountNameKey,
+                            keyboardType: TextInputType.name,
                           ),
                           const SizedBox(height: 8),
-                          TextField(
+                          _billingField(
+                            label: 'Routing Number',
                             controller: _achRoutingCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Routing Number'),
+                            focusNode: _achRoutingFocusNode,
+                            semanticKey: _achRoutingKey,
+                            keyboardType: TextInputType.number,
+                            speakDigits: true,
                           ),
                           const SizedBox(height: 8),
-                          TextField(
+                          _billingField(
+                            label: 'Account Number',
                             controller: _achAccountCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Account Number'),
+                            focusNode: _achAccountFocusNode,
+                            semanticKey: _achAccountKey,
+                            keyboardType: TextInputType.number,
+                            speakDigits: true,
                           ),
                         ],
-                        if (m == 'Apple Pay')
-                          TextField(
+                        if (method == 'Apple Pay')
+                          _billingField(
+                            label: 'Apple Pay Email',
                             controller: _applePayEmailCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Apple Pay Email'),
+                            focusNode: _applePayEmailFocusNode,
+                            semanticKey: _applePayEmailKey,
                             keyboardType: TextInputType.emailAddress,
                           ),
-                        if (m == 'Google Pay')
-                          TextField(
+                        if (method == 'Google Pay')
+                          _billingField(
+                            label: 'Google Pay Email',
                             controller: _googlePayEmailCtrl,
-                            style: const TextStyle(fontSize: 11),
-                            decoration: _dec('Google Pay Email'),
+                            focusNode: _googlePayEmailFocusNode,
+                            semanticKey: _googlePayEmailKey,
                             keyboardType: TextInputType.emailAddress,
                           ),
                         const SizedBox(height: 8),
@@ -1912,19 +2436,43 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
               }).toList(),
             ),
           ),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            value: _saveForFutureUse,
-            onChanged: (v) => setState(() => _saveForFutureUse = v ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            activeColor: AppColors.blackCat,
-            title: const Text(
-              'Save for future use',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.blackCat,
+          Semantics(
+            button: true,
+            label:
+                'Save for future use toggle, ${_saveForFutureUse ? 'on' : 'off'}',
+            hint: 'Double tap to toggle.',
+            onTap: () {
+              setState(() => _saveForFutureUse = !_saveForFutureUse);
+              SemanticsService.sendAnnouncement(
+                View.of(context),
+                'Save for future use toggle ${_saveForFutureUse ? 'on' : 'off'}',
+                Directionality.of(context),
+              );
+            },
+            child: ExcludeSemantics(
+              child: CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _saveForFutureUse,
+                onChanged: (value) {
+                  final next = value ?? false;
+                  setState(() => _saveForFutureUse = next);
+                  SemanticsService.sendAnnouncement(
+                    View.of(context),
+                    'Save for future use toggle ${next ? 'on' : 'off'}',
+                    Directionality.of(context),
+                  );
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: AppColors.blackCat,
+                title: const Text(
+                  'Save for future use',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1935,7 +2483,6 @@ class _EditCompanyBillingPopupState extends State<EditCompanyBillingPopup> {
     );
   }
 }
-
 class EditCompanyAddressesPopup extends StatefulWidget {
   const EditCompanyAddressesPopup({super.key, required this.initial});
   final CompanyAddressesDraft initial;
@@ -1946,6 +2493,8 @@ class EditCompanyAddressesPopup extends StatefulWidget {
 }
 
 class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
+  final ScrollController _scrollController = ScrollController();
+
   late final TextEditingController _billingStreetCtrl;
   late final TextEditingController _billingCityCtrl;
   late final TextEditingController _billingStateCtrl;
@@ -1957,6 +2506,56 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
   late final TextEditingController _shippingStateCtrl;
   late final TextEditingController _shippingZipCtrl;
   late final TextEditingController _shippingCountryCtrl;
+
+  final FocusNode _billingStreetFocusNode = FocusNode(
+    debugLabel: 'billingStreetAddress',
+  );
+  final FocusNode _billingCityFocusNode = FocusNode(
+    debugLabel: 'billingCity',
+  );
+  final FocusNode _billingZipFocusNode = FocusNode(
+    debugLabel: 'billingZip',
+  );
+  final FocusNode _shippingStreetFocusNode = FocusNode(
+    debugLabel: 'shippingStreetAddress',
+  );
+  final FocusNode _shippingCityFocusNode = FocusNode(
+    debugLabel: 'shippingCity',
+  );
+  final FocusNode _shippingZipFocusNode = FocusNode(
+    debugLabel: 'shippingZip',
+  );
+
+  final GlobalKey _billingStreetKey = GlobalKey(
+    debugLabel: 'billingStreetAddressA11y',
+  );
+  final GlobalKey _billingCityKey = GlobalKey(
+    debugLabel: 'billingCityA11y',
+  );
+  final GlobalKey _billingStateKey = GlobalKey(
+    debugLabel: 'billingStateA11y',
+  );
+  final GlobalKey _billingZipKey = GlobalKey(
+    debugLabel: 'billingZipA11y',
+  );
+  final GlobalKey _billingCountryKey = GlobalKey(
+    debugLabel: 'billingCountryA11y',
+  );
+  final GlobalKey _shippingStreetKey = GlobalKey(
+    debugLabel: 'shippingStreetAddressA11y',
+  );
+  final GlobalKey _shippingCityKey = GlobalKey(
+    debugLabel: 'shippingCityA11y',
+  );
+  final GlobalKey _shippingStateKey = GlobalKey(
+    debugLabel: 'shippingStateA11y',
+  );
+  final GlobalKey _shippingZipKey = GlobalKey(
+    debugLabel: 'shippingZipA11y',
+  );
+  final GlobalKey _shippingCountryKey = GlobalKey(
+    debugLabel: 'shippingCountryA11y',
+  );
 
   @override
   void initState() {
@@ -1990,6 +2589,7 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _billingStreetCtrl.dispose();
     _billingCityCtrl.dispose();
     _billingStateCtrl.dispose();
@@ -2000,16 +2600,18 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
     _shippingStateCtrl.dispose();
     _shippingZipCtrl.dispose();
     _shippingCountryCtrl.dispose();
+
+    _billingStreetFocusNode.dispose();
+    _billingCityFocusNode.dispose();
+    _billingZipFocusNode.dispose();
+    _shippingStreetFocusNode.dispose();
+    _shippingCityFocusNode.dispose();
+    _shippingZipFocusNode.dispose();
     super.dispose();
   }
 
-  InputDecoration _dec(String hint) {
+  InputDecoration _addressDecoration() {
     return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(
-        fontSize: 12,
-        color: Colors.black.withValues(alpha: 0.35),
-      ),
       isDense: true,
       filled: true,
       fillColor: AppColors.snow,
@@ -2033,22 +2635,478 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
     );
   }
 
+  Widget _addressTextField({
+    required String label,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required GlobalKey semanticKey,
+    TextInputType? keyboardType,
+  }) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final currentValue = value.text.trim();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Semantics(
+              key: semanticKey,
+              container: true,
+              textField: true,
+              isRequired: true,
+              label: label,
+              value: currentValue.isEmpty ? 'Not entered' : currentValue,
+              hint: 'Double tap to edit.',
+              onTap: () => FocusScope.of(context).requestFocus(focusNode),
+              child: ExcludeSemantics(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  style: const TextStyle(fontSize: 11),
+                  keyboardType: keyboardType,
+                  decoration: _addressDecoration(),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _restoreAccessibilityFocus(GlobalKey semanticKey) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    semanticKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  Future<void> _showAccessibleChoicePicker({
+    required String title,
+    required List<String> items,
+    required String currentValue,
+    required GlobalKey returnFocusKey,
+    required ValueChanged<String> onSelected,
+  }) async {
+    final searchController = TextEditingController();
+    final closeFocusNode = FocusNode(debugLabel: '${title}PickerClose');
+    final closeKey = GlobalKey(debugLabel: '${title}PickerCloseA11y');
+    var query = '';
+    var initialFocusSent = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      requestFocus: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final filtered = normalizedQuery.isEmpty
+                ? items
+                : items
+                      .where(
+                        (item) => item.toLowerCase().contains(normalizedQuery),
+                      )
+                      .toList();
+
+            if (!initialFocusSent) {
+              initialFocusSent = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!sheetContext.mounted) return;
+                FocusScope.of(sheetContext).requestFocus(closeFocusNode);
+                await WidgetsBinding.instance.endOfFrame;
+                if (!sheetContext.mounted) return;
+                closeKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+                  const FocusSemanticEvent(),
+                );
+              });
+            }
+
+            return Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              explicitChildNodes: true,
+              label: 'Select $title',
+              child: SafeArea(
+                child: Container(
+                  height: MediaQuery.of(sheetContext).size.height * 0.72,
+                  decoration: const BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Semantics(
+                              header: true,
+                              child: Text(
+                                'Select $title',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Semantics(
+                            key: closeKey,
+                            button: true,
+                            label: 'Close $title selector',
+                            hint: 'Double tap to close.',
+                            onTap: () => Navigator.pop(sheetContext),
+                            child: ExcludeSemantics(
+                              child: IconButton(
+                                focusNode: closeFocusNode,
+                                tooltip: 'Close $title selector',
+                                onPressed: () => Navigator.pop(sheetContext),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Semantics(
+                        textField: true,
+                        label: 'Search $title',
+                        child: TextField(
+                          controller: searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search $title',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            border: const OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onChanged: (value) {
+                            setSheetState(() => query = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? Semantics(
+                                label: 'No matching $title options',
+                                child: Center(
+                                  child: Text('No matching $title options'),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final item = filtered[index];
+                                  final selected = item == currentValue;
+                                  return Semantics(
+                                    button: true,
+                                    selected: selected,
+                                    label: item,
+                                    hint: selected
+                                        ? 'Currently selected. Double tap to keep this selection.'
+                                        : 'Double tap to select.',
+                                    onTap: () {
+                                      onSelected(item);
+                                      Navigator.pop(sheetContext);
+                                    },
+                                    child: ExcludeSemantics(
+                                      child: ListTile(
+                                        title: Text(item),
+                                        trailing: selected
+                                            ? const Icon(Icons.check_rounded)
+                                            : null,
+                                        onTap: () {
+                                          onSelected(item);
+                                          Navigator.pop(sheetContext);
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    searchController.dispose();
+    closeFocusNode.dispose();
+    await _restoreAccessibilityFocus(returnFocusKey);
+  }
+
+  Widget _accessibleDropdown({
+    required String label,
+    required TextEditingController controller,
+    required List<String> items,
+    required GlobalKey semanticKey,
+  }) {
+    final value = controller.text.trim();
+
+    void updateValue(String selected) {
+      if (!mounted) return;
+      setState(() => controller.text = selected);
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        '$label selected $selected',
+        Directionality.of(context),
+      );
+    }
+
+    return Semantics(
+      key: semanticKey,
+      container: true,
+      button: true,
+      isRequired: true,
+      label: label,
+      value: value.isEmpty ? 'Not selected' : value,
+      hint: 'Double tap to select $label.',
+      onTap: () => _showAccessibleChoicePicker(
+        title: label,
+        items: items,
+        currentValue: value,
+        returnFocusKey: semanticKey,
+        onSelected: updateValue,
+      ),
+      child: ExcludeSemantics(
+        child: SearchableDropdownField(
+          label: label,
+          value: value.isEmpty ? null : value,
+          items: items,
+          fillColor: AppColors.snow,
+          borderColor: AppColors.blackCatBorderLight,
+          onChanged: updateValue,
+        ),
+      ),
+    );
+  }
+
+  void _setShippingSameAsBilling(bool value) {
+    setState(() => _shippingSameAsBilling = value);
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Shipping address same as billing address toggle ${value ? 'on' : 'off'}',
+      Directionality.of(context),
+    );
+  }
+
+  Widget _shippingSameAsBillingToggle() {
+    return Semantics(
+      container: true,
+      button: true,
+      label:
+          'Shipping address same as billing address toggle, ${_shippingSameAsBilling ? 'on' : 'off'}',
+      hint: _shippingSameAsBilling
+          ? 'Double tap to enter a different shipping address.'
+          : 'Double tap to use the billing address for shipping.',
+      onTap: () => _setShippingSameAsBilling(!_shippingSameAsBilling),
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Is shipping address same as billing address',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  color: Colors.black.withValues(alpha: 0.75),
+                ),
+              ),
+            ),
+            Transform.scale(
+              scale: 0.82,
+              child: Switch(
+                value: _shippingSameAsBilling,
+                activeThumbColor: AppColors.blackCat,
+                inactiveThumbColor: AppColors.blackCatLight,
+                inactiveTrackColor: AppColors.blackCatLight.withValues(
+                  alpha: 0.35,
+                ),
+                onChanged: _setShippingSameAsBilling,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _focusTextField({
+    required GlobalKey semanticKey,
+    required FocusNode focusNode,
+    required String announcement,
+  }) async {
+    final fieldContext = semanticKey.currentContext;
+    if (fieldContext != null) {
+      await Scrollable.ensureVisible(
+        fieldContext,
+        alignment: 0.25,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(focusNode);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    semanticKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      announcement,
+      Directionality.of(context),
+    );
+  }
+
+  Future<void> _focusSemanticControl({
+    required GlobalKey semanticKey,
+    required String announcement,
+  }) async {
+    final fieldContext = semanticKey.currentContext;
+    if (fieldContext != null) {
+      await Scrollable.ensureVisible(
+        fieldContext,
+        alignment: 0.25,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    semanticKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      announcement,
+      Directionality.of(context),
+    );
+  }
+
   bool _validate() {
-    if (_billingStreetCtrl.text.trim().isEmpty ||
-        _billingCityCtrl.text.trim().isEmpty ||
-        _billingStateCtrl.text.trim().isEmpty ||
-        _billingZipCtrl.text.trim().isEmpty ||
-        _billingCountryCtrl.text.trim().isEmpty) {
+    if (_billingStreetCtrl.text.trim().isEmpty) {
+      unawaited(
+        _focusTextField(
+          semanticKey: _billingStreetKey,
+          focusNode: _billingStreetFocusNode,
+          announcement: 'Billing Street Address is required.',
+        ),
+      );
       return false;
     }
-    if (!_shippingSameAsBilling &&
-        (_shippingStreetCtrl.text.trim().isEmpty ||
-            _shippingCityCtrl.text.trim().isEmpty ||
-            _shippingStateCtrl.text.trim().isEmpty ||
-            _shippingZipCtrl.text.trim().isEmpty ||
-            _shippingCountryCtrl.text.trim().isEmpty)) {
+    if (_billingCityCtrl.text.trim().isEmpty) {
+      unawaited(
+        _focusTextField(
+          semanticKey: _billingCityKey,
+          focusNode: _billingCityFocusNode,
+          announcement: 'Billing City is required.',
+        ),
+      );
       return false;
     }
+    if (_billingStateCtrl.text.trim().isEmpty) {
+      unawaited(
+        _focusSemanticControl(
+          semanticKey: _billingStateKey,
+          announcement: 'Billing State is required.',
+        ),
+      );
+      return false;
+    }
+    if (_billingZipCtrl.text.trim().isEmpty) {
+      unawaited(
+        _focusTextField(
+          semanticKey: _billingZipKey,
+          focusNode: _billingZipFocusNode,
+          announcement: 'Billing Zip is required.',
+        ),
+      );
+      return false;
+    }
+    if (_billingCountryCtrl.text.trim().isEmpty) {
+      unawaited(
+        _focusSemanticControl(
+          semanticKey: _billingCountryKey,
+          announcement: 'Billing Country is required.',
+        ),
+      );
+      return false;
+    }
+
+    if (!_shippingSameAsBilling) {
+      if (_shippingStreetCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusTextField(
+            semanticKey: _shippingStreetKey,
+            focusNode: _shippingStreetFocusNode,
+            announcement: 'Shipping Street Address is required.',
+          ),
+        );
+        return false;
+      }
+      if (_shippingCityCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusTextField(
+            semanticKey: _shippingCityKey,
+            focusNode: _shippingCityFocusNode,
+            announcement: 'Shipping City is required.',
+          ),
+        );
+        return false;
+      }
+      if (_shippingStateCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusSemanticControl(
+            semanticKey: _shippingStateKey,
+            announcement: 'Shipping State is required.',
+          ),
+        );
+        return false;
+      }
+      if (_shippingZipCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusTextField(
+            semanticKey: _shippingZipKey,
+            focusNode: _shippingZipFocusNode,
+            announcement: 'Shipping Zip is required.',
+          ),
+        );
+        return false;
+      }
+      if (_shippingCountryCtrl.text.trim().isEmpty) {
+        unawaited(
+          _focusSemanticControl(
+            semanticKey: _shippingCountryKey,
+            announcement: 'Shipping Country is required.',
+          ),
+        );
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -2059,6 +3117,7 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
       );
       return;
     }
+
     Navigator.pop(
       context,
       widget.initial.copyWith(
@@ -2082,140 +3141,104 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
     return _CompanyPopupScaffold(
       title: 'Addresses',
       subtitle: 'Update billing and shipping addresses.',
+      scrollController: _scrollController,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Billing Address',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Column(
-            children: [
-              TextField(
-                controller: _billingStreetCtrl,
-                style: const TextStyle(fontSize: 11),
-                decoration: _dec('Billing Street Address'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _billingCityCtrl,
-                style: const TextStyle(fontSize: 11),
-                decoration: _dec('Billing City'),
-              ),
-              const SizedBox(height: 8),
-              SearchableDropdownField(
-                label: 'Billing State',
-                value: _billingStateCtrl.text.trim().isEmpty
-                    ? null
-                    : _billingStateCtrl.text.trim(),
-                items: usStates,
-                fillColor: AppColors.snow,
-                borderColor: AppColors.blackCatBorderLight,
-                onChanged: (value) =>
-                    setState(() => _billingStateCtrl.text = value),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _billingZipCtrl,
-                style: const TextStyle(fontSize: 11),
-                decoration: _dec('Billing Zip'),
-              ),
-              const SizedBox(height: 8),
-              SearchableDropdownField(
-                label: 'Billing Country',
-                value: _billingCountryCtrl.text.trim().isEmpty
-                    ? null
-                    : _billingCountryCtrl.text.trim(),
-                items: countries,
-                fillColor: AppColors.snow,
-                borderColor: AppColors.blackCatBorderLight,
-                onChanged: (value) =>
-                    setState(() => _billingCountryCtrl.text = value),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Is shipping address same as billing address',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: Colors.black.withValues(alpha: 0.75),
-                  ),
-                ),
-              ),
-              Transform.scale(
-                scale: 0.82,
-                child: Switch(
-                  value: _shippingSameAsBilling,
-                  activeThumbColor: AppColors.blackCat,
-                  inactiveThumbColor: AppColors.blackCatLight,
-                  inactiveTrackColor: AppColors.blackCatLight.withValues(
-                    alpha: 0.35,
-                  ),
-                  onChanged: (v) => setState(() => _shippingSameAsBilling = v),
-                ),
-              ),
-            ],
-          ),
-          if (!_shippingSameAsBilling) ...[
-            const SizedBox(height: 10),
-            const Text(
-              'Shipping Address',
+          Semantics(
+            header: true,
+            child: const Text(
+              'Billing Address',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             ),
+          ),
+          const SizedBox(height: 8),
+          _addressTextField(
+            label: 'Billing Street Address',
+            controller: _billingStreetCtrl,
+            focusNode: _billingStreetFocusNode,
+            semanticKey: _billingStreetKey,
+            keyboardType: TextInputType.streetAddress,
+          ),
+          const SizedBox(height: 8),
+          _addressTextField(
+            label: 'Billing City',
+            controller: _billingCityCtrl,
+            focusNode: _billingCityFocusNode,
+            semanticKey: _billingCityKey,
+          ),
+          const SizedBox(height: 8),
+          _accessibleDropdown(
+            label: 'Billing State',
+            controller: _billingStateCtrl,
+            items: usStates,
+            semanticKey: _billingStateKey,
+          ),
+          const SizedBox(height: 8),
+          _addressTextField(
+            label: 'Billing Zip',
+            controller: _billingZipCtrl,
+            focusNode: _billingZipFocusNode,
+            semanticKey: _billingZipKey,
+            keyboardType: TextInputType.text,
+          ),
+          const SizedBox(height: 8),
+          _accessibleDropdown(
+            label: 'Billing Country',
+            controller: _billingCountryCtrl,
+            items: countries,
+            semanticKey: _billingCountryKey,
+          ),
+          const SizedBox(height: 12),
+          _shippingSameAsBillingToggle(),
+          if (!_shippingSameAsBilling) ...[
+            const SizedBox(height: 14),
+            Semantics(
+              header: true,
+              child: const Text(
+                'Shipping Address',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
             const SizedBox(height: 8),
-            Column(
-              children: [
-                TextField(
-                  controller: _shippingStreetCtrl,
-                  style: const TextStyle(fontSize: 11),
-                  decoration: _dec('Shipping Street Address'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _shippingCityCtrl,
-                  style: const TextStyle(fontSize: 11),
-                  decoration: _dec('Shipping City'),
-                ),
-                const SizedBox(height: 8),
-                SearchableDropdownField(
-                  label: 'Shipping State',
-                  value: _shippingStateCtrl.text.trim().isEmpty
-                      ? null
-                      : _shippingStateCtrl.text.trim(),
-                  items: usStates,
-                  fillColor: AppColors.snow,
-                  borderColor: AppColors.blackCatBorderLight,
-                  onChanged: (value) =>
-                      setState(() => _shippingStateCtrl.text = value),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _shippingZipCtrl,
-                  style: const TextStyle(fontSize: 11),
-                  decoration: _dec('Shipping Zip'),
-                ),
-                const SizedBox(height: 8),
-                SearchableDropdownField(
-                  label: 'Shipping Country',
-                  value: _shippingCountryCtrl.text.trim().isEmpty
-                      ? null
-                      : _shippingCountryCtrl.text.trim(),
-                  items: countries,
-                  fillColor: AppColors.snow,
-                  borderColor: AppColors.blackCatBorderLight,
-                  onChanged: (value) =>
-                      setState(() => _shippingCountryCtrl.text = value),
-                ),
-              ],
+            _addressTextField(
+              label: 'Shipping Street Address',
+              controller: _shippingStreetCtrl,
+              focusNode: _shippingStreetFocusNode,
+              semanticKey: _shippingStreetKey,
+              keyboardType: TextInputType.streetAddress,
+            ),
+            const SizedBox(height: 8),
+            _addressTextField(
+              label: 'Shipping City',
+              controller: _shippingCityCtrl,
+              focusNode: _shippingCityFocusNode,
+              semanticKey: _shippingCityKey,
+            ),
+            const SizedBox(height: 8),
+            _accessibleDropdown(
+              label: 'Shipping State',
+              controller: _shippingStateCtrl,
+              items: usStates,
+              semanticKey: _shippingStateKey,
+            ),
+            const SizedBox(height: 8),
+            _addressTextField(
+              label: 'Shipping Zip',
+              controller: _shippingZipCtrl,
+              focusNode: _shippingZipFocusNode,
+              semanticKey: _shippingZipKey,
+              keyboardType: TextInputType.text,
+            ),
+            const SizedBox(height: 8),
+            _accessibleDropdown(
+              label: 'Shipping Country',
+              controller: _shippingCountryCtrl,
+              items: countries,
+              semanticKey: _shippingCountryKey,
             ),
           ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _PopupActions(onSave: _save),
         ],
       ),
@@ -2223,75 +3246,214 @@ class _EditCompanyAddressesPopupState extends State<EditCompanyAddressesPopup> {
   }
 }
 
-class _CompanyPopupScaffold extends StatelessWidget {
+
+class _CompanyPopupScaffold extends StatefulWidget {
   const _CompanyPopupScaffold({
     required this.title,
     required this.subtitle,
     required this.child,
+    required this.scrollController,
   });
 
   final String title;
   final String subtitle;
   final Widget child;
+  final ScrollController scrollController;
+
+  @override
+  State<_CompanyPopupScaffold> createState() => _CompanyPopupScaffoldState();
+}
+
+class _CompanyPopupScaffoldState extends State<_CompanyPopupScaffold> {
+  final FocusNode _closeButtonFocusNode = FocusNode(
+    debugLabel: 'popupCloseButton',
+  );
+  final GlobalKey _closeButtonKey = GlobalKey(
+    debugLabel: 'popupCloseButtonA11yKey',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (widget.scrollController.hasClients) {
+        widget.scrollController.jumpTo(
+          widget.scrollController.position.minScrollExtent,
+        );
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 260));
+      if (!mounted) return;
+      _focusRealClose();
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _focusRealClose() {
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_closeButtonFocusNode);
+    _closeButtonKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  Future<void> _returnToRealClose() async {
+    if (!mounted) return;
+    FocusScope.of(context).unfocus();
+
+    if (widget.scrollController.hasClients) {
+      final position = widget.scrollController.position;
+      final top = position.minScrollExtent;
+      await widget.scrollController.animateTo(
+        top,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+      if (!mounted) return;
+      if (widget.scrollController.hasClients) {
+        widget.scrollController.jumpTo(
+          widget.scrollController.position.minScrollExtent,
+        );
+      }
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final closeContext = _closeButtonKey.currentContext;
+    if (closeContext != null) {
+      await Scrollable.ensureVisible(
+        closeContext,
+        alignment: 0,
+        duration: Duration.zero,
+      );
+    }
+    if (!mounted) return;
+    _focusRealClose();
+
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+    _focusRealClose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.title;
+    final subtitle = widget.subtitle;
+    final child = widget.child;
+    final scrollController = widget.scrollController;
     final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Container(
-        color: Colors.black.withValues(alpha: 0.25),
-        child: SafeArea(
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: keyboardInset),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                decoration: const BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: SingleChildScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.only(bottom: keyboardInset > 0 ? 12 : 0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.blackCat,
+
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: title,
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.25),
+          child: SafeArea(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardInset),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  decoration: const BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.only(
+                      bottom: keyboardInset > 0 ? 12 : 0,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ExcludeSemantics(
+                                child: Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.blackCat,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: 'Close',
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.blackCat,
+                            Semantics(
+                              key: _closeButtonKey,
+                              sortKey: OrdinalSortKey(0),
+                              button: true,
+                              label: 'Close $title',
+                              hint: 'Double tap to close.',
+                              onTap: () => Navigator.pop(context),
+                              child: ExcludeSemantics(
+                                child: IconButton(
+                                  focusNode: _closeButtonFocusNode,
+                                  tooltip: 'Close $title',
+                                  onPressed: () => Navigator.pop(context),
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      child,
-                    ],
+                        Semantics(
+                          container: true,
+                          explicitChildNodes: true,
+                          sortKey: OrdinalSortKey(1),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Semantics(
+                                header: true,
+                                label: '$title. $subtitle',
+                                child: ExcludeSemantics(
+                                  child: Text(
+                                    subtitle,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w400,
+                                      color: AppColors.blackCat,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              child,
+                            ],
+                          ),
+                        ),
+                        Semantics(
+                          sortKey: OrdinalSortKey(2),
+                          container: true,
+                          button: true,
+                          label: 'Close $title',
+                          hint: 'Returns to the Close button at the top.',
+                          onTap: () => Navigator.pop(context),
+                          onDidGainAccessibilityFocus: () {
+                            unawaited(_returnToRealClose());
+                          },
+                          child: const SizedBox(height: 1, width: 1),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -2302,7 +3464,6 @@ class _CompanyPopupScaffold extends StatelessWidget {
     );
   }
 }
-
 class _PopupActions extends StatelessWidget {
   const _PopupActions({required this.onSave});
   final VoidCallback onSave;

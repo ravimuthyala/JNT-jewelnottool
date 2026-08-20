@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -12,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../widgets/request_modal_accessibility.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 
@@ -63,8 +65,34 @@ class _ShipmentInfo {
 
 class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final GlobalKey _closeButtonSemanticsKey = GlobalKey();
+  final FocusNode _closeButtonFocusNode = FocusNode(
+    debugLabel: 'Shipped modal close button',
+  );
   bool _isMarkingDelivered = false;
-  int _selectedMeasurementTab = 0;
+  bool _sentInitialCloseFocus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted || _sentInitialCloseFocus) return;
+      _closeButtonFocusNode.requestFocus();
+      final renderObject = _closeButtonSemanticsKey.currentContext
+          ?.findRenderObject();
+      if (renderObject == null) return;
+      _sentInitialCloseFocus = true;
+      renderObject.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeButtonFocusNode.dispose();
+    super.dispose();
+  }
   String get _requestTable =>
       widget.request.sourceCollection == 'Company_Custom_Requests'
       ? 'company_custom_requests'
@@ -473,9 +501,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
-    final sheetMediaQuery = MediaQuery.of(
-      context,
-    ).copyWith(textScaler: const TextScaler.linear(1.0));
+    final sheetMediaQuery = MediaQuery.of(context);
 
     final modalClientPhotos = _modalClientPhotos();
 
@@ -574,7 +600,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
-                          height: 44,
+                          height: 48,
                           child: ElevatedButton.icon(
                             onPressed: _isMarkingDelivered
                                 ? null
@@ -667,7 +693,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
-                  height: 44,
+                  height: 48,
                   child: ElevatedButton.icon(
                     onPressed: () => _openTrackingPreview(info),
                     style: ElevatedButton.styleFrom(
@@ -808,12 +834,52 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     final avatarLetter = headerName.isEmpty
         ? (isBrandRequest ? 'B' : 'C')
         : headerName[0].toUpperCase();
+    final requestType = request.requestTypeLabel.isNotEmpty
+        ? request.requestTypeLabel
+        : (request.isDirectRequest ? 'Direct' : 'Standard');
+    final orderType = request.orderType == RequestOrderTypeV2.group
+        ? 'Group'
+        : 'Single';
+    final orderNumber = request.orderNumber.trim().isNotEmpty
+        ? request.orderNumber.trim()
+        : request.id;
+    final summaryLabel =
+        '$headerName. Order number $orderNumber. '
+        '$requestType request. $orderType order. '
+        'Need by ${_needByLabel(request.neededBy)}. '
+        'Budget ${request.budgetMin} dollars to ${request.budgetMax} dollars.';
 
     return Stack(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-          child: Column(
+        // Keep Close first in the actual semantics tree. A visually positioned
+        // control that is declared after the hero can still be traversed after
+        // the whole hero on Android, even when it has a lower sort key.
+        Positioned(
+          right: 6,
+          top: 6,
+          child: Focus(
+            focusNode: _closeButtonFocusNode,
+            autofocus: true,
+            child: Semantics(
+              key: _closeButtonSemanticsKey,
+              container: true,
+              focusable: true,
+              button: true,
+              sortKey: OrdinalSortKey(0),
+              label: 'Close',
+              onTap: onClose,
+              child: const SizedBox(width: 48, height: 48),
+            ),
+          ),
+        ),
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          sortKey: OrdinalSortKey(1),
+          label: summaryLabel,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 8),
@@ -891,15 +957,12 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
             ],
           ),
         ),
+        ),
         Positioned(
           right: 6,
           top: 6,
-          child: Semantics(
-            button: true,
-            label: 'Close',
-            onTap: onClose,
-            child: ExcludeSemantics(
-              child: InkWell(
+          child: ExcludeSemantics(
+            child: InkWell(
                 borderRadius: BorderRadius.zero,
                 onTap: onClose,
                 child: Padding(
@@ -910,9 +973,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                     color: AppColors.blackCat.withValues(alpha: 0.70),
                   ),
                 ),
-              ),
             ),
-          ),
+            ),
         ),
       ],
     );
@@ -1251,9 +1313,15 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     return value[0].toUpperCase() + value.substring(1);
   }
 
-  static Widget _sectionTitle(String t) => Text(
-    t,
-    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+  static Widget _sectionTitle(String t) => Semantics(
+    header: true,
+    label: t,
+    child: ExcludeSemantics(
+      child: Text(
+        t,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+    ),
   );
 
   Widget _measurementSection() {
@@ -2141,23 +2209,48 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   Future<void> _openImagePreview(String src) async {
     await showDialog<void>(
       context: context,
-      builder: (_) => Dialog(
-        backgroundColor: AppColors.snow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          children: [
-            AspectRatio(aspectRatio: 1, child: _imageForPath(src)),
-            Positioned(
-              right: 6,
-              top: 6,
-              child: IconButton(
-                tooltip: 'Close image preview',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
+      builder: (_) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Request photo preview',
+        child: Dialog(
+          backgroundColor: AppColors.snow,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          insetPadding: const EdgeInsets.all(12),
+          child: Stack(
+            children: [
+              Positioned(
+                right: 6,
+                top: 6,
+                child: RequestModalInitialClose(
+                  label: 'Close image preview',
+                  onClose: () => Navigator.pop(context),
+                ),
               ),
-            ),
-          ],
+              Semantics(
+                image: true,
+                label: 'Request photo',
+                child: ExcludeSemantics(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _imageForPath(src),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    tooltip: 'Close image preview',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

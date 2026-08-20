@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -9,7 +10,9 @@ import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 // for ClientRequestV2 + NailDimensionsV2 (or move models to a shared file)
 import '../models/client_request_v2.dart';
+import '../widgets/accessible_date_grid.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../widgets/request_modal_accessibility.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 import '../services/shipping_qr_helper.dart';
@@ -21,12 +24,18 @@ part 'artist_completed_photos_tab.dart';
 part 'artist_completed_shipping_tab.dart';
 
 Widget completedSectionTitle(String text) {
-  return Text(
-    text,
-    style: const TextStyle(
-      fontWeight: FontWeight.w700,
-      fontSize: 16,
-      color: AppColors.blackCat,
+  return Semantics(
+    header: true,
+    label: text,
+    child: ExcludeSemantics(
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 16,
+          color: AppColors.blackCat,
+        ),
+      ),
     ),
   );
 }
@@ -109,6 +118,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   final FocusNode _shippingContentFocusNode = FocusNode(
     debugLabel: 'completedShippingContent',
   );
+  bool _didRequestInitialFocus = false;
 
   // ✅ NEW (optional, but helps keep formatting consistent)
   final _shippedDateCtrl = TextEditingController();
@@ -168,6 +178,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   bool _accessibleNavigation(BuildContext context) {
     final mediaQuery = MediaQuery.maybeOf(context);
     return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding.instance.platformDispatcher.semanticsEnabled ||
         WidgetsBinding
             .instance
             .platformDispatcher
@@ -186,6 +197,11 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   void _selectCompletedTab(int index) {
     if (_completedTabIndex == index) return;
     setState(() => _completedTabIndex = index);
+    const labels = <String>['Details', 'Photos', 'Shipping'];
+    announceRequestAccessibilityMessage(
+      context,
+      '${labels[index]} tab selected',
+    );
     final target = switch (index) {
       0 => _detailsContentFocusNode,
       1 => _photosContentFocusNode,
@@ -197,6 +213,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_didRequestInitialFocus || !_accessibleNavigation(context)) return;
+    _didRequestInitialFocus = true;
     _requestAccessibleFocus(_closeFocusNode);
   }
 
@@ -383,130 +401,39 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Future<void> _pickShippedDate() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final now = DateTime.now();
-    final initial = _shippedDate ?? now;
-    DateTime tempSelected = initial;
+    final today = DateTime(now.year, now.month, now.day);
+    final firstDate = DateTime(2000, 1, 1);
+    final lastDate = today;
+    final requestedInitial = _shippedDate ?? today;
+    final initial = requestedInitial.isBefore(firstDate)
+        ? firstDate
+        : requestedInitial.isAfter(lastDate)
+        ? lastDate
+        : requestedInitial;
 
-    await showModalBottomSheet<void>(
+    final picked = await showAccessibleDatePickerDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final baseTheme = Theme.of(context);
-        final media = MediaQuery.of(context);
-        return Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            width: math.min(media.size.width * 0.84, 336),
-            constraints: BoxConstraints(maxHeight: media.size.height * 0.8),
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            decoration: const BoxDecoration(
-              color: AppColors.snow,
-              borderRadius: BorderRadius.zero,
-            ),
-            child: Theme(
-              data: baseTheme.copyWith(
-                colorScheme: baseTheme.colorScheme.copyWith(
-                  primary: AppColors.blackCat,
-                  onPrimary: AppColors.snow,
-                  surface: AppColors.snow,
-                  onSurface: AppColors.blackCat,
-                ),
-                datePickerTheme: baseTheme.datePickerTheme.copyWith(
-                  headerHeadlineStyle: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  weekdayStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.blackCat,
-                  ),
-                  dayStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.blackCat,
-                  ),
-                  yearStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.blackCat,
-                  ),
-                ),
-              ),
-              child: MediaQuery(
-                data: media.copyWith(textScaler: const TextScaler.linear(0.88)),
-                // CalendarDatePicker's onDateChanged also fires when only a
-                // year is picked (keeping the previous month/day) -- closing
-                // immediately there would never let the user go on to pick
-                // the month/day. Track the latest pick and only commit it
-                // once Confirm is tapped.
-                child: StatefulBuilder(
-                  builder: (context, setSheetState) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: CalendarDatePicker(
-                            initialDate: tempSelected,
-                            firstDate: now.subtract(const Duration(days: 30)),
-                            lastDate: now.add(const Duration(days: 30)),
-                            onDateChanged: (picked) {
-                              setSheetState(() => tempSelected = picked);
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCatLight,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () => Navigator.pop(sheetContext),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _shippedDate = tempSelected;
-                                _shippedDateCtrl.text =
-                                    '${tempSelected.month}/${tempSelected.day}/${tempSelected.year}';
-                              });
-                              Navigator.pop(sheetContext);
-                            },
-                            child: const Text(
-                              'Confirm',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+      fieldLabel: 'Shipped Date',
+      firstDate: firstDate,
+      lastDate: lastDate,
+      initialSelectedDate: initial,
     );
+
+    if (picked == null || !mounted) return;
+    setState(() {
+      _shippedDate = picked;
+      _shippedDateCtrl.text = '${picked.month}/${picked.day}/${picked.year}';
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final sheetMediaQuery = MediaQuery.of(
-      context,
-    ).copyWith(textScaler: const TextScaler.linear(1.0));
+    final keyboardOpen = bottomInset > 0;
+    final sheetMediaQuery = MediaQuery.of(context);
 
     return Semantics(
       scopesRoute: true,
@@ -538,29 +465,32 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                       borderRadius: BorderRadius.zero,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _topHeroCentered(
-                      context,
-                      widget.request,
-                      widget.onClose,
+                  if (!keyboardOpen) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _topHeroCentered(
+                        context,
+                        widget.request,
+                        widget.onClose,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _completedStatusBanner(),
-                  ),
-                  const SizedBox(height: 12),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Divider(
-                      height: 1,
-                      color: AppColors.blackCatBorderLight,
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _completedStatusBanner(),
                     ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Divider(
+                        height: 1,
+                        color: AppColors.blackCatBorderLight,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ] else
+                    const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _completedTabsBar(),
@@ -650,7 +580,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             borderRadius: BorderRadius.zero,
             onTap: () => _selectCompletedTab(index),
             child: Container(
-              height: 44,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppColors.snow,
                 borderRadius: BorderRadius.zero,
@@ -691,12 +621,38 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     final avatarLetter = headerName.isEmpty
         ? (isBrandRequest ? 'B' : 'C')
         : headerName[0].toUpperCase();
+    final requestType = request.requestTypeLabel.isNotEmpty
+        ? request.requestTypeLabel
+        : (request.isDirectRequest ? 'Direct' : 'Standard');
+    final orderType = request.orderType == RequestOrderTypeV2.group
+        ? 'Group'
+        : 'Single';
+    final orderNumber = request.orderNumber.trim().isNotEmpty
+        ? request.orderNumber.trim()
+        : request.id;
+    final summaryLabel =
+        '$headerName. ${headerSubtitle.isEmpty ? '' : '$headerSubtitle. '}'
+        'Order number $orderNumber. $requestType request. $orderType order. '
+        'Need by ${_needByLabel(request.neededBy)}. '
+        'Budget ${request.budgetMin} dollars to ${request.budgetMax} dollars.';
 
     return Stack(
       children: [
-        SizedBox(
-          width: double.infinity,
-          child: Padding(
+        Positioned(
+          right: 6,
+          top: 6,
+          child: RequestModalInitialClose(
+            label: 'Close completed request details',
+            onClose: onClose,
+          ),
+        ),
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          label: summaryLabel,
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -805,19 +761,15 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 ),
               ],
             ),
+            ),
           ),
         ),
 
         Positioned(
           right: 6,
           top: 6,
-          child: Semantics(
-            button: true,
-            label: 'Close completed request details',
-            hint: 'Double tap to close',
-            onTap: onClose,
-            child: ExcludeSemantics(
-              child: InkWell(
+          child: ExcludeSemantics(
+            child: InkWell(
                 focusNode: _closeFocusNode,
                 borderRadius: BorderRadius.zero,
                 onTap: onClose,
@@ -829,7 +781,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                     color: AppColors.blackCat.withValues(alpha: 0.70),
                   ),
                 ),
-              ),
             ),
           ),
         ),
@@ -1240,10 +1191,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     );
   }
 
-  static Widget _sectionTitle(String t) => Text(
-    t,
-    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-  );
+  static Widget _sectionTitle(String t) => completedSectionTitle(t);
 
   static Widget _chipInfo({required IconData icon, required String text}) {
     return Row(
@@ -2209,6 +2157,14 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             insetPadding: const EdgeInsets.all(12),
             child: Stack(
               children: [
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: RequestModalInitialClose(
+                    label: 'Close image preview',
+                    onClose: () => Navigator.of(dialogContext).pop(),
+                  ),
+                ),
                 Positioned.fill(
                   child: ExcludeSemantics(
                     child: InteractiveViewer(
@@ -2221,13 +2177,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 Positioned(
                   right: 6,
                   top: 6,
-                  child: Semantics(
-                    button: true,
-                    label: 'Close image preview',
-                    hint: 'Double tap to close',
-                    onTap: () => Navigator.of(dialogContext).pop(),
-                    child: ExcludeSemantics(
-                      child: IconButton(
+                  child: ExcludeSemantics(
+                    child: IconButton(
                         focusNode: closeFocusNode,
                         tooltip: 'Close image preview',
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -2236,7 +2187,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                           color: AppColors.snow,
                           size: 30,
                         ),
-                      ),
                     ),
                   ),
                 ),

@@ -3,14 +3,17 @@
 import 'dart:io';
 
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
+import '../widgets/request_modal_accessibility.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
 
@@ -2176,12 +2179,7 @@ class ShippedOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      namesRoute: true,
-      label: 'Shipped order details',
-      child: _BaseOrderDetails(
+    return _BaseOrderDetails(
         title: 'Order Details',
         statusPillText: 'Shipped',
         statusPillColor: AppColors.balletSlippers,
@@ -2192,7 +2190,6 @@ class ShippedOrderDetailsPage extends StatelessWidget {
         budgetViewMode: budgetViewMode,
         showRightPanel: false,
         rightPanel: const SizedBox.shrink(),
-      ),
     );
   }
 }
@@ -2215,12 +2212,7 @@ class InProgressOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      namesRoute: true,
-      label: 'In progress order details',
-      child: _BaseOrderDetails(
+    return _BaseOrderDetails(
         title: 'Order Details',
         statusPillText: 'In Progress',
         statusPillColor: AppColors.balletSlippers,
@@ -2237,7 +2229,6 @@ class InProgressOrderDetailsPage extends StatelessWidget {
             _StepItem('Shipped', false),
           ],
         ),
-      ),
     );
   }
 }
@@ -2260,12 +2251,7 @@ class InReviewOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      namesRoute: true,
-      label: 'In review order details',
-      child: _BaseOrderDetails(
+    return _BaseOrderDetails(
         title: 'Order Details',
         statusPillText: 'Pending',
         statusPillColor: AppColors.balletSlippers,
@@ -2281,7 +2267,6 @@ class InReviewOrderDetailsPage extends StatelessWidget {
             'You’ll get an update soon.',
           ],
         ),
-      ),
     );
   }
 }
@@ -2304,12 +2289,7 @@ class NewOrderDetailsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = _OrderSafe.from(order);
 
-    return Semantics(
-      scopesRoute: true,
-      explicitChildNodes: true,
-      namesRoute: true,
-      label: 'New order details',
-      child: _BaseOrderDetails(
+    return _BaseOrderDetails(
         title: 'Order Details',
         statusPillText: 'New',
         statusPillColor: AppColors.balletSlippers,
@@ -2319,7 +2299,6 @@ class NewOrderDetailsPage extends StatelessWidget {
         isBrandViewer: isBrandViewer,
         budgetViewMode: budgetViewMode,
         rightPanel: const SizedBox.shrink(),
-      ),
     );
   }
 }
@@ -2791,16 +2770,40 @@ class _BaseOrderDetails extends StatelessWidget {
     final isBrandRequest =
         order.sourceCollection.trim() == 'Company_Custom_Requests';
     final acceptedArtistMetaFuture = _loadAcceptedArtistMeta(order);
+    final closeSemanticsKey = GlobalKey();
+    final modalAppBar = JntModalAppBar(
+      onClose: () => Navigator.pop(context),
+      closeTooltip: 'Close order details',
+      autofocusClose: false,
+      closeIcon: const Icon(Icons.close_rounded, size: 26),
+    );
 
-    return Scaffold(
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Order details',
+      child: Scaffold(
       backgroundColor: AppColors.snow,
-      appBar: JntModalAppBar(
-        onClose: () => Navigator.pop(context),
-        closeTooltip: 'Close order details',
-        autofocusClose: MediaQuery.of(context).accessibleNavigation,
-        closeIcon: const Icon(Icons.close_rounded, size: 26),
+      appBar: PreferredSize(
+        preferredSize: modalAppBar.preferredSize,
+        child: Stack(
+          children: [
+            ExcludeSemantics(child: modalAppBar),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: RequestModalInitialClose(
+                semanticsKey: closeSemanticsKey,
+                label: 'Close order details',
+                onClose: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
       ),
       body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
         children: [
           if (isCancelledStatus) ...[
@@ -2828,7 +2831,11 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
-          Row(
+          Semantics(
+            container: true,
+            label: 'Placed on ${_placedOnText()}, status $statusPillText',
+            child: ExcludeSemantics(
+              child: Row(
             children: [
               Text(
                 'Placed on: ${_placedOnText()}',
@@ -2849,6 +2856,8 @@ class _BaseOrderDetails extends StatelessWidget {
                 ),
               ),
             ],
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           if (isBrandRequest) ...[
@@ -3125,7 +3134,7 @@ class _BaseOrderDetails extends StatelessWidget {
               ],
 
               SizedBox(
-                height: 46,
+                height: 48,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.blackCat.withValues(alpha: 0.78),
@@ -3188,7 +3197,7 @@ class _BaseOrderDetails extends StatelessWidget {
               const SizedBox(height: 12),
               Center(
                 child: SizedBox(
-                  height: 46,
+                  height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blackCat,
@@ -3263,7 +3272,7 @@ class _BaseOrderDetails extends StatelessWidget {
               const SizedBox(height: 12),
               Center(
                 child: SizedBox(
-                  height: 46,
+                  height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blackCat,
@@ -3544,8 +3553,29 @@ class _BaseOrderDetails extends StatelessWidget {
                 ),
               ),
             ),
+            RequestAccessibilityOnlyAction(
+              label: 'Close order details',
+              hint: 'Double tap to close',
+              semanticSize: 48,
+              onAccessibilityFocus: () async {
+                final controller = PrimaryScrollController.maybeOf(context);
+                if (controller != null && controller.hasClients) {
+                  await controller.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                  );
+                }
+                await WidgetsBinding.instance.endOfFrame;
+                closeSemanticsKey.currentContext
+                    ?.findRenderObject()
+                    ?.sendSemanticsEvent(const FocusSemanticEvent());
+              },
+              onTap: () => Navigator.of(context).pop(),
+            ),
           ],
         ],
+      ),
       ),
     );
   }
@@ -3604,7 +3634,11 @@ class _BaseOrderDetails extends StatelessWidget {
         const SizedBox(height: 10),
         for (var i = 0; i < budgetRows.length; i++) ...[
           if (i > 0) const SizedBox(height: 8),
-          Row(
+          Semantics(
+            container: true,
+            label: '${budgetRows[i].label.replaceAll(':', '')}, ${budgetRows[i].value}',
+            child: ExcludeSemantics(
+              child: Row(
             children: [
               Text(
                 budgetRows[i].label,
@@ -3624,11 +3658,18 @@ class _BaseOrderDetails extends StatelessWidget {
                 ),
               ),
             ],
+              ),
+            ),
           ),
         ],
         if ((isPending || isPaid) && hasArtistFinalAmount) ...[
           const SizedBox(height: 8),
-          Row(
+          Semantics(
+            container: true,
+            label:
+                '${isPaid ? 'Paid amount' : 'Amount due'}, $amountText',
+            child: ExcludeSemantics(
+              child: Row(
             children: [
               Text(
                 isPaid ? 'Paid Amount:' : 'Amount Due:',
@@ -3648,6 +3689,8 @@ class _BaseOrderDetails extends StatelessWidget {
                 ),
               ),
             ],
+              ),
+            ),
           ),
         ],
         const SizedBox(height: 8),
@@ -3681,7 +3724,7 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 44,
+            height: 48,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.blackCat,
@@ -3764,7 +3807,11 @@ class _BaseOrderDetails extends StatelessWidget {
         const SizedBox(height: 10),
         for (var i = 0; i < budgetRows.length; i++) ...[
           if (i > 0) const SizedBox(height: 8),
-          Row(
+          Semantics(
+            container: true,
+            label: '${budgetRows[i].label.replaceAll(':', '')}, ${budgetRows[i].value}',
+            child: ExcludeSemantics(
+              child: Row(
             children: [
               Text(
                 budgetRows[i].label,
@@ -3784,10 +3831,16 @@ class _BaseOrderDetails extends StatelessWidget {
                 ),
               ),
             ],
+              ),
+            ),
           ),
         ],
         const SizedBox(height: 8),
-        Row(
+        Semantics(
+          container: true,
+          label: 'Final amount by artist, $text',
+          child: ExcludeSemantics(
+            child: Row(
           children: [
             Text(
               'Final Amount by Artist:',
@@ -3807,6 +3860,8 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
             ),
           ],
+            ),
+          ),
         ),
       ],
     );
@@ -3849,7 +3904,7 @@ class _BaseOrderDetails extends StatelessWidget {
         if (statusPillText == 'Shipped') ...[
           const SizedBox(height: 10),
           SizedBox(
-            height: 44,
+            height: 48,
             child: OutlinedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.blackCat,
@@ -4469,12 +4524,18 @@ class _BaseOrderDetails extends StatelessWidget {
         order.groupClients.isNotEmpty;
 
     Widget detailsBlock() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Order Details',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+      return Semantics(
+        container: true,
+        explicitChildNodes: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          Semantics(
+            header: true,
+            child: const Text(
+              'Order Details',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
           ),
           const SizedBox(height: 10),
           if (_isBrandRequest) ...[
@@ -4499,7 +4560,8 @@ class _BaseOrderDetails extends StatelessWidget {
           _bullet('Request Artist', _requestArtistDisplay()),
           // Keep in code per request, but hide from UI:
           // _bullet('Status', statusPillText),
-        ],
+          ],
+        ),
       );
     }
 
@@ -5312,7 +5374,7 @@ class _BaseOrderDetails extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: SizedBox(
-            height: 42,
+            height: 48,
             child: VerticalDivider(
               width: 1,
               thickness: 1,
@@ -5326,9 +5388,16 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   Widget _measurementSummaryItem(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
+    final spokenValue = value.trim().isEmpty || value == '-'
+        ? 'not provided'
+        : value;
+    return Semantics(
+      container: true,
+      label: '$label, $spokenValue',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -5352,8 +5421,6 @@ class _BaseOrderDetails extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.blackCat,
                 fontSize: 13,
@@ -5363,6 +5430,8 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
           ),
         ],
+          ),
+        ),
       ),
     );
   }
@@ -5383,9 +5452,23 @@ class _BaseOrderDetails extends StatelessWidget {
 
     Widget row(String label, String key) {
       final hasNfc = showNfc(key);
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
+      final displayValue = value(key);
+      final numericValue = displayValue
+          .replaceAll(RegExp(r'\s*mm$', caseSensitive: false), '')
+          .trim();
+      final spokenValue = numericValue.isEmpty || numericValue == '-'
+          ? 'measurement not provided'
+          : '$numericValue millimeters';
+      final semanticLabel =
+          '$title, $label, $spokenValue${hasNfc ? ', NFC enabled' : ''}';
+
+      return Semantics(
+        container: true,
+        label: semanticLabel,
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
@@ -5405,7 +5488,7 @@ class _BaseOrderDetails extends StatelessWidget {
             if (hasNfc) ...[const SizedBox(width: 3), _nfcDimensionChip()],
             const SizedBox(width: 6),
             Text(
-              value(key),
+              displayValue,
               textAlign: TextAlign.right,
               maxLines: 1,
               softWrap: false,
@@ -5418,6 +5501,8 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
             ),
           ],
+            ),
+          ),
         ),
       );
     }
@@ -5426,14 +5511,17 @@ class _BaseOrderDetails extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-            fontFamily: 'ArialBold',
-            color: AppColors.blackCat,
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontFamily: 'ArialBold',
+              color: AppColors.blackCat,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -5871,6 +5959,83 @@ class _LocalGroupClientMeasurementsTabs extends StatefulWidget {
 class _LocalGroupClientMeasurementsTabsState
     extends State<_LocalGroupClientMeasurementsTabs> {
   int _selectedIndex = 0;
+  final ScrollController _clientTabsScrollController = ScrollController();
+  final GlobalKey _selectedLeftHandKey = GlobalKey();
+  final Map<String, GlobalKey> _clientTabKeys = <String, GlobalKey>{};
+
+  String _clientKey(_ClientMeasurementTabData client, int index) {
+    final email = client.clientEmail.trim().toLowerCase();
+    return email.isNotEmpty ? email : '${client.name.trim()}-$index';
+  }
+
+  GlobalKey _tabKey(_ClientMeasurementTabData client, int index) {
+    return _clientTabKeys.putIfAbsent(
+      _clientKey(client, index),
+      () => GlobalKey(),
+    );
+  }
+
+  Future<void> _showSelectedTabAndFocusLeftHand() async {
+    if (!mounted || widget.clients.isEmpty) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final safeIndex = _selectedIndex
+        .clamp(0, widget.clients.length - 1)
+        .toInt();
+    final tabContext = _tabKey(widget.clients[safeIndex], safeIndex).currentContext;
+    if (tabContext != null) {
+      await Scrollable.ensureVisible(
+        tabContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+    final handContext = _selectedLeftHandKey.currentContext;
+    if (handContext == null || !mounted) return;
+    await Scrollable.ensureVisible(
+      handContext,
+      alignment: 0.2,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+    handContext
+        .findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  void _keepSelectedTabVisible() {
+    if (!mounted || widget.clients.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final safeIndex = _selectedIndex
+          .clamp(0, widget.clients.length - 1)
+          .toInt();
+      final tabContext =
+          _tabKey(widget.clients[safeIndex], safeIndex).currentContext;
+      if (tabContext != null) {
+        Scrollable.ensureVisible(
+          tabContext,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _selectClient(int index) {
+    if (index < 0 || index >= widget.clients.length) return;
+    setState(() => _selectedIndex = index);
+    final name = widget.clients[index].name;
+    announceRequestAccessibilityMessage(
+      context,
+      '$name selected. $name, Left hand.',
+    );
+    if (requestAccessibilityEnabled(context)) {
+      unawaited(_showSelectedTabAndFocusLeftHand());
+    }
+  }
 
   int _viewerOwnedIndex() {
     final viewerEmail = widget.currentViewerEmail.trim().toLowerCase();
@@ -5907,6 +6072,12 @@ class _LocalGroupClientMeasurementsTabsState
   }
 
   @override
+  void dispose() {
+    _clientTabsScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (widget.clients.isEmpty) return const SizedBox.shrink();
     final safeIndex = _selectedIndex
@@ -5926,17 +6097,28 @@ class _LocalGroupClientMeasurementsTabsState
         mainAxisSize: MainAxisSize.min,
         children: [
           SingleChildScrollView(
+            controller: _clientTabsScrollController,
             scrollDirection: Axis.horizontal,
             child: Row(
               children: widget.clients.asMap().entries.map((entry) {
                 final selectedTab = entry.key == _selectedIndex;
                 return Semantics(
+                  key: _tabKey(entry.value, entry.key),
                   button: true,
                   selected: selectedTab,
-                  label: entry.value.name,
+                  label:
+                      '${entry.value.name}, tab ${entry.key + 1} of ${widget.clients.length}',
+                  hint: selectedTab
+                      ? 'Selected client measurements'
+                      : 'Double tap to show client measurements',
+                  onTap: () {
+                    _selectClient(entry.key);
+                  },
                   child: ExcludeSemantics(
                     child: InkWell(
-                      onTap: () => setState(() => _selectedIndex = entry.key),
+                      onTap: () {
+                        _selectClient(entry.key);
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -5977,8 +6159,42 @@ class _LocalGroupClientMeasurementsTabsState
             child: _LocalMeasurementsBody(
               client: selected,
               showMeasurements: true,
+              leftHandSemanticsKey: _selectedLeftHandKey,
+              onLeftHandAccessibilityFocus: _keepSelectedTabVisible,
             ),
           ),
+          if (requestAccessibilityEnabled(context))
+            Semantics(
+              container: true,
+              explicitChildNodes: true,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  RequestAccessibilityOnlyAction(
+                    label: safeIndex > 0
+                        ? 'Previous client, ${widget.clients[safeIndex - 1].name}'
+                        : 'Previous client, unavailable',
+                    visualLabel: '‹ Previous client',
+                    enabled: safeIndex > 0,
+                    hint: safeIndex > 0
+                        ? 'Double tap to show previous client measurements'
+                        : null,
+                    onTap: () => _selectClient(safeIndex - 1),
+                  ),
+                  RequestAccessibilityOnlyAction(
+                    label: safeIndex < widget.clients.length - 1
+                        ? 'Next client, ${widget.clients[safeIndex + 1].name}'
+                        : 'Next client, unavailable',
+                    visualLabel: 'Next client ›',
+                    enabled: safeIndex < widget.clients.length - 1,
+                    hint: safeIndex < widget.clients.length - 1
+                        ? 'Double tap to show next client measurements'
+                        : null,
+                    onTap: () => _selectClient(safeIndex + 1),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -5989,10 +6205,14 @@ class _LocalMeasurementsBody extends StatelessWidget {
   const _LocalMeasurementsBody({
     required this.client,
     required this.showMeasurements,
+    required this.leftHandSemanticsKey,
+    required this.onLeftHandAccessibilityFocus,
   });
 
   final _ClientMeasurementTabData client;
   final bool showMeasurements;
+  final GlobalKey leftHandSemanticsKey;
+  final VoidCallback onLeftHandAccessibilityFocus;
 
   String _valueOrDash(String value) =>
       value.trim().isEmpty ? '-' : value.trim();
@@ -6053,6 +6273,9 @@ class _LocalMeasurementsBody extends StatelessWidget {
                   'Left Hand',
                   client.leftHand,
                   client.nfc.left,
+                  client.name,
+                  semanticsKey: leftHandSemanticsKey,
+                  onAccessibilityFocus: onLeftHandAccessibilityFocus,
                 ),
               ),
               Padding(
@@ -6068,6 +6291,7 @@ class _LocalMeasurementsBody extends StatelessWidget {
                   'Right Hand',
                   client.rightHand,
                   client.nfc.right,
+                  client.name,
                 ),
               ),
             ],
@@ -6106,7 +6330,14 @@ class _LocalMeasurementsBody extends StatelessWidget {
   }
 
   Widget _plainSummaryItem(String label, String value) {
-    return Row(
+    final spokenValue = value.trim().isEmpty || value == '-'
+        ? 'not provided'
+        : value;
+    return Semantics(
+      container: true,
+      label: '$label, $spokenValue',
+      child: ExcludeSemantics(
+        child: Row(
       children: [
         Text(
           label,
@@ -6121,8 +6352,6 @@ class _LocalMeasurementsBody extends StatelessWidget {
           child: Text(
             value,
             textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.blackCat,
               fontSize: 13,
@@ -6132,6 +6361,8 @@ class _LocalMeasurementsBody extends StatelessWidget {
           ),
         ),
       ],
+        ),
+      ),
     );
   }
 
@@ -6139,6 +6370,11 @@ class _LocalMeasurementsBody extends StatelessWidget {
     String title,
     Map<String, String> map,
     Map<String, bool> nfc,
+    String clientName,
+    {
+    GlobalKey? semanticsKey,
+    VoidCallback? onAccessibilityFocus,
+    }
   ) {
     String value(String key) {
       final raw = (map[key] ?? '').trim();
@@ -6151,9 +6387,21 @@ class _LocalMeasurementsBody extends StatelessWidget {
 
     Widget row(String label, String key) {
       final hasNfc = showNfc(key);
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
+      final displayValue = value(key);
+      final numericValue = displayValue
+          .replaceAll(RegExp(r'\s*mm$', caseSensitive: false), '')
+          .trim();
+      final spokenValue = numericValue.isEmpty || numericValue == '-'
+          ? 'measurement not provided'
+          : '$numericValue millimeters';
+      return Semantics(
+        container: true,
+        label:
+            '$title, $label, $spokenValue${hasNfc ? ', NFC enabled' : ''}',
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
@@ -6172,7 +6420,7 @@ class _LocalMeasurementsBody extends StatelessWidget {
             if (hasNfc) ...[const SizedBox(width: 3), _nfcChip()],
             const SizedBox(width: 6),
             Text(
-              value(key),
+              displayValue,
               textAlign: TextAlign.right,
               maxLines: 1,
               softWrap: false,
@@ -6185,6 +6433,8 @@ class _LocalMeasurementsBody extends StatelessWidget {
               ),
             ),
           ],
+            ),
+          ),
         ),
       );
     }
@@ -6193,15 +6443,25 @@ class _LocalMeasurementsBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Center(
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              fontFamily: 'ArialBold',
-              color: AppColors.blackCat,
+        Semantics(
+          key: semanticsKey,
+          header: true,
+          onDidGainAccessibilityFocus: onAccessibilityFocus,
+          label: clientName.trim().isEmpty
+              ? title
+              : '${clientName.trim()}, $title',
+          child: ExcludeSemantics(
+            child: Center(
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  fontFamily: 'ArialBold',
+                  color: AppColors.blackCat,
+                ),
+              ),
             ),
           ),
         ),
@@ -6313,21 +6573,25 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: AppColors.blackCatBorderLight),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }
@@ -6394,6 +6658,7 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
           borderRadius: BorderRadius.zero,
         ),
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -6418,10 +6683,16 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Center(
-                child: Text(
-                  'Cancel Order?',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              Center(
+                child: Semantics(
+                  header: true,
+                  child: const Text(
+                    'Cancel Order?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -6439,12 +6710,15 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Reason for Cancellation',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'ArialBold',
+              Semantics(
+                header: true,
+                child: const Text(
+                  'Reason for Cancellation',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'ArialBold',
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -6486,12 +6760,16 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
               if (_selected == 'Something else')
                 TextField(
                   controller: _reasonCtrl,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
                   minLines: 1,
                   maxLines: 3,
                   onChanged: (_) {
                     if (_error.isNotEmpty) setState(() => _error = '');
                   },
                   decoration: InputDecoration(
+                    labelText: 'Cancellation reason',
                     hintText: 'Enter your reason...',
                     errorText: _error.isEmpty ? null : _error,
                     isDense: true,
@@ -6749,24 +7027,23 @@ class _SubmittedPhotosStrip extends StatelessWidget {
     int total,
     Widget Function(String path) imageForPath,
   ) {
-    final closeFocusNode = FocusNode(debugLabel: 'closeOrderPhotoPreview');
-
     showDialog<void>(
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await Future<void>.delayed(const Duration(milliseconds: 300));
-          if (MediaQuery.of(dialogContext).accessibleNavigation) {
-            closeFocusNode.requestFocus();
-          }
-        });
-
         return Dialog(
           backgroundColor: Colors.black,
           insetPadding: const EdgeInsets.all(8),
           child: Stack(
             children: [
+              Positioned(
+                top: 8,
+                right: 8,
+                child: RequestModalInitialClose(
+                  label: 'Close image preview',
+                  onClose: () => Navigator.of(dialogContext).pop(),
+                ),
+              ),
               Positioned.fill(
                 child: Semantics(
                   image: true,
@@ -6784,15 +7061,8 @@ class _SubmittedPhotosStrip extends StatelessWidget {
               Positioned(
                 top: 8,
                 right: 8,
-                child: Focus(
-                  focusNode: closeFocusNode,
-                  child: Semantics(
-                    button: true,
-                    label: 'Close image preview',
-                    hint: 'Double tap to close',
-                    onTap: () => Navigator.of(dialogContext).pop(),
-                    child: ExcludeSemantics(
-                      child: IconButton(
+                child: ExcludeSemantics(
+                  child: IconButton(
                         tooltip: 'Close image preview',
                         onPressed: () => Navigator.of(dialogContext).pop(),
                         icon: const Icon(
@@ -6800,8 +7070,6 @@ class _SubmittedPhotosStrip extends StatelessWidget {
                           color: AppColors.snow,
                           size: 34,
                         ),
-                      ),
-                    ),
                   ),
                 ),
               ),
@@ -6809,12 +7077,7 @@ class _SubmittedPhotosStrip extends StatelessWidget {
           ),
         );
       },
-    ).whenComplete(() {
-      if (closeFocusNode.hasFocus) {
-        closeFocusNode.unfocus();
-      }
-      closeFocusNode.dispose();
-    });
+    );
   }
 
   @override
@@ -7839,7 +8102,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                   size: 22,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 1),
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 visualDensity: VisualDensity.compact,
               );
             }
@@ -7857,25 +8120,38 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                 child: SafeArea(
                   top: false,
                   child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Stack(
                           children: [
-                            const Expanded(
-                              child: Text(
-                                'Review & Tip Your Artist',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                              ),
+                            RequestModalInitialClose(
+                              label: 'Close review and tip',
+                              onClose: () => Navigator.of(sheetContext).pop(),
                             ),
-                            IconButton(
-                              tooltip: 'Close',
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              icon: const Icon(Icons.close_rounded),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Review & Tip Your Artist',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                ExcludeSemantics(
+                                  child: IconButton(
+                                    tooltip: 'Close',
+                                    onPressed: () =>
+                                        Navigator.of(sheetContext).pop(),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -7907,9 +8183,11 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                         const SizedBox(height: 8),
                         TextField(
                           controller: _commentCtrl,
+                          textInputAction: TextInputAction.next,
                           minLines: 3,
                           maxLines: 4,
                           decoration: InputDecoration(
+                            labelText: 'Review comments, optional',
                             hintText: 'Write a quick review (optional)',
                             isDense: true,
                             filled: true,
@@ -8003,11 +8281,15 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                         if (_selectedTipPercent == null)
                           TextField(
                             controller: _customTipCtrl,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) =>
+                                FocusManager.instance.primaryFocus?.unfocus(),
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
                             onChanged: (_) => modalSetState(() {}),
                             decoration: InputDecoration(
+                              labelText: 'Custom tip amount, optional',
                               hintText: 'Custom tip amount (\$)',
                               isDense: true,
                               filled: true,
@@ -8043,7 +8325,12 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                             ),
                           ),
                         const SizedBox(height: 8),
-                        Container(
+                        Semantics(
+                          liveRegion: true,
+                          label:
+                              'Tip total, ${calculatedTip.toStringAsFixed(2)} dollars',
+                          child: ExcludeSemantics(
+                            child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -8060,11 +8347,13 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
-                          height: 44,
+                          height: 48,
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.blackCat,
@@ -8093,11 +8382,17 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
                                     }
                                   },
                             child: _saving
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                                ? Semantics(
+                                    liveRegion: true,
+                                    label: 'Submitting review and tip',
+                                    child: const ExcludeSemantics(
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
                                     ),
                                   )
                                 : Text(
@@ -8180,7 +8475,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         const SizedBox(height: 12),
         Center(
           child: SizedBox(
-            height: 42,
+            height: 48,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.blackCat,
@@ -8283,10 +8578,12 @@ class _ClientStatusTabsState extends State<_ClientStatusTabs> {
       child: Semantics(
         button: true,
         selected: selected,
-        label: label,
+        label: '$label, tab ${index + 1} of ${widget.tabs.length}',
+        hint: selected ? 'Selected tab' : 'Double tap to show $label',
+        onTap: () => _selectTab(index, label),
         child: ExcludeSemantics(
           child: InkWell(
-            onTap: () => setState(() => _selectedTab = index),
+            onTap: () => _selectTab(index, label),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -8313,6 +8610,12 @@ class _ClientStatusTabsState extends State<_ClientStatusTabs> {
         ),
       ),
     );
+  }
+
+  void _selectTab(int index, String label) {
+    if (_selectedTab == index) return;
+    setState(() => _selectedTab = index);
+    announceRequestAccessibilityMessage(context, '$label tab selected.');
   }
 }
 

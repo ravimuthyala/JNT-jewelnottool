@@ -21,7 +21,6 @@ import '../theme/app_colors.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../config/auth_flags.dart';
-import '../models/company_business_options.dart';
 import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../utils/registration_input_utils.dart';
@@ -53,6 +52,124 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   );
   final FocusNode _billingAddressTopFocusNode = FocusNode(
     debugLabel: 'billingAddressTop',
+  );
+
+  // Persistent accessibility targets. These keep TalkBack on the actual
+  // field/control through step changes, validation, and OS pickers.
+  final GlobalKey _logoUploadSemanticsKey = GlobalKey(
+    debugLabel: 'brandRegistrationLogoUploadA11y',
+  );
+  final GlobalKey _companyNameSemanticsKey = GlobalKey(
+    debugLabel: 'brandRegistrationCompanyNameA11y',
+  );
+  final GlobalKey _billingStateSemanticsKey = GlobalKey(
+    debugLabel: 'brandRegistrationBillingStateA11y',
+  );
+  final GlobalKey _billingCountrySemanticsKey = GlobalKey(
+    debugLabel: 'brandRegistrationBillingCountryA11y',
+  );
+  final GlobalKey _shippingStateSemanticsKey = GlobalKey(
+    debugLabel: 'brandRegistrationShippingStateA11y',
+  );
+  final GlobalKey _shippingCountrySemanticsKey = GlobalKey(
+    debugLabel: 'brandRegistrationShippingCountryA11y',
+  );
+  final Map<String, GlobalKey> _billingMethodSemanticsKeys =
+      <String, GlobalKey>{
+        'Credit/Debit Card': GlobalKey(
+          debugLabel: 'brandRegistrationCreditCardMethodA11y',
+        ),
+        'ACH Transfer': GlobalKey(
+          debugLabel: 'brandRegistrationAchMethodA11y',
+        ),
+        'Apple Pay': GlobalKey(
+          debugLabel: 'brandRegistrationApplePayMethodA11y',
+        ),
+        'Google Pay': GlobalKey(
+          debugLabel: 'brandRegistrationGooglePayMethodA11y',
+        ),
+      };
+
+  final FocusNode _companyNameFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCompanyName',
+  );
+  final FocusNode _companyEmailFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCompanyEmail',
+  );
+  final FocusNode _companyPhoneFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCompanyPhone',
+  );
+  final FocusNode _passwordFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationPassword',
+  );
+  final FocusNode _confirmPasswordFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationConfirmPassword',
+  );
+  final FocusNode _companyUrlFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCompanyUrl',
+  );
+  final FocusNode _tiktokFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationTikTok',
+  );
+  final FocusNode _instagramFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationInstagram',
+  );
+  final FocusNode _contactNameFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationContactName',
+  );
+  final FocusNode _contactEmailFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationContactEmail',
+  );
+  final FocusNode _contactPhoneFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationContactPhone',
+  );
+  final FocusNode _billingCityFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationBillingCity',
+  );
+  final FocusNode _billingManualStateFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationBillingManualState',
+  );
+  final FocusNode _billingZipFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationBillingZip',
+  );
+  final FocusNode _shippingStreetFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationShippingStreet',
+  );
+  final FocusNode _shippingCityFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationShippingCity',
+  );
+  final FocusNode _shippingManualStateFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationShippingManualState',
+  );
+  final FocusNode _shippingZipFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationShippingZip',
+  );
+  final FocusNode _cardNameFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCardName',
+  );
+  final FocusNode _cardNumberFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCardNumber',
+  );
+  final FocusNode _cardExpiryFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCardExpiry',
+  );
+  final FocusNode _cardCvvFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationCardCvv',
+  );
+  final FocusNode _achAccountNameFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationAchAccountName',
+  );
+  final FocusNode _achRoutingFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationAchRouting',
+  );
+  final FocusNode _achAccountFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationAchAccount',
+  );
+  final FocusNode _applePayEmailFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationApplePayEmail',
+  );
+  final FocusNode _googlePayEmailFocusNode = FocusNode(
+    debugLabel: 'brandRegistrationGooglePayEmail',
   );
   Timer? _billingStreetAutocompleteDebounce;
   Timer? _shippingStreetAutocompleteDebounce;
@@ -87,7 +204,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   final _bioCtrl = TextEditingController();
   // âœ… NEW: for the updated Company Profile + Account Creation section
   final _confirmPassCtrl = TextEditingController();
-  String? _businessType;
 
   final _contactEmailCtrl = TextEditingController();
   final _contactPhoneCtrl = TextEditingController();
@@ -366,6 +482,33 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     _registrationScrollController.dispose();
     _logoUploadFocusNode.dispose();
     _billingAddressTopFocusNode.dispose();
+    _companyNameFocusNode.dispose();
+    _companyEmailFocusNode.dispose();
+    _companyPhoneFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
+    _companyUrlFocusNode.dispose();
+    _tiktokFocusNode.dispose();
+    _instagramFocusNode.dispose();
+    _contactNameFocusNode.dispose();
+    _contactEmailFocusNode.dispose();
+    _contactPhoneFocusNode.dispose();
+    _billingCityFocusNode.dispose();
+    _billingManualStateFocusNode.dispose();
+    _billingZipFocusNode.dispose();
+    _shippingStreetFocusNode.dispose();
+    _shippingCityFocusNode.dispose();
+    _shippingManualStateFocusNode.dispose();
+    _shippingZipFocusNode.dispose();
+    _cardNameFocusNode.dispose();
+    _cardNumberFocusNode.dispose();
+    _cardExpiryFocusNode.dispose();
+    _cardCvvFocusNode.dispose();
+    _achAccountNameFocusNode.dispose();
+    _achRoutingFocusNode.dispose();
+    _achAccountFocusNode.dispose();
+    _applePayEmailFocusNode.dispose();
+    _googlePayEmailFocusNode.dispose();
     // existing
     _nameCtrl.dispose();
     _emailCtrl.dispose();
@@ -424,7 +567,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         _logoBytes = bytes;
         _logoPath = null;
       });
-      _restoreLogoUploadFocus();
+      _moveFocusAfterLogoUpload();
       return;
     }
 
@@ -432,16 +575,95 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       _logoPath = img.path;
       _logoBytes = null;
     });
-    _restoreLogoUploadFocus();
+    _moveFocusAfterLogoUpload();
   }
 
-  // The OS image picker steals accessibility focus; after it returns, put
-  // focus back on the avatar (not wherever the platform happens to land it,
-  // which is often the Close button) so screen reader users stay in place.
+  void _announce(String message) {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+  }
+
+  void _showSnackAndAnnounce(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+    _announce(message);
+  }
+
+  Future<void> _moveAccessibilityFocus({
+    FocusNode? focusNode,
+    GlobalKey? semanticKey,
+    bool scrollIntoView = true,
+  }) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    BuildContext? targetContext = semanticKey?.currentContext ?? focusNode?.context;
+    if (targetContext == null) return;
+
+    if (scrollIntoView) {
+      await Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.18,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+      if (!mounted) return;
+    }
+
+    if (focusNode != null) {
+      FocusScope.of(context).requestFocus(focusNode);
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    targetContext = semanticKey?.currentContext ?? focusNode?.context;
+    targetContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+
+    // Android can occasionally drop the first accessibility-focus event
+    // while a route, keyboard, or scroll animation is settling.
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    targetContext = semanticKey?.currentContext ?? focusNode?.context;
+    targetContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  // If the user cancels the OS image picker, keep them on the Company Logo
+  // control because no registration value changed.
   void _restoreLogoUploadFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      FocusScope.of(context).requestFocus(_logoUploadFocusNode);
+      unawaited(
+        _moveAccessibilityFocus(
+          focusNode: _logoUploadFocusNode,
+          semanticKey: _logoUploadSemanticsKey,
+        ),
+      );
+    });
+  }
+
+  // After a logo is successfully selected, continue the form instead of
+  // returning TalkBack to the app-bar Close button or back to the upload
+  // control. Company Name is the next real field for ADA and non-ADA users.
+  void _moveFocusAfterLogoUpload() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        _moveAccessibilityFocus(
+          focusNode: _companyNameFocusNode,
+          semanticKey: _companyNameSemanticsKey,
+        ),
+      );
     });
   }
 
@@ -451,7 +673,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   static const double _labelFs = 14;
   static const double _inputFs = 14;
   static const double _hintFs = 13.5;
-  static const double _dropFs = 14;
   static const double _fieldHeight = 46;
   static const double _fieldVerticalPadding = 14;
 
@@ -505,29 +726,17 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     return Semantics(isRequired: required, child: child);
   }
 
-  /// Wraps a DropdownButtonFormField-style widget so screen readers announce
-  /// it as a dropdown (with its current value) instead of a generic button.
-  Widget _dropdownSemantics({
-    required String label,
-    required String? value,
-    required Widget child,
-    bool required = false,
-  }) {
-    return Semantics(
-      label: label,
-      value: (value == null || value.trim().isEmpty) ? 'Not selected' : value,
-      hint: 'Dropdown. Double tap to open.',
-      isRequired: required,
-      child: ExcludeSemantics(child: child),
-    );
-  }
-
   Widget _countryCodeDropdown({
     required String value,
+    required String semanticLabel,
     required ValueChanged<CountryCode> onChanged,
     bool embedded = false,
   }) {
-    return Localizations.override(
+    return MergeSemantics(
+      child: Semantics(
+        label: semanticLabel,
+        value: value,
+        child: Localizations.override(
       context: context,
       locale: const Locale('en'),
       child: Container(
@@ -579,150 +788,179 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
           },
         ),
       ),
-    );
-  }
-
-  String? _firstExactMatch(List<String> options, String input) {
-    final needle = input.trim().toLowerCase();
-    if (needle.isEmpty) return null;
-    for (final option in options) {
-      if (option.trim().toLowerCase() == needle) return option;
-    }
-    return null;
-  }
-
-  Widget _typeAheadPicker({
-    required String label,
-    required String hint,
-    required List<String> options,
-    required String? selectedValue,
-    required ValueChanged<String?> onChanged,
-    String? Function(String?)? validator,
-    bool required = false,
-  }) {
-    return _req(
-      required,
-      _typeAheadPickerField(
-        label: label,
-        hint: hint,
-        options: options,
-        selectedValue: selectedValue,
-        onChanged: onChanged,
-        validator: validator,
+        ),
       ),
     );
   }
 
-  Widget _typeAheadPickerField({
+  Future<String?> _showAccessibleChoicePicker({
+    required String title,
+    required List<String> options,
+    required String currentValue,
+  }) async {
+    // The sheet owns its own TextEditingController and FocusNode. Do not
+    // allocate/dispose them here: showModalBottomSheet's Future can complete
+    // before its reverse animation has fully unmounted the sheet. Disposing
+    // controller/focus objects from this parent method during that interval
+    // can leave mounted TextField/Focus widgets referring to disposed state
+    // and can trigger Flutter framework teardown assertions.
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      requestFocus: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _RegistrationAccessibleChoiceSheet(
+        title: title,
+        options: options,
+        currentValue: currentValue,
+      ),
+    );
+  }
+
+  Widget _typeAheadPicker({
+    required String id,
     required String label,
     required String hint,
     required List<String> options,
     required String? selectedValue,
+    required GlobalKey semanticKey,
     required ValueChanged<String?> onChanged,
     String? Function(String?)? validator,
+    bool required = false,
   }) {
     return FormField<String>(
+      // Keep the FormField identity stable when a value is selected.
+      // Keying this widget with selectedValue caused Flutter to tear down
+      // the old FormField and create a new one while the same Semantics
+      // GlobalKey was being reused. On Android this could trip
+      // InheritedElement's `_dependents.isEmpty` assertion after selecting
+      // a state/country from the modal picker.
+      key: ValueKey<String>('accessible-picker-$id'),
       initialValue: selectedValue,
-      validator: validator,
+      // selectedValue is the parent/source-of-truth value. This also keeps
+      // validation correct when an address suggestion fills State for us
+      // programmatically rather than through field.didChange().
+      validator: (_) => validator?.call(selectedValue),
       builder: (field) {
+        final current = (selectedValue ?? field.value ?? '').trim();
+
+        Future<void> openPicker() async {
+          final selected = await _showAccessibleChoicePicker(
+            title: label,
+            options: options,
+            currentValue: current,
+          );
+          if (selected == null || !mounted) {
+            await _moveAccessibilityFocus(
+              semanticKey: semanticKey,
+              scrollIntoView: false,
+            );
+            return;
+          }
+
+          // showModalBottomSheet completes its result Future before the
+          // route necessarily finishes its reverse transition. Let that
+          // teardown (including the Search TextField/keyboard) settle before
+          // rebuilding this FormField with the newly selected value.
+          await Future<void>.delayed(const Duration(milliseconds: 320));
+          if (!mounted) return;
+
+          field.didChange(selected);
+          onChanged(selected);
+
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted) return;
+          await _moveAccessibilityFocus(
+            semanticKey: semanticKey,
+            scrollIntoView: false,
+          );
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Autocomplete<String>(
-              initialValue: TextEditingValue(text: field.value ?? ''),
-              optionsBuilder: (textEditingValue) {
-                final query = textEditingValue.text.trim().toLowerCase();
-                if (query.isEmpty) return const Iterable<String>.empty();
-                return options.where(
-                  (option) => option.toLowerCase().contains(query),
-                );
-              },
-              onSelected: (value) {
-                field.didChange(value);
-                onChanged(value);
-              },
-              fieldViewBuilder:
-                  (context, textController, focusNode, onSubmitted) {
-                    return TextFormField(
-                      controller: textController,
-                      focusNode: focusNode,
-                      style: const TextStyle(
-                        fontSize: _inputFs,
-                        color: Colors.black,
-                      ),
-                      decoration: _dec(label, hint),
-                      onTapOutside: (_) => focusNode.unfocus(),
-                      onEditingComplete: () {
-                        final match = _firstExactMatch(
-                          options,
-                          textController.text,
-                        );
-                        if (match != null) {
-                          field.didChange(match);
-                          onChanged(match);
-                        }
-                      },
-                    );
-                  },
-              optionsViewBuilder: (context, onSelected, optionsList) {
-                final maxW = MediaQuery.of(context).size.width - 48;
-                final optionCount = optionsList.length;
-                final menuHeight = AutocompleteDropdownSizing.menuHeight(
-                  itemCount: optionCount,
-                  itemExtent: 40,
-                );
-                return TextFieldTapRegion(
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      color: AppColors.snow,
-                      elevation: 4,
-                      borderRadius: BorderRadius.zero,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: menuHeight,
-                          maxWidth: maxW < 260 ? 260 : maxW,
+            Semantics(
+              key: semanticKey,
+              button: true,
+              isRequired: required,
+              label: label,
+              value: current.isEmpty ? 'Not selected' : current,
+              hint: 'Double tap to search and select $label',
+              onTap: () => unawaited(openPicker()),
+              child: ExcludeSemantics(
+                child: InkWell(
+                  onTap: () => unawaited(openPicker()),
+                  // Do not use InputDecorator for these accessible modal
+                  // selectors. The page already renders the visible field label
+                  // immediately above this control, and InputDecorator can
+                  // independently paint label/hint/value layers. On some
+                  // Android/Flutter combinations those layers were appearing
+                  // on top of one another for Billing/Shipping State.
+                  //
+                  // A plain bordered row guarantees exactly one visible text
+                  // widget inside the selector while the outer Semantics node
+                  // still provides the accessible label, value, required state
+                  // and activation action.
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        constraints: const BoxConstraints(
+                          minHeight: _fieldHeight,
                         ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
-                            optionCount,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.snow,
+                          borderRadius: BorderRadius.zero,
+                          border: Border.all(
+                            color: field.hasError
+                                ? Theme.of(context).colorScheme.error
+                                : AppColors.blackCatBorderLight,
                           ),
-                          physics: AutocompleteDropdownSizing.scrollPhysics(
-                            optionCount,
-                          ),
-                          itemCount: optionCount,
-                          itemBuilder: (context, index) {
-                            final option = optionsList.elementAt(index);
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                option,
-                                style: const TextStyle(fontSize: _inputFs),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                current.isEmpty ? hint : current,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: _inputFs,
+                                  color: current.isEmpty
+                                      ? Colors.black.withValues(alpha: 0.35)
+                                      : AppColors.blackCat,
+                                ),
                               ),
-                              onTap: () => onSelected(option),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 12),
+                            const Icon(Icons.search_rounded, size: 18),
+                          ],
                         ),
                       ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            if (field.hasError)
-              Padding(
-                padding: const EdgeInsets.only(top: 6, left: 12),
-                child: Text(
-                  field.errorText!,
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    height: 1.1,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.red,
+                      if (field.hasError) ...[
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Text(
+                            field.errorText!,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              height: 1.1,
+                              fontWeight: FontWeight.w500,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
+            ),
           ],
         );
       },
@@ -803,11 +1041,14 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     if (_checkingEmailAvailability) {
       return Padding(
         padding: const EdgeInsets.only(top: 4, left: 2),
-        child: Text(
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
           'Checking email availability…',
           style: TextStyle(
             fontSize: 11,
             color: Colors.black.withValues(alpha: 0.5),
+          ),
           ),
         ),
       );
@@ -816,12 +1057,15 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     if (_emailTakenRole != null && normalized == _lastCheckedEmail) {
       return Padding(
         padding: const EdgeInsets.only(top: 4, left: 2),
-        child: Text(
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
           SupabaseAuthService.emailAlreadyRegisteredMessage,
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: Colors.red,
+          ),
           ),
         ),
       );
@@ -863,26 +1107,31 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   }
 
   Widget _buildPasswordStatus() {
-    if (_passCtrl.text.isNotEmpty && _passwordError != null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 4, left: 2),
-        child: Text(
-          _passwordError!,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Colors.red,
+    final hasError = _passCtrl.text.isNotEmpty && _passwordError != null;
+    final message = hasError
+        ? _passwordError!
+        : 'Password must include uppercase, lowercase, number, and symbol.';
+
+    return Semantics(
+      container: true,
+      liveRegion: hasError,
+      label: hasError ? 'Password error. $message' : 'Password rules. $message',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4, left: 2),
+          child: Text(
+            message,
+            style: hasError
+                ? const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red,
+                  )
+                : TextStyle(
+                    fontSize: 11,
+                    color: Colors.black.withValues(alpha: 0.55),
+                  ),
           ),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(top: 4, left: 2),
-      child: Text(
-        'Password must include uppercase, lowercase, number, and symbol.',
-        style: TextStyle(
-          fontSize: 11,
-          color: Colors.black.withValues(alpha: 0.55),
         ),
       ),
     );
@@ -1071,7 +1320,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     final contactName = _contactNameCtrl.text.trim();
     final contactEmail = _contactEmailCtrl.text.trim().toLowerCase();
     final companyWebsite = _companyUrlCtrl.text.trim();
-    final businessType = (_businessType ?? '').trim();
+    const businessType = '';
     final companyPhone = '$_normalizedCompanyAreaCode$companyPhoneLocal';
     final contactPhone = '$_normalizedContactAreaCode$contactPhoneLocal';
     return {
@@ -1477,10 +1726,14 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     if (!_showValidationErrors) {
       setState(() => _showValidationErrors = true);
     }
-    if (_formKey.currentState?.validate() != true) return;
+    if (_formKey.currentState?.validate() != true) {
+      await _focusFirstRegistrationError();
+      return;
+    }
     if (!_hasRequiredBillingMethod()) {
+      await _focusFirstRegistrationError();
       _showBillingValidationMessage(
-        'Please enter at least one payment method before continuing.',
+        'Please complete the selected payment method before continuing.',
       );
       return;
     }
@@ -1498,12 +1751,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
       if (!billingValidation.isValid) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              billingValidation.message ?? 'Invalid U.S. billing address.',
-            ),
-          ),
+        final message =
+            billingValidation.message ?? 'Invalid U.S. billing address.';
+        _showSnackAndAnnounce(message);
+        await _moveAccessibilityFocus(
+          focusNode: _billingAddressTopFocusNode,
         );
         return;
       }
@@ -1522,12 +1774,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
       if (!shippingValidation.isValid) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              shippingValidation.message ?? 'Invalid U.S. shipping address.',
-            ),
-          ),
+        final message =
+            shippingValidation.message ?? 'Invalid U.S. shipping address.';
+        _showSnackAndAnnounce(message);
+        await _moveAccessibilityFocus(
+          focusNode: _shippingStreetFocusNode,
         );
         return;
       }
@@ -1611,10 +1862,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         // row) is a safe repair/resubmit case.
         if (existingRole != null && existingRole != 'company') {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(SupabaseAuthService.emailAlreadyRegisteredMessage),
-            ),
+          _showSnackAndAnnounce(
+            SupabaseAuthService.emailAlreadyRegisteredMessage,
+          );
+          await _moveAccessibilityFocus(
+            focusNode: _companyEmailFocusNode,
           );
           return;
         }
@@ -1640,17 +1892,11 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       final message = isAlreadyRegistered
           ? 'Email already registered. Please sign in.'
           : e.message;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      _showSnackAndAnnounce(message);
     } on TimeoutException {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Registration timed out. Please check your connection and try again.',
-          ),
-        ),
+      _showSnackAndAnnounce(
+        'Registration timed out. Please check your connection and try again.',
       );
     } catch (e, st) {
       if (kDebugMode) {
@@ -1659,9 +1905,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         debugPrint(st.toString());
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+      _showSnackAndAnnounce('Registration failed: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -1722,10 +1966,20 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       );
       if (resolved != null) {
         _applyBillingStreetSuggestion(resolved);
+        _announce('Billing address selected: ${resolved.displayLabel}.');
+        await _moveAccessibilityFocus(
+          focusNode: _billingAddressTopFocusNode,
+          scrollIntoView: false,
+        );
         return;
       }
     }
     _applyBillingStreetSuggestion(selected);
+    _announce('Billing address selected: ${selected.displayLabel}.');
+    await _moveAccessibilityFocus(
+      focusNode: _billingAddressTopFocusNode,
+      scrollIntoView: false,
+    );
   }
 
   Future<void> _autofillShippingAddressFromStreet() async {
@@ -1783,10 +2037,272 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
       );
       if (resolved != null) {
         _applyShippingStreetSuggestion(resolved);
+        _announce('Shipping address selected: ${resolved.displayLabel}.');
+        await _moveAccessibilityFocus(
+          focusNode: _shippingStreetFocusNode,
+          scrollIntoView: false,
+        );
         return;
       }
     }
     _applyShippingStreetSuggestion(selected);
+    _announce('Shipping address selected: ${selected.displayLabel}.');
+    await _moveAccessibilityFocus(
+      focusNode: _shippingStreetFocusNode,
+      scrollIntoView: false,
+    );
+  }
+
+  Future<bool> _announceAndFocusError(
+    String message, {
+    FocusNode? focusNode,
+    GlobalKey? semanticKey,
+  }) async {
+    _announce(message);
+    await _moveAccessibilityFocus(
+      focusNode: focusNode,
+      semanticKey: semanticKey,
+    );
+    return false;
+  }
+
+  void _selectBillingMethod(String method) {
+    if (_billingMethod == method) {
+      _announce('$method already selected.');
+      return;
+    }
+
+    setState(() => _billingMethod = method);
+    _announce('$method selected.');
+
+    // The selected payment method reveals a different group of fields.
+    // Return TalkBack to the method itself after the rebuild so the next
+    // forward swipe enters the newly revealed first field instead of jumping
+    // past the payment card.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final semanticKey = _billingMethodSemanticsKeys[method];
+      if (semanticKey == null) return;
+      unawaited(
+        _moveAccessibilityFocus(
+          semanticKey: semanticKey,
+          scrollIntoView: false,
+        ),
+      );
+    });
+  }
+
+  Future<bool> _focusFirstRegistrationError() async {
+    if (_registrationStep == 0) {
+      if (_companyNameCtrl.text.trim().isEmpty) {
+        return _announceAndFocusError(
+          'Company Name is required.',
+          focusNode: _companyNameFocusNode,
+        );
+      }
+      final emailError = _accountEmailValidator(_emailCtrl.text);
+      if (emailError != null) {
+        return _announceAndFocusError(
+          emailError,
+          focusNode: _companyEmailFocusNode,
+        );
+      }
+      final companyPhoneError = _phoneValidator(_phoneCtrl.text);
+      if (companyPhoneError != null) {
+        return _announceAndFocusError(
+          'Company Phone: $companyPhoneError.',
+          focusNode: _companyPhoneFocusNode,
+        );
+      }
+      final passwordError = _passwordValidator(_passCtrl.text);
+      if (passwordError != null) {
+        return _announceAndFocusError(
+          passwordError,
+          focusNode: _passwordFocusNode,
+        );
+      }
+      final confirmError = _confirmPasswordValidator(_confirmPassCtrl.text);
+      if (confirmError != null) {
+        return _announceAndFocusError(
+          confirmError,
+          focusNode: _confirmPasswordFocusNode,
+        );
+      }
+      final companyUrlError = _optionalUrlValidator(_companyUrlCtrl.text);
+      if (companyUrlError != null) {
+        return _announceAndFocusError(
+          companyUrlError,
+          focusNode: _companyUrlFocusNode,
+        );
+      }
+      if (_tiktokCtrl.text.trim().isEmpty &&
+          _instagramCtrl.text.trim().isEmpty) {
+        return _announceAndFocusError(
+          'Provide Instagram or TikTok.',
+          focusNode: _tiktokFocusNode,
+        );
+      }
+      if (_contactNameCtrl.text.trim().isEmpty) {
+        return _announceAndFocusError(
+          'Contact Name is required.',
+          focusNode: _contactNameFocusNode,
+        );
+      }
+      final contactEmailError = _emailValidator(_contactEmailCtrl.text);
+      if (contactEmailError != null) {
+        return _announceAndFocusError(
+          'Contact Email: $contactEmailError.',
+          focusNode: _contactEmailFocusNode,
+        );
+      }
+      final contactPhoneError = _phoneValidator(_contactPhoneCtrl.text);
+      if (contactPhoneError != null) {
+        return _announceAndFocusError(
+          'Contact Phone: $contactPhoneError.',
+          focusNode: _contactPhoneFocusNode,
+        );
+      }
+      return false;
+    }
+
+    if (_streetCtrl.text.trim().isEmpty) {
+      return _announceAndFocusError(
+        'Billing Street Address is required.',
+        focusNode: _billingAddressTopFocusNode,
+      );
+    }
+    if (_cityCtrl.text.trim().isEmpty) {
+      return _announceAndFocusError(
+        'Billing City is required.',
+        focusNode: _billingCityFocusNode,
+      );
+    }
+    if (_isBillingUnitedStates && (_selectedState ?? '').trim().isEmpty) {
+      return _announceAndFocusError(
+        'Billing State is required.',
+        semanticKey: _billingStateSemanticsKey,
+      );
+    }
+    if (_isBillingUnitedStates && _zipValidator(_zipCtrl.text) != null) {
+      return _announceAndFocusError(
+        _zipValidator(_zipCtrl.text)!,
+        focusNode: _billingZipFocusNode,
+      );
+    }
+    if (_selectedCountry.trim().isEmpty) {
+      return _announceAndFocusError(
+        'Billing Country is required.',
+        semanticKey: _billingCountrySemanticsKey,
+      );
+    }
+
+    if (!_shippingSameAsBilling) {
+      if (_shipStreetCtrl.text.trim().isEmpty) {
+        return _announceAndFocusError(
+          'Shipping Street Address is required.',
+          focusNode: _shippingStreetFocusNode,
+        );
+      }
+      if (_shipCityCtrl.text.trim().isEmpty) {
+        return _announceAndFocusError(
+          'Shipping City is required.',
+          focusNode: _shippingCityFocusNode,
+        );
+      }
+      if (_isShippingUnitedStates &&
+          (_shipSelectedState ?? '').trim().isEmpty) {
+        return _announceAndFocusError(
+          'Shipping State is required.',
+          semanticKey: _shippingStateSemanticsKey,
+        );
+      }
+      if (_isShippingUnitedStates) {
+        final shippingZipError = _zipValidator(_shipZipCtrl.text);
+        if (shippingZipError != null) {
+          return _announceAndFocusError(
+            shippingZipError == 'Zip Code is required'
+                ? 'Shipping Zip Code is required.'
+                : 'Enter a valid Shipping ZIP code.',
+            focusNode: _shippingZipFocusNode,
+          );
+        }
+      }
+      if (_shipSelectedCountry.trim().isEmpty) {
+        return _announceAndFocusError(
+          'Shipping Country is required.',
+          semanticKey: _shippingCountrySemanticsKey,
+        );
+      }
+    }
+
+    switch (_billingMethod) {
+      case 'Credit/Debit Card':
+        if (_cardNameCtrl.text.trim().isEmpty) {
+          return _announceAndFocusError(
+            'Name on Card is required.',
+            focusNode: _cardNameFocusNode,
+          );
+        }
+        final cardDigits = _cardNumberCtrl.text.replaceAll(RegExp(r'\D'), '');
+        if (cardDigits.length < 13 || cardDigits.length > 19) {
+          return _announceAndFocusError(
+            'Enter a valid Card Number.',
+            focusNode: _cardNumberFocusNode,
+          );
+        }
+        if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(_cardExpiryCtrl.text.trim())) {
+          return _announceAndFocusError(
+            'Enter Expiry as month slash year.',
+            focusNode: _cardExpiryFocusNode,
+          );
+        }
+        final cvv = _cardCvvCtrl.text.trim();
+        if (cvv.length != 3 && cvv.length != 4) {
+          return _announceAndFocusError(
+            'CVV must be 3 or 4 digits.',
+            focusNode: _cardCvvFocusNode,
+          );
+        }
+        break;
+      case 'ACH Transfer':
+        if (_achAccountNameCtrl.text.trim().isEmpty) {
+          return _announceAndFocusError(
+            'Account Holder Name is required.',
+            focusNode: _achAccountNameFocusNode,
+          );
+        }
+        if (_achRoutingCtrl.text.trim().isEmpty) {
+          return _announceAndFocusError(
+            'Routing Number is required.',
+            focusNode: _achRoutingFocusNode,
+          );
+        }
+        if (_achAccountCtrl.text.trim().isEmpty) {
+          return _announceAndFocusError(
+            'Account Number is required.',
+            focusNode: _achAccountFocusNode,
+          );
+        }
+        break;
+      case 'Apple Pay':
+        if (_emailValidator(_applePayEmailCtrl.text) != null) {
+          return _announceAndFocusError(
+            'Enter a valid Apple Pay Email.',
+            focusNode: _applePayEmailFocusNode,
+          );
+        }
+        break;
+      case 'Google Pay':
+        if (_emailValidator(_googlePayEmailCtrl.text) != null) {
+          return _announceAndFocusError(
+            'Enter a valid Google Pay Email.',
+            focusNode: _googlePayEmailFocusNode,
+          );
+        }
+        break;
+    }
+
+    return false;
   }
 
   Future<bool> _validateCurrentRegistrationStep() async {
@@ -1795,23 +2311,13 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
     }
     final valid = _formKey.currentState?.validate() ?? true;
     if (!valid && mounted) {
-      SemanticsService.sendAnnouncement(
-        View.of(context),
-        'Please correct the highlighted fields before continuing.',
-        Directionality.of(context),
-      );
-      if (_registrationStep == 1) {
-        SemanticsService.sendAnnouncement(
-          View.of(context),
-          'Please enter at least one payment method before continuing.',
-          Directionality.of(context),
-        );
-      }
+      await _focusFirstRegistrationError();
       return false;
     }
     if (_registrationStep == 1 && !_hasRequiredBillingMethod()) {
+      await _focusFirstRegistrationError();
       return _showBillingValidationMessage(
-        'Please enter at least one payment method before continuing.',
+        'Please complete the selected payment method before continuing.',
       );
     }
     return valid;
@@ -1855,12 +2361,16 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   /// Next/Back button, or wherever it last landed), so it can silently skip
   /// past the new step's first field. Moves focus to that field explicitly.
   void _focusTopOfStep(int step) {
-    final target = step == 0
-        ? _logoUploadFocusNode
-        : _billingAddressTopFocusNode;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      FocusScope.of(context).requestFocus(target);
+      unawaited(
+        _moveAccessibilityFocus(
+          focusNode: step == 0
+              ? _logoUploadFocusNode
+              : _billingAddressTopFocusNode,
+          semanticKey: step == 0 ? _logoUploadSemanticsKey : null,
+        ),
+      );
     });
   }
 
@@ -2140,6 +2650,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                             children: [
                               const SizedBox(height: 6),
                               _ProfileUpload(
+                                semanticKey: _logoUploadSemanticsKey,
                                 label: 'Company Logo',
                                 onTap: _pickCompanyLogo,
                                 focusNode: _logoUploadFocusNode,
@@ -2153,10 +2664,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
                               _FieldLabel.required('Company Name'),
                               const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
+                              Semantics(
+                                key: _companyNameSemanticsKey,
+                                isRequired: true,
+                                child: TextFormField(
                                   controller: _companyNameCtrl,
+                                  focusNode: _companyNameFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   decoration: _dec(
                                     'Company Name',
@@ -2168,47 +2681,6 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               ),
                               const SizedBox(height: 16),
 
-                              _FieldLabel.required('Business Type'),
-                              const SizedBox(height: 6),
-                              _dropdownSemantics(
-                                label: 'Business Type',
-                                value: _businessType,
-                                required: true,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _businessType,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    color: AppColors.blackCat,
-                                  ),
-                                  menuMaxHeight: 280,
-                                  items: kCompanyBusinessTypes
-                                      .map(
-                                        (b) => DropdownMenuItem<String>(
-                                          value: b,
-                                          child: Text(
-                                            b,
-                                            style: const TextStyle(
-                                              fontSize: _dropFs,
-                                              color: AppColors.blackCat,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (v) =>
-                                      setState(() => _businessType = v),
-                                  decoration: _dec(
-                                    'Business Type',
-                                    'Select Business Type',
-                                  ),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                      ? 'Business Type is required'
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-
                               _FieldLabel.required('Company Email'),
                               const SizedBox(height: 6),
                               _req(
@@ -2216,6 +2688,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 TextFormField(
                                   controller:
                                       _emailCtrl, // âœ… using your existing controller
+                                  focusNode: _companyEmailFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   keyboardType: TextInputType.emailAddress,
                                   decoration: _dec(
@@ -2249,35 +2722,55 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                                 AppColors.blackCatBorderLight,
                                           ),
                                         ),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 132,
-                                              child: _countryCodeDropdown(
-                                                value: _companyPhoneAreaCode,
-                                                embedded: true,
-                                                onChanged: (code) => setState(
-                                                  () => _companyPhoneAreaCode =
-                                                      code.dialCode ?? '+1',
+                                        child: Semantics(
+                                          container: true,
+                                          explicitChildNodes: true,
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 132,
+                                                child: Semantics(
+                                                  sortKey: OrdinalSortKey(0),
+                                                  child: _countryCodeDropdown(
+                                                    value: _companyPhoneAreaCode,
+                                                    semanticLabel:
+                                                        'Company phone country code',
+                                                    embedded: true,
+                                                    onChanged: (code) => setState(
+                                                      () => _companyPhoneAreaCode =
+                                                          code.dialCode ?? '+1',
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
-                                            ),
                                             Container(
                                               width: 1,
                                               color:
                                                   AppColors.blackCatBorderLight,
                                             ),
                                             const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Semantics(
-                                                isRequired: true,
-                                                child: TextFormField(
+                                              Expanded(
+                                                child: Semantics(
+                                                  sortKey: OrdinalSortKey(1),
+                                                  label:
+                                                      'Company phone number, 10 digits',
+                                                  isRequired: true,
+                                                  child: TextFormField(
                                                   controller: _phoneCtrl,
+                                                  focusNode: _companyPhoneFocusNode,
                                                   style: const TextStyle(
                                                     fontSize: _inputFs,
                                                   ),
                                                   keyboardType:
                                                       TextInputType.phone,
+                                                  textInputAction:
+                                                      TextInputAction.next,
+                                                  onFieldSubmitted: (_) {
+                                                    FocusScope.of(context)
+                                                        .requestFocus(
+                                                          _passwordFocusNode,
+                                                        );
+                                                  },
                                                   inputFormatters: [
                                                     FilteringTextInputFormatter
                                                         .digitsOnly,
@@ -2311,8 +2804,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(width: 10),
-                                          ],
+                                              const SizedBox(width: 10),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       if (field.hasError)
@@ -2338,11 +2832,15 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
                               _FieldLabel.required('Password'),
                               const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
+                              Semantics(
+                                isRequired: true,
+                                hint: _passwordError != null
+                                    ? 'Password error. ${_passwordError!}'
+                                    : 'Password rules. Must include uppercase, lowercase, number, and symbol.',
+                                child: TextFormField(
                                   controller:
                                       _passCtrl, // âœ… using your existing controller
+                                  focusNode: _passwordFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   obscureText: _obscure,
                                   decoration: _dec(
@@ -2366,7 +2864,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                   onChanged: _onPasswordChanged,
                                 ),
                               ),
-                              _buildPasswordStatus(),
+                              ExcludeSemantics(child: _buildPasswordStatus()),
                               const SizedBox(height: 16),
 
                               _FieldLabel.required('Confirm Password'),
@@ -2375,6 +2873,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 true,
                                 TextFormField(
                                   controller: _confirmPassCtrl,
+                                  focusNode: _confirmPasswordFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   obscureText: _obscureConfirm,
                                   decoration: _dec(
@@ -2407,6 +2906,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               const SizedBox(height: 6),
                               TextFormField(
                                 controller: _companyUrlCtrl,
+                                focusNode: _companyUrlFocusNode,
                                 style: const TextStyle(fontSize: _inputFs),
                                 keyboardType: TextInputType.url,
                                 decoration: _dec(
@@ -2421,6 +2921,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               const SizedBox(height: 6),
                               TextFormField(
                                 controller: _tiktokCtrl,
+                                focusNode: _tiktokFocusNode,
                                 style: const TextStyle(fontSize: _inputFs),
                                 decoration: _dec(
                                   'TikTok',
@@ -2434,6 +2935,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               const SizedBox(height: 6),
                               TextFormField(
                                 controller: _instagramCtrl,
+                                focusNode: _instagramFocusNode,
                                 style: const TextStyle(fontSize: _inputFs),
                                 decoration: _dec(
                                   'Instagram',
@@ -2476,6 +2978,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 true,
                                 TextFormField(
                                   controller: _contactNameCtrl,
+                                  focusNode: _contactNameFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   decoration: _dec(
                                     'Contact Name',
@@ -2493,6 +2996,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 true,
                                 TextFormField(
                                   controller: _contactEmailCtrl,
+                                  focusNode: _contactEmailFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   keyboardType: TextInputType.emailAddress,
                                   decoration: _dec(
@@ -2524,35 +3028,49 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                                 AppColors.blackCatBorderLight,
                                           ),
                                         ),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 132,
-                                              child: _countryCodeDropdown(
-                                                value: _contactPhoneAreaCode,
-                                                embedded: true,
-                                                onChanged: (code) => setState(
-                                                  () => _contactPhoneAreaCode =
-                                                      code.dialCode ?? '+1',
+                                        child: Semantics(
+                                          container: true,
+                                          explicitChildNodes: true,
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 132,
+                                                child: Semantics(
+                                                  sortKey: OrdinalSortKey(0),
+                                                  child: _countryCodeDropdown(
+                                                    value: _contactPhoneAreaCode,
+                                                    semanticLabel:
+                                                        'Contact phone country code',
+                                                    embedded: true,
+                                                    onChanged: (code) => setState(
+                                                      () => _contactPhoneAreaCode =
+                                                          code.dialCode ?? '+1',
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
-                                            ),
                                             Container(
                                               width: 1,
                                               color:
                                                   AppColors.blackCatBorderLight,
                                             ),
                                             const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Semantics(
-                                                isRequired: true,
-                                                child: TextFormField(
+                                              Expanded(
+                                                child: Semantics(
+                                                  sortKey: OrdinalSortKey(1),
+                                                  label:
+                                                      'Contact phone number, 10 digits',
+                                                  isRequired: true,
+                                                  child: TextFormField(
                                                   controller: _contactPhoneCtrl,
+                                                  focusNode: _contactPhoneFocusNode,
                                                   style: const TextStyle(
                                                     fontSize: _inputFs,
                                                   ),
                                                   keyboardType:
                                                       TextInputType.phone,
+                                                  textInputAction:
+                                                      TextInputAction.done,
                                                   inputFormatters: [
                                                     FilteringTextInputFormatter
                                                         .digitsOnly,
@@ -2586,8 +3104,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(width: 10),
-                                          ],
+                                              const SizedBox(width: 10),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       if (field.hasError)
@@ -2713,7 +3232,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                   controller: _streetCtrl,
                                   style: const TextStyle(fontSize: _inputFs),
                                   decoration: _dec(
-                                    'Street Address',
+                                    'Billing Street Address',
                                     'Enter Billing Street Address',
                                   ),
                                   onChanged: (_) =>
@@ -2761,20 +3280,37 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                         itemCount: suggestionCount,
                                         separatorBuilder: (_, _) =>
                                             const Divider(height: 1),
-                                        itemBuilder: (_, i) => ListTile(
-                                          dense: true,
-                                          title: Text(
-                                            _billingStreetSuggestions[i]
-                                                .displayLabel,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          onTap: () =>
+                                        itemBuilder: (_, i) {
+                                          final suggestion =
+                                              _billingStreetSuggestions[i];
+                                          return Semantics(
+                                            button: true,
+                                            label:
+                                                '${suggestion.displayLabel}, address suggestion ${i + 1} of $suggestionCount',
+                                            hint: 'Double tap to use this address',
+                                            onTap: () => unawaited(
                                               _selectBillingStreetSuggestion(
-                                                _billingStreetSuggestions[i],
+                                                suggestion,
                                               ),
-                                        ),
+                                            ),
+                                            child: ExcludeSemantics(
+                                              child: ListTile(
+                                                dense: true,
+                                                title: Text(
+                                                  suggestion.displayLabel,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                                onTap: () => unawaited(
+                                                  _selectBillingStreetSuggestion(
+                                                    suggestion,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     );
                                   },
@@ -2787,6 +3323,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 true,
                                 TextFormField(
                                   controller: _cityCtrl,
+                                  focusNode: _billingCityFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   decoration: _dec(
                                     'City',
@@ -2804,10 +3341,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               const SizedBox(height: 6),
                               if (_isBillingUnitedStates)
                                 _typeAheadPicker(
-                                  label: 'State',
-                                  hint: 'Type billing state',
+                                  id: 'billing-state',
+                                  label: 'Billing State',
+                                  hint: 'Select billing state',
                                   options: usStates,
                                   selectedValue: _selectedState,
+                                  semanticKey: _billingStateSemanticsKey,
                                   required: true,
                                   onChanged: (v) =>
                                       setState(() => _selectedState = v),
@@ -2819,6 +3358,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               else
                                 TextFormField(
                                   controller: _manualStateCtrl,
+                                  focusNode: _billingManualStateFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   decoration: _dec(
                                     'State / Region',
@@ -2836,6 +3376,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 _isBillingUnitedStates,
                                 TextFormField(
                                   controller: _zipCtrl,
+                                  focusNode: _billingZipFocusNode,
                                   style: const TextStyle(fontSize: _inputFs),
                                   keyboardType: TextInputType.number,
                                   decoration: _dec(
@@ -2853,10 +3394,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                               _FieldLabel.required('Country'),
                               const SizedBox(height: 6),
                               _typeAheadPicker(
-                                label: 'Country',
-                                hint: 'Type billing country',
+                                id: 'billing-country',
+                                label: 'Billing Country',
+                                hint: 'Select billing country',
                                 options: countries,
                                 selectedValue: _selectedCountry,
+                                semanticKey: _billingCountrySemanticsKey,
                                 required: true,
                                 onChanged: (v) {
                                   if (v == null) return;
@@ -2957,15 +3500,30 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 const SizedBox(height: 16),
                                 const Divider(height: 1),
                                 const SizedBox(height: 16),
+                                Semantics(
+                                  header: true,
+                                  label: 'Shipping Address',
+                                  child: const ExcludeSemantics(
+                                    child: Text(
+                                      'Shipping Address',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
                                 _FieldLabel.required('Street Address'),
                                 const SizedBox(height: 6),
                                 _req(
                                   true,
                                   TextFormField(
                                     controller: _shipStreetCtrl,
+                                    focusNode: _shippingStreetFocusNode,
                                     style: const TextStyle(fontSize: _inputFs),
                                     decoration: _dec(
-                                      'Street Address',
+                                      'Shipping Street Address',
                                       'Enter Shipping Street Address',
                                     ),
                                     onChanged: (_) =>
@@ -3019,20 +3577,38 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           itemCount: suggestionCount,
                                           separatorBuilder: (_, _) =>
                                               const Divider(height: 1),
-                                          itemBuilder: (_, i) => ListTile(
-                                            dense: true,
-                                            title: Text(
-                                              _shippingStreetSuggestions[i]
-                                                  .displayLabel,
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            onTap: () =>
+                                          itemBuilder: (_, i) {
+                                            final suggestion =
+                                                _shippingStreetSuggestions[i];
+                                            return Semantics(
+                                              button: true,
+                                              label:
+                                                  '${suggestion.displayLabel}, address suggestion ${i + 1} of $suggestionCount',
+                                              hint:
+                                                  'Double tap to use this address',
+                                              onTap: () => unawaited(
                                                 _selectShippingStreetSuggestion(
-                                                  _shippingStreetSuggestions[i],
+                                                  suggestion,
                                                 ),
-                                          ),
+                                              ),
+                                              child: ExcludeSemantics(
+                                                child: ListTile(
+                                                  dense: true,
+                                                  title: Text(
+                                                    suggestion.displayLabel,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  onTap: () => unawaited(
+                                                    _selectShippingStreetSuggestion(
+                                                      suggestion,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       );
                                     },
@@ -3044,6 +3620,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                   true,
                                   TextFormField(
                                     controller: _shipCityCtrl,
+                                    focusNode: _shippingCityFocusNode,
                                     style: const TextStyle(fontSize: _inputFs),
                                     decoration: _dec(
                                       'City',
@@ -3061,10 +3638,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 const SizedBox(height: 6),
                                 if (_isShippingUnitedStates)
                                   _typeAheadPicker(
-                                    label: 'State',
-                                    hint: 'Type shipping state',
+                                    id: 'shipping-state',
+                                    label: 'Shipping State',
+                                    hint: 'Select shipping state',
                                     options: usStates,
                                     selectedValue: _shipSelectedState,
+                                    semanticKey: _shippingStateSemanticsKey,
                                     required: true,
                                     onChanged: (v) =>
                                         setState(() => _shipSelectedState = v),
@@ -3077,6 +3656,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 else
                                   TextFormField(
                                     controller: _shipManualStateCtrl,
+                                    focusNode: _shippingManualStateFocusNode,
                                     style: const TextStyle(fontSize: _inputFs),
                                     decoration: _dec(
                                       'State / Region',
@@ -3093,6 +3673,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                   _isShippingUnitedStates,
                                   TextFormField(
                                     controller: _shipZipCtrl,
+                                    focusNode: _shippingZipFocusNode,
                                     style: const TextStyle(fontSize: _inputFs),
                                     keyboardType: TextInputType.number,
                                     decoration: _dec(
@@ -3112,10 +3693,12 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 _FieldLabel.required('Country'),
                                 const SizedBox(height: 6),
                                 _typeAheadPicker(
-                                  label: 'Country',
-                                  hint: 'Type shipping country',
+                                  id: 'shipping-country',
+                                  label: 'Shipping Country',
+                                  hint: 'Select shipping country',
                                   options: countries,
                                   selectedValue: _shipSelectedCountry,
+                                  semanticKey: _shippingCountrySemanticsKey,
                                   required: true,
                                   onChanged: (v) {
                                     if (v == null) return;
@@ -3368,19 +3951,18 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Semantics(
+                                          key: _billingMethodSemanticsKeys[method],
                                           button: true,
                                           selected: selected,
-                                          label:
-                                              '$method'
-                                              '${selected ? ', selected' : ''}',
-                                          onTap: () => setState(
-                                            () => _billingMethod = method,
-                                          ),
+                                          label: method,
+                                          hint: selected
+                                              ? 'Selected payment method'
+                                              : 'Double tap to select payment method',
+                                          onTap: () => _selectBillingMethod(method),
                                           child: ExcludeSemantics(
                                             child: InkWell(
-                                              onTap: () => setState(
-                                                () => _billingMethod = method,
-                                              ),
+                                              onTap: () =>
+                                                  _selectBillingMethod(method),
                                               child: Row(
                                                 children: [
                                                   Icon(
@@ -3412,6 +3994,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                               'Credit/Debit Card') ...[
                                             TextFormField(
                                               controller: _cardNameCtrl,
+                                              focusNode: _cardNameFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3429,6 +4012,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                             const SizedBox(height: 6),
                                             TextFormField(
                                               controller: _cardNumberCtrl,
+                                              focusNode: _cardNumberFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3459,6 +4043,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                                 Expanded(
                                                   child: TextFormField(
                                                     controller: _cardExpiryCtrl,
+                                                    focusNode: _cardExpiryFocusNode,
                                                     style: const TextStyle(
                                                       fontSize: _inputFs,
                                                     ),
@@ -3489,6 +4074,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                                 Expanded(
                                                   child: TextFormField(
                                                     controller: _cardCvvCtrl,
+                                                    focusNode: _cardCvvFocusNode,
                                                     style: const TextStyle(
                                                       fontSize: _inputFs,
                                                     ),
@@ -3519,6 +4105,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           if (method == 'ACH Transfer') ...[
                                             TextFormField(
                                               controller: _achAccountNameCtrl,
+                                              focusNode: _achAccountNameFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3537,6 +4124,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                             const SizedBox(height: 6),
                                             TextFormField(
                                               controller: _achRoutingCtrl,
+                                              focusNode: _achRoutingFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3556,6 +4144,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                             const SizedBox(height: 6),
                                             TextFormField(
                                               controller: _achAccountCtrl,
+                                              focusNode: _achAccountFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3576,6 +4165,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           if (method == 'Apple Pay') ...[
                                             TextFormField(
                                               controller: _applePayEmailCtrl,
+                                              focusNode: _applePayEmailFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3606,6 +4196,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                           if (method == 'Google Pay') ...[
                                             TextFormField(
                                               controller: _googlePayEmailCtrl,
+                                              focusNode: _googlePayEmailFocusNode,
                                               style: const TextStyle(
                                                 fontSize: _inputFs,
                                               ),
@@ -3640,23 +4231,46 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                                 }).toList(),
                               ),
                               const SizedBox(height: 6),
-                              CheckboxListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                value: _saveBillingForFutureUse,
-                                onChanged: (v) => setState(
-                                  () => _saveBillingForFutureUse = v ?? false,
-                                ),
-                                activeColor: AppColors.deepPlum,
-                                title: const Text(
-                                  'Save for future use',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                              Semantics(
+                                button: true,
+                                label:
+                                    'Save for future use toggle, ${_saveBillingForFutureUse ? 'on' : 'off'}',
+                                hint: 'Double tap to toggle',
+                                onTap: () {
+                                  setState(
+                                    () => _saveBillingForFutureUse =
+                                        !_saveBillingForFutureUse,
+                                  );
+                                  _announce(
+                                    'Save for future use ${_saveBillingForFutureUse ? 'on' : 'off'}.',
+                                  );
+                                },
+                                child: ExcludeSemantics(
+                                  child: CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    value: _saveBillingForFutureUse,
+                                    onChanged: (v) {
+                                      final next = v ?? false;
+                                      setState(
+                                        () => _saveBillingForFutureUse = next,
+                                      );
+                                      _announce(
+                                        'Save for future use ${next ? 'on' : 'off'}.',
+                                      );
+                                    },
+                                    activeColor: AppColors.deepPlum,
+                                    title: const Text(
+                                      'Save for future use',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
                                   ),
                                 ),
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
                               ),
                             ],
                           ),
@@ -3685,6 +4299,266 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   }
 }
 
+
+/// Searchable modal selector used by Billing/Shipping State and Country.
+///
+/// Important lifecycle detail:
+/// This widget owns the Search TextEditingController and Close FocusNode.
+/// They are disposed only when Flutter actually disposes the bottom-sheet
+/// subtree, not when Navigator.pop returns a result to the parent page.
+class _RegistrationAccessibleChoiceSheet extends StatefulWidget {
+  const _RegistrationAccessibleChoiceSheet({
+    required this.title,
+    required this.options,
+    required this.currentValue,
+  });
+
+  final String title;
+  final List<String> options;
+  final String currentValue;
+
+  @override
+  State<_RegistrationAccessibleChoiceSheet> createState() =>
+      _RegistrationAccessibleChoiceSheetState();
+}
+
+class _RegistrationAccessibleChoiceSheetState
+    extends State<_RegistrationAccessibleChoiceSheet> {
+  late final TextEditingController _searchController;
+  late final FocusNode _closeFocusNode;
+  String _query = '';
+  bool _returningSelection = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _closeFocusNode = FocusNode(
+      debugLabel: '${widget.title}PickerClose',
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted || _returningSelection) return;
+
+      FocusScope.of(context).requestFocus(_closeFocusNode);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+
+      _closeFocusNode.context
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
+
+  List<String> get _filteredOptions {
+    final normalized = _query.trim().toLowerCase();
+    if (normalized.isEmpty) return widget.options;
+    return widget.options
+        .where((option) => option.toLowerCase().contains(normalized))
+        .toList(growable: false);
+  }
+
+  Future<void> _closeWithoutSelection() async {
+    if (_returningSelection) return;
+    _returningSelection = true;
+
+    // Close any active Search keyboard before beginning the sheet pop.
+    FocusScope.of(context).unfocus();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _selectOption(String option) async {
+    if (_returningSelection) return;
+    _returningSelection = true;
+
+    // The crash reported on Android occurred specifically when an option was
+    // selected after typing in Search. Detach the Search TextField from the
+    // IME first, let one frame settle, then return the result. The controller
+    // remains alive until this sheet's real dispose() runs after route teardown.
+    FocusScope.of(context).unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return;
+
+    Navigator.of(context).pop(option);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filteredOptions;
+
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: '${widget.title} selector',
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Material(
+            color: AppColors.snow,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.82,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            sortKey: OrdinalSortKey(1),
+                            label: widget.title,
+                            child: ExcludeSemantics(
+                              child: Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Semantics(
+                          sortKey: OrdinalSortKey(0),
+                          button: true,
+                          label: 'Close ${widget.title} selector',
+                          hint: 'Double tap to close',
+                          onTap: () => unawaited(_closeWithoutSelection()),
+                          child: ExcludeSemantics(
+                            child: IconButton(
+                              focusNode: _closeFocusNode,
+                              tooltip: 'Close ${widget.title} selector',
+                              onPressed: _returningSelection
+                                  ? null
+                                  : () => unawaited(_closeWithoutSelection()),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: Semantics(
+                      sortKey: OrdinalSortKey(2),
+                      label: 'Search ${widget.title}',
+                      textField: true,
+                      child: TextField(
+                        controller: _searchController,
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Type to filter ${widget.title}',
+                          filled: true,
+                          fillColor: AppColors.snow,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: const BorderSide(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: const BorderSide(
+                              color: AppColors.blackCatBorderLight,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: const BorderSide(
+                              color: AppColors.blackCat,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          if (!mounted || _returningSelection) return;
+                          setState(() => _query = value);
+                        },
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Semantics(
+                      container: true,
+                      explicitChildNodes: true,
+                      sortKey: OrdinalSortKey(3),
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text('No results'),
+                            )
+                          : ListView.builder(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding:
+                                  const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final option = filtered[index];
+                                final selected =
+                                    option.trim().toLowerCase() ==
+                                    widget.currentValue
+                                        .trim()
+                                        .toLowerCase();
+
+                                return Semantics(
+                                  button: true,
+                                  selected: selected,
+                                  label:
+                                      '$option, option ${index + 1} of ${filtered.length}',
+                                  hint: 'Double tap to select',
+                                  onTap: _returningSelection
+                                      ? null
+                                      : () => unawaited(
+                                            _selectOption(option),
+                                          ),
+                                  child: ExcludeSemantics(
+                                    child: ListTile(
+                                      dense: true,
+                                      title: Text(option),
+                                      trailing: selected
+                                          ? const Icon(Icons.check_rounded)
+                                          : null,
+                                      onTap: _returningSelection
+                                          ? null
+                                          : () => unawaited(
+                                                _selectOption(option),
+                                              ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// ------------------------
 /// UI Components (same as your style, minimal changes)
 /// ------------------------
@@ -3702,40 +4576,53 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.55),
-              height: 1.25,
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: AppColors.blackCatBorderLight),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 10),
             ),
-          ),
-          const SizedBox(height: 6),
-          child,
-        ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              label: title,
+              child: ExcludeSemantics(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.55),
+                height: 1.25,
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 6),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -3745,24 +4632,35 @@ class _ProfileUpload extends StatelessWidget {
   const _ProfileUpload({
     required this.onTap,
     required this.label,
+    required this.semanticKey,
     this.image,
     this.focusNode,
   });
   final VoidCallback onTap;
   final String label;
+  final GlobalKey semanticKey;
   final ImageProvider? image;
   final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
-    return RegistrationProfileUpload(
+    return Semantics(
+      key: semanticKey,
+      button: true,
+      label: image == null ? 'Upload $label' : 'Change $label',
+      hint: 'Double tap to choose an image',
       onTap: onTap,
-      imageProvider: image,
-      label: label,
-      helperText: image == null
-          ? 'Tap to upload company logo'
-          : 'Tap to change company logo',
-      focusNode: focusNode,
+      child: ExcludeSemantics(
+        child: RegistrationProfileUpload(
+          onTap: onTap,
+          imageProvider: image,
+          label: label,
+          helperText: image == null
+              ? 'Tap to upload company logo'
+              : 'Tap to change company logo',
+          focusNode: focusNode,
+        ),
+      ),
     );
   }
 }

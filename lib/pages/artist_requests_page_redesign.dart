@@ -5,13 +5,17 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_colors.dart';
+import '../utils/calendar_export_utils.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import 'artist_designing_request_sheet.dart';
 import '../models/client_request_v2.dart';
 import 'artist_completed_request_sheet.dart';
 import 'artist_shipped_request_sheet.dart';
+import 'artist_delivered_request_sheet.dart';
 import 'client_campaign_details_page.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/ascension_service.dart';
@@ -26,6 +30,7 @@ import '../widgets/artist_profile_avatar_icon.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/company_client_request_card.dart';
+import '../widgets/request_modal_accessibility.dart';
 
 // Supabase database compatibility helpers for this page.
 // These keep the existing UI and business-flow code intact while routing reads/writes to Supabase tables.
@@ -611,10 +616,9 @@ class StorageUrlResolver {
 }
 
 double _reqScale(BuildContext context) {
-  final w = MediaQuery.of(context).size.width;
-  if (w < 360) return 0.85;
-  if (w < 390) return 0.9;
-  return 0.95; // slightly smaller even on normal phones
+  // Never reduce the user's configured text size on narrow devices.
+  // Flutter applies MediaQuery.textScaler to the resulting Text widgets.
+  return 1.0;
 }
 
 bool shouldShowScenario21ToArtist({
@@ -723,6 +727,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   // Search + sort
   final _searchCtrl = TextEditingController();
+  Timer? _searchAnnouncementTimer;
+  final Map<String, GlobalKey> _requestCardSemanticsKeys = <String, GlobalKey>{};
   String _sort = 'Newest';
 
   // Toggle filters
@@ -838,11 +844,43 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   bool _accessibleNavigation(BuildContext context) {
     final mediaQuery = MediaQuery.maybeOf(context);
     return (mediaQuery?.accessibleNavigation ?? false) ||
+        WidgetsBinding.instance.platformDispatcher.semanticsEnabled ||
         WidgetsBinding
             .instance
             .platformDispatcher
             .accessibilityFeatures
             .accessibleNavigation;
+  }
+
+  void _onSearchChanged(String _) {
+    setState(() {});
+    if (!_accessibleNavigation(context)) return;
+
+    _searchAnnouncementTimer?.cancel();
+    _searchAnnouncementTimer = Timer(const Duration(milliseconds: 650), () {
+      if (!mounted || !_accessibleNavigation(context)) return;
+      final count = _filteredForTab(_tabCtrl.index).length;
+      final message = count == 0
+          ? 'No artist requests found'
+          : '$count ${count == 1 ? 'artist request' : 'artist requests'} found';
+      SemanticsService.sendAnnouncement(
+        View.of(context), message, Directionality.of(context),
+      );
+    });
+  }
+
+  void _clearSearch() {
+    _searchAnnouncementTimer?.cancel();
+    _searchCtrl.clear();
+    setState(() {});
+    if (!_accessibleNavigation(context)) return;
+    final count = _filteredForTab(_tabCtrl.index).length;
+    final message = count == 0
+        ? 'Search cleared. No artist requests found'
+        : 'Search cleared. $count ${count == 1 ? 'artist request' : 'artist requests'} found';
+    SemanticsService.sendAnnouncement(
+      View.of(context), message, Directionality.of(context),
+    );
   }
 
   bool get _hasActiveFilters {
@@ -1666,6 +1704,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   @override
   void dispose() {
     _closeDropdown();
+    _searchAnnouncementTimer?.cancel();
     _clientRequestsSub?.cancel();
     _companyRequestsSub?.cancel();
     _tabCtrl.dispose();
@@ -2217,6 +2256,48 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   // UI components
   // ----------------------------
   Widget _searchBar() {
+    final adaEnabled = _accessibleNavigation(context);
+    final searchField = TextField(
+      style: _t(
+        13,
+        w: FontWeight.w800,
+        c: AppColors.blackCat.withValues(alpha: 0.9),
+      ),
+      controller: _searchCtrl,
+      textInputAction: TextInputAction.search,
+      onChanged: _onSearchChanged,
+      onSubmitted: (_) {
+        FocusManager.instance.primaryFocus?.unfocus();
+      },
+      decoration: InputDecoration(
+        hintText: 'Search by client, title, ID',
+        hintStyle: _t(
+          12,
+          w: FontWeight.w400,
+          c: AppColors.blackCat.withValues(alpha: 0.45),
+        ),
+        prefixIcon: ExcludeSemantics(
+          child: Icon(
+            Icons.search,
+            color: AppColors.blackCat.withValues(alpha: 0.45),
+            size: 18,
+          ),
+        ),
+        suffixIcon: _searchCtrl.text.isNotEmpty
+            ? IconButton(
+                tooltip: 'Clear search',
+                onPressed: _clearSearch,
+                icon: const Icon(Icons.clear_rounded),
+              )
+            : null,
+        border: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+      ),
+    );
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.snow,
@@ -2230,42 +2311,25 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           ),
         ],
       ),
-      child: TextField(
-        style: _t(
-          13,
-          w: FontWeight.w800,
-          c: AppColors.blackCat.withValues(alpha: 0.9),
-        ),
-        controller: _searchCtrl,
-        onChanged: (_) => setState(() {}),
-        decoration: InputDecoration(
-          hintText: 'Search by client, title, ID',
-          hintStyle: _t(
-            12,
-            w: FontWeight.w400,
-            c: AppColors.blackCat.withValues(alpha: 0.45),
-          ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: AppColors.blackCat.withValues(alpha: 0.45),
-            size: 18,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 10,
-          ), // was 14
-        ),
-      ),
+      child: adaEnabled
+          ? Semantics(label: 'Search artist requests', child: searchField)
+          : searchField,
     );
   }
 
   Widget _searchWithFilterButton() {
-    return Row(
+    final count = _filteredForTab(_tabCtrl.index).length;
+    final resultText = count == 0
+        ? 'No artist requests found'
+        : '$count ${count == 1 ? 'artist request' : 'artist requests'} found';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: _searchBar()),
-        const SizedBox(width: 10),
-        Semantics(
+        Row(
+          children: [
+            Expanded(child: _searchBar()),
+            const SizedBox(width: 10),
+            Semantics(
           button: true,
           label: _hasActiveFilters ? 'Filters, active' : 'Filters',
           onTap: _openFiltersModal,
@@ -2274,8 +2338,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               borderRadius: BorderRadius.zero,
               onTap: _openFiltersModal,
               child: Container(
-                height: 44,
-                width: 44,
+                height: 48,
+                width: 48,
                 decoration: BoxDecoration(
                   color: _hasActiveFilters
                       ? AppColors.alabaster.withValues(alpha: 0.75)
@@ -2316,7 +2380,26 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               ),
             ),
           ),
+            ),
+          ],
         ),
+        if (_searchCtrl.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Semantics(
+            header: true,
+            label: resultText,
+            child: ExcludeSemantics(
+              child: Text(
+                resultText,
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.72),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -2333,6 +2416,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       text: budgetRange.end.round().toString(),
     );
     final closeFocusNode = FocusNode(debugLabel: 'artistRequestFilterClose');
+    final closeSemanticsKey = GlobalKey();
+    final minFocusNode = FocusNode(debugLabel: 'artistRequestMinimumBudget');
+    final maxFocusNode = FocusNode(debugLabel: 'artistRequestMaximumBudget');
     var closeFocusRequested = false;
 
     RangeValues normalizedBudgetFromText() {
@@ -2368,7 +2454,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               vertical: 24,
             ),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            child: StatefulBuilder(
+            child: SingleChildScrollView(
+              child: StatefulBuilder(
               builder: (modalContext, setModalState) {
                 if (_accessibleNavigation(modalContext) &&
                     !closeFocusRequested) {
@@ -2377,6 +2464,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     if (closeFocusNode.canRequestFocus) {
                       closeFocusNode.requestFocus();
                     }
+                    Future<void>.delayed(
+                      const Duration(milliseconds: 700),
+                      () {
+                        closeSemanticsKey.currentContext
+                            ?.findRenderObject()
+                            ?.sendSemanticsEvent(const FocusSemanticEvent());
+                      },
+                    );
                   });
                 }
 
@@ -2387,28 +2482,46 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            Icons.filter_alt_outlined,
-                            size: 18,
-                            color: AppColors.blackCat,
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Filter',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: AppColors.blackCat,
+                          Expanded(
+                            child: Semantics(
+                              header: true,
+                              label: 'Filter artist requests',
+                              child: ExcludeSemantics(
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.filter_alt_outlined,
+                                      size: 18,
+                                      color: AppColors.blackCat,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Filter',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: AppColors.blackCat,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                          IconButton(
-                            focusNode: closeFocusNode,
-                            tooltip: 'Close',
-                            color: AppColors.blackCat,
-                            onPressed: () => Navigator.pop(dialogContext),
-                            icon: const Icon(Icons.close_rounded),
+                          Semantics(
+                            key: closeSemanticsKey,
+                            button: true,
+                            label: 'Close filters',
+                            onTap: () => Navigator.pop(dialogContext),
+                            child: ExcludeSemantics(
+                              child: IconButton(
+                                focusNode: closeFocusNode,
+                                tooltip: 'Close filters',
+                                color: AppColors.blackCat,
+                                onPressed: () => Navigator.pop(dialogContext),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -2452,22 +2565,30 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                         children: [
                           Expanded(
                             child: TextField(
+                              focusNode: minFocusNode,
                               controller: minCtrl,
                               keyboardType: TextInputType.number,
-                              textInputAction: TextInputAction.done,
+                              textInputAction: TextInputAction.next,
                               style: const TextStyle(
                                 color: AppColors.blackCat,
                                 fontWeight: FontWeight.w700,
                               ),
                               cursorColor: AppColors.blackCat,
-                              decoration: _miniDec(prefix: '\$', hint: 'Min'),
-                              onSubmitted: (_) =>
-                                  applyTextBudget(setModalState),
+                              decoration: _miniDec(
+                                label: 'Minimum budget in dollars',
+                                prefix: '\$',
+                                hint: 'Min',
+                              ),
+                              onSubmitted: (_) {
+                                applyTextBudget(setModalState);
+                                maxFocusNode.requestFocus();
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
+                              focusNode: maxFocusNode,
                               controller: maxCtrl,
                               keyboardType: TextInputType.number,
                               textInputAction: TextInputAction.done,
@@ -2476,9 +2597,18 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                                 fontWeight: FontWeight.w700,
                               ),
                               cursorColor: AppColors.blackCat,
-                              decoration: _miniDec(prefix: '\$', hint: 'Max'),
-                              onSubmitted: (_) =>
-                                  applyTextBudget(setModalState),
+                              decoration: _miniDec(
+                                label: 'Maximum budget in dollars',
+                                prefix: '\$',
+                                hint: 'Max',
+                              ),
+                              onSubmitted: (_) {
+                                applyTextBudget(setModalState);
+                                maxFocusNode.requestFocus();
+                                SystemChannels.textInput.invokeMethod<void>(
+                                  'TextInput.hide',
+                                );
+                              },
                             ),
                           ),
                         ],
@@ -2503,7 +2633,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                         child: Semantics(
                           label: 'Budget range',
                           value:
-                              '\$${budgetRange.start.round()} to \$${budgetRange.end.round()}',
+                              '${budgetRange.start.round()} to ${budgetRange.end.round()} dollars',
                           child: RangeSlider(
                             values: budgetRange,
                             min: 15,
@@ -2677,7 +2807,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     ],
                   ),
                 );
-              },
+                },
+              ),
             ),
           ),
         );
@@ -2685,6 +2816,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
 
     closeFocusNode.dispose();
+    minFocusNode.dispose();
+    maxFocusNode.dispose();
     minCtrl.dispose();
     maxCtrl.dispose();
 
@@ -2697,6 +2830,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       _budgetMinCtrl.text = result.budgetRange.start.round().toString();
       _budgetMaxCtrl.text = result.budgetRange.end.round().toString();
     });
+    if (_accessibleNavigation(context)) {
+      final count = _filteredForTab(_tabCtrl.index).length;
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        'Filters applied. $count ${count == 1 ? 'artist request' : 'artist requests'} found',
+        Directionality.of(context),
+      );
+    }
   }
 
   Widget _filterChip({
@@ -5000,6 +5141,31 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
   }
 
+  Future<void> _openRequestDetailsFromCard(ClientRequestV2 request) async {
+    try {
+      if (request.status == RequestStatusV2.inReview) {
+        await _openInReviewDetails(request);
+      } else if (request.status == RequestStatusV2.accepted ||
+          request.status == RequestStatusV2.designing) {
+        await _openDesigningDetails(request);
+      } else if (request.status == RequestStatusV2.completed) {
+        await _openCompletedDetails(request);
+      } else if (request.status == RequestStatusV2.shipped) {
+        await _openShippedDetails(request);
+      } else if (request.status == RequestStatusV2.delivered) {
+        await showDeliveredRequestSheet(context: context, request: request);
+      }
+    } finally {
+      if (!mounted || !_accessibleNavigation(context)) return;
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      if (!mounted) return;
+      _requestCardSemanticsKeys[request.id]
+          ?.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    }
+  }
+
   Future<void> _openInReviewDetails(ClientRequestV2 r) async {
     final request = await _hydrateRequestForDetails(r);
     if (!mounted) return;
@@ -5010,8 +5176,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         isScrollControlled: true,
         useSafeArea: false,
         backgroundColor: Colors.transparent,
-        builder: (_) => ClientCampaignDetailsPage(
-          request: request,
+        builder: (_) => Semantics(
+          scopesRoute: true,
+          namesRoute: true,
+          explicitChildNodes: true,
+          label: 'Campaign request details',
+          child: ClientCampaignDetailsPage(
+            request: request,
           declineLabel: 'Decline',
           acceptLabel: 'Accept',
           onDecline: () async {
@@ -5050,7 +5221,8 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 SnackBar(content: Text('Failed to accept request: $e')),
               );
             }
-          },
+            },
+          ),
         ),
       );
       return;
@@ -5061,8 +5233,13 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       isScrollControlled: true,
       useSafeArea: false,
       backgroundColor: Colors.transparent,
-      builder: (_) => InReviewDetailsSheet(
-        request: request,
+      builder: (_) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Request details',
+        child: InReviewDetailsSheet(
+          request: request,
         onDecline: () async {
           Navigator.pop(context);
           try {
@@ -5083,9 +5260,15 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             useSafeArea: false,
             useRootNavigator: true,
             backgroundColor: Colors.transparent,
-            builder: (_) => AcceptRequestDialogV2(
-              budgetMin: request.budgetMin,
-              budgetMax: request.budgetMax,
+            builder: (_) => Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              explicitChildNodes: true,
+              label: 'Accept request',
+              child: AcceptRequestDialogV2(
+                budgetMin: request.budgetMin,
+                budgetMax: request.budgetMax,
+              ),
             ),
           );
 
@@ -5118,6 +5301,19 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
               if (!mounted) return;
               unawaited(_loadRequestsFromDb());
+
+              final clientLabel = request.clientName.trim().isNotEmpty
+                  ? request.clientName.trim()
+                  : request.title.trim();
+              await promptAddRequestToCalendar(
+                context,
+                title: 'JNT order #${request.orderNumber} — $clientLabel',
+                description: request.subtitle.trim().isNotEmpty
+                    ? request.subtitle.trim()
+                    : 'Nail art order for $clientLabel. Manage in the JewelNotTool app.',
+                dueDate: request.neededBy,
+                location: request.clientLocation.trim(),
+              );
             } catch (e) {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
@@ -5125,18 +5321,27 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               );
             }
           }
-        },
+          },
+        ),
       ),
     );
   }
 
-  InputDecoration _miniDec({String? prefix, String? hint}) {
+  InputDecoration _miniDec({String? label, String? prefix, String? hint}) {
     return InputDecoration(
-      prefixText: prefix,
-      prefixStyle: TextStyle(
-        color: AppColors.blackCat.withValues(alpha: 0.78),
-        fontWeight: FontWeight.w600,
-      ),
+      labelText: label,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      prefix: prefix == null
+          ? null
+          : ExcludeSemantics(
+              child: Text(
+                prefix,
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.78),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
       hintText: hint,
       hintStyle: TextStyle(
         color: AppColors.blackCat.withValues(alpha: 0.45),
@@ -5164,7 +5369,21 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       controller: _tabCtrl,
       dividerColor: Colors.transparent,
       labelPadding: const EdgeInsets.only(left: 0, right: 14),
-      onTap: (_) => setState(() {}),
+      onTap: (index) {
+        setState(() {});
+        final labels = <String>[
+          'All',
+          'In Review',
+          'Designing',
+          'Completed',
+          'Shipped',
+        ];
+        final count = _filteredForTab(index).length;
+        announceRequestAccessibilityMessage(
+          context,
+          '${labels[index]} selected. $count ${count == 1 ? 'request' : 'requests'} found.',
+        );
+      },
       indicator: const UnderlineTabIndicator(
         borderSide: BorderSide(color: AppColors.alabaster, width: 3),
       ),
@@ -5232,22 +5451,44 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           unawaited(_loadRequestsFromDb());
         });
       }
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return Semantics(
+        liveRegion: true,
+        label: 'Loading artist requests',
+        child: const ExcludeSemantics(
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
     }
 
     if (_isLoadingDb && _all.isEmpty) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return Semantics(
+        liveRegion: true,
+        label: 'Loading artist requests',
+        child: const ExcludeSemantics(
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
     }
 
     final items = _filteredForTab(tabIndex);
 
     if (items.isEmpty) {
-      return Center(
-        child: Text(
-          'No requests in this status',
-          style: TextStyle(
-            color: AppColors.blackCat.withValues(alpha: 0.55),
-            fontWeight: FontWeight.w400,
+      final hasSearch = _searchCtrl.text.trim().isNotEmpty;
+      final message = hasSearch
+          ? 'No artist requests found'
+          : 'No requests in this status';
+      return Semantics(
+        liveRegion: true,
+        label: message,
+        child: ExcludeSemantics(
+          child: Center(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.55),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
           ),
         ),
       );
@@ -5411,38 +5652,14 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     return MergeSemantics(
       child: Semantics(
+        key: _requestCardSemanticsKeys.putIfAbsent(r.id, () => GlobalKey()),
         button: true,
         label: cardLabel,
+        hint: 'Double tap to open request details',
         child: ExcludeSemantics(
           child: InkWell(
             borderRadius: BorderRadius.zero,
-            onTap: () {
-              if (r.status == RequestStatusV2.inReview) {
-                _openInReviewDetails(r);
-              } else if (r.status == RequestStatusV2.accepted ||
-                  r.status == RequestStatusV2.designing) {
-                _openDesigningDetails(r);
-              } else if (r.status == RequestStatusV2.completed) {
-                _openCompletedDetails(r);
-              } else if (r.status == RequestStatusV2.shipped) {
-                _openShippedDetails(r);
-              }
-
-              // -------------------------------------------------
-              // KEEP THESE BUT COMMENTED (per your request)
-              // -------------------------------------------------
-              /*
-        else if (r.status == RequestStatusV2.delivered) {
-          showDeliveredRequestSheet(context: context, request: r);
-        } else if (r.status == RequestStatusV2.cancelled) {
-          _openCancelledDetails(r);
-        } else if (r.status == RequestStatusV2.declined) {
-          _openDeclinedDetails(r);
-        } else if (r.status == RequestStatusV2.expired) {
-          _openExpiredDetails(r);
-        }
-        */
-            },
+            onTap: () => _openRequestDetailsFromCard(r),
 
             child: Container(
               padding: const EdgeInsets.all(14),
@@ -5670,30 +5887,40 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   Widget _companyRequestCard(ClientRequestV2 r) {
     final s = _reqScale(context);
     final displayStatus = _companyRequestStatus(r);
+    final orderNumber = r.orderNumber.trim().isNotEmpty
+        ? r.orderNumber.trim()
+        : r.id;
+    final cardLabel = <String>[
+      r.brandName.trim().isEmpty ? 'Brand request' : r.brandName.trim(),
+      if (r.title.trim().isNotEmpty) r.title.trim(),
+      'Order number $orderNumber',
+      'Need by ${_formatNeedBy(r.neededBy)}',
+      'Budget ${r.budgetMin} dollars to ${r.budgetMax} dollars',
+      'Status $displayStatus',
+    ].join(', ');
     return FutureBuilder<bool>(
       future: _requestHasNfc(r),
       builder: (context, snapshot) {
-        return CompanyClientRequestCard(
-          request: r,
-          scale: s,
-          displayStatus: displayStatus,
-          needByLabel: _shortDate(r.neededBy),
-          submittedLabel: _shortDate(r.submittedAt ?? r.neededBy),
-          avatar: _clientAvatar(r, s),
-          previewImage: _requestPreviewImage(r),
-          showNfcChip: snapshot.data == true,
-          onTap: () {
-            if (r.status == RequestStatusV2.inReview) {
-              _openInReviewDetails(r);
-            } else if (r.status == RequestStatusV2.accepted ||
-                r.status == RequestStatusV2.designing) {
-              _openDesigningDetails(r);
-            } else if (r.status == RequestStatusV2.completed) {
-              _openCompletedDetails(r);
-            } else if (r.status == RequestStatusV2.shipped) {
-              _openShippedDetails(r);
-            }
-          },
+        return Semantics(
+          key: _requestCardSemanticsKeys.putIfAbsent(r.id, () => GlobalKey()),
+          container: true,
+          button: true,
+          label: cardLabel,
+          hint: 'Double tap to open request details',
+          onTap: () => _openRequestDetailsFromCard(r),
+          child: ExcludeSemantics(
+            child: CompanyClientRequestCard(
+              request: r,
+              scale: s,
+              displayStatus: displayStatus,
+              needByLabel: _shortDate(r.neededBy),
+              submittedLabel: _shortDate(r.submittedAt ?? r.neededBy),
+              avatar: _clientAvatar(r, s),
+              previewImage: _requestPreviewImage(r),
+              showNfcChip: snapshot.data == true,
+              onTap: () => _openRequestDetailsFromCard(r),
+            ),
+          ),
         );
       },
     );
@@ -6141,10 +6368,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  bool _hasHeroProfileImage() {
-    final path = _heroPhotoSource().trim();
-    return path.isNotEmpty;
-  }
 
   String _heroPhotoSource() {
     final profile = request.clientProfileImage.trim();
@@ -6324,8 +6547,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     return text == 'true' || text == 'yes' || text == '1' || text == 'direct';
   }
 
-  String _displayNormalized(Object? value) =>
-      (value ?? '').toString().trim().toLowerCase().replaceAll(' ', '_');
 
   bool _displayIsRequestDescription(String value) {
     final candidate = value.trim().toLowerCase();
@@ -8719,6 +8940,14 @@ class InReviewDetailsSheet extends StatelessWidget {
         ),
         child: Stack(
           children: [
+            Positioned(
+              right: 6,
+              top: 6,
+              child: RequestModalInitialClose(
+                label: 'Close request details',
+                onClose: () => Navigator.pop(context),
+              ),
+            ),
             Column(
               children: [
                 const SizedBox(height: 10),
@@ -8770,7 +8999,9 @@ class InReviewDetailsSheet extends StatelessWidget {
                                   return Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                    children: [_groupOrderClientsTabs(details)],
+                                    children: [
+                                      _groupOrderClientsTabs(context, details),
+                                    ],
                                   );
                                 },
                               ),
@@ -8950,13 +9181,8 @@ class InReviewDetailsSheet extends StatelessWidget {
             Positioned(
               right: 6,
               top: 6,
-              child: Semantics(
-                container: true,
-                button: true,
-                label: 'Close',
-                onTap: () => Navigator.pop(context),
-                child: ExcludeSemantics(
-                  child: InkWell(
+              child: ExcludeSemantics(
+                child: InkWell(
                     borderRadius: BorderRadius.zero,
                     onTap: () => Navigator.pop(context),
                     child: Padding(
@@ -8967,7 +9193,6 @@ class InReviewDetailsSheet extends StatelessWidget {
                         color: AppColors.blackCat,
                       ),
                     ),
-                  ),
                 ),
               ),
             ),
@@ -9023,12 +9248,18 @@ class InReviewDetailsSheet extends StatelessWidget {
     return '-';
   }
 
-  static Widget _sectionTitle(String t) => Text(
-    t,
-    style: const TextStyle(
-      fontWeight: FontWeight.w800,
-      fontSize: 15,
-      color: AppColors.blackCat,
+  static Widget _sectionTitle(String t) => Semantics(
+    header: true,
+    label: t,
+    child: ExcludeSemantics(
+      child: Text(
+        t,
+        style: const TextStyle(
+          fontWeight: FontWeight.w800,
+          fontSize: 15,
+          color: AppColors.blackCat,
+        ),
+      ),
     ),
   );
 
@@ -9260,51 +9491,6 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  static Widget _measurementSummaryItem(String label, String value) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 42),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 42,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Arial',
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.blackCat,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'ArialBold',
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   static String _prettyLength(String raw) {
     final v = raw.trim();
@@ -9362,10 +9548,28 @@ class InReviewDetailsSheet extends StatelessWidget {
     final displayName = isBrandRequest && request.brandName.trim().isNotEmpty
         ? request.brandName.trim()
         : request.clientName;
+    final requestType = request.requestTypeLabel.isNotEmpty
+        ? request.requestTypeLabel
+        : (request.isDirectRequest ? 'Direct' : 'Standard');
+    final orderType = request.orderType == RequestOrderTypeV2.group
+        ? 'Group'
+        : 'Single';
+    final orderNumber = request.orderNumber.trim().isNotEmpty
+        ? request.orderNumber.trim()
+        : request.id;
+    final summaryLabel =
+        '$displayName. ${isBrandRequest ? '$campaignName. Brand request. ' : ''}'
+        'Order number $orderNumber. $requestType request. $orderType order. '
+        'Need by ${_needByLabel(request.neededBy)}. '
+        'Budget ${request.budgetMin} dollars to ${request.budgetMax} dollars.';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      child: Column(
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: summaryLabel,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+        child: Column(
         children: [
           const SizedBox(height: 12),
 
@@ -9521,6 +9725,7 @@ class InReviewDetailsSheet extends StatelessWidget {
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -9740,7 +9945,10 @@ class InReviewDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _groupOrderClientsTabs(_RequestNfcDetails nfcDetails) {
+  Widget _groupOrderClientsTabs(
+    BuildContext context,
+    _RequestNfcDetails nfcDetails,
+  ) {
     final tabs = _orderClientsForTabs(nfcDetails);
     if (tabs.isEmpty) {
       return _softBox(
@@ -9797,7 +10005,8 @@ class InReviewDetailsSheet extends StatelessWidget {
               ),
             ),
             SizedBox(
-              height: 300,
+              height: (300 * MediaQuery.textScalerOf(context).scale(1.0))
+                  .clamp(300.0, 600.0),
               child: TabBarView(
                 children: tabs.map((c) => _clientMeasurementsTab(c)).toList(),
               ),
@@ -10223,23 +10432,38 @@ class InReviewDetailsSheet extends StatelessWidget {
   Future<void> _openImagePreview(BuildContext context, String imagePath) async {
     await showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(12),
-        backgroundColor: AppColors.snow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: Stack(
-          children: [
-            AspectRatio(aspectRatio: 1, child: _previewImageForPath(imagePath)),
-            Positioned(
-              right: 6,
-              top: 6,
-              child: IconButton(
-                tooltip: 'Close',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
+      builder: (context) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Request photo preview',
+        child: Dialog(
+          insetPadding: const EdgeInsets.all(12),
+          backgroundColor: AppColors.snow,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          child: Stack(
+            children: [
+              Semantics(
+                image: true,
+                label: 'Request inspiration photo',
+                child: ExcludeSemantics(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _previewImageForPath(imagePath),
+                  ),
+                ),
               ),
-            ),
-          ],
+              Positioned(
+                right: 6,
+                top: 6,
+                child: IconButton(
+                  tooltip: 'Close photo preview',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -11042,13 +11266,19 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Accept',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.blackCat,
-                    fontFamily: 'Arial',
+                Semantics(
+                  header: true,
+                  label: 'Accept request',
+                  child: const ExcludeSemantics(
+                    child: Text(
+                      'Accept',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.blackCat,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -11159,8 +11389,12 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
   }
 
   Widget _row(String a, String b) {
-    return Row(
-      children: [
+    final spoken = b.replaceAll('\$', '').replaceAll(' - ', ' to ');
+    return Semantics(
+      label: '$a, $spoken dollars',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
         Expanded(
           child: Text(
             a,
@@ -11175,7 +11409,9 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
           b,
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -11184,6 +11420,24 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
     TextEditingController c, {
     String prefix = '',
     bool enabled = true,
+  }) {
+    if (!enabled) {
+      final value = c.text.trim().isEmpty ? '0' : c.text.trim();
+      return Semantics(
+        label: '$label, $value dollars, disabled',
+        child: ExcludeSemantics(
+          child: _fieldRowVisual(label, c, prefix: prefix, enabled: false),
+        ),
+      );
+    }
+    return _fieldRowVisual(label, c, prefix: prefix, enabled: true);
+  }
+
+  Widget _fieldRowVisual(
+    String label,
+    TextEditingController c, {
+    String prefix = '',
+    required bool enabled,
   }) {
     return Row(
       children: [
@@ -11204,10 +11458,16 @@ class _AcceptRequestDialogV2State extends State<AcceptRequestDialogV2> {
             controller: c,
             enabled: enabled,
             keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              prefixText: prefix,
+              labelText: '$label in dollars',
+              floatingLabelBehavior: FloatingLabelBehavior.never,
+              prefix: prefix.isEmpty
+                  ? null
+                  : ExcludeSemantics(child: Text(prefix)),
               filled: true,
               fillColor: AppColors.snow,
               contentPadding: const EdgeInsets.symmetric(
