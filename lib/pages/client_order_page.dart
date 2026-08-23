@@ -65,6 +65,7 @@ class SubmittedClientRequestSummary {
     this.fallbackToPool = true,
     this.status = 'pending',
     this.orderType = 'single',
+    this.groupShippingMode = 'toMyself',
     this.description = '',
     this.descriptionPreview = '',
     this.cancelReason = '',
@@ -134,6 +135,7 @@ class SubmittedClientRequestSummary {
   final bool fallbackToPool;
   final String status;
   final String orderType;
+  final String groupShippingMode;
   final String description;
   final String descriptionPreview;
   final String cancelReason;
@@ -546,7 +548,16 @@ class _SupabaseOrderService {
       ...asMap(payload['acceptance']),
     };
     final payment = asMap(row['payment']);
-    final shipping = asMap(row['shipping']);
+    final shipping = <String, dynamic>{
+      ...asMap(row['shipping']),
+      ...asMap(details['shipping']),
+      ...asMap(payload['shipping']),
+    };
+    final groupOrder = <String, dynamic>{
+      ...asMap(row['groupOrder']),
+      ...asMap(details['groupOrder']),
+      ...asMap(payload['groupOrder']),
+    };
     final review = asMap(row['review']);
     final clientReview = asMap(row['client_review']);
     final designApproval = asMap(row['designApproval']).isNotEmpty
@@ -856,6 +867,11 @@ class _SupabaseOrderService {
         payload['orderType'],
         order['type'],
         'single',
+      ]),
+      groupShippingMode: text([
+        groupOrder['shippingMode'],
+        shipping['groupShippingMode'],
+        'toMyself',
       ]),
       description: text([
         row['description'],
@@ -1825,6 +1841,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       subtitle: req.descriptionPreview,
       hasAssignedArtist: selectedArtistName.isNotEmpty,
       orderType: req.orderType,
+      groupShippingMode: req.groupShippingMode,
       groupClients: req.groupClients
           .map((client) {
             // Group-order slots only ever hold a snapshot captured when that
@@ -3674,6 +3691,7 @@ class ClientOrder {
   final String subtitle;
   final bool hasAssignedArtist;
   final String orderType;
+  final String groupShippingMode;
   final List<OrderClientMeasurement> groupClients;
   final String clientDescription;
   final String cancelReason;
@@ -3749,6 +3767,7 @@ class ClientOrder {
     required this.subtitle,
     this.hasAssignedArtist = true,
     this.orderType = 'single',
+    this.groupShippingMode = 'toMyself',
     this.groupClients = const <OrderClientMeasurement>[],
     this.clientDescription = '',
     this.cancelReason = '',
@@ -3830,4 +3849,132 @@ class OrderClientMeasurement {
     this.leftHandDimensions = const <String, String>{},
     this.rightHandDimensions = const <String, String>{},
   });
+}
+
+/// Fetches a single order by id (checking both client and company request
+/// tables) and builds a [ClientOrder] from it -- for deep-link navigation,
+/// where only an order id is known and there's no in-memory list object to
+/// reuse like every other entry point to the order details pages has.
+///
+/// Deliberately simpler than the order-list's own row->ClientOrder mapping:
+/// skips the "fill in from the viewer's own live profile" enrichment that
+/// only matters for the list view's in-progress acceptance-state tracking.
+/// This just needs to render an already-resolved order.
+Future<ClientOrder?> fetchClientOrderByIdForReview(String orderId) async {
+  final supabase = Supabase.instance.client;
+  for (final table in const [
+    'client_custom_requests',
+    'company_custom_requests',
+  ]) {
+    try {
+      final row = await supabase
+          .from(table)
+          .select()
+          .eq('id', orderId)
+          .maybeSingle();
+      if (row == null) continue;
+
+      final req = _SupabaseOrderService.fromRow(
+        Map<String, dynamic>.from(row),
+        table,
+      );
+      final isCompany = table == 'company_custom_requests';
+      final submittedText = req.clientSubmittedAt == null
+          ? 'Submitted'
+          : 'Submitted ${formatDateMdy(req.clientSubmittedAt!)}';
+
+      return ClientOrder(
+        id: req.id,
+        sourceCollection: req.sourceCollection,
+        rawStatus: req.status,
+        orderNumber: req.orderNumber,
+        brandName: isCompany ? req.contactName : '',
+        campaignName: isCompany ? req.campaignName : '',
+        title: req.clientName.trim().isNotEmpty ? req.clientName.trim() : 'Client',
+        subtitle: req.descriptionPreview,
+        hasAssignedArtist:
+            req.selectedArtist.trim().isNotEmpty ||
+            req.acceptedByArtistName.trim().isNotEmpty,
+        orderType: req.orderType,
+        groupShippingMode: req.groupShippingMode,
+        groupClients: req.groupClients
+            .map(
+              (c) => OrderClientMeasurement(
+                clientId: c.clientId,
+                clientName: c.clientName,
+                clientEmail: c.clientEmail,
+                responseStatus: c.responseStatus,
+                nailShape: c.nailShape,
+                nailLength: c.nailLength,
+                leftHandDimensions: c.leftHandDimensions,
+                rightHandDimensions: c.rightHandDimensions,
+              ),
+            )
+            .toList(growable: false),
+        clientDescription: req.description.trim().isNotEmpty
+            ? req.description
+            : req.descriptionPreview,
+        cancelReason: req.cancelReason,
+        inspirationPhotos: req.inspirationPhotos,
+        needByDisplay: req.needByDisplay,
+        jntRevealDateDisplay: req.jntRevealDateDisplay,
+        nailShape: req.nailShape,
+        nailLength: req.nailLength,
+        budgetMin: req.budgetMin,
+        budgetMax: req.budgetMax,
+        clientBudgetMin: req.clientBudgetMin,
+        clientBudgetMax: req.clientBudgetMax,
+        artistBudgetMin: req.artistBudgetMin,
+        artistBudgetMax: req.artistBudgetMax,
+        leftHandDimensions: req.leftHandDimensions,
+        rightHandDimensions: req.rightHandDimensions,
+        status: OrderStatus.delivered,
+        expectedOrDeliveredText: submittedText,
+        createdAt: req.clientSubmittedAt,
+        artistAcceptedAmount: req.artistFinalAmount?.round(),
+        paymentStatus: req.paymentStatus,
+        paymentLink: req.paymentLink,
+        paidAt: req.paidAt,
+        clientProfileImage: req.clientProfileImage,
+        artistCompletedPhotos: req.artistCompletedPhotos,
+        completionReviewStatus: req.completionReviewStatus,
+        completionDeclineReason: req.completionDeclineReason,
+        completionDeclineDescription: req.completionDeclineDescription,
+        completionDeclinedAt: req.completionDeclinedAt,
+        designApprovalStatus: req.designApprovalStatus,
+        designApprovedAt: req.designApprovedAt,
+        clientDesignApprovedAt: req.designApprovedAt,
+        designSubmittedAt: req.designSubmittedAt,
+        designApprovalDueAt: req.designApprovalDueAt,
+        designReminderSentAt: req.designReminderSentAt,
+        designPreviewPhotos: req.designPreviewPhotos,
+        clientEmail: req.clientEmail,
+        acceptedByArtistEmail: req.acceptedByArtistEmail,
+        declinedByClientEmails: req.declinedByClientEmails,
+        declinedByArtistEmails: req.declinedByArtistEmails,
+        directClientStatus: req.directClientStatus,
+        artistName: req.acceptedByArtistName.trim().isNotEmpty
+            ? req.acceptedByArtistName
+            : req.selectedArtist,
+        selectedArtistName: req.selectedArtist,
+        selectedArtistEmail: req.selectedArtistEmail,
+        isDirectRequest: req.isDirectRequest,
+        fallbackToPool: req.fallbackToPool,
+        artistProfileImage: req.artistProfileImage,
+        cancelledAt: req.cancelledAt,
+        needBy: req.needBy,
+        shippedByCourier: req.shippedByCourier,
+        trackingNumber: req.trackingNumber,
+        shippedAt: req.shippedAt,
+        deliveredAt: req.deliveredAt,
+        rating: req.clientRating?.toDouble(),
+        reviewText: req.clientReviewText,
+        reviewSubmittedAt: req.clientReviewSubmittedAt,
+        imageAsset: req.clientProfileImage,
+      );
+    } catch (e) {
+      debugPrint('fetchClientOrderByIdForReview($table) failed: $e');
+    }
+  }
+  return null;
 }

@@ -10,6 +10,7 @@ import 'client_shell_page.dart';
 import '../models/client_profile_models.dart';
 import 'branding_company_shell_page.dart';
 import 'client_artist_home_page.dart';
+import '../services/delivered_review_deep_link.dart';
 
 class LoginDialog extends StatefulWidget {
   const LoginDialog({super.key});
@@ -22,11 +23,16 @@ class LoginDialog extends StatefulWidget {
   /// deliberately throw without signing the user out so a temporary network
   /// problem never clears a persisted login.
   static Future<Widget?> restoredSessionHome() async {
+    final sw = Stopwatch()..start();
     final user = Supabase.instance.client.auth.currentUser;
     final uid = (user?.id ?? '').trim();
     if (uid.isEmpty) return null;
 
     final accountDoc = await _LoginDialogState._loadAccountDocWithRetry(uid);
+    debugPrint(
+      '[STARTUP] restoredSessionHome: account doc resolved after '
+      '${sw.elapsedMilliseconds}ms',
+    );
     if (accountDoc == null) {
       throw StateError('Unable to load the account linked to this session.');
     }
@@ -133,6 +139,21 @@ class _LoginDialogState extends State<LoginDialog> {
     Navigator.of(
       rootContext,
     ).pushReplacement(MaterialPageRoute(builder: (_) => page));
+
+    // Resume a "Rate & Tip" deep link that was tapped while signed out --
+    // see services/delivered_review_deep_link.dart.
+    final pendingOrderId = pendingDeliveredReviewOrderId;
+    if (pendingOrderId != null) {
+      pendingDeliveredReviewOrderId = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!rootNavigator.mounted) return;
+        openDeliveredReviewOrder(
+          rootNavigator,
+          pendingOrderId,
+          awaitingSignIn: true,
+        );
+      });
+    }
   }
 
   static const _collectionClientArtist = 'client_artist';
@@ -433,6 +454,29 @@ class _LoginDialogState extends State<LoginDialog> {
 
   static Future<_AccountDoc?> _loadAccountDoc(String uid) async {
     final supabase = Supabase.instance.client;
+    final sw = Stopwatch()..start();
+
+    // A single server-side lookup (see migration
+    // 20260820120000_add_resolve_account_row_for_uid_rpc.sql) instead of 4
+    // separate parallel REST requests -- on a real device each of those 4
+    // requests measured 1.8s-4.7s on its own (connection + JWT/RLS overhead
+    // per request), so this collapses that to one round trip.
+    try {
+      final row = await supabase.rpc('resolve_account_row_for_uid');
+      debugPrint(
+        '[STARTUP] _loadAccountDoc: resolve_account_row_for_uid took '
+        '${sw.elapsedMilliseconds}ms (found=${row != null})',
+      );
+      if (row == null) return null;
+      final data = Map<String, dynamic>.from(row as Map);
+      final collection = (data.remove('_table') ?? '').toString();
+      return _AccountDoc(collection: collection, data: data);
+    } catch (e) {
+      debugPrint(
+        '[STARTUP] _loadAccountDoc: RPC failed after '
+        '${sw.elapsedMilliseconds}ms, falling back to per-table lookup: $e',
+      );
+    }
 
     const collections = <String>[
       _collectionClientArtist,
@@ -442,12 +486,17 @@ class _LoginDialogState extends State<LoginDialog> {
     ];
 
     final requests = collections.map((collection) {
+      final tableSw = Stopwatch()..start();
       return supabase
           .from(collection)
           .select()
           .eq('id', uid)
           .maybeSingle()
           .then((data) {
+            debugPrint(
+              '[STARTUP] _loadAccountDoc: $collection lookup took '
+              '${tableSw.elapsedMilliseconds}ms (found=${data != null})',
+            );
             if (data != null) {
               return _AccountDoc(
                 collection: collection,
@@ -456,7 +505,13 @@ class _LoginDialogState extends State<LoginDialog> {
             }
             return null;
           })
-          .catchError((_) => null);
+          .catchError((e) {
+            debugPrint(
+              '[STARTUP] _loadAccountDoc: $collection lookup FAILED after '
+              '${tableSw.elapsedMilliseconds}ms: $e',
+            );
+            return null;
+          });
     });
 
     final results = await Future.wait(requests);
@@ -471,15 +526,25 @@ class _LoginDialogState extends State<LoginDialog> {
 
   static Future<_AccountDoc?> _loadAccountDocWithRetry(String uid) async {
     const int maxAttempts = 3;
+    final sw = Stopwatch()..start();
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         final doc = await _loadAccountDoc(
           uid,
-        ).timeout(const Duration(seconds: 12));
+        ).timeout(const Duration(seconds: 6));
+        debugPrint(
+          '[STARTUP] _loadAccountDocWithRetry: resolved on attempt '
+          '$attempt after ${sw.elapsedMilliseconds}ms '
+          '(collection=${doc?.collection})',
+        );
         return doc;
-      } catch (_) {
+      } catch (e) {
+        debugPrint(
+          '[STARTUP] _loadAccountDocWithRetry: attempt $attempt failed '
+          'after ${sw.elapsedMilliseconds}ms total: $e',
+        );
         if (attempt == maxAttempts) rethrow;
-        await Future<void>.delayed(Duration(milliseconds: 800 * attempt));
+        await Future<void>.delayed(Duration(milliseconds: 500 * attempt));
       }
     }
     return null;

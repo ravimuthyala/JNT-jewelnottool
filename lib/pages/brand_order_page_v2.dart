@@ -56,6 +56,24 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   RealtimeChannel? _submittedRequestsChannel;
   List<ClientOrder> _submittedOrders = const [];
   bool _loadingOrders = true;
+  StreamSubscription<List<ChatNotificationRef>>? _unreadChatSub;
+  List<ChatNotificationRef> _unreadChatRefs = const <ChatNotificationRef>[];
+
+  bool _hasUnreadChat(String requestId) =>
+      _unreadChatRefs.any((r) => r.requestId == requestId);
+
+  /// "New message from X" for a single sender, "N new messages" once more
+  /// than one recipient/thread under the same order has something unread.
+  String? _unreadChatLabel(String requestId) {
+    final names = _unreadChatRefs
+        .where((r) => r.requestId == requestId)
+        .map((r) => r.senderName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    if (names.isEmpty) return null;
+    if (names.length == 1) return 'New message from ${names.first}';
+    return '${names.length} new messages';
+  }
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -183,6 +201,17 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   void initState() {
     super.initState();
     _subscribeSubmittedOrders();
+
+    final myEmail = _currentEmail;
+    if (myEmail.isNotEmpty) {
+      _unreadChatSub =
+          NotificationsService.watchUnreadChatConversationRefs(
+            receiverEmail: myEmail,
+          ).listen((refs) {
+            if (!mounted) return;
+            setState(() => _unreadChatRefs = refs);
+          });
+    }
   }
 
   @override
@@ -198,6 +227,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     if (_submittedRequestsChannel != null) {
       unawaited(_client.removeChannel(_submittedRequestsChannel!));
     }
+    _unreadChatSub?.cancel();
     super.dispose();
   }
 
@@ -1014,6 +1044,8 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                     order: o,
                     showLeadingThumb: widget.showCompanyChrome,
                     onDetails: () => _openOrderDetails(context, o),
+                    hasUnreadChat: _hasUnreadChat(o.id),
+                    unreadChatLabel: _unreadChatLabel(o.id),
                   ),
                 ),
               ),
@@ -1043,6 +1075,8 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                     order: o,
                     showLeadingThumb: widget.showCompanyChrome,
                     onDetails: () => _openOrderDetails(context, o),
+                    hasUnreadChat: _hasUnreadChat(o.id),
+                    unreadChatLabel: _unreadChatLabel(o.id),
                   ),
                 ),
               ),
@@ -1549,11 +1583,18 @@ class _OrderCard extends StatelessWidget {
     required this.order,
     required this.onDetails,
     required this.showLeadingThumb,
+    this.hasUnreadChat = false,
+    this.unreadChatLabel,
   });
 
   final ClientOrder order;
   final VoidCallback onDetails;
   final bool showLeadingThumb;
+  final bool hasUnreadChat;
+
+  /// "New message from X" / "N new messages" -- null when there's nothing
+  /// unread, or when the sender's name wasn't available.
+  final String? unreadChatLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1574,6 +1615,20 @@ class _OrderCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    if (hasUnreadChat) ...[
+                      Semantics(
+                        label: 'Unread chat message',
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 7),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE85656),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ],
                     Expanded(
                       child: Semantics(
                         label: 'Campaign, ${order.title}',
@@ -1626,6 +1681,19 @@ class _OrderCard extends StatelessWidget {
                     _StatusChip(status: order.status),
                   ],
                 ),
+                if (unreadChatLabel != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    unreadChatLabel!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFE85656),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
                 if (order.nfcRequested) ...[
                   const SizedBox(height: 6),
                   const _NfcRequestTag(),

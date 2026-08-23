@@ -4105,42 +4105,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     final deepLink = _reviewDeepLink;
     final body =
         'Your order has been delivered. Please leave a quick review and tip in the app.';
-    final clientName = prefs.name.trim().isEmpty ? 'there' : prefs.name.trim();
-    final orderId = widget.order.id;
-    final artworkTitle = widget.order.subtitle.trim().isNotEmpty
-        ? widget.order.subtitle.trim()
-        : (widget.order.title.trim().isNotEmpty
-              ? widget.order.title.trim()
-              : 'Custom Artwork');
-    final artistName = widget.order.artistName.trim().isNotEmpty
-        ? widget.order.artistName.trim()
-        : 'Your Artist';
-    final deliveredOn = _formatDeliveryDate(widget.order.deliveredAt);
-    final orderLink = 'jnt://orders/details?orderId=${widget.order.id}';
-    final reviewLink = '$deepLink&target=review';
-    final tipLink = '$deepLink&target=tip';
-    final emailText =
-        'Hi $clientName,\n\n'
-        'Your custom artwork is ready! Your order has been successfully delivered.\n\n'
-        'Order Summary\n'
-        'Order ID: $orderId\n'
-        'Artwork: $artworkTitle\n'
-        'Artist: $artistName\n'
-        'Delivered On: $deliveredOn\n\n'
-        'View Your Artwork\n'
-        'Click below to view or download your artwork:\n'
-        '$orderLink\n\n'
-        'Leave a Review\n'
-        'Tell us about your experience and help the artist grow:\n'
-        '$reviewLink\n\n'
-        'Add a Tip (Optional)\n'
-        'Loved the work? You can support your artist with a tip:\n'
-        '$tipLink\n\n'
-        'If you have any questions or need help, simply reply to this email.\n\n'
-        'Thank you for choosing JNT!\n\n'
-        'Best regards,\n'
-        'Team JNT\n\n'
-        'Support: support@jnt.com';
     if (prefs.email.isNotEmpty) {
       await NotificationsService.createUserNotification(
         receiverEmail: prefs.email,
@@ -4151,17 +4115,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         sourceCollection: _orderCollection,
         extra: <String, dynamic>{'deepLink': deepLink, 'action': 'review_tip'},
       );
-    }
-
-    if ((prefs.channel == _ReviewChannel.email ||
-            prefs.channel == _ReviewChannel.both) &&
-        prefs.email.isNotEmpty) {
-      await NotificationsService.queueEmail(
-        to: prefs.email,
-        subject: 'Your order has been delivered',
-        text: emailText,
-      );
-      channels.add('email');
     }
 
     if ((prefs.channel == _ReviewChannel.text ||
@@ -4177,8 +4130,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
     return channels.join(', ');
   }
-
-  String _formatDeliveryDate(DateTime? value) => formatDateMdyOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();

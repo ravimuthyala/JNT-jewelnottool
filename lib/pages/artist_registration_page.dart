@@ -1862,21 +1862,20 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
 
       if (!mounted) return;
 
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      rootNavigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const ArtistShellPage()),
+        (route) => false,
+      );
       if (kRequireEmailVerification) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => EmailVerificationPendingPage(
-              email: email,
-              loginPageBuilder: (_) => const ArtistLoginPage(),
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const ArtistShellPage()),
-          (route) => false,
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!rootNavigator.mounted) return;
+          showEmailVerificationPendingModal(
+            context: rootNavigator.context,
+            email: email,
+            loginPageBuilder: (_) => const ArtistLoginPage(),
+          );
+        });
       }
     } on AuthException catch (e) {
       if (!mounted) return;

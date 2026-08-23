@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -37,9 +36,20 @@ class _DeliveredRequestSheet extends StatefulWidget {
   State<_DeliveredRequestSheet> createState() => _DeliveredRequestSheetState();
 }
 
+class _RecipientDeliveryInfo {
+  const _RecipientDeliveryInfo({
+    required this.name,
+    required this.courier,
+    required this.tracking,
+  });
+
+  final String name;
+  final String courier;
+  final String tracking;
+}
+
 class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   static const int _decodeMax = 1024;
-  int _selectedTab = 2; // Open Delivered tab first for delivered history.
   final ScrollController _sheetScrollController = ScrollController();
 
   final FocusNode _closeFocusNode = FocusNode(
@@ -292,47 +302,6 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     super.dispose();
   }
 
-  void _scrollSheetToTop() {
-    if (!_sheetScrollController.hasClients) return;
-    _sheetScrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-    );
-  }
-
-  void _selectTab(int index) {
-    if (_selectedTab == index) {
-      if (_accessibleNavigation(context)) _scrollSheetToTop();
-      return;
-    }
-    setState(() => _selectedTab = index);
-    const labels = <String>['Details', 'Photos', 'Delivered'];
-    announceRequestAccessibilityMessage(
-      context,
-      '${labels[index]} tab selected',
-    );
-    _scrollSheetToTop();
-    if (!_accessibleNavigation(context)) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final node = switch (index) {
-        0 => _detailsContentFocusNode,
-        1 => _photosContentFocusNode,
-        _ => _deliveredContentFocusNode,
-      };
-      node.requestFocus();
-      final semanticsKey = switch (index) {
-        0 => _detailsContentSemanticsKey,
-        1 => _photosContentSemanticsKey,
-        _ => _deliveredContentSemanticsKey,
-      };
-      semanticsKey.currentContext
-          ?.findRenderObject()
-          ?.sendSemanticsEvent(const FocusSemanticEvent());
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
@@ -367,34 +336,21 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                   children: [
                     const SizedBox(height: 10),
                     _dragHandle(),
-                    _topHero(context),
                     Expanded(
                       child: ListView(
                         controller: _sheetScrollController,
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                         children: [
+                          _topHero(context),
                           _infoChips(),
                           const SizedBox(height: 14),
                           _deliveredBanner(),
                           const SizedBox(height: 18),
-                          _tabBar(),
+                          ..._detailsSectionItems(),
                           const SizedBox(height: 14),
-                          // Keep the active tab content in the same semantic
-                          // traversal group as the three tab controls. AnimatedSwitcher
-                          // can temporarily remove the incoming child's semantics,
-                          // causing TalkBack to leave the modal after the last tab.
-                          Semantics(
-                            container: true,
-                            explicitChildNodes: true,
-                            child: KeyedSubtree(
-                              key: ValueKey<int>(_selectedTab),
-                              child: _selectedTab == 0
-                                  ? _detailsTab()
-                                  : _selectedTab == 1
-                                  ? _photosTab()
-                                  : _deliveredTab(),
-                            ),
-                          ),
+                          ..._photosSectionItems(),
+                          const SizedBox(height: 14),
+                          ..._deliveredSectionItems(),
                           const SizedBox(height: 12),
                         ],
                       ),
@@ -888,192 +844,260 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     );
   }
 
-  Widget _tabBar() {
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      child: Row(
-      children: [
-        _tabButton('Details', 0),
-        _tabButton('Photos', 1),
-        _tabButton('Delivered', 2),
-      ],
-      ),
-    );
-  }
-
-  Widget _tabButton(String label, int index) {
-    final selected = _selectedTab == index;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: '$label tab, ${index + 1} of 3',
-        hint: selected ? null : 'Double tap to show $label',
-        onTap: () => _selectTab(index),
-        child: ExcludeSemantics(
-          child: InkWell(
-            onTap: () => _selectTab(index),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                ),
-                Container(
-                  height: 3,
-                  width: double.infinity,
-                  color: selected ? AppColors.blackCat : Colors.transparent,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _detailsTab() {
+  List<Widget> _detailsSectionItems() {
     final description = request.bio.trim().isEmpty
         ? 'No description provided'
         : request.bio.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Focus(
-          focusNode: _detailsContentFocusNode,
-          child: Semantics(
-            key: _detailsContentSemanticsKey,
-            focusable: true,
-            label: 'Description. $description',
-            child: ExcludeSemantics(
-              child: _descriptionAndCompanyBioSection(request),
-            ),
+    return <Widget>[
+      Focus(
+        focusNode: _detailsContentFocusNode,
+        child: Semantics(
+          key: _detailsContentSemanticsKey,
+          focusable: true,
+          label: 'Description. $description',
+          child: ExcludeSemantics(
+            child: _descriptionAndCompanyBioSection(request),
           ),
         ),
+      ),
+      const SizedBox(height: 14),
+      if (_isBrandRequest(request)) ...[
+        _acceptedClientDetailsSection(request),
         const SizedBox(height: 14),
-        if (_isBrandRequest(request)) ...[
-          _acceptedClientDetailsSection(request),
-          const SizedBox(height: 14),
-        ],
-        _orderDetailsSection(),
-        const SizedBox(height: 14),
-        _paymentSection(),
       ],
-    );
+      _orderDetailsSection(),
+      const SizedBox(height: 14),
+      _paymentSection(),
+    ];
   }
 
-  Widget _photosTab() {
+  List<Widget> _photosSectionItems() {
     final clientCount = request.clientImages
         .where((e) => e.trim().isNotEmpty)
         .length;
     final artistCount = request.artistImages
         .where((e) => e.trim().isNotEmpty)
         .length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Focus(
-          focusNode: _photosContentFocusNode,
-          child: Semantics(
-            key: _photosContentSemanticsKey,
-            focusable: true,
-            container: true,
-            explicitChildNodes: true,
-            label:
-                'Photos. $clientCount client ${clientCount == 1 ? 'photo' : 'photos'} and $artistCount artist ${artistCount == 1 ? 'photo' : 'photos'}.',
-            child: _photosSection(
-              'Uploaded Photos (Client)',
-              request.clientImages,
+    return <Widget>[
+      Focus(
+        focusNode: _photosContentFocusNode,
+        child: Semantics(
+          key: _photosContentSemanticsKey,
+          focusable: true,
+          container: true,
+          explicitChildNodes: true,
+          label:
+              'Photos. $clientCount client ${clientCount == 1 ? 'photo' : 'photos'} and $artistCount artist ${artistCount == 1 ? 'photo' : 'photos'}.',
+          child: _photosSection(
+            'Uploaded Photos (Client)',
+            request.clientImages,
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      _photosSection('Uploaded Photos (Artist)', request.artistImages),
+    ];
+  }
+
+  List<Widget> _deliveredSectionItems() {
+    final isRespective =
+        request.orderType == RequestOrderTypeV2.group &&
+        request.groupShippingMode == GroupShippingMode.toRespectiveClient;
+
+    return <Widget>[
+      Focus(
+        focusNode: _deliveredContentFocusNode,
+        child: Semantics(
+          key: _deliveredContentSemanticsKey,
+          focusable: true,
+          header: true,
+          label: 'Delivered information',
+          child: const ExcludeSemantics(
+            child: Text(
+              'Delivered Information',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        _photosSection('Uploaded Photos (Artist)', request.artistImages),
-      ],
+      ),
+      const SizedBox(height: 10),
+      if (isRespective)
+        FutureBuilder<List<_RecipientDeliveryInfo>>(
+          future: _loadRecipientDeliveries(),
+          builder: (context, snapshot) {
+            final recipients = snapshot.data;
+            if (recipients == null) {
+              return _borderBox(
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Center(
+                    child: Semantics(
+                      label: 'Loading delivery information',
+                      liveRegion: true,
+                      child: const ExcludeSemantics(
+                        child: SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+            if (recipients.isEmpty) {
+              return _singleDeliveryCard();
+            }
+            return Column(
+              children: [
+                for (final recipient in recipients) ...[
+                  _recipientDeliveryCard(recipient),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            );
+          },
+        )
+      else
+        _singleDeliveryCard(),
+    ];
+  }
+
+  Widget _singleDeliveryCard() {
+    return _borderBox(
+      Column(
+        children: [
+          _deliveryInfoRow(
+            label: 'Client Name',
+            value: request.clientName.trim().isEmpty
+                ? '-'
+                : request.clientName.trim(),
+          ),
+          _deliveryInfoRow(
+            label: 'Shipped By',
+            value: (request.shippedByCourier ?? '').trim().isEmpty
+                ? '-'
+                : (request.shippedByCourier ?? '').trim(),
+          ),
+          _deliveryInfoRow(
+            label: 'Tracking number',
+            value: (request.trackingNumber?.trim() ?? '').isEmpty
+                ? '-'
+                : (request.trackingNumber?.trim() ?? ''),
+          ),
+          _deliveryInfoRow(
+            label: 'Shipped Date',
+            value: _fmtDateLong(request.shippedAt),
+          ),
+          _deliveryInfoRow(
+            label: 'Delivered Date',
+            value: _fmtDateLong(request.deliveredAt),
+            bottomPadding: 0,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
     );
   }
 
-  Widget _deliveredTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Focus(
-          focusNode: _deliveredContentFocusNode,
-          child: Semantics(
-            key: _deliveredContentSemanticsKey,
-            focusable: true,
-            header: true,
-            label: 'Delivered information',
-            child: const ExcludeSemantics(
+  Widget _recipientDeliveryCard(_RecipientDeliveryInfo recipient) {
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: 'Shipment to ${recipient.name}',
+      child: _borderBox(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(
               child: Text(
-                'Delivered Information',
-                style: TextStyle(
-                  fontSize: 14,
+                recipient.name,
+                style: const TextStyle(
                   fontWeight: FontWeight.w700,
+                  fontSize: 14,
                   color: AppColors.blackCat,
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            _deliveryInfoRow(
+              label: 'Shipped By',
+              value: recipient.courier.isEmpty ? '-' : recipient.courier,
+            ),
+            _deliveryInfoRow(
+              label: 'Tracking number',
+              value: recipient.tracking.isEmpty ? '-' : recipient.tracking,
+            ),
+            _deliveryInfoRow(
+              label: 'Shipped Date',
+              value: _fmtDateLong(request.shippedAt),
+            ),
+            _deliveryInfoRow(
+              label: 'Delivered Date',
+              value: _fmtDateLong(request.deliveredAt),
+              bottomPadding: 0,
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        _borderBox(
-          Column(
-            children: [
-              _deliveryInfoRow(
-                icon: Icons.person_outline_rounded,
-                label: 'Client Name',
-                value: request.clientName.trim().isEmpty
-                    ? '-'
-                    : request.clientName.trim(),
-              ),
-              _deliveryInfoRow(
-                icon: Icons.local_shipping_outlined,
-                label: 'Shipped By',
-                value: (request.shippedByCourier ?? '').trim().isEmpty
-                    ? '-'
-                    : (request.shippedByCourier ?? '').trim(),
-              ),
-              _deliveryInfoRow(
-                icon: Icons.qr_code_2_rounded,
-                label: 'Tracking number',
-                value: (request.trackingNumber?.trim() ?? '').isEmpty
-                    ? '-'
-                    : (request.trackingNumber?.trim() ?? ''),
-              ),
-              _deliveryInfoRow(
-                icon: Icons.event_available_outlined,
-                label: 'Shipped Date',
-                value: _fmtDateLong(request.shippedAt),
-              ),
-              _deliveryInfoRow(
-                icon: Icons.event_available_outlined,
-                label: 'Delivered Date',
-                value: _fmtDateLong(request.deliveredAt),
-                bottomPadding: 0,
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
-        ),
-      ],
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      ),
     );
   }
 
+  /// "Ship to each group member individually" mode: the per-recipient
+  /// courier/tracking (a list, not the single shared pair on [request])
+  /// is written into detailsExtra by onMarkShipped
+  /// (artist_requests_page_redesign.dart), which lands in the separate
+  /// *_details table's `data` column via SupabaseCompatDatabase's
+  /// Firestore-compat write path -- see the matching read in
+  /// artist_shipped_request_sheet.dart.
+  Future<List<_RecipientDeliveryInfo>> _loadRecipientDeliveries() async {
+    try {
+      final detailRow = await Supabase.instance.client
+          .from(_requestDetailsTable)
+          .select()
+          .eq('request_id', request.id)
+          .eq('detail_key', 'payload')
+          .maybeSingle();
+      final detailData = _asMap(detailRow?['data']);
+      final shipment = _asMap(detailData['shipment']);
+      final rawRecipients = _asList(shipment['recipients']);
+      return rawRecipients
+          .whereType<Map>()
+          .map((raw) {
+            final map = Map<String, dynamic>.from(raw);
+            // The compat-DB write layer recursively snake_cases every
+            // nested map key before storing, so what's persisted is
+            // client_name/tracking_number, not the camelCase keys
+            // ShipmentRecipientEntry was built with.
+            final name = _firstNonEmpty(<Object?>[
+              map['clientName'],
+              map['client_name'],
+            ]);
+            return _RecipientDeliveryInfo(
+              name: name.isEmpty ? 'Client' : name,
+              courier: _firstNonEmpty(<Object?>[map['courier']]),
+              tracking: _firstNonEmpty(<Object?>[
+                map['trackingNumber'],
+                map['tracking_number'],
+              ]),
+            );
+          })
+          .toList(growable: false);
+    } catch (_) {
+      return const <_RecipientDeliveryInfo>[];
+    }
+  }
+
   Widget _deliveryInfoRow({
-    required IconData icon,
     required String label,
     required String value,
-    double bottomPadding = 22,
+    double bottomPadding = 10,
   }) {
     final semanticValue = value.trim().isEmpty || value.trim() == '-'
         ? 'Not provided'
@@ -1086,33 +1110,22 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 34,
-                child: Icon(icon, size: 18, color: AppColors.blackCat),
+              Text(
+                '$label: ',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
               ),
-              const SizedBox(width: 18),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.blackCat,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      value.trim().isEmpty ? '-' : value.trim(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.blackCat,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  value.trim().isEmpty ? '-' : value.trim(),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.blackCat,
+                  ),
                 ),
               ),
             ],
@@ -1415,7 +1428,18 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _paymentSection() {
-    final finalAmount = request.artistFinalAmount;
+    // Group orders: the requester's committed budgetMax is the real final
+    // amount, not the artist's own entered price (which stays an internal
+    // ceiling check only) -- see AcceptRequestDialogV2 and
+    // order_details_pages.dart's _paymentSection for the client-facing
+    // mirror of this same rule.
+    final isGroupOrder =
+        request.orderType == RequestOrderTypeV2.group ||
+        request.groupClients.isNotEmpty;
+    final artistAmount = request.artistFinalAmount;
+    final finalAmount = (isGroupOrder && artistAmount != null)
+        ? request.budgetMax.toDouble()
+        : artistAmount;
     final paymentStatus = request.paymentStatus.trim().isEmpty
         ? 'Pending'
         : request.paymentStatus.trim();
@@ -1437,7 +1461,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
           ),
           const SizedBox(height: 12),
           _detailRow(
-            finalAmount != null ? 'Final Amount by Artist' : 'Amount',
+            finalAmount == null
+                ? 'Amount'
+                : (isGroupOrder ? 'Final Amount' : 'Final Amount by Artist'),
             amountText,
           ),
           const SizedBox(height: 10),

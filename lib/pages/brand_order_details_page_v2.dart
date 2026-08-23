@@ -855,6 +855,287 @@ class _OrderGroupClient {
   final Map<String, String> rightHandDimensions;
 }
 
+/// Bottom sheet letting a brand pick which recipient of a group order to
+/// chat with -- each recipient has their own separate thread (see
+/// _BaseOrderDetails._openClientChatWith's conversationSuffix). Only
+/// accepted recipients are chattable; pending/declined ones are shown for
+/// context but disabled.
+class _GroupClientChatPickerSheet extends StatelessWidget {
+  const _GroupClientChatPickerSheet({
+    required this.clients,
+    required this.requestId,
+    required this.myEmail,
+    required this.onSelect,
+  });
+
+  final List<_OrderGroupClient> clients;
+
+  /// Needed to compute each row's own conversation id (same suffix scheme
+  /// as _openClientChatWith) so an unread dot can be shown against the
+  /// exact recipient it's from, not just "this order has something new."
+  final String requestId;
+  final String myEmail;
+  final ValueChanged<_OrderGroupClient> onSelect;
+
+  /// Mirrors _BaseOrderDetails._openClientChatWith's id scheme -- brand
+  /// never gets the unsuffixed thread, every recipient has their own.
+  String _conversationIdFor(_OrderGroupClient client) {
+    final email = client.clientEmail.trim().toLowerCase();
+    final threadKey = (client.clientId.trim().isNotEmpty
+            ? client.clientId.trim()
+            : email)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return buildChatConversationId(
+      requestId,
+      conversationSuffix: 'brand_client_$threadKey',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: 'Select a client to chat with',
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 480),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            decoration: const BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.blackCatBorderLight,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Select a client to chat with',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Each recipient has their own separate thread.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.blackCat.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 380),
+                  child: StreamBuilder<List<ChatNotificationRef>>(
+                    stream: myEmail.isEmpty
+                        ? const Stream<List<ChatNotificationRef>>.empty()
+                        : NotificationsService.watchUnreadChatConversationRefs(
+                            receiverEmail: myEmail,
+                          ),
+                    builder: (context, snapshot) {
+                      final unreadConversationIds = (snapshot.data ?? const [])
+                          .where((r) => r.requestId == requestId)
+                          .map((r) => r.conversationId)
+                          .toSet();
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: clients.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final client = clients[index];
+                          return _clientRow(
+                            client,
+                            hasUnread: unreadConversationIds.contains(
+                              _conversationIdFor(client),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _clientRow(_OrderGroupClient client, {required bool hasUnread}) {
+    final status = client.responseStatus.trim().toLowerCase();
+    final isAccepted = status == 'accepted';
+    final name = client.clientName.trim().isEmpty
+        ? 'Client'
+        : client.clientName.trim();
+    final email = client.clientEmail.trim();
+    final letter = name.isNotEmpty ? name[0].toUpperCase() : 'C';
+
+    final Color pillBg;
+    final Color pillFg;
+    final String pillLabel;
+    switch (status) {
+      case 'accepted':
+        pillBg = const Color(0xFFDBF4E6);
+        pillFg = const Color(0xFF1E8E5A);
+        pillLabel = 'Accepted';
+      case 'declined':
+      case 'rejected':
+        pillBg = const Color(0xFFF3DCDC);
+        pillFg = const Color(0xFFA6453E);
+        pillLabel = 'Declined';
+      default:
+        pillBg = AppColors.alabaster;
+        pillFg = AppColors.blackCatLight;
+        pillLabel = 'Pending';
+    }
+
+    return Opacity(
+      opacity: isAccepted ? 1 : 0.6,
+      child: Semantics(
+        button: isAccepted,
+        label: isAccepted
+            ? hasUnread
+                  ? 'Chat with $name, unread message'
+                  : 'Chat with $name'
+            : '$name, $pillLabel, chat not available yet',
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: isAccepted ? () => onSelect(client) : null,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.blackCatBorderLight),
+              ),
+              child: Row(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: AppColors.balletSlippers,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          letter,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ),
+                      if (hasUnread)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE85656),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.snow,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        if (email.isNotEmpty)
+                          Text(
+                            email,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pillBg,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      pillLabel,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: pillFg,
+                      ),
+                    ),
+                  ),
+                  if (isAccepted) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: const BoxDecoration(
+                        color: AppColors.blackCat,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 14,
+                        color: AppColors.snow,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// ------------------------
 /// SHIPPED ORDER DETAILS (UI like your screenshot)
 /// ------------------------
@@ -1115,7 +1396,30 @@ class _BaseOrderDetails extends StatelessWidget {
     return fallback;
   }
 
-  void _openAiSupportChat(BuildContext context) {
+  bool get _isGroupOrder =>
+      order.orderType.trim().toLowerCase() == 'group' ||
+      order.groupClients.isNotEmpty;
+
+  /// Brand's own display name to use as the "me" side of the chat --
+  /// [showRequestChatModal] resolves the peer as "whichever of
+  /// clientEmail/artistEmail isn't the signed-in user," so the brand's own
+  /// identity has to be one of the two slots for that to work.
+  String get _brandDisplayName {
+    final currentName = _currentName.trim();
+    if (currentName.isNotEmpty) return currentName;
+    final email = _currentEmail.trim();
+    return email.contains('@') ? email.split('@').first : 'Brand';
+  }
+
+  /// Opens a chat with the actual client on this order -- a single direct
+  /// thread for a single-client order, or a picker (one thread per
+  /// recipient) for a group order.
+  void _openClientChat(BuildContext context) {
+    if (_isGroupOrder) {
+      _openGroupClientChatPicker(context);
+      return;
+    }
+
     final clientEmail = order.clientEmail.trim().toLowerCase();
     if (clientEmail.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1123,21 +1427,71 @@ class _BaseOrderDetails extends StatelessWidget {
       );
       return;
     }
-    final currentName = _currentName.trim();
-    final fallbackCurrentName = _currentEmail.trim();
-    final clientName = currentName.isNotEmpty
-        ? currentName
-        : (fallbackCurrentName.contains('@')
-              ? fallbackCurrentName.split('@').first
-              : 'Client');
+    final displayName = _requestedClientDisplay();
+    final clientName = (displayName == 'N/A' || displayName == 'Group')
+        ? (clientEmail.contains('@') ? clientEmail.split('@').first : 'Client')
+        : displayName;
+
     showRequestChatModal(
       context: context,
       requestId: order.id,
-      conversationSuffix: 'ai_support',
-      clientEmail: clientEmail,
-      artistEmail: 'ai.chatbot@jnt.com',
-      clientName: clientName,
-      artistName: 'JNT AI Assistant',
+      conversationSuffix: 'brand_client',
+      clientEmail: _currentEmail,
+      artistEmail: clientEmail,
+      clientName: _brandDisplayName,
+      artistName: clientName,
+    );
+  }
+
+  void _openGroupClientChatPicker(BuildContext context) {
+    final chattable = order.groupClients
+        .where((c) => c.clientEmail.trim().isNotEmpty)
+        .toList(growable: false);
+
+    if (chattable.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No recipients available to chat with yet.'),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _GroupClientChatPickerSheet(
+        clients: chattable,
+        requestId: order.id,
+        myEmail: _currentEmail,
+        onSelect: (client) {
+          Navigator.of(sheetContext).pop();
+          _openClientChatWith(context, client);
+        },
+      ),
+    );
+  }
+
+  void _openClientChatWith(BuildContext context, _OrderGroupClient client) {
+    final clientEmail = client.clientEmail.trim().toLowerCase();
+    final clientName = client.clientName.trim().isNotEmpty
+        ? client.clientName.trim()
+        : (clientEmail.contains('@') ? clientEmail.split('@').first : 'Client');
+    final threadKey = (client.clientId.trim().isNotEmpty
+            ? client.clientId.trim()
+            : clientEmail)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+
+    showRequestChatModal(
+      context: context,
+      requestId: order.id,
+      conversationSuffix: 'brand_client_$threadKey',
+      clientEmail: _currentEmail,
+      artistEmail: clientEmail,
+      clientName: _brandDisplayName,
+      artistName: clientName,
     );
   }
 
@@ -1622,9 +1976,7 @@ class _BaseOrderDetails extends StatelessWidget {
                       elevation: 0,
                     ),
                     onPressed: () {
-                      // Brand-submitted requests always talk to the JNT AI
-                      // Assistant, never directly with the accepted artist.
-                      _openAiSupportChat(context);
+                      _openClientChat(context);
                     },
                     child: const Text(
                       'Chat',
@@ -1668,14 +2020,13 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                         onPressed: () {
                           if (isCancelledStatus) {
-                            (onCancelledChat ??
-                                    () => _openAiSupportChat(context))
+                            (onCancelledChat ?? () => _openClientChat(context))
                                 .call();
                             return;
                           }
                           (onExpiredChat ??
                                   onCancelledChat ??
-                                  () => _openAiSupportChat(context))
+                                  () => _openClientChat(context))
                               .call();
                         },
                         child: const Text(
@@ -1943,8 +2294,19 @@ class _BaseOrderDetails extends StatelessWidget {
         : isPending
         ? 'Payment Pending'
         : 'Payment Range';
-    final amount =
-        (order.artistAcceptedAmount ?? order.budgetMax ?? order.budgetMin);
+    // Group campaigns: the brand's committed budgetMax is the real final
+    // amount, not the artist's own entered price (internal ceiling check
+    // only) -- see order_details_pages.dart's _paymentSection for the
+    // client-flow mirror of this same rule.
+    final isGroupOrder =
+        order.orderType.trim().toLowerCase() == 'group' ||
+        order.groupClients.isNotEmpty;
+    final hasArtistAmount = order.artistAcceptedAmount != null;
+    final amount = hasArtistAmount
+        ? (isGroupOrder
+              ? (order.budgetMax ?? order.artistAcceptedAmount)
+              : order.artistAcceptedAmount)
+        : (order.budgetMax ?? order.budgetMin);
     final rangeText = _budgetText();
     final amountText = amount == null ? rangeText : '\$$amount';
 
@@ -4638,42 +5000,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     final deepLink = _reviewDeepLink;
     final body =
         'Your order has been delivered. Please leave a quick review and tip in the app.';
-    final clientName = prefs.name.trim().isEmpty ? 'there' : prefs.name.trim();
-    final orderId = widget.order.id;
-    final artworkTitle = widget.order.subtitle.trim().isNotEmpty
-        ? widget.order.subtitle.trim()
-        : (widget.order.title.trim().isNotEmpty
-              ? widget.order.title.trim()
-              : 'Custom Artwork');
-    final artistName = widget.order.artistName.trim().isNotEmpty
-        ? widget.order.artistName.trim()
-        : 'Your Artist';
-    final deliveredOn = _formatDeliveryDate(widget.order.deliveredAt);
-    final orderLink = 'jnt://orders/details?orderId=${widget.order.id}';
-    final reviewLink = '$deepLink&target=review';
-    final tipLink = '$deepLink&target=tip';
-    final emailText =
-        'Hi $clientName,\n\n'
-        'Your custom artwork is ready! Your order has been successfully delivered.\n\n'
-        'Order Summary\n'
-        'Order ID: $orderId\n'
-        'Artwork: $artworkTitle\n'
-        'Artist: $artistName\n'
-        'Delivered On: $deliveredOn\n\n'
-        'View Your Artwork\n'
-        'Click below to view or download your artwork:\n'
-        '$orderLink\n\n'
-        'Leave a Review\n'
-        'Tell us about your experience and help the artist grow:\n'
-        '$reviewLink\n\n'
-        'Add a Tip (Optional)\n'
-        'Loved the work? You can support your artist with a tip:\n'
-        '$tipLink\n\n'
-        'If you have any questions or need help, simply reply to this email.\n\n'
-        'Thank you for choosing JNT!\n\n'
-        'Best regards,\n'
-        'Team JNT\n\n'
-        'Support: support@jnt.com';
     if (prefs.email.isNotEmpty) {
       await NotificationsService.createUserNotification(
         receiverEmail: prefs.email,
@@ -4684,17 +5010,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         sourceCollection: _orderCollection,
         extra: <String, dynamic>{'deepLink': deepLink, 'action': 'review_tip'},
       );
-    }
-
-    if ((prefs.channel == _ReviewChannel.email ||
-            prefs.channel == _ReviewChannel.both) &&
-        prefs.email.isNotEmpty) {
-      await NotificationsService.queueEmail(
-        to: prefs.email,
-        subject: 'Your order has been delivered',
-        text: emailText,
-      );
-      channels.add('email');
     }
 
     if ((prefs.channel == _ReviewChannel.text ||
@@ -4710,8 +5025,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
     return channels.join(', ');
   }
-
-  String _formatDeliveryDate(DateTime? value) => formatDateMdyOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();

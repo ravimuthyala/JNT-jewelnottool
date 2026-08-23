@@ -174,13 +174,16 @@ class _AddToCalendarSheet extends StatelessWidget {
                 height: 44,
                 child: TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    'Not now',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blackCat.withValues(alpha: 0.6),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: AppColors.blackCat.withValues(alpha: 0.6),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
                     ),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

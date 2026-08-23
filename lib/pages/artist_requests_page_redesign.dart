@@ -20,6 +20,8 @@ import 'client_campaign_details_page.dart';
 import '../services/artist_requests_repository.dart';
 import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
+import '../services/shipped_email_templates.dart';
+import '../services/delivered_email_templates.dart';
 import 'artist_profile_page.dart';
 import 'artist_reviews_page.dart';
 import 'notifications_page.dart';
@@ -738,6 +740,24 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   OverlayEntry? _dropdownEntry;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _clientRequestsSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _companyRequestsSub;
+  StreamSubscription<List<ChatNotificationRef>>? _unreadChatSub;
+  List<ChatNotificationRef> _unreadChatRefs = const <ChatNotificationRef>[];
+
+  bool _hasUnreadChat(String requestId) =>
+      _unreadChatRefs.any((r) => r.requestId == requestId);
+
+  /// "New message from X" for a single sender, "N new messages" once more
+  /// than one recipient/thread under the same request has something unread.
+  String? _unreadChatLabel(String requestId) {
+    final names = _unreadChatRefs
+        .where((r) => r.requestId == requestId)
+        .map((r) => r.senderName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    if (names.isEmpty) return null;
+    if (names.length == 1) return 'New message from ${names.first}';
+    return '${names.length} new messages';
+  }
 
   void _closeDropdown() {
     _dropdownEntry?.remove();
@@ -920,6 +940,19 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       unawaited(_loadCurrentArtistIdentity());
     }
     // Load on explicit user action to avoid startup OOM from large legacy docs.
+
+    final myEmail = (Supabase.instance.client.auth.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    if (myEmail.isNotEmpty) {
+      _unreadChatSub =
+          NotificationsService.watchUnreadChatConversationRefs(
+            receiverEmail: myEmail,
+          ).listen((refs) {
+            if (!mounted) return;
+            setState(() => _unreadChatRefs = refs);
+          });
+    }
   }
 
   Future<void> _loadCurrentArtistIdentity() async {
@@ -1707,6 +1740,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     _searchAnnouncementTimer?.cancel();
     _clientRequestsSub?.cancel();
     _companyRequestsSub?.cancel();
+    _unreadChatSub?.cancel();
     _tabCtrl.dispose();
     _searchCtrl.dispose();
     _budgetMinCtrl.dispose();
@@ -3246,10 +3280,65 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           return <String, dynamic>{};
         }
 
+        // Group orders (client- or brand-submitted): the requester who
+        // committed the budget is billed the FULL budgetMax -- not the
+        // artist's entered price, which stays an internal ceiling check only
+        // (see AcceptRequestDialogV2's exceedsBudget validation). Every
+        // other recipient the order is for sees just their own
+        // informational share, never the total or the headcount.
+        final isGroupOrder =
+            request.orderType == RequestOrderTypeV2.group ||
+            request.groupClients.isNotEmpty;
+
+        List<({String email, String name})> groupRecipients() {
+          final seen = <String>{};
+          final out = <({String email, String name})>[];
+          final primaryEmail = normalizeEmail(request.clientEmail);
+          if (primaryEmail.isNotEmpty) {
+            seen.add(primaryEmail);
+            out.add((email: primaryEmail, name: request.clientName));
+          }
+          for (final c in request.groupClients) {
+            final email = normalizeEmail(c.clientEmail);
+            if (email.isEmpty || seen.contains(email)) continue;
+            seen.add(email);
+            out.add((email: email, name: c.clientName));
+          }
+          return out;
+        }
+
+        Future<void> notifyGroupShares({
+          required double finalAmount,
+          required String skipEmail,
+        }) async {
+          final recipients = groupRecipients();
+          if (recipients.isEmpty) return;
+          final share = finalAmount / recipients.length;
+          for (final recipient in recipients) {
+            if (recipient.email == skipEmail) continue;
+            await NotificationsService.createUserNotification(
+              receiverEmail: recipient.email,
+              title: 'Request Accepted',
+              body:
+                  '$artistName accepted the group order. Your payment amount: \$${share.toStringAsFixed(2)}.',
+              type: 'group_order_accepted_share',
+              orderId: request.id,
+              orderNumber: request.orderNumber,
+              sourceCollection: sourceCollection,
+              extra: <String, dynamic>{
+                'artistName': artistName,
+                'shareAmount': share,
+                'finalAmount': finalAmount,
+              },
+            );
+          }
+        }
+
         var notifyEmail = '';
         var notificationTitle = 'Request Accepted';
         var notificationBody =
             '$artistName accepted your request $orderRef. Final amount: \$${normalizedTotal.toStringAsFixed(2)}.';
+        var notificationFinalAmount = normalizedTotal;
 
         if (sourceCollection == 'Company_Custom_Requests') {
           Map<String, dynamic>? row;
@@ -3287,11 +3376,47 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           notificationTitle = 'Brand Request Accepted';
           notificationBody =
               '$artistName accepted your ${campaignName.isEmpty ? 'brand request' : '$campaignName brand request'} $orderRef. Final amount: \$${normalizedTotal.toStringAsFixed(2)}.';
+
+          if (isGroupOrder) {
+            // The brand -- not the accepted client -- is billed for a
+            // group campaign, so the payment-bearing notification has to
+            // go to the brand's own account instead of the field this
+            // branch otherwise resolves (acceptedClientEmail/
+            // selectedClientEmail, which name a *recipient*, not the
+            // payer). company_email only exists on the raw row/payload,
+            // not on the hydrated ClientRequestV2.
+            final brandEmail = firstEmail(<Object?>[
+              row?['company_email'],
+              row?['companyEmail'],
+              payload['company_email'],
+              payload['companyEmail'],
+              details['company_email'],
+              details['companyEmail'],
+            ]);
+            notifyEmail = brandEmail;
+            notificationFinalAmount = request.budgetMax.toDouble();
+            notificationBody =
+                '$artistName accepted your ${campaignName.isEmpty ? 'brand request' : '$campaignName brand request'} $orderRef. Final amount: \$${notificationFinalAmount.toStringAsFixed(2)}. Pay to confirm.';
+            await notifyGroupShares(
+              finalAmount: notificationFinalAmount,
+              skipEmail: brandEmail,
+            );
+          }
         } else {
           notifyEmail = firstEmail(<Object?>[
             request.clientEmail,
             request.selectedClientEmail,
           ]);
+
+          if (isGroupOrder) {
+            notificationFinalAmount = request.budgetMax.toDouble();
+            notificationBody =
+                '$artistName accepted your request $orderRef. Final amount: \$${notificationFinalAmount.toStringAsFixed(2)}. Pay to confirm.';
+            await notifyGroupShares(
+              finalAmount: notificationFinalAmount,
+              skipEmail: notifyEmail,
+            );
+          }
         }
 
         if (notifyEmail.isNotEmpty) {
@@ -3306,7 +3431,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             orderNumber: request.orderNumber,
             sourceCollection: sourceCollection,
             extra: <String, dynamic>{
-              'artistFinalAmount': normalizedTotal,
+              'artistFinalAmount': notificationFinalAmount,
               'artistName': artistName,
             },
           );
@@ -4609,15 +4734,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           orderNumber: orderNo,
           sourceCollection: r.sourceCollection,
         );
-        await NotificationsService.queueEmail(
-          to: clientEmail,
-          subject: 'Please Review Your Completed Nail Design',
-          text:
-              'Your artist completed order $orderNo and uploaded photos. Please open your order details to Accept or Decline before shipping.',
-          html:
-              '<p>Your artist completed order <b>$orderNo</b> and uploaded photos.</p>'
-              '<p>Please open your order details to <b>Accept</b> or <b>Decline</b> before shipping.</p>',
-        );
         try {
           final doc = await SupabaseCompatDatabase.instance
               .collection(r.sourceCollection)
@@ -4800,15 +4916,44 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       // ✅ UPDATED signature + uses shippedDate
       onMarkShipped:
           ({
-            required String courier,
-            required String tracking,
+            required GroupShippingMode mode,
             required DateTime shippedDate,
+            String courier = '',
+            String tracking = '',
+            List<ShipmentRecipientEntry> recipients = const [],
           }) async {
+            final isRespective = mode == GroupShippingMode.toRespectiveClient;
+            // In "ship to each group member individually" mode, the
+            // primary client's own shipment is the entry with no
+            // clientId (see _ShipmentRecipient's 'self' key in
+            // artist_completed_shipping_tab.dart) -- its courier/tracking
+            // are what populate the flat DB columns and the primary
+            // client's own notification, same as the shared fields did
+            // before this mode existed.
+            final primaryEntry = isRespective
+                ? recipients.firstWhere(
+                    (e) => e.clientId.isEmpty,
+                    orElse: () => ShipmentRecipientEntry(
+                      clientId: '',
+                      clientName: r.clientName,
+                      clientEmail: r.clientEmail,
+                      courier: courier,
+                      tracking: tracking,
+                    ),
+                  )
+                : null;
+            final effectiveCourier = isRespective
+                ? primaryEntry!.courier
+                : courier;
+            final effectiveTracking = isRespective
+                ? primaryEntry!.tracking
+                : tracking;
+
             // 1) update local UI immediately
             final updated = r.copyWith(
               status: RequestStatusV2.shipped,
-              shippedByCourier: courier,
-              trackingNumber: tracking,
+              shippedByCourier: effectiveCourier,
+              trackingNumber: effectiveTracking,
 
               // ✅ NEW: use selected shipped date from sheet
               shippedAt: shippedDate,
@@ -4819,15 +4964,27 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 request: r,
                 status: 'shipped',
                 summaryExtra: {
-                  'shippedByCourier': courier,
-                  'trackingNumber': tracking,
+                  'shippedByCourier': effectiveCourier,
+                  'trackingNumber': effectiveTracking,
                   'shippedAt': SupabaseDbTime.fromDate(shippedDate),
                 },
                 detailsExtra: {
                   'shipment': {
-                    'courier': courier,
-                    'trackingNumber': tracking,
+                    'mode': mode.name,
+                    'courier': effectiveCourier,
+                    'trackingNumber': effectiveTracking,
                     'shippedAt': SupabaseDbTime.fromDate(shippedDate),
+                    if (isRespective)
+                      'recipients': [
+                        for (final entry in recipients)
+                          {
+                            'clientId': entry.clientId,
+                            'clientName': entry.clientName,
+                            'clientEmail': entry.clientEmail,
+                            'courier': entry.courier,
+                            'trackingNumber': entry.tracking,
+                          },
+                      ],
                   },
                 },
               );
@@ -4886,6 +5043,106 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   '${shippedDate.month.toString().padLeft(2, '0')}/${shippedDate.day.toString().padLeft(2, '0')}/${shippedDate.year}';
               final shippedMessage =
                   '$artistName has shipped your $campaignName on $shippedOnText';
+
+              // Shared inputs for the "order shipped" email templates
+              // (client/artist/brand) -- see
+              // lib/services/shipped_email_templates.dart.
+              final trackingUrl =
+                  'https://jnt-app-c3097.web.app/open-app?type=track-order&orderId=${Uri.encodeComponent(r.id)}';
+              final appLink =
+                  'https://jnt-app-c3097.web.app/open-app?type=order-details&orderId=${Uri.encodeComponent(r.id)}';
+              final currentArtistEmail =
+                  (Supabase.instance.client.auth.currentUser?.email ?? '')
+                      .trim()
+                      .toLowerCase();
+
+              String firstNameOf(String full) {
+                final trimmed = full.trim();
+                if (trimmed.isEmpty) return 'there';
+                return trimmed.split(RegExp(r'\s+')).first;
+              }
+
+              // "All group clients" -- union every place a group
+              // participant's email can live on this request (mirrors the
+              // visibility check elsewhere in this file), keyed by email so
+              // duplicates collapse and a name from groupClients wins over
+              // an email-only entry from the selected/accepted lists.
+              // "All group clients" -- union every place a group
+              // participant's email can live on this request (mirrors the
+              // visibility check elsewhere in this file). Keyed by email
+              // so duplicates collapse. In "ship to each group member
+              // individually" mode, each recipient already carries their
+              // own courier/tracking (entered per-recipient in the sheet);
+              // otherwise every group member shares the one courier/
+              // tracking pair the artist entered.
+              final groupRecipients =
+                  <String, ({String name, String courier, String tracking})>{};
+              if (isRespective) {
+                for (final entry in recipients) {
+                  if (entry.clientId.isEmpty) continue; // skip 'self'
+                  final email = entry.clientEmail.trim().toLowerCase();
+                  if (email.isEmpty) continue;
+                  groupRecipients[email] = (
+                    name: entry.clientName,
+                    courier: entry.courier,
+                    tracking: entry.tracking,
+                  );
+                }
+              } else {
+                final names = <String, String>{};
+                for (final gc in hydrated.groupClients) {
+                  final email = gc.clientEmail.trim().toLowerCase();
+                  if (email.isEmpty) continue;
+                  names[email] = gc.clientName.trim();
+                }
+                for (final email in <String>[
+                  ...hydrated.selectedGroupClientEmails,
+                  ...hydrated.acceptedGroupClientEmails,
+                ]) {
+                  final normalized = email.trim().toLowerCase();
+                  if (normalized.isEmpty) continue;
+                  names.putIfAbsent(normalized, () => '');
+                }
+                for (final entry in names.entries) {
+                  groupRecipients[entry.key] = (
+                    name: entry.value,
+                    courier: effectiveCourier,
+                    tracking: effectiveTracking,
+                  );
+                }
+              }
+              groupRecipients.remove(clientEmail);
+              groupRecipients.remove(acceptedClientEmail);
+
+              Future<void> sendGroupClientEmails({
+                required String primaryClientNameForCopy,
+              }) async {
+                for (final entry in groupRecipients.entries) {
+                  final content = ShippedEmailTemplates.client(
+                    isGroupClient: true,
+                    isBrandOrder: isBrandRequest,
+                    recipientFirstName: firstNameOf(entry.value.name),
+                    primaryClientName: primaryClientNameForCopy,
+                    orderNumber: orderRef,
+                    shippedDate: shippedOnText,
+                    carrierName: entry.value.courier,
+                    trackingNumber: entry.value.tracking,
+                    trackingUrl: trackingUrl,
+                    appLink: appLink,
+                    artistName: artistName,
+                    campaignName: campaignName,
+                    brandCompanyName: brandCompanyName,
+                  );
+                  await NotificationsService.queueEmail(
+                    to: entry.key,
+                    subject: content.subject,
+                    text: content.text,
+                    html: content.html,
+                    preheader: content.preheader,
+                  );
+                }
+              }
+
               if (isBrandRequest) {
                 for (final receiver in brandEmails) {
                   await NotificationsService.createUserNotification(
@@ -4897,6 +5154,25 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     orderNumber: r.orderNumber,
                     sourceCollection: r.sourceCollection,
                   );
+                  final brandContent = ShippedEmailTemplates.brand(
+                    campaignName: campaignName,
+                    brandCompanyName: brandCompanyName,
+                    primaryClientName: acceptedClientName,
+                    orderNumber: orderRef,
+                    shippedDate: shippedOnText,
+                    carrierName: effectiveCourier,
+                    trackingNumber: effectiveTracking,
+                    trackingUrl: trackingUrl,
+                    appLink: appLink,
+                    artistName: artistName,
+                  );
+                  await NotificationsService.queueEmail(
+                    to: receiver,
+                    subject: brandContent.subject,
+                    text: brandContent.text,
+                    html: brandContent.html,
+                    preheader: brandContent.preheader,
+                  );
                 }
                 if (acceptedClientEmail.isNotEmpty) {
                   await NotificationsService.createUserNotification(
@@ -4907,6 +5183,54 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                     orderId: r.id,
                     orderNumber: r.orderNumber,
                     sourceCollection: r.sourceCollection,
+                  );
+                  final clientContent = ShippedEmailTemplates.client(
+                    isGroupClient: false,
+                    isBrandOrder: true,
+                    recipientFirstName: firstNameOf(acceptedClientName),
+                    primaryClientName: acceptedClientName,
+                    orderNumber: orderRef,
+                    shippedDate: shippedOnText,
+                    carrierName: effectiveCourier,
+                    trackingNumber: effectiveTracking,
+                    trackingUrl: trackingUrl,
+                    appLink: appLink,
+                    artistName: artistName,
+                    campaignName: campaignName,
+                    brandCompanyName: brandCompanyName,
+                  );
+                  await NotificationsService.queueEmail(
+                    to: acceptedClientEmail,
+                    subject: clientContent.subject,
+                    text: clientContent.text,
+                    html: clientContent.html,
+                    preheader: clientContent.preheader,
+                  );
+                }
+                await sendGroupClientEmails(
+                  primaryClientNameForCopy: acceptedClientName,
+                );
+                if (currentArtistEmail.isNotEmpty) {
+                  final artistContent = ShippedEmailTemplates.artist(
+                    isBrandOrder: true,
+                    orderNumber: orderRef,
+                    shippedDate: shippedOnText,
+                    carrierName: effectiveCourier,
+                    trackingNumber: effectiveTracking,
+                    trackingUrl: trackingUrl,
+                    appLink: appLink,
+                    artistName: artistName,
+                    primaryClientName: acceptedClientName,
+                    groupClientCount: groupRecipients.length,
+                    campaignName: campaignName,
+                    brandCompanyName: brandCompanyName,
+                  );
+                  await NotificationsService.queueEmail(
+                    to: currentArtistEmail,
+                    subject: artistContent.subject,
+                    text: artistContent.text,
+                    html: artistContent.html,
+                    preheader: artistContent.preheader,
                   );
                 }
                 await NotificationsService.notifyAdmins(
@@ -4921,8 +5245,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 return;
               }
               if (clientEmail.isNotEmpty) {
-                final trackingUrl =
-                    'https://jnt-app-c3097.web.app/open-app?type=track-order&orderId=${Uri.encodeComponent(r.id)}';
                 await NotificationsService.createUserNotification(
                   receiverEmail: clientEmail,
                   title: 'Order Shipped',
@@ -4932,20 +5254,47 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   orderNumber: r.orderNumber,
                   sourceCollection: r.sourceCollection,
                 );
-                await NotificationsService.queueTemplatedEmail(
+                final clientContent = ShippedEmailTemplates.client(
+                  isGroupClient: false,
+                  isBrandOrder: false,
+                  recipientFirstName: firstNameOf(r.clientName),
+                  primaryClientName: r.clientName,
+                  orderNumber: orderRef,
+                  shippedDate: shippedOnText,
+                  carrierName: effectiveCourier,
+                  trackingNumber: effectiveTracking,
+                  trackingUrl: trackingUrl,
+                  appLink: appLink,
+                  artistName: artistName,
+                );
+                await NotificationsService.queueEmail(
                   to: clientEmail,
-                  templateName: 'client_order_shipped',
-                  data: <String, dynamic>{
-                    'clientName': r.clientName.trim().isEmpty
-                        ? 'Client'
-                        : r.clientName.trim(),
-                    'orderId': orderRef,
-                    'orderNumber': orderRef,
-                    'carrierName': courier,
-                    'trackingNumber': tracking,
-                    'estimatedDelivery': '',
-                    'trackingUrl': trackingUrl,
-                  },
+                  subject: clientContent.subject,
+                  text: clientContent.text,
+                  html: clientContent.html,
+                  preheader: clientContent.preheader,
+                );
+              }
+              await sendGroupClientEmails(primaryClientNameForCopy: r.clientName);
+              if (currentArtistEmail.isNotEmpty) {
+                final artistContent = ShippedEmailTemplates.artist(
+                  isBrandOrder: false,
+                  orderNumber: orderRef,
+                  shippedDate: shippedOnText,
+                  carrierName: effectiveCourier,
+                  trackingNumber: effectiveTracking,
+                  trackingUrl: trackingUrl,
+                  appLink: appLink,
+                  artistName: artistName,
+                  primaryClientName: r.clientName,
+                  groupClientCount: groupRecipients.length,
+                );
+                await NotificationsService.queueEmail(
+                  to: currentArtistEmail,
+                  subject: artistContent.subject,
+                  text: artistContent.text,
+                  html: artistContent.html,
+                  preheader: artistContent.preheader,
                 );
               }
             } catch (e) {
@@ -5080,23 +5429,26 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             );
             return;
           }
+          // Working deep link: matches main.dart's `path.contains('review-order')`
+          // handler, which hydrates the order by id and opens
+          // DeliveredOrderDetailsPage directly on the Review & Tip panel.
+          // artistId is the signed-in artist's own auth uid, which doubles
+          // as their row id in the artist/client_artist tables everywhere
+          // else in this app.
+          final deliveredArtistId =
+              Supabase.instance.client.auth.currentUser?.id ?? '';
+          final reviewUrl =
+              'https://jnt-app-c3097.web.app/review-order?orderId=${Uri.encodeComponent(r.id)}&artistId=${Uri.encodeComponent(deliveredArtistId)}';
+          final deliveredOnText =
+              '${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().year}';
+
+          String firstNameOf(String full) {
+            final trimmed = full.trim();
+            if (trimmed.isEmpty) return 'there';
+            return trimmed.split(RegExp(r'\s+')).first;
+          }
+
           if (clientEmail.isNotEmpty) {
-            final artistName = r.selectedArtist.trim().isNotEmpty
-                ? r.selectedArtist.trim()
-                : (r.acceptedByArtistEmail.trim().isNotEmpty
-                      ? r.acceptedByArtistEmail.trim().split('@').first
-                      : 'Your artist');
-            final deliveredDate = DateTime.now().toIso8601String();
-            final tracking = r.trackingNumber?.trim().isNotEmpty == true
-                ? r.trackingNumber!.trim()
-                : (r.shippingLabelTrackingNumber.trim().isNotEmpty
-                      ? r.shippingLabelTrackingNumber.trim()
-                      : '');
-            final reviewUrl =
-                'https://jnt-app-c3097.web.app/open-app?type=review-order&orderId=${Uri.encodeComponent(r.id)}';
-            final appLink =
-                'https://jnt-app-c3097.web.app/open-app?type=order-details&orderId=${Uri.encodeComponent(r.id)}';
-            final deepLink = reviewUrl;
             await NotificationsService.createUserNotification(
               receiverEmail: clientEmail,
               title: 'Order Delivered: Review & Tip',
@@ -5107,27 +5459,67 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               orderNumber: r.orderNumber,
               sourceCollection: r.sourceCollection,
               extra: <String, dynamic>{
-                'deepLink': deepLink,
+                'deepLink': reviewUrl,
                 'action': 'review_tip',
               },
             );
-            await NotificationsService.queueTemplatedEmail(
+            final clientContent = DeliveredEmailTemplates.client(
+              isGroupClient: false,
+              recipientFirstName: firstNameOf(r.clientName),
+              primaryClientName: r.clientName,
+              orderNumber: orderRef,
+              deliveredDate: deliveredOnText,
+              artistName: artistEmail.isNotEmpty
+                  ? artistEmail.split('@').first
+                  : 'Your artist',
+              reviewUrl: reviewUrl,
+              appLink: reviewUrl,
+            );
+            await NotificationsService.queueEmail(
               to: clientEmail,
-              templateName: 'client_order_delivered_review_tip',
-              data: <String, dynamic>{
-                'clientName': r.clientName.trim().isEmpty
-                    ? 'Client'
-                    : r.clientName.trim(),
-                'orderId': orderRef,
-                'artistName': artistName,
-                'deliveredDate': deliveredDate,
-                'trackingNumber': tracking,
-                'reviewUrl': reviewUrl,
-                'tip10Url': '$reviewUrl&tip=10',
-                'tip15Url': '$reviewUrl&tip=15',
-                'tip20Url': '$reviewUrl&tip=20',
-                'appLink': appLink,
-              },
+              subject: clientContent.subject,
+              text: clientContent.text,
+              html: clientContent.html,
+              preheader: clientContent.preheader,
+            );
+          }
+
+          // "All group clients" -- same union-of-sources pattern used for
+          // shipped-order emails.
+          final groupRecipients = <String, String>{};
+          for (final gc in hydrated.groupClients) {
+            final email = gc.clientEmail.trim().toLowerCase();
+            if (email.isEmpty) continue;
+            groupRecipients[email] = gc.clientName.trim();
+          }
+          for (final email in <String>[
+            ...hydrated.selectedGroupClientEmails,
+            ...hydrated.acceptedGroupClientEmails,
+          ]) {
+            final normalized = email.trim().toLowerCase();
+            if (normalized.isEmpty) continue;
+            groupRecipients.putIfAbsent(normalized, () => '');
+          }
+          groupRecipients.remove(clientEmail);
+          for (final entry in groupRecipients.entries) {
+            final groupContent = DeliveredEmailTemplates.client(
+              isGroupClient: true,
+              recipientFirstName: firstNameOf(entry.value),
+              primaryClientName: r.clientName,
+              orderNumber: orderRef,
+              deliveredDate: deliveredOnText,
+              artistName: artistEmail.isNotEmpty
+                  ? artistEmail.split('@').first
+                  : 'Your artist',
+              reviewUrl: reviewUrl,
+              appLink: reviewUrl,
+            );
+            await NotificationsService.queueEmail(
+              to: entry.key,
+              subject: groupContent.subject,
+              text: groupContent.text,
+              html: groupContent.html,
+              preheader: groupContent.preheader,
             );
           }
         } catch (e) {
@@ -5681,7 +6073,36 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   // ✅ Avatar stacked above name (left column)
                   SizedBox(
                     width: 62,
-                    child: Column(children: [_clientAvatar(r, s)]),
+                    child: Column(
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _clientAvatar(r, s),
+                            if (_hasUnreadChat(r.id))
+                              Positioned(
+                                top: -2,
+                                right: -2,
+                                child: Semantics(
+                                  label: 'Unread chat message',
+                                  child: Container(
+                                    width: 13,
+                                    height: 13,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE85656),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: AppColors.snow,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
 
                   const SizedBox(width: 12),
@@ -5708,6 +6129,19 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                             ),
                           ],
                         ),
+                        if (_unreadChatLabel(r.id) != null) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            _unreadChatLabel(r.id)!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: const Color(0xFFE85656),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5 * s,
+                            ),
+                          ),
+                        ],
                         if (r.sourceCollection ==
                             'Company_Custom_Requests') ...[
                           const SizedBox(height: 4),

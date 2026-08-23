@@ -368,6 +368,12 @@ class ArtistRequestsRepository {
 
     return lite.copyWith(
       orderType: orderType,
+      groupShippingMode: _resolveGroupShippingMode(
+        groupOrder: groupOrder,
+        shipping: _asMap(detailData['shipping']).isNotEmpty
+            ? _asMap(detailData['shipping'])
+            : _asMap(data['shipping']),
+      ),
       selectedGroupClientEmails: selectedGroupClientEmails,
       acceptedGroupClientEmails: acceptedGroupClientEmails.toList(
         growable: false,
@@ -588,6 +594,10 @@ class ArtistRequestsRepository {
           _asNullableBool(data['allow_non_licensed']) ??
           true,
       orderType: orderType,
+      groupShippingMode: _resolveGroupShippingMode(
+        groupOrder: groupOrder,
+        shipping: _asMap(data['shipping']),
+      ),
       selectedArtist: directFlag ? selectedArtist : '',
       selectedArtistEmail: directFlag ? selectedArtistEmail : '',
       selectedGroupClientEmails: selectedGroupClientEmails,
@@ -1486,6 +1496,12 @@ class ArtistRequestsRepository {
       openToClientPool: openToClientPool,
       allowNonLicensed: allowNonLicensed,
       orderType: orderType,
+      groupShippingMode: _resolveGroupShippingMode(
+        groupOrder: groupOrder,
+        shipping: _asMap(detailData['shipping']).isNotEmpty
+            ? _asMap(detailData['shipping'])
+            : _asMap(data['shipping']),
+      ),
       selectedArtist: selectedArtist,
       selectedArtistEmail: selectedArtistEmail,
       selectedClient: selectedClient,
@@ -1812,6 +1828,31 @@ class ArtistRequestsRepository {
     return RequestOrderTypeV2.single;
   }
 
+  static GroupShippingMode _resolveGroupShippingMode({
+    required Map<String, dynamic> groupOrder,
+    Map<String, dynamic> shipping = const <String, dynamic>{},
+  }) {
+    final raw = _firstNonEmptyString(
+      groupOrder['shippingMode'],
+      shipping['groupShippingMode'],
+    );
+    return GroupShippingMode.fromStorageValue(raw.isEmpty ? null : raw);
+  }
+
+  static GroupClientShippingAddress _parseGroupClientShippingAddress(
+    Map<String, dynamic> map,
+  ) {
+    final address = _asMap(map['shippingAddress']);
+    if (address.isEmpty) return const GroupClientShippingAddress();
+    return GroupClientShippingAddress(
+      street: _firstNonEmptyString(address['street']),
+      city: _firstNonEmptyString(address['city']),
+      state: _firstNonEmptyString(address['state']),
+      zip: _firstNonEmptyString(address['zip']),
+      country: _firstNonEmptyString(address['country']),
+    );
+  }
+
   static Future<List<GroupOrderClientV2>> _parseGroupClients(
     Map<String, dynamic> groupOrder,
     String Function(dynamic v) dim, {
@@ -1890,6 +1931,7 @@ class ArtistRequestsRepository {
             ring: dim(dims['rRing']),
             pinky: dim(dims['rPinky']),
           ),
+          shippingAddress: _parseGroupClientShippingAddress(map),
         ),
       );
     }

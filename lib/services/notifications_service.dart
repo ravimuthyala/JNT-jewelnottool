@@ -5,6 +5,24 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/scenario_4_1.dart';
 
+/// Lightweight pointer to an unread chat-message notification -- enough to
+/// badge an order/request card or "Chat" button (requestId), badge a
+/// specific recipient in a group-chat picker (conversationId), and show who
+/// it's from (senderName) without a second lookup.
+class ChatNotificationRef {
+  const ChatNotificationRef({
+    required this.notificationId,
+    required this.requestId,
+    required this.conversationId,
+    required this.senderName,
+  });
+
+  final String notificationId;
+  final String requestId;
+  final String conversationId;
+  final String senderName;
+}
+
 class NotificationsService {
   static final RegExp _uuidPattern = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
@@ -253,6 +271,130 @@ class NotificationsService {
     };
 
     return controller.stream;
+  }
+
+  /// Live set of unread chat-message notifications for [receiverEmail],
+  /// reduced to just what's needed to badge a specific order/request card
+  /// or "Chat" button (requestId) and to reopen or clear the exact
+  /// conversation (conversationId) -- see request_chat_page.dart, which
+  /// writes both into the notification's `extra` payload when a message is
+  /// sent.
+  static Stream<List<ChatNotificationRef>> watchUnreadChatConversationRefs({
+    required String receiverEmail,
+  }) {
+    final normalized = receiverEmail.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return Stream<List<ChatNotificationRef>>.value(
+        const <ChatNotificationRef>[],
+      );
+    }
+    final controller = StreamController<List<ChatNotificationRef>>.broadcast();
+
+    Future<void> emit() async {
+      try {
+        final rows = _rows(
+          await _supabase
+              .from('user_notifications')
+              .select('id, read, type, extra')
+              .eq('receiver_email', normalized)
+              .eq('type', 'chat_message')
+              .limit(500),
+        );
+        final refs = rows
+            .where((row) => row['read'] != true)
+            .map((row) {
+              final extra = _map(row['extra']);
+              return ChatNotificationRef(
+                notificationId: (row['id'] ?? '').toString(),
+                requestId: (extra['requestId'] ?? '').toString(),
+                conversationId: (extra['conversationId'] ?? '').toString(),
+                senderName: (extra['senderName'] ?? '').toString(),
+              );
+            })
+            .where(
+              (ref) =>
+                  ref.requestId.isNotEmpty || ref.conversationId.isNotEmpty,
+            )
+            .toList(growable: false);
+        if (!controller.isClosed) controller.add(refs);
+      } catch (_) {
+        if (!controller.isClosed) controller.add(const <ChatNotificationRef>[]);
+      }
+    }
+
+    unawaited(emit());
+
+    final channel = _supabase
+        .channel('user_chat_notifications_$normalized')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'user_notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'receiver_email',
+            value: normalized,
+          ),
+          callback: (_) => unawaited(emit()),
+        )
+        .subscribe();
+
+    controller.onCancel = () async {
+      try {
+        await _supabase.removeChannel(channel);
+      } catch (e) {
+        debugPrint(
+          'NotificationsService.watchUnreadChatConversationRefs '
+          'removeChannel failed: $e',
+        );
+      }
+    };
+
+    return controller.stream;
+  }
+
+  /// Marks every unread chat-message notification tied to [conversationId]
+  /// as read -- called when the recipient actually opens that conversation,
+  /// so the bell/card/button badges clear without a separate "mark chat
+  /// read" concept from the rest of the notification system.
+  static Future<void> markChatNotificationsReadForConversation({
+    required String receiverEmail,
+    required String conversationId,
+  }) async {
+    final normalized = receiverEmail.trim().toLowerCase();
+    final convo = conversationId.trim();
+    if (normalized.isEmpty || convo.isEmpty) return;
+
+    try {
+      final rows = _rows(
+        await _supabase
+            .from('user_notifications')
+            .select('id, read, type, extra')
+            .eq('receiver_email', normalized)
+            .eq('type', 'chat_message')
+            .limit(500),
+      );
+      final ids = rows
+          .where((row) {
+            if (row['read'] == true) return false;
+            final extra = _map(row['extra']);
+            return (extra['conversationId'] ?? '').toString() == convo;
+          })
+          .map((row) => row['id'])
+          .whereType<Object>()
+          .toList(growable: false);
+      if (ids.isEmpty) return;
+
+      await _supabase
+          .from('user_notifications')
+          .update({'read': true, 'updated_at': DateTime.now().toIso8601String()})
+          .inFilter('id', ids);
+    } catch (e) {
+      debugPrint(
+        'NotificationsService.markChatNotificationsReadForConversation '
+        'failed: $e',
+      );
+    }
   }
 
   static Future<int> markAllNotificationsRead({
@@ -1002,57 +1144,29 @@ class NotificationsService {
     required String subject,
     required String text,
     String? html,
+    String? preheader,
   }) async {
     final normalized = to.trim().toLowerCase();
     if (normalized.isEmpty) return;
 
+    // A direct .insert() here silently no-ops under RLS (a client session
+    // has no write access to mail_queue -- the only existing writer is a
+    // SECURITY DEFINER trigger). See migration
+    // 20260824090000_add_queue_client_email_rpc.sql.
     try {
-      await _supabase.from('mail_queue').insert({
-        'to_email': normalized,
-        'to_list': <String>[normalized],
-        'subject': subject,
-        'text': text,
-        if (html != null && html.trim().isNotEmpty) 'html': html.trim(),
-        'status': 'queued',
-        'created_at': DateTime.now().toIso8601String(),
-        'payload': <String, dynamic>{
-          'to': <String>[normalized],
-          'message': {
-            'subject': subject,
-            'text': text,
-            if (html != null && html.trim().isNotEmpty) 'html': html.trim(),
-          },
+      await _supabase.rpc(
+        'queue_client_email',
+        params: {
+          'p_to_email': normalized,
+          'p_subject': subject,
+          'p_text': text,
+          if (html != null && html.trim().isNotEmpty) 'p_html': html.trim(),
+          if (preheader != null && preheader.trim().isNotEmpty)
+            'p_preheader': preheader.trim(),
         },
-      });
+      );
     } catch (e) {
       debugPrint('NotificationsService.queueEmail failed: $e');
-    }
-  }
-
-  static Future<void> queueTemplatedEmail({
-    required String to,
-    required String templateName,
-    required Map<String, dynamic> data,
-  }) async {
-    final normalized = to.trim().toLowerCase();
-    if (normalized.isEmpty || templateName.trim().isEmpty) return;
-
-    try {
-      await _supabase.from('mail_queue').insert({
-        'to_email': normalized,
-        'to_list': <String>[normalized],
-        'template_name': templateName.trim(),
-        'template_data': data,
-        'status': 'queued',
-        'created_at': DateTime.now().toIso8601String(),
-        'payload': <String, dynamic>{
-          'to': <String>[normalized],
-          'toEmail': normalized,
-          'template': {'name': templateName.trim(), 'data': data},
-        },
-      });
-    } catch (e) {
-      debugPrint('NotificationsService.queueTemplatedEmail failed: $e');
     }
   }
 

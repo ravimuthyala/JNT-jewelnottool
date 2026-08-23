@@ -314,13 +314,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         type: type,
         sourceCollection: 'client',
       );
-      await NotificationsService.queueEmail(
-        to: email,
-        subject: 'Update your payout method',
-        text:
-            'Please update your payout method in your profile to receive '
-            'payouts for Brand Campaign requests.',
-      );
     } catch (e) {
       debugPrint('AMBASSADOR PAYOUT PROMPT FAILED: $e');
     }

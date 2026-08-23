@@ -1698,27 +1698,26 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
 
     if (!mounted) return;
 
+    final companyName = _companyNameCtrl.text.trim().isEmpty
+        ? 'Brand'
+        : _companyNameCtrl.text.trim();
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    rootNavigator.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) =>
+            BrandingCompanyShellPage(companyDisplayName: companyName),
+      ),
+      (route) => false,
+    );
     if (kRequireEmailVerification) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationPendingPage(
-            email: _emailCtrl.text.trim().toLowerCase(),
-            loginPageBuilder: (_) => const HomePage(),
-          ),
-        ),
-        (route) => false,
-      );
-    } else {
-      final companyName = _companyNameCtrl.text.trim().isEmpty
-          ? 'Brand'
-          : _companyNameCtrl.text.trim();
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) =>
-              BrandingCompanyShellPage(companyDisplayName: companyName),
-        ),
-        (route) => false,
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!rootNavigator.mounted) return;
+        showEmailVerificationPendingModal(
+          context: rootNavigator.context,
+          email: _emailCtrl.text.trim().toLowerCase(),
+          loginPageBuilder: (_) => const HomePage(),
+        );
+      });
     }
   }
 

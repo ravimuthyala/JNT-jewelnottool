@@ -182,8 +182,15 @@ class _ClientCustomRequestWithArtistPageState
     return false;
   }
 
-  void _applyNfcBudgetDelta({required int oldCount, required int newCount}) {
-    final nextStart = newCount > 0 ? 22.0 : 15.0;
+  // $7 per NFC checkbox selected (any finger, main client or any group
+  // member), added on top of the $15 base minimum -- not a flat one-time
+  // surcharge regardless of how many are checked.
+  static const double _nfcSurchargePerChip = 7.0;
+  static const double _baseMinBudget = 15.0;
+
+  void _applyNfcBudgetDelta() {
+    final totalNfcCount = _totalSelectedNfcCount(mainNails: _singleNailPrefs);
+    final nextStart = _baseMinBudget + (totalNfcCount * _nfcSurchargePerChip);
     if (_clientBudget.start == nextStart) return;
     final nextEnd = _clientBudget.end < nextStart
         ? nextStart
@@ -200,6 +207,7 @@ class _ClientCustomRequestWithArtistPageState
 
   // shipping
   bool _shippingDifferent = false;
+  GroupShippingMode _groupShippingMode = GroupShippingMode.toMyself;
   final _shipStreetCtrl = TextEditingController();
   final _shipCityCtrl = TextEditingController();
   final _shipZipCtrl = TextEditingController();
@@ -1354,12 +1362,9 @@ class _ClientCustomRequestWithArtistPageState
 
   void _removeClientSlot(int index) {
     final removed = _groupSelections.removeAt(index);
-    final removedNfcCount = removed.draftNails == null
-        ? 0
-        : _nfcSelectedCount(removed.draftNails!.dimensions);
     removed.dispose();
     setState(() {
-      _applyNfcBudgetDelta(oldCount: removedNfcCount, newCount: 0);
+      _applyNfcBudgetDelta();
     });
   }
 
@@ -1393,10 +1398,6 @@ class _ClientCustomRequestWithArtistPageState
       _groupSelections[index].clientId = clientId;
       _groupSelections[index].showSuggestions = false;
 
-      final oldNfcCount = _groupSelections[index].draftNails == null
-          ? 0
-          : _nfcSelectedCount(_groupSelections[index].draftNails!.dimensions);
-
       if (client != null) {
         _groupSelections[index].searchController.text = client.name;
         final p = client.profile.nail;
@@ -1418,10 +1419,7 @@ class _ClientCustomRequestWithArtistPageState
         _groupSelections[index].savedNails = null;
       }
 
-      final newNfcCount = _groupSelections[index].draftNails == null
-          ? 0
-          : _nfcSelectedCount(_groupSelections[index].draftNails!.dimensions);
-      _applyNfcBudgetDelta(oldCount: oldNfcCount, newCount: newNfcCount);
+      _applyNfcBudgetDelta();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || index >= _groupSelections.length) return;
@@ -1860,10 +1858,24 @@ class _ClientCustomRequestWithArtistPageState
       final index = entry.key;
       final slot = entry.value;
       final selectedClient = _findClient(slot.clientId);
+      final address = selectedClient?.profile.address;
       return {
         'slotIndex': index + 1,
         'clientId': slot.clientId ?? '',
         'clientName': selectedClient?.name ?? '',
+        'clientEmail': selectedClient?.profile.basic.email ?? '',
+        // Snapshotted at submission time (not looked up again at ship
+        // time) so a "ship to each group member individually" order still
+        // has an address even if the member's profile changes later.
+        'shippingAddress': address == null
+            ? null
+            : {
+                'street': address.street,
+                'city': address.city,
+                'state': address.state,
+                'zip': address.zip,
+                'country': address.country,
+              },
         'draftNails': slot.draftNails == null
             ? null
             : _nailPreferencesToMap(slot.draftNails!),
@@ -1956,6 +1968,7 @@ class _ClientCustomRequestWithArtistPageState
         : widget.artistName.trim();
     _fallbackToPool = true;
     _shippingDifferent = false;
+    _groupShippingMode = GroupShippingMode.toMyself;
     _shipStreetCtrl.clear();
     _shipCityCtrl.clear();
     _shipZipCtrl.clear();
@@ -2222,11 +2235,17 @@ class _ClientCustomRequestWithArtistPageState
         'state': _shippingDifferent ? _shipState.trim() : '',
         'zip': _shippingDifferent ? _shipZipCtrl.text.trim() : '',
         'country': _shippingDifferent ? _shipCountry.trim() : '',
+        'groupShippingMode': isGroupOrder
+            ? _groupShippingMode.storageValue
+            : GroupShippingMode.toMyself.storageValue,
       },
       'groupOrder': {
         'isGroupOrder': isGroupOrder,
         'maxClients': _maxGroupClients,
         'clients': groupClients,
+        'shippingMode': isGroupOrder
+            ? _groupShippingMode.storageValue
+            : GroupShippingMode.toMyself.storageValue,
       },
       'inspirationPhotos': const <String>[],
       'clientProfileSnapshot': _profileSnapshotToMap(widget.profile),
@@ -2261,6 +2280,37 @@ class _ClientCustomRequestWithArtistPageState
         );
       } catch (e) {
         debugPrint('CLIENT CUSTOM REQUEST NOTIFICATION FAILED: $e');
+      }
+
+      if (isGroupOrder && groupClients.isNotEmpty) {
+        try {
+          final requesterName = widget.profile.basic.name.trim().isEmpty
+              ? 'A client'
+              : widget.profile.basic.name.trim();
+          final totalPeople = groupClients.length + 1;
+          for (final client in groupClients) {
+            final email = (client['clientEmail'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
+            if (email.isEmpty) continue;
+            await NotificationsService.createUserNotification(
+              receiverEmail: email,
+              title: '$requesterName added you to a group order',
+              body: "You're one of $totalPeople people on this order.",
+              type: 'group_order_added',
+              orderId: requestId,
+              orderNumber: _firstNonEmpty([requestSummary['orderNumber']]),
+              sourceCollection: 'Client_Custom_Requests',
+              extra: <String, dynamic>{
+                'requesterName': requesterName,
+                'totalPeople': totalPeople,
+              },
+            );
+          }
+        } catch (e) {
+          debugPrint('CLIENT GROUP ADD NOTIFICATION FAILED: $e');
+        }
       }
 
       if (_pickedPhotoFiles.isNotEmpty) {
@@ -3091,20 +3141,9 @@ class _ClientCustomRequestWithArtistPageState
                                 .withValues(alpha: 0.25),
                             onChanged: (updated) {
                               setState(() {
-                                final oldNfcCount = slot.draftNails == null
-                                    ? 0
-                                    : _nfcSelectedCount(
-                                        slot.draftNails!.dimensions,
-                                      );
-                                final newNfcCount = _nfcSelectedCount(
-                                  updated.dimensions,
-                                );
                                 slot.draftNails = updated;
                                 slot.savedNails = null;
-                                _applyNfcBudgetDelta(
-                                  oldCount: oldNfcCount,
-                                  newCount: newNfcCount,
-                                );
+                                _applyNfcBudgetDelta();
                                 _syncSelectedArtistForFilters();
                               });
                             },
@@ -3264,17 +3303,10 @@ class _ClientCustomRequestWithArtistPageState
               ),
               onChanged: (updated) {
                 setState(() {
-                  final oldNfcCount = _nfcSelectedCount(
-                    _singleNailPrefs.dimensions,
-                  );
-                  final newNfcCount = _nfcSelectedCount(updated.dimensions);
                   _singleNailPrefs = updated;
                   _shape = updated.shape;
                   _length = updated.length;
-                  _applyNfcBudgetDelta(
-                    oldCount: oldNfcCount,
-                    newCount: newNfcCount,
-                  );
+                  _applyNfcBudgetDelta();
                   _syncSelectedArtistForFilters();
                   _fieldErrors.remove('shape');
                   _fieldErrors.remove('length');
@@ -3314,6 +3346,25 @@ class _ClientCustomRequestWithArtistPageState
 
             const SizedBox(height: 18),
 
+            const Text(
+              'Shipping Information',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Arial',
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Tell us where your finished order should be sent.',
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.70),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                fontFamily: 'Arialbold',
+              ),
+            ),
+
             const SizedBox(height: 14),
 
             // shipping checkbox BEFORE submit
@@ -3321,6 +3372,76 @@ class _ClientCustomRequestWithArtistPageState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_orderType == OrderType.group) ...[
+                    const Text(
+                      'Group Order Shipping',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                        fontFamily: 'ArialBold',
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Choose how finished items should be delivered to your group.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.65),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    RadioGroup<GroupShippingMode>(
+                      groupValue: _groupShippingMode,
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _groupShippingMode = value);
+                      },
+                      child: Column(
+                        children: [
+                          RadioListTile<GroupShippingMode>(
+                            value: GroupShippingMode.toMyself,
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            activeColor: AppColors.blackCat,
+                            title: const Text(
+                              "Ship all group members' items to me",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: const Text(
+                              "We'll send one consolidated shipment to your address for you to distribute.",
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          RadioListTile<GroupShippingMode>(
+                            value: GroupShippingMode.toRespectiveClient,
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            activeColor: AppColors.blackCat,
+                            title: const Text(
+                              'Ship to each group member individually',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: const Text(
+                              "Each group member's items will be shipped directly to their own address.",
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Divider(
+                      height: 1,
+                      color: AppColors.blackCat.withValues(alpha: 0.12),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -3573,6 +3694,23 @@ class _ClientCustomRequestWithArtistPageState
 Future<void> _saveBudgetToDb(RangeValues v) async {}
 
 enum OrderType { single, group }
+
+/// How a group order's finished items should be shipped: consolidated to
+/// the requester, or split so each group member's items go to them
+/// directly. Read by the artist's shipping flow once an order ships.
+enum GroupShippingMode {
+  toMyself,
+  toRespectiveClient;
+
+  String get storageValue => name;
+
+  static GroupShippingMode fromStorageValue(String? value) {
+    return GroupShippingMode.values.firstWhere(
+      (mode) => mode.storageValue == value,
+      orElse: () => GroupShippingMode.toMyself,
+    );
+  }
+}
 
 /// -----------------
 /// MODELS (local)

@@ -23,8 +23,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/client_profile_models.dart';
 import 'pages/artist_registration/artist_registration_flow.dart';
-import 'pages/review_artist_page.dart';
 import 'pages/tip_artist_page.dart';
+import 'services/delivered_review_deep_link.dart';
 
 // Sentry DSN is intentionally blank by default: the Sentry SDK safely no-ops
 // (runs the app normally, just doesn't send events) when the DSN is empty.
@@ -66,11 +66,18 @@ class _AppBootstrapper extends StatefulWidget {
 
 class _AppBootstrapperState extends State<_AppBootstrapper> {
   late Future<bool> _supabaseReady;
+  final Stopwatch _sw = Stopwatch()..start();
 
   @override
   void initState() {
     super.initState();
-    _supabaseReady = SupabaseBootstrap.ensureInitialized();
+    _supabaseReady = SupabaseBootstrap.ensureInitialized().then((ok) {
+      debugPrint(
+        '[STARTUP] SupabaseBootstrap.ensureInitialized: ${_sw.elapsedMilliseconds}ms '
+        '(ok=$ok)',
+      );
+      return ok;
+    });
   }
 
   @override
@@ -699,16 +706,11 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
     final artistId = extractedUri.queryParameters['artistId'];
     final tipPercentRaw = extractedUri.queryParameters['tipPercent'];
 
-    if (path.contains('review-order') && orderId != null && artistId != null) {
+    if (path.contains('review-order') && orderId != null) {
       final navigator = JntApp.navigatorKey.currentState;
       if (navigator == null) return;
 
-      navigator.push(
-        MaterialPageRoute(
-          builder: (_) =>
-              ReviewArtistPage(orderId: orderId, artistId: artistId),
-        ),
-      );
+      await openDeliveredReviewOrder(navigator, orderId);
 
       return;
     }

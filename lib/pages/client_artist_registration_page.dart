@@ -4154,27 +4154,26 @@ class _ClientArtistRegistrationPageState
 
       unawaited(_finishNonBlockingRegistrationSave(supabaseUser));
 
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      rootNavigator.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => ClientArtistHomePage(
+            profile: draft,
+            showContinueProfileCard: !draft.isComplete,
+            enableAllTabs: enableAllTabs,
+          ),
+        ),
+        (_) => false,
+      );
       if (kRequireEmailVerification) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => EmailVerificationPendingPage(
-              email: _emailCtrl.text.trim().toLowerCase(),
-              loginPageBuilder: (_) => const HomePage(),
-            ),
-          ),
-          (_) => false,
-        );
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => ClientArtistHomePage(
-              profile: draft,
-              showContinueProfileCard: !draft.isComplete,
-              enableAllTabs: enableAllTabs,
-            ),
-          ),
-          (_) => false,
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!rootNavigator.mounted) return;
+          showEmailVerificationPendingModal(
+            context: rootNavigator.context,
+            email: _emailCtrl.text.trim().toLowerCase(),
+            loginPageBuilder: (_) => const HomePage(),
+          );
+        });
       }
     } on TimeoutException catch (e) {
       if (!mounted) return;

@@ -17,6 +17,73 @@ enum RequestStatusV2 {
 
 enum RequestOrderTypeV2 { single, group }
 
+/// How a group order's finished items ship: consolidated to the requester,
+/// or split so each group member's items go to them directly. Set by the
+/// client at request time (client_custom_request_page.dart /
+/// client_custom_request_with_artist_page.dart); read here by the artist's
+/// shipping flow.
+enum GroupShippingMode {
+  toMyself,
+  toRespectiveClient;
+
+  static GroupShippingMode fromStorageValue(String? value) {
+    return GroupShippingMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => GroupShippingMode.toMyself,
+    );
+  }
+}
+
+@immutable
+class GroupClientShippingAddress {
+  final String street;
+  final String city;
+  final String state;
+  final String zip;
+  final String country;
+
+  const GroupClientShippingAddress({
+    this.street = '',
+    this.city = '',
+    this.state = '',
+    this.zip = '',
+    this.country = '',
+  });
+
+  bool get isEmpty =>
+      street.trim().isEmpty && city.trim().isEmpty && state.trim().isEmpty;
+
+  String get cityState {
+    final parts = [
+      city.trim(),
+      state.trim(),
+    ].where((s) => s.isNotEmpty).toList();
+    return parts.join(', ');
+  }
+}
+
+/// One recipient's courier + tracking # when a group order ships to each
+/// member individually. Built by the artist's shipping form
+/// (artist_completed_shipping_tab.dart) and consumed by the Mark as
+/// Shipped handler (artist_requests_page_redesign.dart) to persist and
+/// email each recipient their own tracking number.
+@immutable
+class ShipmentRecipientEntry {
+  final String clientId;
+  final String clientName;
+  final String clientEmail;
+  final String courier;
+  final String tracking;
+
+  const ShipmentRecipientEntry({
+    required this.clientId,
+    required this.clientName,
+    required this.clientEmail,
+    required this.courier,
+    required this.tracking,
+  });
+}
+
 @immutable
 class NailDimensionsV2 {
   final String thumb;
@@ -44,6 +111,7 @@ class GroupOrderClientV2 {
   final String nailLength;
   final NailDimensionsV2 leftHand;
   final NailDimensionsV2 rightHand;
+  final GroupClientShippingAddress shippingAddress;
 
   const GroupOrderClientV2({
     required this.slotIndex,
@@ -54,6 +122,7 @@ class GroupOrderClientV2 {
     this.nailLength = '',
     required this.leftHand,
     required this.rightHand,
+    this.shippingAddress = const GroupClientShippingAddress(),
   });
 }
 
@@ -86,6 +155,7 @@ class ClientRequestV2 {
   final bool openToClientPool;
   final bool allowNonLicensed;
   final RequestOrderTypeV2 orderType;
+  final GroupShippingMode groupShippingMode;
   final String selectedArtist;
   final String selectedArtistEmail;
   final String selectedClient;
@@ -185,6 +255,7 @@ class ClientRequestV2 {
     this.openToClientPool = true,
     this.allowNonLicensed = true,
     this.orderType = RequestOrderTypeV2.single,
+    this.groupShippingMode = GroupShippingMode.toMyself,
     this.selectedArtist = '',
     this.selectedArtistEmail = '',
     this.selectedClient = '',
@@ -266,6 +337,7 @@ class ClientRequestV2 {
     int? artistBudgetMax,
     double? artistFinalAmount,
     RequestOrderTypeV2? orderType,
+    GroupShippingMode? groupShippingMode,
     bool? fallbackToPool,
     bool? openToClientPool,
     bool? allowNonLicensed,
@@ -360,6 +432,7 @@ class ClientRequestV2 {
       openToClientPool: openToClientPool ?? this.openToClientPool,
       allowNonLicensed: allowNonLicensed ?? this.allowNonLicensed,
       orderType: orderType ?? this.orderType,
+      groupShippingMode: groupShippingMode ?? this.groupShippingMode,
       selectedArtist: selectedArtist ?? this.selectedArtist,
       selectedArtistEmail: selectedArtistEmail ?? this.selectedArtistEmail,
       selectedClient: selectedClient ?? this.selectedClient,

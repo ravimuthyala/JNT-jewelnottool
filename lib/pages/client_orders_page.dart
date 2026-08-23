@@ -65,6 +65,7 @@ class SubmittedClientRequestSummary {
     this.fallbackToPool = true,
     this.status = 'pending',
     this.orderType = 'single',
+    this.groupShippingMode = 'toMyself',
     this.description = '',
     this.descriptionPreview = '',
     this.cancelReason = '',
@@ -134,6 +135,7 @@ class SubmittedClientRequestSummary {
   final bool fallbackToPool;
   final String status;
   final String orderType;
+  final String groupShippingMode;
   final String description;
   final String descriptionPreview;
   final String cancelReason;
@@ -546,7 +548,16 @@ class _SupabaseOrderService {
       ...asMap(payload['acceptance']),
     };
     final payment = asMap(row['payment']);
-    final shipping = asMap(row['shipping']);
+    final shipping = <String, dynamic>{
+      ...asMap(row['shipping']),
+      ...asMap(details['shipping']),
+      ...asMap(payload['shipping']),
+    };
+    final groupOrder = <String, dynamic>{
+      ...asMap(row['groupOrder']),
+      ...asMap(details['groupOrder']),
+      ...asMap(payload['groupOrder']),
+    };
     final review = asMap(row['review']);
     final clientReview = asMap(row['client_review']);
     final designApproval = asMap(row['designApproval']).isNotEmpty
@@ -856,6 +867,11 @@ class _SupabaseOrderService {
         payload['orderType'],
         order['type'],
         'single',
+      ]),
+      groupShippingMode: text([
+        groupOrder['shippingMode'],
+        shipping['groupShippingMode'],
+        'toMyself',
       ]),
       description: text([
         row['description'],
@@ -1303,11 +1319,41 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   );
   bool _didSetInitialA11yFocus = false;
   bool _focusRequestQueued = false;
+  StreamSubscription<List<ChatNotificationRef>>? _unreadChatSub;
+  List<ChatNotificationRef> _unreadChatRefs = const <ChatNotificationRef>[];
+
+  bool _hasUnreadChat(String requestId) =>
+      _unreadChatRefs.any((r) => r.requestId == requestId);
+
+  /// "New message from X" for a single sender, "N new messages" once more
+  /// than one recipient/thread under the same order has something unread.
+  String? _unreadChatLabel(String requestId) {
+    final names = _unreadChatRefs
+        .where((r) => r.requestId == requestId)
+        .map((r) => r.senderName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    if (names.isEmpty) return null;
+    if (names.length == 1) return 'New message from ${names.first}';
+    return '${names.length} new messages';
+  }
+
   @override
   void initState() {
     super.initState();
     _subscribeSubmittedOrders();
     _scheduleInitialA11yFocus();
+
+    final myEmail = widget.profile.basic.email.trim().toLowerCase();
+    if (myEmail.isNotEmpty) {
+      _unreadChatSub =
+          NotificationsService.watchUnreadChatConversationRefs(
+            receiverEmail: myEmail,
+          ).listen((refs) {
+            if (!mounted) return;
+            setState(() => _unreadChatRefs = refs);
+          });
+    }
   }
 
   @override
@@ -1328,6 +1374,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
   @override
   void dispose() {
     _submittedRequestsSub?.cancel();
+    _unreadChatSub?.cancel();
     _notificationsFocusNode.dispose();
     super.dispose();
   }
@@ -1825,6 +1872,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       subtitle: req.descriptionPreview,
       hasAssignedArtist: selectedArtistName.isNotEmpty,
       orderType: req.orderType,
+      groupShippingMode: req.groupShippingMode,
       groupClients: req.groupClients
           .map((client) {
             // Group-order slots only ever hold a snapshot captured when that
@@ -2285,6 +2333,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                       () => GlobalKey(),
                     ),
                     onDetails: () => _openOrderDetails(context, o),
+                    hasUnreadChat: _hasUnreadChat(o.id),
+                    unreadChatLabel: _unreadChatLabel(o.id),
                   ),
                 ),
               ),
@@ -2318,6 +2368,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
                       () => GlobalKey(),
                     ),
                     onDetails: () => _openOrderDetails(context, o),
+                    hasUnreadChat: _hasUnreadChat(o.id),
+                    unreadChatLabel: _unreadChatLabel(o.id),
                   ),
                 ),
               ),
@@ -2990,12 +3042,19 @@ class _OrderCard extends StatelessWidget {
     required this.onDetails,
     required this.showLeadingThumb,
     required this.detailsSemanticsKey,
+    this.hasUnreadChat = false,
+    this.unreadChatLabel,
   });
 
   final ClientOrder order;
   final VoidCallback onDetails;
   final bool showLeadingThumb;
   final GlobalKey detailsSemanticsKey;
+  final bool hasUnreadChat;
+
+  /// "New message from X" / "N new messages" -- null when there's nothing
+  /// unread, or when the sender's name wasn't available.
+  final String? unreadChatLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -3016,6 +3075,20 @@ class _OrderCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    if (hasUnreadChat) ...[
+                      Semantics(
+                        label: 'Unread chat message',
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 7),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE85656),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ],
                     Expanded(
                       child: Text(
                         order.title,
@@ -3072,6 +3145,19 @@ class _OrderCard extends StatelessWidget {
                     fontFamily: 'Arial',
                   ),
                 ),
+                if (unreadChatLabel != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    unreadChatLabel!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFE85656),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -3674,6 +3760,7 @@ class ClientOrder {
   final String subtitle;
   final bool hasAssignedArtist;
   final String orderType;
+  final String groupShippingMode;
   final List<OrderClientMeasurement> groupClients;
   final String clientDescription;
   final String cancelReason;
@@ -3749,6 +3836,7 @@ class ClientOrder {
     required this.subtitle,
     this.hasAssignedArtist = true,
     this.orderType = 'single',
+    this.groupShippingMode = 'toMyself',
     this.groupClients = const <OrderClientMeasurement>[],
     this.clientDescription = '',
     this.cancelReason = '',

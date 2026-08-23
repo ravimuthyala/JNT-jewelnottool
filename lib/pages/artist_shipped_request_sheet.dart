@@ -51,16 +51,37 @@ class _ShippedRequestSheet extends StatefulWidget {
   State<_ShippedRequestSheet> createState() => _ShippedRequestSheetState();
 }
 
+class _RecipientShipmentInfo {
+  const _RecipientShipmentInfo({
+    required this.name,
+    required this.courier,
+    required this.tracking,
+  });
+
+  final String name;
+  final String courier;
+  final String tracking;
+}
+
 class _ShipmentInfo {
   const _ShipmentInfo({
     required this.courier,
     required this.tracking,
     required this.shippedAt,
+    this.isRespective = false,
+    this.recipients = const <_RecipientShipmentInfo>[],
   });
 
   final String courier;
   final String tracking;
   final DateTime? shippedAt;
+
+  /// True when the client chose "ship to each group member individually"
+  /// -- see GroupShippingMode in models/client_request_v2.dart. When true,
+  /// [recipients] holds each group member's own courier/tracking instead
+  /// of the single shared pair above.
+  final bool isRespective;
+  final List<_RecipientShipmentInfo> recipients;
 }
 
 class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
@@ -315,10 +336,63 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
         shippedAt = _asDateTime(raw);
         if (shippedAt != null) break;
       }
+
+      // "Ship to each group member individually" mode: the per-recipient
+      // courier/tracking (a list, not the single shared pair above) is
+      // written into detailsExtra by onMarkShipped
+      // (artist_requests_page_redesign.dart), which lands in the separate
+      // *_details table's `data` column -- not this root row -- via
+      // SupabaseCompatDatabase's Firestore-compat write path.
+      final isRespective =
+          widget.request.orderType == RequestOrderTypeV2.group &&
+          widget.request.groupShippingMode ==
+              GroupShippingMode.toRespectiveClient;
+      var recipients = const <_RecipientShipmentInfo>[];
+      if (isRespective) {
+        try {
+          final detailRow = await _supabase
+              .from(_requestDetailsTable)
+              .select()
+              .eq('request_id', widget.request.id)
+              .eq('detail_key', 'payload')
+              .maybeSingle();
+          final detailData = _asMap(detailRow?['data']);
+          final shipment = _asMap(detailData['shipment']);
+          final rawRecipients = _asList(shipment['recipients']);
+          recipients = rawRecipients
+              .whereType<Map>()
+              .map((raw) {
+                final map = Map<String, dynamic>.from(raw);
+                // The compat-DB write layer (_prepareValues/_encodeValue in
+                // artist_requests_page_redesign.dart) recursively snake_cases
+                // every nested map key before storing, so what's persisted
+                // is client_name/client_id/tracking_number, not the
+                // camelCase keys ShipmentRecipientEntry was built with.
+                final name = _firstNonEmpty(<Object?>[
+                  map['clientName'],
+                  map['client_name'],
+                ]);
+                return _RecipientShipmentInfo(
+                  name: name.isEmpty ? 'Client' : name,
+                  courier: _firstNonEmpty(<Object?>[map['courier']]),
+                  tracking: _firstNonEmpty(<Object?>[
+                    map['trackingNumber'],
+                    map['tracking_number'],
+                  ]),
+                );
+              })
+              .toList(growable: false);
+        } catch (_) {
+          // Keep the single-shipment fallback below if this lookup fails.
+        }
+      }
+
       return _ShipmentInfo(
         courier: courier,
         tracking: tracking,
         shippedAt: shippedAt ?? fallback.shippedAt,
+        isRespective: isRespective && recipients.isNotEmpty,
+        recipients: recipients,
       );
     } catch (_) {
       return fallback;
@@ -542,16 +616,6 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                         onClose: () => Navigator.pop(context),
                       ),
                       const SizedBox(height: 12),
-
-                      FutureBuilder<_ShipmentInfo>(
-                        future: _loadShipmentInfo(),
-                        builder: (context, snapshot) {
-                          final info = snapshot.data ?? _fallbackShipmentInfo();
-                          return _shipmentStatusCard(info);
-                        },
-                      ),
-
-                      const SizedBox(height: 12),
                       _descriptionAndCompanyBioSection(widget.request),
                       const SizedBox(height: 12),
                       if (_isBrandRequest(widget.request)) ...[
@@ -565,6 +629,17 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                       _clientPhotosSection(modalClientPhotos),
                       const SizedBox(height: 12),
                       _artistPhotosSection(widget.request.artistImages),
+                      const SizedBox(height: 12),
+
+                      FutureBuilder<_ShipmentInfo>(
+                        future: _loadShipmentInfo(),
+                        builder: (context, snapshot) {
+                          final info = snapshot.data ?? _fallbackShipmentInfo();
+                          return info.isRespective
+                              ? _respectiveShipmentSection(info)
+                              : _shipmentStatusCard(info);
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -717,6 +792,110 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _respectiveShipmentSection(_ShipmentInfo info) {
+    return _softBox(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.local_shipping_outlined,
+                size: 20,
+                color: AppColors.blackCat,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  info.shippedAt == null
+                      ? 'Shipped to each group member individually'
+                      : 'Shipped on ${_fmtDate(info.shippedAt!)} — to each group member individually',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final recipient in info.recipients) ...[
+            _recipientShipmentCard(recipient, info.shippedAt),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _recipientShipmentCard(
+    _RecipientShipmentInfo recipient,
+    DateTime? shippedAt,
+  ) {
+    final courier = recipient.courier.trim();
+    final tracking = recipient.tracking.trim();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.snow,
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.10)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  recipient.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 32,
+                child: ElevatedButton.icon(
+                  onPressed: () => _openTrackingPreview(
+                    _ShipmentInfo(
+                      courier: courier,
+                      tracking: tracking,
+                      shippedAt: shippedAt,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: AppColors.snow,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.travel_explore_rounded, size: 13),
+                  label: const Text(
+                    'Track Shipment',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _shippingInfoRow('Shipped by', courier.isEmpty ? '-' : courier),
+          const SizedBox(height: 6),
+          _shippingInfoRow('Tracking #', tracking.isEmpty ? '-' : tracking),
         ],
       ),
     );

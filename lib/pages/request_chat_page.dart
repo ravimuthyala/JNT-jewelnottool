@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/notifications_service.dart';
 import '../theme/app_colors.dart';
 
 Future<void> showRequestChatModal({
@@ -159,6 +160,14 @@ class _RequestChatModalState extends State<RequestChatModal> {
       debugPrint('RequestChatModal: failed to ensure room: $e');
     }));
     _initPresenceChannel();
+    if (_currentEmail.isNotEmpty) {
+      unawaited(
+        NotificationsService.markChatNotificationsReadForConversation(
+          receiverEmail: _currentEmail,
+          conversationId: _conversationId,
+        ),
+      );
+    }
   }
 
   @override
@@ -373,6 +382,39 @@ class _RequestChatModalState extends State<RequestChatModal> {
           'updated_at': nowIso,
         })
         .eq('id', _conversationId);
+
+    // Let the peer know a message is waiting -- skipped for the AI
+    // assistant, which doesn't read notifications, and reuses the existing
+    // in-app notification pipeline (bell badge, notifications list) rather
+    // than a chat-specific one. Best-effort: a failed notification insert
+    // shouldn't surface as a send error, since the message itself already
+    // sent successfully.
+    final peer = _peerEmail;
+    if (peer.isNotEmpty && peer != _aiAssistantEmail) {
+      unawaited(
+        NotificationsService.createUserNotification(
+          receiverEmail: peer,
+          title: 'New message from $_currentName',
+          body: text.trim().isNotEmpty
+              ? text.trim()
+              : (attachmentType == 'image' ? 'Sent a photo' : 'Sent an attachment'),
+          type: 'chat_message',
+          orderId: widget.requestId,
+          extra: <String, dynamic>{
+            'requestId': widget.requestId,
+            'conversationId': _conversationId,
+            'conversationSuffix': widget.conversationSuffix,
+            'clientEmail': widget.clientEmail,
+            'artistEmail': widget.artistEmail,
+            'clientName': widget.clientName,
+            'artistName': widget.artistName,
+            'senderName': _currentName,
+          },
+        ).catchError((Object e, StackTrace st) {
+          debugPrint('RequestChatModal: failed to notify peer: $e');
+        }),
+      );
+    }
 
     // Client-side auto-reply. Mirrors the server-side "ai-chat-assistant"
     // Edge Function (supabase/functions/ai-chat-assistant) so the assistant
@@ -1175,6 +1217,19 @@ enum _AiIntent {
 String _conversationIdForRequest(String requestId) {
   final clean = requestId.trim();
   return clean.isEmpty ? 'request_unknown' : 'request_$clean';
+}
+
+/// Public mirror of [RequestChatModal]'s own `_conversationId` getter, so
+/// callers that need to know a conversation id *before* opening the modal
+/// (e.g. a group-member picker checking which recipient has an unread
+/// message) can compute the exact same id without duplicating the format.
+String buildChatConversationId(
+  String requestId, {
+  String conversationSuffix = '',
+}) {
+  final base = _conversationIdForRequest(requestId);
+  final suffix = conversationSuffix.trim();
+  return suffix.isEmpty ? base : '${base}_$suffix';
 }
 
 String _normalizeEmail(String email) => email.trim().toLowerCase();

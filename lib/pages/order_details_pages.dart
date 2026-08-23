@@ -1273,6 +1273,7 @@ class _OrderSafe {
   final String subtitle;
   final bool hasAssignedArtist;
   final String orderType;
+  final String groupShippingMode;
   final List<_OrderGroupClient> groupClients;
   final DateTime? createdAt;
   final String clientDescription;
@@ -1334,6 +1335,7 @@ class _OrderSafe {
     required this.subtitle,
     required this.hasAssignedArtist,
     required this.orderType,
+    this.groupShippingMode = 'toMyself',
     required this.groupClients,
     required this.createdAt,
     required this.clientDescription,
@@ -1410,6 +1412,8 @@ class _OrderSafe {
             return o.sourceCollection;
           case 'clientDescription':
             return o.clientDescription;
+          case 'groupShippingMode':
+            return o.groupShippingMode;
         }
       } catch (_) {}
       return null;
@@ -1728,6 +1732,29 @@ class _OrderSafe {
       return direct;
     }
 
+    String pickGroupShippingMode() {
+      final rootGroupOrder = asMap(rootMap['groupOrder']);
+      final detailGroupOrder = asMap(detailMap['groupOrder']);
+      final payloadGroupOrder = asMap(payloadMap['groupOrder']);
+      final requestGroupOrder = asMap(requestDetailsMap['groupOrder']);
+      final candidates = <Object?>[
+        field('groupShippingMode'),
+        rootGroupOrder['shippingMode'],
+        asMap(rootMap['shipping'])['groupShippingMode'],
+        detailGroupOrder['shippingMode'],
+        asMap(detailMap['shipping'])['groupShippingMode'],
+        payloadGroupOrder['shippingMode'],
+        asMap(payloadMap['shipping'])['groupShippingMode'],
+        requestGroupOrder['shippingMode'],
+        asMap(requestDetailsMap['shipping'])['groupShippingMode'],
+      ];
+      for (final candidate in candidates) {
+        final text = (candidate ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return 'toMyself';
+    }
+
     List<_OrderGroupClient> pickGroupClients() {
       final rootGroupOrder = asMap(rootMap['groupOrder']);
       final detailGroupOrder = asMap(detailMap['groupOrder']);
@@ -1768,6 +1795,7 @@ class _OrderSafe {
           ? (o.hasAssignedArtist as bool)
           : true,
       orderType: s(o?.orderType, 'single'),
+      groupShippingMode: pickGroupShippingMode(),
       groupClients: pickGroupClients(),
       createdAt: o?.createdAt is DateTime ? o.createdAt as DateTime : null,
       clientDescription: requestDescription,
@@ -3614,15 +3642,48 @@ class _BaseOrderDetails extends StatelessWidget {
         : isPending
         ? 'Payment Pending'
         : 'Payment Range';
-    final amount =
-        (order.artistAcceptedAmount ?? order.budgetMax ?? order.budgetMin);
+    // Group orders: the requester's committed budgetMax is the real final
+    // amount, not whatever the artist entered when accepting (that number
+    // stays an internal ceiling check only -- see AcceptRequestDialogV2).
+    // "Has this been accepted yet" is still driven by artistAcceptedAmount,
+    // just not the VALUE shown once it has.
+    final isGroupOrder =
+        order.orderType.trim().toLowerCase() == 'group' ||
+        order.groupClients.isNotEmpty;
+    // Group orders: only the requester who committed the budget can pay --
+    // group members can already view this same order (client_orders_page's
+    // belongs() matches them via groupOrder.clients[].clientEmail), and
+    // without this check they'd see and could tap the identical Pay Now
+    // button for the full amount.
+    final currentEmail = (AppAuth.instance.currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+    final isRequester =
+        !isGroupOrder ||
+        (currentEmail.isNotEmpty &&
+            order.clientEmail.trim().toLowerCase() == currentEmail);
     final hasArtistFinalAmount =
         order.artistAcceptedAmount != null && order.artistAcceptedAmount! > 0;
+    final amount = hasArtistFinalAmount
+        ? (isGroupOrder
+              ? (order.budgetMax ?? order.artistAcceptedAmount)
+              : order.artistAcceptedAmount)
+        : (order.budgetMax ?? order.budgetMin);
+    // Group members (not the requester) never see the full amount or the
+    // headcount -- just their own informational share of it.
+    final displayAmount = (isGroupOrder && !isRequester && amount != null)
+        ? (amount / (1 + order.groupClients.length)).round()
+        : amount;
     final budgetRows = _budgetRows();
     final primaryRangeText = budgetRows.isEmpty
         ? _budgetText()
         : budgetRows.first.value;
-    final amountText = amount == null ? primaryRangeText : '\$$amount';
+    final amountText = displayAmount == null
+        ? primaryRangeText
+        : '\$$displayAmount';
+    final amountRowLabel = !isRequester
+        ? 'Your payment amount:'
+        : (isPaid ? 'Paid Amount:' : 'Amount Due:');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3666,13 +3727,12 @@ class _BaseOrderDetails extends StatelessWidget {
           const SizedBox(height: 8),
           Semantics(
             container: true,
-            label:
-                '${isPaid ? 'Paid amount' : 'Amount due'}, $amountText',
+            label: '${amountRowLabel.replaceAll(':', '')}, $amountText',
             child: ExcludeSemantics(
               child: Row(
             children: [
               Text(
-                isPaid ? 'Paid Amount:' : 'Amount Due:',
+                amountRowLabel,
                 style: TextStyle(
                   color: AppColors.blackCat,
                   fontSize: 13,
@@ -3713,7 +3773,7 @@ class _BaseOrderDetails extends StatelessWidget {
         // itself decides real-vs-simulated.
         if (!isPaid && isPending) ...[
           const SizedBox(height: 8),
-          if (order.paymentLink.trim().isNotEmpty)
+          if (isRequester && order.paymentLink.trim().isNotEmpty)
             Text(
               'Payment link has been sent to your notifications and email.',
               style: TextStyle(
@@ -3723,25 +3783,70 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.blackCat,
-                foregroundColor: AppColors.snow,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                elevation: 0,
+          if (isRequester)
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blackCat,
+                  foregroundColor: AppColors.snow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  elevation: 0,
+                ),
+                onPressed: () => _payNow(context),
+                child: Text(
+                  kPaymentLiveEnabled ? 'Pay Now' : 'Pay Now (Simulated)',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              onPressed: () => _payNow(context),
-              child: Text(
-                kPaymentLiveEnabled ? 'Pay Now' : 'Pay Now (Simulated)',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+            )
+          else
+            // Group order, viewer isn't the requester: no Pay Now here --
+            // only the person who submitted the order (order.clientEmail)
+            // is billed the full amount.
+            Semantics(
+              container: true,
+              label:
+                  'Payment is handled by the person who submitted this order.',
+              child: ExcludeSemantics(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.balletSlippers.withValues(alpha: 0.4),
+                    border: Border.all(color: AppColors.blackCatBorderLight),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: AppColors.blackCat.withValues(alpha: 0.65),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Payment is handled by the person who submitted this order.',
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ],
     );
@@ -4558,6 +4663,13 @@ class _BaseOrderDetails extends StatelessWidget {
             _bullet('Description', order.clientDescription.trim()),
           ],
           _bullet('Request Artist', _requestArtistDisplay()),
+          if (isGroupOrder)
+            _bullet(
+              'Shipped To',
+              order.groupShippingMode == 'toRespectiveClient'
+                  ? 'Individual'
+                  : 'Self',
+            ),
           // Keep in code per request, but hide from UI:
           // _bullet('Status', statusPillText),
           ],
@@ -7405,9 +7517,18 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
       'jnt://orders/review?orderId=${widget.order.id}&action=review_tip';
 
   double get _tipBaseAmount {
+    // Group orders: tip off the requester's committed budgetMax (the real
+    // final amount), same reasoning as _paymentSection's amount field.
+    final isGroupOrder =
+        widget.order.orderType.trim().toLowerCase() == 'group' ||
+        widget.order.groupClients.isNotEmpty;
     final accepted = widget.order.artistAcceptedAmount;
-    if (accepted != null && accepted > 0) return accepted.toDouble();
     final budgetMax = widget.order.budgetMax;
+    if (isGroupOrder && accepted != null && accepted > 0) {
+      if (budgetMax != null && budgetMax > 0) return budgetMax.toDouble();
+      return accepted.toDouble();
+    }
+    if (accepted != null && accepted > 0) return accepted.toDouble();
     if (budgetMax != null && budgetMax > 0) return budgetMax.toDouble();
     final budgetMin = widget.order.budgetMin;
     if (budgetMin != null && budgetMin > 0) return budgetMin.toDouble();
@@ -7572,42 +7693,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     final deepLink = _reviewDeepLink;
     final body =
         'Your order has been delivered. Please leave a quick review and tip in the app.';
-    final clientName = prefs.name.trim().isEmpty ? 'there' : prefs.name.trim();
-    final orderId = widget.order.id;
-    final artworkTitle = widget.order.subtitle.trim().isNotEmpty
-        ? widget.order.subtitle.trim()
-        : (widget.order.title.trim().isNotEmpty
-              ? widget.order.title.trim()
-              : 'Custom Artwork');
-    final artistName = widget.order.artistName.trim().isNotEmpty
-        ? widget.order.artistName.trim()
-        : 'Your Artist';
-    final deliveredOn = _formatDeliveryDate(widget.order.deliveredAt);
-    final orderLink = 'jnt://orders/details?orderId=${widget.order.id}';
-    final reviewLink = '$deepLink&target=review';
-    final tipLink = '$deepLink&target=tip';
-    final emailText =
-        'Hi $clientName,\n\n'
-        'Your custom artwork is ready! Your order has been successfully delivered.\n\n'
-        'Order Summary\n'
-        'Order ID: $orderId\n'
-        'Artwork: $artworkTitle\n'
-        'Artist: $artistName\n'
-        'Delivered On: $deliveredOn\n\n'
-        'View Your Artwork\n'
-        'Click below to view or download your artwork:\n'
-        '$orderLink\n\n'
-        'Leave a Review\n'
-        'Tell us about your experience and help the artist grow:\n'
-        '$reviewLink\n\n'
-        'Add a Tip (Optional)\n'
-        'Loved the work? You can support your artist with a tip:\n'
-        '$tipLink\n\n'
-        'If you have any questions or need help, simply reply to this email.\n\n'
-        'Thank you for choosing JNT!\n\n'
-        'Best regards,\n'
-        'Team JNT\n\n'
-        'Support: support@jnt.com';
     if (prefs.email.isNotEmpty) {
       await NotificationsService.createUserNotification(
         receiverEmail: prefs.email,
@@ -7618,17 +7703,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
         sourceCollection: _orderCollection,
         extra: <String, dynamic>{'deepLink': deepLink, 'action': 'review_tip'},
       );
-    }
-
-    if ((prefs.channel == _ReviewChannel.email ||
-            prefs.channel == _ReviewChannel.both) &&
-        prefs.email.isNotEmpty) {
-      await NotificationsService.queueEmail(
-        to: prefs.email,
-        subject: 'Your order has been delivered',
-        text: emailText,
-      );
-      channels.add('email');
     }
 
     if ((prefs.channel == _ReviewChannel.text ||
@@ -7644,9 +7718,6 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
 
     return channels.join(', ');
   }
-
-  String _formatDeliveryDate(DateTime? value) =>
-      formatDateMdyShortYearOrDash(value);
 
   double? _asDouble(Object? raw) {
     if (raw is num) return raw.toDouble();

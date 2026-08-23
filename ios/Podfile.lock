@@ -1,4 +1,6 @@
 PODS:
+  - add_2_calendar (0.0.1):
+    - Flutter
   - app_links (6.4.1):
     - Flutter
   - Flutter (1.0.0)
@@ -20,6 +22,7 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - add_2_calendar (from `.symlinks/plugins/add_2_calendar/ios`)
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - Flutter (from `Flutter`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
@@ -34,6 +37,8 @@ SPEC REPOS:
     - Sentry
 
 EXTERNAL SOURCES:
+  add_2_calendar:
+    :path: ".symlinks/plugins/add_2_calendar/ios"
   app_links:
     :path: ".symlinks/plugins/app_links/ios"
   Flutter:
@@ -52,6 +57,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
+  add_2_calendar: a7585019c9875312e69412bfd168df46018994f7
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326

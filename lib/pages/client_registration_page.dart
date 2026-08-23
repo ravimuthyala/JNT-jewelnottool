@@ -2004,21 +2004,20 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
 
     _authLog('navigation after signup');
     if (!mounted) return;
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    rootNavigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => ClientShellPage(profile: draft)),
+      (route) => false,
+    );
     if (kRequireEmailVerification) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => EmailVerificationPendingPage(
-            email: _emailCtrl.text.trim().toLowerCase(),
-            loginPageBuilder: (_) => const HomePage(),
-          ),
-        ),
-        (route) => false,
-      );
-    } else {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => ClientShellPage(profile: draft)),
-        (route) => false,
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!rootNavigator.mounted) return;
+        showEmailVerificationPendingModal(
+          context: rootNavigator.context,
+          email: _emailCtrl.text.trim().toLowerCase(),
+          loginPageBuilder: (_) => const HomePage(),
+        );
+      });
     }
   }
 

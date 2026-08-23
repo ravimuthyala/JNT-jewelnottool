@@ -23,6 +23,26 @@ part 'artist_completed_details_tab.dart';
 part 'artist_completed_photos_tab.dart';
 part 'artist_completed_shipping_tab.dart';
 
+/// One row in the "ship to each group member individually" list -- the
+/// primary client (key 'self') plus every group member.
+class _ShipmentRecipient {
+  const _ShipmentRecipient({
+    required this.key,
+    required this.name,
+    required this.email,
+    required this.tag,
+    required this.hasAddress,
+    required this.addressLabel,
+  });
+
+  final String key;
+  final String name;
+  final String email;
+  final String tag;
+  final bool hasAddress;
+  final String addressLabel;
+}
+
 Widget completedSectionTitle(String text) {
   return Semantics(
     header: true,
@@ -60,9 +80,11 @@ Future<void> showCompletedRequestSheet({
   required int shipDays,
   required VoidCallback onClose,
   required Future<void> Function({
-    required String courier,
-    required String tracking,
-    required DateTime shippedDate, // ✅ NEW
+    required GroupShippingMode mode,
+    required DateTime shippedDate,
+    String courier,
+    String tracking,
+    List<ShipmentRecipientEntry> recipients,
   })
   onMarkShipped,
 }) async {
@@ -91,11 +113,12 @@ class _CompletedRequestSheet extends StatefulWidget {
   final int shipDays;
   final VoidCallback onClose;
 
-  // ✅ NEW: include shippedDate in callback
   final Future<void> Function({
-    required String courier,
-    required String tracking,
+    required GroupShippingMode mode,
     required DateTime shippedDate,
+    String courier,
+    String tracking,
+    List<ShipmentRecipientEntry> recipients,
   })
   onMarkShipped;
 
@@ -126,7 +149,60 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
 
   String? _courier;
   bool _submitting = false;
-  int _completedTabIndex = 0;
+
+  // Group order shipping (ship to each member individually): courier +
+  // tracking are keyed per recipient instead of one shared pair. 'self'
+  // is the primary client; group members are keyed by clientId (falling
+  // back to slot index if a legacy row has no clientId).
+  final Map<String, String?> _recipientCouriers = {};
+  final Map<String, TextEditingController> _recipientTrackingCtrls = {};
+
+  bool get _isRespectiveShippingMode =>
+      widget.request.orderType == RequestOrderTypeV2.group &&
+      widget.request.groupShippingMode == GroupShippingMode.toRespectiveClient;
+
+  List<_ShipmentRecipient> get _shipmentRecipients {
+    final selfCityState = [
+      widget.request.shippingCity,
+      widget.request.shippingState,
+    ].where((s) => s.trim().isNotEmpty).join(', ');
+    return <_ShipmentRecipient>[
+      _ShipmentRecipient(
+        key: 'self',
+        name: widget.request.clientName.trim().isEmpty
+            ? 'You'
+            : widget.request.clientName.trim(),
+        email: widget.request.clientEmail,
+        tag: 'You',
+        hasAddress: true,
+        addressLabel: widget.request.shippingAddressDifferentFromProfile
+            ? (selfCityState.isEmpty ? 'Address on file' : selfCityState)
+            : 'Profile address',
+      ),
+      for (final gc in widget.request.groupClients)
+        _ShipmentRecipient(
+          key: gc.clientId.trim().isNotEmpty
+              ? gc.clientId.trim()
+              : 'slot-${gc.slotIndex}',
+          name: gc.clientName.trim().isEmpty
+              ? 'Client ${gc.slotIndex}'
+              : gc.clientName.trim(),
+          email: gc.clientEmail,
+          tag: 'Group',
+          hasAddress: !gc.shippingAddress.isEmpty,
+          addressLabel: gc.shippingAddress.isEmpty
+              ? ''
+              : gc.shippingAddress.cityState,
+        ),
+    ];
+  }
+
+  TextEditingController _trackingCtrlFor(String key) {
+    return _recipientTrackingCtrls.putIfAbsent(
+      key,
+      () => TextEditingController(),
+    );
+  }
   bool? _dbShippingLabelReady;
   String _dbShippingLabelQrData = '';
   String _dbShippingQrCode = '';
@@ -194,22 +270,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     });
   }
 
-  void _selectCompletedTab(int index) {
-    if (_completedTabIndex == index) return;
-    setState(() => _completedTabIndex = index);
-    const labels = <String>['Details', 'Photos', 'Shipping'];
-    announceRequestAccessibilityMessage(
-      context,
-      '${labels[index]} tab selected',
-    );
-    final target = switch (index) {
-      0 => _detailsContentFocusNode,
-      1 => _photosContentFocusNode,
-      _ => _shippingContentFocusNode,
-    };
-    _requestAccessibleFocus(target);
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -236,6 +296,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   void dispose() {
     _trackingCtrl.dispose();
     _shippedDateCtrl.dispose(); // ✅ NEW
+    for (final ctrl in _recipientTrackingCtrls.values) {
+      ctrl.dispose();
+    }
     _closeFocusNode.dispose();
     _detailsContentFocusNode.dispose();
     _photosContentFocusNode.dispose();
@@ -252,10 +315,24 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     }
   }
 
-  bool get _isValid =>
-      (_courier != null && _courier!.trim().isNotEmpty) &&
-      _trackingCtrl.text.trim().isNotEmpty &&
-      _shippedDate != null; // ✅ NEW requirement
+  bool get _isValid {
+    if (_shippedDate == null) return false;
+    if (!_isRespectiveShippingMode) {
+      return (_courier != null && _courier!.trim().isNotEmpty) &&
+          _trackingCtrl.text.trim().isNotEmpty;
+    }
+    final recipients = _shipmentRecipients;
+    if (recipients.isEmpty) return false;
+    for (final recipient in recipients) {
+      if (!recipient.hasAddress) return false;
+      final courier = _recipientCouriers[recipient.key];
+      final tracking = _trackingCtrlFor(recipient.key).text.trim();
+      if (courier == null || courier.trim().isEmpty || tracking.isEmpty) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   bool get _isShippingLabelReady {
     if (_dbShippingLabelReady == true) return true;
@@ -465,44 +542,38 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                       borderRadius: BorderRadius.zero,
                     ),
                   ),
-                  if (!keyboardOpen) ...[
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _topHeroCentered(
-                        context,
-                        widget.request,
-                        widget.onClose,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _completedStatusBanner(),
-                    ),
-                    const SizedBox(height: 12),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(
-                        height: 1,
-                        color: AppColors.blackCatBorderLight,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ] else
-                    const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _completedTabsBar(),
-                  ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
                   Expanded(
-                    child: IndexedStack(
-                      index: _completedTabIndex,
+                    child: ListView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        16 + math.max(0.0, bottomInset),
+                      ),
                       children: [
-                        _completedDetailsTab(context, bottomInset),
-                        _completedPhotosTab(context, bottomInset),
-                        _completedShippingTab(context, bottomInset),
+                        if (!keyboardOpen) ...[
+                          _topHeroCentered(
+                            context,
+                            widget.request,
+                            widget.onClose,
+                          ),
+                          const SizedBox(height: 12),
+                          _completedStatusBanner(),
+                          const SizedBox(height: 12),
+                          const Divider(
+                            height: 1,
+                            color: AppColors.blackCatBorderLight,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        ..._completedDetailsSectionItems(),
+                        const SizedBox(height: 20),
+                        ..._completedPhotosSectionItems(),
+                        const SizedBox(height: 20),
+                        ..._completedShippingSectionItems(),
                       ],
                     ),
                   ),
@@ -512,18 +583,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _completedTabsBar() {
-    return Row(
-      children: [
-        _completedTabButton('Details', 0),
-        const SizedBox(width: 8),
-        _completedTabButton('Photos', 1),
-        const SizedBox(width: 8),
-        _completedTabButton('Shipping', 2),
-      ],
     );
   }
 
@@ -563,47 +622,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _completedTabButton(String label, int index) {
-    final selected = _completedTabIndex == index;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: '$label tab, ${index + 1} of 3',
-        hint: selected ? 'Selected tab' : 'Double tap to show the $label tab',
-        onTap: () => _selectCompletedTab(index),
-        child: ExcludeSemantics(
-          child: InkWell(
-            borderRadius: BorderRadius.zero,
-            onTap: () => _selectCompletedTab(index),
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.snow,
-                borderRadius: BorderRadius.zero,
-                border: Border(
-                  bottom: BorderSide(
-                    color: selected ? AppColors.blackCat : Colors.transparent,
-                    width: 3,
-                  ),
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 13.5,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -1391,36 +1409,33 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Focus(
-          focusNode: _shippingContentFocusNode,
-          child: Semantics(
-            container: true,
-            label: shippingLabelSummary,
-            child: ExcludeSemantics(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _sectionTitle('Shipping Label'),
-                  const SizedBox(height: 10),
-                  if (_isShippingLabelReady) ...[
-                    _kv('Client', clientName),
-                    _kv(
-                      'City/State',
-                      cityState == 'Not provided' ? '-' : cityState,
+        Semantics(
+          container: true,
+          label: shippingLabelSummary,
+          child: ExcludeSemantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionTitle('Shipping Label'),
+                const SizedBox(height: 10),
+                if (_isShippingLabelReady) ...[
+                  _kv('Client', clientName),
+                  _kv(
+                    'City/State',
+                    cityState == 'Not provided' ? '-' : cityState,
+                  ),
+                  _kv('Carrier', carrier),
+                  _kv('Tracking', tracking),
+                ] else
+                  Text(
+                    'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.68),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
                     ),
-                    _kv('Carrier', carrier),
-                    _kv('Tracking', tracking),
-                  ] else
-                    Text(
-                      'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.68),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -2261,9 +2276,18 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     );
   }
 
+  // qr_flutter's auto-version detection (package:qr 3.0.2) can hang the
+  // main isolate indefinitely -- not throw -- when handed data too long to
+  // fit in a QR code, instead of a normal exception. Stored QR values here
+  // come from several legacy/DB sources of uncertain shape, so cap what we
+  // ever hand to QrImageView and fall back to the known-short generated
+  // payload rather than trust a stale value.
+  static const int _maxQrDataLength = 300;
+
   Future<void> _openQrDialog() async {
-    final qr = _shippingQrValue.isNotEmpty
-        ? _shippingQrValue
+    final storedQr = _shippingQrValue;
+    final qr = storedQr.isNotEmpty && storedQr.length <= _maxQrDataLength
+        ? storedQr
         : generateShippingQrCode(
             collectionName: widget.request.sourceCollection,
             orderDocId: widget.request.id,
