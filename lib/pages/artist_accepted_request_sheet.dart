@@ -15,6 +15,7 @@ import '../utils/image_cache_utils.dart';
 import '../utils/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../widgets/finished_photo_publish_consent.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 import '../widgets/request_modal_accessibility.dart';
@@ -120,6 +121,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
   /// Local photos selected for the final completed set.
   final List<XFile> _artistPhotos = [];
+
+  bool _consentToPublishFinishedPhotos = false;
 
   bool _markingCompleted = false;
 
@@ -799,6 +802,14 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                     ),
                                   ),
                                 ],
+                                const SizedBox(height: 8),
+                                FinishedPhotoPublishConsentTile(
+                                  value: _consentToPublishFinishedPhotos,
+                                  onChanged: (value) => setState(
+                                    () => _consentToPublishFinishedPhotos =
+                                        value,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1289,6 +1300,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
           'p_order_number': orderNumber,
           'p_artist_photos': uploadedArtistPhotos,
           'p_shipping': shipping,
+          'p_consent_to_publish_finished_photos':
+              _consentToPublishFinishedPhotos,
         },
       );
 

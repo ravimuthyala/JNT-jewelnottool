@@ -2127,7 +2127,10 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           isRequired: true,
                           child: TextFormField(
                             controller: _dateOfBirthCtrl,
-                            keyboardType: TextInputType.datetime,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              DateOfBirthTextInputFormatter(),
+                            ],
                             style: const TextStyle(fontSize: _inputFs),
                             onChanged: _onDateOfBirthTyped,
                             decoration: _dec(

@@ -32,6 +32,7 @@ import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/full_hand_measurement_flow.dart';
 import '../widgets/registration_date_of_birth_picker.dart';
+import '../widgets/nail_photo_consent_dialog.dart';
 
 const Color _clientRegHeaderBg = AppColors.alabaster;
 const Color _clientRegBodyBg = AppColors.snow;
@@ -2627,7 +2628,10 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                 true,
                                 TextFormField(
                                   controller: _dateOfBirthCtrl,
-                                  keyboardType: TextInputType.datetime,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    DateOfBirthTextInputFormatter(),
+                                  ],
                                   style: const TextStyle(
                                     fontSize: _inputFs,
                                     fontFamily: 'Arial',
@@ -3128,10 +3132,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                                     () => _consentToStoreNailImages =
                                         value ?? false,
                                   ),
-                                  title: const Text(
-                                    'Do you consent to store the nail image',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
+                                  title: const NailPhotoConsentLabel(),
                                 ),
                               ),
                               SizedBox(

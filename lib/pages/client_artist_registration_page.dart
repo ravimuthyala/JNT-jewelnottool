@@ -21,6 +21,7 @@ import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/full_hand_measurement_flow.dart';
 import '../widgets/registration_date_of_birth_picker.dart';
+import '../widgets/nail_photo_consent_dialog.dart';
 import '../widgets/communication_preference_section.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
@@ -4515,7 +4516,7 @@ class _ClientArtistRegistrationPageState
                 controller: _dateOfBirthCtrl,
                 keyboardType: TextInputType.number,
                 inputFormatters: [
-                  _DateOfBirthTextInputFormatter(),
+                  DateOfBirthTextInputFormatter(),
                 ],
                 style: const TextStyle(fontSize: _inputFs),
                 onChanged: _onDateOfBirthTyped,
@@ -4896,10 +4897,7 @@ class _ClientArtistRegistrationPageState
                 checkColor: AppColors.snow,
                 onChanged: (value) =>
                     setState(() => _consentToStoreNailImages = value ?? false),
-                title: const Text(
-                  'Do you consent to store the nail image',
-                  style: TextStyle(fontSize: 13),
-                ),
+                title: const NailPhotoConsentLabel(),
               ),
               SizedBox(
                 width: double.infinity,
@@ -7292,48 +7290,6 @@ class _ClientArtistRegistrationChoiceSheetState
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DateOfBirthTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final deleting = newValue.text.length < oldValue.text.length;
-
-    var digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length > 8) {
-      digits = digits.substring(0, 8);
-    }
-
-    // If the user backspaces one of the automatically inserted slashes,
-    // remove the digit immediately before it too. Otherwise the slash would
-    // be immediately reinserted and backspace would appear stuck.
-    final removedGeneratedSlash =
-        deleting &&
-        oldValue.text.endsWith('/') &&
-        newValue.text == oldValue.text.substring(0, oldValue.text.length - 1);
-
-    if (removedGeneratedSlash && digits.isNotEmpty) {
-      digits = digits.substring(0, digits.length - 1);
-    }
-
-    final buffer = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      buffer.write(digits[i]);
-      if (i == 1 || i == 3) {
-        buffer.write('/');
-      }
-    }
-
-    final formatted = buffer.toString();
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-      composing: TextRange.empty,
     );
   }
 }

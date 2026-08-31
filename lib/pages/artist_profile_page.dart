@@ -1260,6 +1260,26 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     return DateTime.tryParse(raw);
   }
 
+  // Mirrors the boolean written by artist_mark_request_completed() into the
+  // real `consent_to_publish_finished_photos` column (client_custom_requests)
+  // and the `consentToPublishFinishedPhotos` key of every jsonb blob it also
+  // updates (data/details/payload) -- checked across all of them the same
+  // way _rowJntRevealDate checks every shape a row can arrive in here.
+  bool _rowConsentedToPublishFinishedPhotos(Map<String, dynamic> row) {
+    final data = _asMap(row['data']);
+    final details = _asMap(row['details']);
+    final payload = _asMap(row['payload']);
+    for (final value in <Object?>[
+      row['consent_to_publish_finished_photos'],
+      data['consentToPublishFinishedPhotos'],
+      details['consentToPublishFinishedPhotos'],
+      payload['consentToPublishFinishedPhotos'],
+    ]) {
+      if (value is bool) return value;
+    }
+    return false;
+  }
+
   bool _rowLooksPostCompletion(Map<String, dynamic> row) {
     final status = _firstNonEmpty([
       row['status'],
@@ -1268,6 +1288,13 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
     final isCompletedStatus =
         status == 'completed' || status == 'shipped' || status == 'delivered';
     if (!isCompletedStatus && _collectCompletedPhotoRefs(row).isEmpty) {
+      return false;
+    }
+
+    // The client must have explicitly consented to publication -- without
+    // it, the completed photos stay private to their order regardless of
+    // status or reveal date.
+    if (!_rowConsentedToPublishFinishedPhotos(row)) {
       return false;
     }
 

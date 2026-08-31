@@ -1603,6 +1603,68 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     await _loadProfileFromSupabase();
   }
 
+  // Mirrors the boolean written by artist_mark_request_completed() into the
+  // real `consent_to_publish_finished_photos` column (client_custom_requests)
+  // and the `consentToPublishFinishedPhotos` key of every jsonb blob it also
+  // updates (data/details/payload). Without an explicit true here, a row's
+  // completed photos stay private to the order -- never synced into the
+  // public portfolio.
+  bool _rowConsentedToPublishFinishedPhotos(Map<String, dynamic> row) {
+    final data = _asMap(row['data']);
+    final details = _asMap(row['details']);
+    final payload = _asMap(row['payload']);
+    for (final value in <Object?>[
+      row['consent_to_publish_finished_photos'],
+      data['consentToPublishFinishedPhotos'],
+      details['consentToPublishFinishedPhotos'],
+      payload['consentToPublishFinishedPhotos'],
+    ]) {
+      if (value is bool) return value;
+    }
+    return false;
+  }
+
+  // The JNT Reveal Date the client/brand chose at submission time for the
+  // finished set to become public -- completed art must not sync into the
+  // portfolio before that date even if the order itself finished earlier.
+  DateTime? _rowJntRevealDateForBackfill(Map<String, dynamic> row) {
+    final data = _asMap(row['data']);
+    final details = _asMap(row['details']);
+    final summary = _asMap(row['summary']);
+    final payload = _asMap(row['payload']);
+    final requestDetails = _asMap(
+      row['request_details'] ??
+          data['requestDetails'] ??
+          details['requestDetails'] ??
+          summary['requestDetails'] ??
+          payload['requestDetails'],
+    );
+    for (final raw in <Object?>[
+      requestDetails['jntRevealDate'],
+      data['jntRevealDate'],
+      details['jntRevealDate'],
+      summary['jntRevealDate'],
+      payload['jntRevealDate'],
+      row['jntRevealDate'],
+      row['jnt_reveal_date'],
+    ]) {
+      final text = (raw ?? '').toString().trim();
+      if (text.isEmpty) continue;
+      final parsed = DateTime.tryParse(text);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  bool _rowPassesPublicationGate(Map<String, dynamic> row) {
+    if (!_rowConsentedToPublishFinishedPhotos(row)) return false;
+    final revealDate = _rowJntRevealDateForBackfill(row);
+    if (revealDate != null && DateTime.now().isBefore(revealDate)) {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _backfillCompletedRequestPhotosToPortfolio(
     ({String table, String id, Map<String, dynamic> data}) ref,
   ) async {
@@ -1654,7 +1716,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
               status == 'completed' ||
               status == 'shipped' ||
               status == 'delivered';
-          if (hasCompletedStatus || fromRoot.isNotEmpty) {
+          if ((hasCompletedStatus || fromRoot.isNotEmpty) &&
+              _rowPassesPublicationGate(data)) {
             urls.addAll(fromRoot);
           }
 
@@ -1675,7 +1738,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                 detailRows.first as Map,
               );
               final fromPayload = readPhotos(payloadMap);
-              if (hasCompletedStatus || fromPayload.isNotEmpty) {
+              if ((hasCompletedStatus || fromPayload.isNotEmpty) &&
+                  (_rowPassesPublicationGate(payloadMap) ||
+                      _rowPassesPublicationGate(data))) {
                 urls.addAll(fromPayload);
               }
             }
@@ -1716,6 +1781,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
           if (!owners.contains(email)) {
             continue;
           }
+          if (!_rowPassesPublicationGate(data)) continue;
           urls.addAll(readPhotos(data));
         }
       } catch (_) {}
