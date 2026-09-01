@@ -1709,11 +1709,11 @@ class _BaseOrderDetails extends StatelessWidget {
                     ].where((e) => e.isNotEmpty).join(', ');
 
                     final artistSummary = <String>[
-                      'Assigned artist, $displayName',
-                      if (rating != null) 'rating ${rating.toStringAsFixed(1)} out of 5',
-                      if (location.isNotEmpty) location,
                       'Artist assigned to your request',
-                    ].join('. ');
+                      displayName,
+                      if (rating != null) '${rating.toStringAsFixed(1)} rating',
+                      if (location.isNotEmpty) location,
+                    ].join(', ');
 
                     return Semantics(
                       label: artistSummary,

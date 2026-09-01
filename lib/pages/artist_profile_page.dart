@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -378,11 +380,13 @@ class ArtistProfilePage extends StatefulWidget {
     this.showBottomNav = false,
     this.bottomNavIndex = 0,
     this.onNavTap,
+    this.isActiveTab = true,
   });
 
   final bool showBottomNav;
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
+  final bool isActiveTab;
 
   @override
   State<ArtistProfilePage> createState() => _ArtistProfilePageState();
@@ -415,6 +419,14 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   String _artistSupabaseId = '';
   bool _portfolioBackfillAttempted = false;
 
+  // On tab activation, focus should land on Notifications, matching
+  // artist_earnings_page.dart/artist_requests_page_redesign.dart.
+  final FocusNode _notificationsFocusNode = FocusNode(
+    debugLabel: 'artistProfileNotifications',
+  );
+  bool _didSetInitialA11yFocus = false;
+  bool _focusRequestQueued = false;
+
   Future<_ArtistIdentity> _resolveArtistIdentity() async {
     final supabaseUser = SupabaseAuthService.currentUser;
     final supabaseId = (supabaseUser?.id ?? '').trim();
@@ -432,10 +444,68 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
   void initState() {
     super.initState();
     _bindArtistProfile();
+    if (widget.isActiveTab) {
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ArtistProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveTab && widget.isActiveTab) {
+      _didSetInitialA11yFocus = false;
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  void _scheduleInitialA11yFocus() {
+    if (_didSetInitialA11yFocus || _focusRequestQueued || !widget.isActiveTab) {
+      return;
+    }
+    _focusRequestQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      _didSetInitialA11yFocus = true;
+      _focusRequestQueued = false;
+      _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
+    });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it. Sending an explicit accessibility-focus semantics event fixes that.
+  // Android/TalkBack already tracks requestFocus() correctly here, so this
+  // stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
   void dispose() {
+    _notificationsFocusNode.dispose();
     super.dispose();
   }
 
@@ -1922,6 +1992,7 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                 child: ExcludeSemantics(
                   child: NotificationBellButton(
                     onTap: _onNotifications,
+                    focusNode: _notificationsFocusNode,
                     iconSize: JntHeaderMetrics.notificationIconSize,
                   ),
                 ),

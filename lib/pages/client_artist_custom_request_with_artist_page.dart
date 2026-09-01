@@ -61,6 +61,7 @@ class ClientArtistCustomRequestWithArtistPage extends StatelessWidget {
             );
           },
           excludeCurrentUserFromArtistDropdown: true,
+          clientArtistMenuStyle: true,
           onSubmitted: (ctx) async {
             if (Navigator.of(ctx).canPop()) {
               Navigator.of(ctx).pop();

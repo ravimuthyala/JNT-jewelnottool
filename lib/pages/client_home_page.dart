@@ -1,12 +1,15 @@
 // lib/pages/client_home_page.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/profile_table_columns.dart';
+import '../services/notifications_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
@@ -69,7 +72,15 @@ class _ClientHomePageState extends State<ClientHomePage> {
   bool _loadingProducts = true;
   List<_Product> _products = const <_Product>[];
   String _resolvedHeaderAvatarUrl = '';
+  // Was never updated from its initial 0 -- the visual badge on
+  // NotificationBellButton below gets its count from its own internal
+  // stream, but the accessibility announcement/value in
+  // _unreadAnnouncementText read this separate, dead field instead, so
+  // VoiceOver/TalkBack always announced "0 unread notifications" no matter
+  // how many were actually unread. _unreadCountSub (wired in initState)
+  // keeps this in sync with the same live source.
   int _unreadCount = 0;
+  StreamSubscription<int>? _unreadCountSub;
   bool _allowAvatarFocus = false;
 
   final FocusNode _notificationsFocusNode = FocusNode(
@@ -104,6 +115,15 @@ class _ClientHomePageState extends State<ClientHomePage> {
     unawaited(_loadHeaderAvatarUrl());
     unawaited(_loadTrendingProducts());
 
+    final email = (Supabase.instance.client.auth.currentUser?.email ?? '')
+        .trim();
+    _unreadCountSub = NotificationsService.watchUnreadCount(
+      receiverEmail: email,
+    ).listen((count) {
+      if (!mounted) return;
+      setState(() => _unreadCount = count);
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
@@ -134,6 +154,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
 
   @override
   void dispose() {
+    _unreadCountSub?.cancel();
     _notificationsFocusNode.dispose();
     _profileMenuFocusNode.dispose();
     super.dispose();
@@ -143,6 +164,7 @@ class _ClientHomePageState extends State<ClientHomePage> {
     if (!mounted || !widget.profileComplete) return;
     final direction = Directionality.of(context);
     _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
     SemanticsService.sendAnnouncement(
       View.of(context),
       'Notifications, $_unreadAnnouncementText',
@@ -151,9 +173,26 @@ class _ClientHomePageState extends State<ClientHomePage> {
     await Future<void>.delayed(const Duration(milliseconds: 120));
     if (!mounted || !widget.profileComplete) return;
     _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
     await Future<void>.delayed(const Duration(milliseconds: 260));
     if (!mounted || !widget.profileComplete) return;
     _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it -- it can silently stay wherever it was, so Notifications is never
+  // read aloud. Sending an explicit accessibility-focus semantics event fixes
+  // that, matching the pattern already used for this elsewhere in the app
+  // (see company_shell_chrome.dart, client_artist_home_page.dart).
+  // Android/TalkBack already tracks requestFocus() correctly on this screen,
+  // so this stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   Future<void> _loadHeaderAvatarUrl() async {

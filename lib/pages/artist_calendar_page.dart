@@ -1,7 +1,10 @@
 // lib/pages/artist_calendar_page.dart
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
@@ -39,6 +42,7 @@ class ArtistCalendarPage extends StatefulWidget {
     this.bottomNavIndex = 3,
     this.onNavTap,
     this.enableSupabaseAutoload = true,
+    this.isActiveTab = true,
   });
 
   final List<ClientRequest> requests;
@@ -61,6 +65,7 @@ class ArtistCalendarPage extends StatefulWidget {
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
   final bool enableSupabaseAutoload;
+  final bool isActiveTab;
 
   @override
   State<ArtistCalendarPage> createState() => _ArtistCalendarPageState();
@@ -71,7 +76,19 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
   late final TabController _tabCtrl;
   final FocusNode _monthlyTabFocusNode = FocusNode(debugLabel: 'monthlyTab');
   final FocusNode _scheduleTabFocusNode = FocusNode(debugLabel: 'scheduleTab');
-  bool _initialAdaFocusRequested = false;
+  // On tab activation, focus should land on Notifications (matching
+  // artist_earnings_page.dart/artist_requests_page_redesign.dart), not the
+  // Monthly tab -- this used to send initial focus to _monthlyTabFocusNode
+  // via didChangeDependencies, which also had its own bug for this
+  // IndexedStack-hosted page: didChangeDependencies fires once when the
+  // page is first built, which for IndexedStack is when the shell mounts
+  // ALL tabs up front, not each time the user actually switches to this
+  // one. isActiveTab + didUpdateWidget (below) tracks the real activation.
+  final FocusNode _notificationsFocusNode = FocusNode(
+    debugLabel: 'artistCalendarNotifications',
+  );
+  bool _didSetInitialA11yFocus = false;
+  bool _focusRequestQueued = false;
 
   DateTime _focusedMonth = _startOfMonth(DateTime.now());
   DateTime _selectedDay = _dateOnly(DateTime.now());
@@ -92,6 +109,63 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
       unawaited(_loadCalendarRequestsFromSupabase());
       _listenCalendarRequestsFromSupabase();
     }
+    if (widget.isActiveTab) {
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ArtistCalendarPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveTab && widget.isActiveTab) {
+      _didSetInitialA11yFocus = false;
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  void _scheduleInitialA11yFocus() {
+    if (_didSetInitialA11yFocus || _focusRequestQueued || !widget.isActiveTab) {
+      return;
+    }
+    _focusRequestQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      _didSetInitialA11yFocus = true;
+      _focusRequestQueued = false;
+      _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
+    });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it. Sending an explicit accessibility-focus semantics event fixes that.
+  // Android/TalkBack already tracks requestFocus() correctly here, so this
+  // stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
@@ -100,17 +174,8 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
     _tabCtrl.dispose();
     _monthlyTabFocusNode.dispose();
     _scheduleTabFocusNode.dispose();
+    _notificationsFocusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialAdaFocusRequested || !_isAdaEnabled(context)) return;
-    _initialAdaFocusRequested = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _monthlyTabFocusNode.requestFocus();
-    });
   }
 
   bool _isAdaEnabled(BuildContext context) {
@@ -522,6 +587,7 @@ class _ArtistCalendarPageState extends State<ArtistCalendarPage>
         backgroundColor: AppColors.snow,
         appBar: JntStandardAppBar(
           onNotifications: _openNotifications,
+          notificationFocusNode: _notificationsFocusNode,
           trailing: _avatarMenu(),
         ),
         body: Column(

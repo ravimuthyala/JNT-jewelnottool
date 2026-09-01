@@ -1,7 +1,9 @@
 // lib/pages/client_artist_registration_page.dart
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -191,6 +193,12 @@ class _ClientArtistRegistrationPageState
   );
   final FocusNode _addPortfolioImageFocusNode = FocusNode(
     debugLabel: 'clientArtistAddPortfolioImageFocus',
+  );
+  final FocusNode _accountEmailFocusNode = FocusNode(
+    debugLabel: 'clientArtistAccountEmail',
+  );
+  final FocusNode _accountPasswordFocusNode = FocusNode(
+    debugLabel: 'clientArtistAccountPassword',
   );
   Uint8List? _profileBytes;
   final Map<String, Uint8List> _guidedMeasurementPhotos = {};
@@ -4223,6 +4231,8 @@ class _ClientArtistRegistrationPageState
     _proYearsExperienceFieldFocusNode.dispose();
     _practiceDurationFieldFocusNode.dispose();
     _addPortfolioImageFocusNode.dispose();
+    _accountEmailFocusNode.dispose();
+    _accountPasswordFocusNode.dispose();
     _yearCalendarToggleFocusNode.dispose();
     _paymentMethodSelectorFocusNode.dispose();
     for (final node in _bundleFocusNodes.values) {
@@ -4541,6 +4551,23 @@ class _ClientArtistRegistrationPageState
     );
   }
 
+  // iOS VoiceOver does not announce a TextField that gains focus purely via
+  // FocusNode.requestFocus() when advancing off the keyboard's Next button --
+  // it silently lands on Password without reading it aloud. Sending an
+  // explicit accessibility-focus semantics event fixes that. Android/TalkBack
+  // already announces the field from requestFocus() alone, so this stays
+  // iOS-only and Android's behavior is unchanged.
+  void _focusAccountPasswordFieldAccessibly() {
+    _accountPasswordFocusNode.requestFocus();
+    if (!kIsWeb && Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _accountPasswordFocusNode.context?.findRenderObject()
+            ?.sendSemanticsEvent(const FocusSemanticEvent());
+      });
+    }
+  }
+
   Widget _accountCredentialsSection() {
     return Builder(
       builder: (context) => _sectionCard(
@@ -4557,8 +4584,12 @@ class _ClientArtistRegistrationPageState
               true,
               TextFormField(
                 controller: _emailCtrl,
+                focusNode: _accountEmailFocusNode,
                 style: const TextStyle(fontSize: _inputFs),
                 keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) =>
+                    _focusAccountPasswordFieldAccessibly(),
                 decoration: _dec('Email *', 'Enter Email'),
                 validator: _accountEmailValidator,
                 onChanged: _onEmailChanged,
@@ -4573,6 +4604,7 @@ class _ClientArtistRegistrationPageState
               true,
               TextFormField(
                 controller: _passCtrl,
+                focusNode: _accountPasswordFocusNode,
                 style: const TextStyle(fontSize: _inputFs),
                 obscureText: _obscurePassword,
                 decoration: _dec(

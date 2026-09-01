@@ -1,4 +1,8 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'forgot_password_page.dart';
 import 'register_page.dart';
@@ -237,6 +241,24 @@ class _LoginDialogState extends State<LoginDialog> {
         return 'company';
       default:
         return null;
+    }
+  }
+
+  // iOS VoiceOver does not announce a TextField that gains focus purely via
+  // FocusNode.requestFocus() when advancing off the keyboard's Next button --
+  // it silently lands on Password without reading it aloud. Sending an
+  // explicit accessibility-focus semantics event fixes that. Android/TalkBack
+  // already announces the field from requestFocus() alone, so this stays
+  // iOS-only and Android's behavior is unchanged.
+  void _focusPasswordFieldAccessibly() {
+    _passwordFocusNode.requestFocus();
+    if (!kIsWeb && Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _passwordFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+          const FocusSemanticEvent(),
+        );
+      });
     }
   }
 
@@ -767,7 +789,7 @@ class _LoginDialogState extends State<LoginDialog> {
                               ),
                               cursorColor: AppColors.blackCat,
                               onSubmitted: (_) =>
-                                  _passwordFocusNode.requestFocus(),
+                                  _focusPasswordFieldAccessibly(),
                               decoration: _fieldDecoration('Email'),
                             ),
 

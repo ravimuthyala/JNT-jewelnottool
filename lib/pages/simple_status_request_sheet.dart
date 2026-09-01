@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -35,7 +36,7 @@ Future<void> showSimpleStatusRequestSheet({
   );
 }
 
-class _SimpleStatusRequestSheet extends StatelessWidget {
+class _SimpleStatusRequestSheet extends StatefulWidget {
   const _SimpleStatusRequestSheet({
     required this.request,
     required this.status,
@@ -49,15 +50,79 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
   final DateTime date;
   final Future<void> Function()? onResubmit;
   final bool forceDeclinedByArtistReason;
+
+  @override
+  State<_SimpleStatusRequestSheet> createState() =>
+      _SimpleStatusRequestSheetState();
+}
+
+class _SimpleStatusRequestSheetState extends State<_SimpleStatusRequestSheet> {
   static const int _decodeMax = 1024;
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _closeFocusNode = FocusNode(
+    debugLabel: 'simpleStatusRequestClose',
+  );
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'simpleStatusRequestCloseSemantics',
+  );
+
+  void _scrollListToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _focusCloseButton() {
+    if (!mounted) return;
+    _closeFocusNode.requestFocus();
+    _closeSemanticsKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  // VoiceOver/TalkBack doesn't reliably wrap from the last element back to
+  // the first on its own, so swiping past Close (or Resubmit, when present)
+  // would otherwise feel like nothing happens. This invisible stop is
+  // placed as the very last thing in the scrollable content -- once focus
+  // reaches it, scroll back to the top and redirect real focus onto the
+  // visible X button, closing the loop.
+  void _redirectEndOfModalToClose() {
+    _scrollListToTop();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _focusCloseButton(),
+    );
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Close',
+      hint: 'Double tap to close',
+      onTap: () => Navigator.pop(context),
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.78;
-    final cfg = _statusConfig(status);
+    final cfg = _statusConfig(widget.status);
     final sheetMediaQuery = MediaQuery.of(
       context,
     ).copyWith(textScaler: const TextScaler.linear(1.0));
+    final isGroup = widget.request.orderType == RequestOrderTypeV2.group;
 
     return Semantics(
       scopesRoute: true,
@@ -78,119 +143,143 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                 ),
                 child: SafeArea(
                   top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Center(
-                          child: Container(
-                            height: 5,
-                            width: 54,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.zero,
-                            ),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 10),
+                      Center(
+                        child: Container(
+                          height: 5,
+                          width: 54,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.zero,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        _topHeroCondensed(request),
-                        const SizedBox(height: 14),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 14,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.snow,
-                            borderRadius: BorderRadius.zero,
-                            border: Border.all(
-                              color: AppColors.blackCatBorderLight,
-                            ),
-                          ),
-                          child: Row(
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              _topHeroCondensed(widget.request),
+                              const SizedBox(height: 14),
                               Container(
-                                height: 34,
-                                width: 34,
-                                decoration: const BoxDecoration(
-                                  color: Colors.transparent,
-                                  shape: BoxShape.circle,
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 14,
                                 ),
-                                child: Icon(
-                                  cfg.icon,
-                                  color: cfg.iconColor,
-                                  size: 18,
+                                decoration: BoxDecoration(
+                                  color: AppColors.snow,
+                                  borderRadius: BorderRadius.zero,
+                                  border: Border.all(
+                                    color: AppColors.blackCatBorderLight,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                child: Row(
                                   children: [
-                                    Text(
-                                      cfg.title,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                        color: cfg.titleColor,
+                                    Container(
+                                      height: 34,
+                                      width: 34,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.transparent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        cfg.icon,
+                                        color: cfg.iconColor,
+                                        size: 18,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${cfg.subtitle} ${_formatDate(date)}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w400,
-                                        fontSize: 13.5,
-                                        color: Colors.black.withValues(
-                                          alpha: 0.62,
-                                        ),
-                                      ),
-                                    ),
-                                    if (_statusReason().isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${_reasonLabel()}: ${_statusReason()}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 13.5,
-                                          color: Colors.black.withValues(
-                                            alpha: 0.70,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            cfg.title,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 14,
+                                              color: cfg.titleColor,
+                                            ),
                                           ),
-                                          height: 1.25,
-                                        ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${cfg.subtitle} ${_formatDate(widget.date)}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w400,
+                                              fontSize: 13.5,
+                                              color: Colors.black.withValues(
+                                                alpha: 0.62,
+                                              ),
+                                            ),
+                                          ),
+                                          if (_statusReason()
+                                              .isNotEmpty) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${_reasonLabel()}: ${_statusReason()}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 13.5,
+                                                color: Colors.black
+                                                    .withValues(alpha: 0.70),
+                                                height: 1.25,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                   ],
                                 ),
                               ),
+                              // Shown for every status now (previously
+                              // excluded for Expired/Declined) so group
+                              // orders get their measurements here the same
+                              // way artist_delivered_request_sheet.dart
+                              // does, regardless of why the request ended.
+                              if (isGroup) ...[
+                                const SizedBox(height: 14),
+                                Semantics(
+                                  header: true,
+                                  label: 'Group Client Measurements',
+                                  child: ExcludeSemantics(
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        'Group Client Measurements',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                          color: Colors.black.withValues(
+                                            alpha: 0.85,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                GroupClientMeasurementsTabs(
+                                  clients: _buildGroupMeasurementClients(
+                                    widget.request,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                        if (status != SimpleRequestStatus.expired &&
-                            request.orderType == RequestOrderTypeV2.group &&
-                            status != SimpleRequestStatus.declined) ...[
-                          const SizedBox(height: 14),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Client Measurements',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                                color: Colors.black.withValues(alpha: 0.85),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          GroupClientMeasurementsTabs(
-                            clients: _buildGroupMeasurementClients(request),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Center(
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                        child: Center(
                           child: Wrap(
                             spacing: 10,
                             runSpacing: 10,
@@ -223,7 +312,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (onResubmit != null)
+                              if (widget.onResubmit != null)
                                 SizedBox(
                                   height: 52,
                                   child: ElevatedButton(
@@ -240,7 +329,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                                     ),
                                     onPressed: () async {
                                       Navigator.pop(context);
-                                      await onResubmit!.call();
+                                      await widget.onResubmit!.call();
                                     },
                                     child: const Padding(
                                       padding: EdgeInsets.symmetric(
@@ -260,28 +349,33 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      _buildAccessibilityCloseLoopTarget(),
+                    ],
                   ),
                 ),
               ),
               Positioned(
                 right: 6,
                 top: 6,
-                child: Semantics(
-                  button: true,
-                  label: 'Close',
-                  onTap: () => Navigator.pop(context),
-                  child: ExcludeSemantics(
-                    child: InkWell(
-                      borderRadius: BorderRadius.zero,
-                      onTap: () => Navigator.pop(context),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Icon(
-                          Icons.close_rounded,
-                          size: 24,
-                          color: Colors.black.withValues(alpha: 0.70),
+                child: Focus(
+                  focusNode: _closeFocusNode,
+                  child: Semantics(
+                    key: _closeSemanticsKey,
+                    button: true,
+                    label: 'Close',
+                    onTap: () => Navigator.pop(context),
+                    child: ExcludeSemantics(
+                      child: InkWell(
+                        borderRadius: BorderRadius.zero,
+                        onTap: () => Navigator.pop(context),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 24,
+                            color: Colors.black.withValues(alpha: 0.70),
+                          ),
                         ),
                       ),
                     ),
@@ -698,24 +792,24 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
   }
 
   String _statusReason() {
-    if (status == SimpleRequestStatus.cancelled) {
-      final reason = request.cancelReason.trim();
+    if (widget.status == SimpleRequestStatus.cancelled) {
+      final reason = widget.request.cancelReason.trim();
       return reason.isNotEmpty ? reason : 'Cancelled by user';
     }
-    if (status == SimpleRequestStatus.declined) {
-      if (forceDeclinedByArtistReason) {
+    if (widget.status == SimpleRequestStatus.declined) {
+      if (widget.forceDeclinedByArtistReason) {
         return 'Declined by Artist';
       }
-      final reason = request.declineReason.trim();
+      final reason = widget.request.declineReason.trim();
       if (reason.isNotEmpty) return reason;
-      if (request.cancelReason.trim().isNotEmpty) {
-        return request.cancelReason.trim();
+      if (widget.request.cancelReason.trim().isNotEmpty) {
+        return widget.request.cancelReason.trim();
       }
-      if (request.completionDeclineReason.trim().isNotEmpty) {
-        return request.completionDeclineReason.trim();
+      if (widget.request.completionDeclineReason.trim().isNotEmpty) {
+        return widget.request.completionDeclineReason.trim();
       }
-      if (request.completionDeclineDescription.trim().isNotEmpty) {
-        return request.completionDeclineDescription.trim();
+      if (widget.request.completionDeclineDescription.trim().isNotEmpty) {
+        return widget.request.completionDeclineDescription.trim();
       }
       return 'Declined by Artist';
     }
@@ -723,7 +817,7 @@ class _SimpleStatusRequestSheet extends StatelessWidget {
   }
 
   String _reasonLabel() {
-    switch (status) {
+    switch (widget.status) {
       case SimpleRequestStatus.declined:
         return 'Decline reason';
       case SimpleRequestStatus.cancelled:

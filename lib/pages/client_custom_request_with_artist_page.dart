@@ -26,6 +26,7 @@ import 'artist_reviews_page.dart';
 import 'client_artist_history_page.dart';
 import 'client_artist_profile_page.dart';
 import 'client_artists_page.dart';
+import 'client_profile_page.dart';
 
 const Color _requestSnow = Color(0xFFFAF9F9);
 const Color _focusRing = Color(0xFFFFBF47);
@@ -47,6 +48,8 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
     this.onOpenArtist,
     this.isActiveTab = true,
     this.excludeCurrentUserFromArtistDropdown = false,
+    this.showCampaignsTab = false,
+    this.clientArtistMenuStyle = false,
   }) : profile = profile ?? ClientProfileDraft.mock();
 
   final ClientProfileDraft profile;
@@ -59,6 +62,11 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
   // used by the Client-Artist role, whose tabs/labels don't match the
   // plain Client shell's Home/Design/Artists/Orders/Profile bar.
   final Widget? customBottomNavigationBar;
+  // Whether the plain Client shell's bottom nav (the ClientBottomNavBar
+  // fallback below) should include Campaigns -- true for ambassador
+  // clients, matching ClientShellPage's own bottom nav. Ignored when
+  // customBottomNavigationBar is supplied.
+  final bool showCampaignsTab;
   // Overrides the account menu's "Artist" entry -- used by the Client-Artist
   // role so it opens the same Artists page it reaches everywhere else
   // (with its own bottom nav), instead of the plain Client's bare page.
@@ -69,6 +77,13 @@ class ClientCustomRequestWithArtistPage extends StatefulWidget {
   /// request as a client, but cannot select themself as the artist.
   /// Default is false so normal Client flow is unchanged.
   final bool excludeCurrentUserFromArtistDropdown;
+
+  /// True when this page is being used by the Client-Artist role, which
+  /// shows a richer account menu (History/Calendar/Artist/Reviews) than
+  /// the plain Client role. Default false so the plain Client's menu
+  /// (just Profile for ambassadors, plus Logout) is what shows unless a
+  /// Client-Artist caller explicitly opts in.
+  final bool clientArtistMenuStyle;
 
   @override
   State<ClientCustomRequestWithArtistPage> createState() =>
@@ -1116,8 +1131,29 @@ class _ClientCustomRequestWithArtistPageState
     super.dispose();
   }
 
+  Future<void> _performLogout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      debugPrint('DESIGN WITH ARTIST SIGN OUT FAILED: $e');
+    }
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
   void _onAvatarMenuSelected(String value) {
     if (value == 'profile') {
+      if (!widget.clientArtistMenuStyle) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ClientProfilePage(
+              profile: widget.profile,
+              onLogout: _performLogout,
+            ),
+          ),
+        );
+        return;
+      }
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
@@ -1161,7 +1197,7 @@ class _ClientCustomRequestWithArtistPageState
       return;
     }
     if (value == 'logout') {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      unawaited(_performLogout());
     }
   }
 
@@ -2594,11 +2630,12 @@ class _ClientCustomRequestWithArtistPageState
                 onSelected: _onAvatarMenuSelected,
                 avatarUrl: widget.profile.basic.profileImageUrl,
                 displayName: widget.profile.basic.name,
-                showProfile: true,
-                showHistory: true,
-                showCalendar: true,
-                showArtist: true,
-                showReviews: true,
+                showProfile:
+                    widget.clientArtistMenuStyle || widget.showCampaignsTab,
+                showHistory: widget.clientArtistMenuStyle,
+                showCalendar: widget.clientArtistMenuStyle,
+                showArtist: widget.clientArtistMenuStyle,
+                showReviews: widget.clientArtistMenuStyle,
               ),
             ),
           ],
@@ -2892,41 +2929,43 @@ class _ClientCustomRequestWithArtistPageState
 
             const SizedBox(height: 12),
 
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Transform.scale(
-                  scale: 0.95,
-                  child: Checkbox(
-                    value: _allowNonLicensed,
-                    onChanged: (v) => setState(() {
-                      _allowNonLicensed = (v ?? true);
-                      _syncSelectedArtistForFilters();
-                    }),
-                    activeColor: AppColors.blackCat,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+            MergeSemantics(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Transform.scale(
+                    scale: 0.95,
+                    child: Checkbox(
+                      value: _allowNonLicensed,
+                      onChanged: (v) => setState(() {
+                        _allowNonLicensed = (v ?? true);
+                        _syncSelectedArtistForFilters();
+                      }),
+                      activeColor: AppColors.blackCat,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(
-                      'Are you willing to allow non-licensed nail technicians to work on your design?',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.blackCat,
-                        height: 1.2,
-                        fontSize: 14,
-                        fontFamily: 'Arial',
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Are you willing to allow non-licensed nail technicians to work on your design?',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.blackCat,
+                          height: 1.2,
+                          fontSize: 14,
+                          fontFamily: 'Arial',
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
 
             const SizedBox(height: 18),
@@ -3442,34 +3481,36 @@ class _ClientCustomRequestWithArtistPageState
                     ),
                     const SizedBox(height: 14),
                   ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Checkbox(
-                        value: _shippingDifferent,
-                        onChanged: (v) =>
-                            setState(() => _shippingDifferent = v ?? false),
-                        activeColor: AppColors.blackCat,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
+                  MergeSemantics(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Checkbox(
+                          value: _shippingDifferent,
+                          onChanged: (v) =>
+                              setState(() => _shippingDifferent = v ?? false),
+                          activeColor: AppColors.blackCat,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: Text(
-                            'Shipping address different from profile address?',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.blackCat.withValues(alpha: 0.75),
-                              height: 1.2,
-                              fontSize: 14,
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                              'Shipping address different from profile address?',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.blackCat.withValues(alpha: 0.75),
+                                height: 1.2,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   if (_shippingDifferent) ...[
                     const SizedBox(height: 10),
@@ -3648,6 +3689,7 @@ class _ClientCustomRequestWithArtistPageState
             (widget.showClientBottomNav
                 ? ClientBottomNavBar(
                     currentIndex: 1, // ✅ Design selected on this page
+                    showCampaignsTab: widget.showCampaignsTab,
                     onTap: (i) async {
                       if (widget.onClientNavTap != null) {
                         await widget.onClientNavTap!(context, i);
@@ -4812,7 +4854,10 @@ class _RadioPill extends StatelessWidget {
     return Semantics(
       checked: selected,
       inMutuallyExclusiveGroup: true,
-      label: label,
+      // Some VoiceOver/TalkBack builds only announce "checked"/"unchecked"
+      // for the `checked` flag rather than "selected", so the state is
+      // spelled out in the label itself to guarantee it's heard.
+      label: selected ? '$label, selected' : label,
       onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
@@ -5113,10 +5158,15 @@ class ClientBottomNavBar extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.showCampaignsTab = false,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
+  // Matches ClientShellPage's own bottom nav: ambassador clients see
+  // Campaigns instead of the Profile tab (profile is reached via the
+  // avatar menu in that case).
+  final bool showCampaignsTab;
 
   @override
   Widget build(BuildContext context) {
@@ -5127,32 +5177,39 @@ class ClientBottomNavBar extends StatelessWidget {
       type: BottomNavigationBarType.fixed,
       selectedItemColor: AppColors.deepPlum,
       unselectedItemColor: AppColors.blackCat.withValues(alpha: 0.55),
-      items: const [
-        BottomNavigationBarItem(
+      items: [
+        const BottomNavigationBarItem(
           icon: Icon(Icons.home_outlined),
           activeIcon: Icon(Icons.home),
           label: 'Home',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
           icon: Icon(Icons.add_circle_outline),
           activeIcon: Icon(Icons.add_circle),
           label: 'Design',
         ),
-        BottomNavigationBarItem(
+        if (showCampaignsTab)
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.inbox_outlined),
+            activeIcon: Icon(Icons.inbox),
+            label: 'Campaigns',
+          ),
+        const BottomNavigationBarItem(
           icon: Icon(Icons.brush_outlined),
           activeIcon: Icon(Icons.brush),
           label: 'Artists',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
           icon: Icon(Icons.receipt_long_outlined),
           activeIcon: Icon(Icons.receipt_long),
           label: 'Orders',
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline),
-          activeIcon: Icon(Icons.person),
-          label: 'Profile',
-        ),
+        if (!showCampaignsTab)
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
       ],
     );
   }

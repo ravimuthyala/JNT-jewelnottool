@@ -16,6 +16,7 @@ class ClientArtistRequestsPage extends StatelessWidget {
     this.onOpenReviews,
     this.onOpenEarnings,
     this.onLogout,
+    this.isActiveTab = true,
   });
 
   final ClientProfileDraft? profile;
@@ -26,6 +27,7 @@ class ClientArtistRequestsPage extends StatelessWidget {
   final VoidCallback? onOpenReviews;
   final VoidCallback? onOpenEarnings;
   final Future<void> Function()? onLogout;
+  final bool isActiveTab;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +50,7 @@ class ClientArtistRequestsPage extends StatelessWidget {
           onSignOut: onLogout == null
               ? null
               : () => unawaited(onLogout!.call()),
+          isActiveTab: isActiveTab,
         ),
       ),
     );

@@ -19,6 +19,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
     this.showBottomNav = true,
     this.onOpenProfile,
     this.onLogout,
+    this.isActiveTab = true,
   });
 
   final ClientProfileDraft profile;
@@ -28,6 +29,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
   final bool showBottomNav;
   final VoidCallback? onOpenProfile;
   final Future<void> Function()? onLogout;
+  final bool isActiveTab;
 
   void _openHomeTab(BuildContext context, int index) {
     Navigator.pushReplacement(
@@ -119,6 +121,7 @@ class ClientArtistEarningsPage extends StatelessWidget {
       showBottomNav: showBottomNav,
       showCampaignsTab: showCampaignsTab,
       bottomNavCurrentIndex: showCampaignsTab ? 0 : 4,
+      isActiveTab: isActiveTab,
       onBottomNavTap: (index) => _openHomeTab(context, index),
       onManageProfile: onOpenProfile,
       onOpenHistory: () {

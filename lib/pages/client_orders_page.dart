@@ -1407,7 +1407,21 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       _didSetInitialA11yFocus = true;
       _focusRequestQueued = false;
       _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
     });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it, so it can stay wherever it auto-selected on screen load instead of
+  // Notifications. Sending an explicit accessibility-focus semantics event
+  // fixes that. Android/TalkBack already tracks requestFocus() correctly
+  // here, so this stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   void _subscribeSubmittedOrders() {

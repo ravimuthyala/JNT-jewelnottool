@@ -12,6 +12,7 @@ class ClientArtistCampaignsPage extends StatelessWidget {
     this.onOpenReviews,
     this.onOpenEarnings,
     this.onLogout,
+    this.isActiveTab = true,
   });
 
   final VoidCallback? onOpenProfile;
@@ -21,6 +22,7 @@ class ClientArtistCampaignsPage extends StatelessWidget {
   final VoidCallback? onOpenReviews;
   final VoidCallback? onOpenEarnings;
   final VoidCallback? onLogout;
+  final bool isActiveTab;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +38,7 @@ class ClientArtistCampaignsPage extends StatelessWidget {
       showClientRequests: false,
       useCampaignNaming: true,
       clientArtistMenuStyle: true,
+      isActiveTab: isActiveTab,
     );
   }
 }

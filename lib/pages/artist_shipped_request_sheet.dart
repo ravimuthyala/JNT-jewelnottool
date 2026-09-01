@@ -90,8 +90,33 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   final FocusNode _closeButtonFocusNode = FocusNode(
     debugLabel: 'Shipped modal close button',
   );
+  final ScrollController _shippedListController = ScrollController();
   bool _isMarkingDelivered = false;
   bool _sentInitialCloseFocus = false;
+
+  void _scrollShippedListToTop() {
+    if (!_shippedListController.hasClients) return;
+    _shippedListController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  // Swiping past the bottom Close button should loop back to the X button
+  // instead of VoiceOver/TalkBack silently doing nothing -- same pattern
+  // used for "Mark as Shipped"/"Mark as Completed" in the other status
+  // sheets (see artist_completed_request_sheet.dart's
+  // _buildAccessibilityCloseLoopTarget).
+  void _redirectShippedCloseLoopToXButton() {
+    _scrollShippedListToTop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _closeButtonFocusNode.requestFocus();
+      _closeButtonSemanticsKey.currentContext?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
 
   @override
   void initState() {
@@ -112,6 +137,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   @override
   void dispose() {
     _closeButtonFocusNode.dispose();
+    _shippedListController.dispose();
     super.dispose();
   }
   String get _requestTable =>
@@ -609,6 +635,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
 
                 Expanded(
                   child: ListView(
+                    controller: _shippedListController,
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
                       _topHeroCentered(
@@ -723,6 +750,73 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                       ],
                     ),
                   ),
+                ),
+                // This modal previously only had the small top-right X --
+                // easy to miss for sighted users and, though reachable, not
+                // the primary close affordance for VoiceOver/TalkBack users
+                // either. An explicit bottom Close button gives both a
+                // clear, obvious way to close. Shape/text styled to match
+                // this app's actual primary-action-button convention (e.g.
+                // _markShippedButton in artist_completed_shipping_tab.dart)
+                // rather than the one-off style artist_delivered_request_
+                // sheet.dart's Close button happens to use.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                  child: Center(
+                    child: SizedBox(
+                      width: 188,
+                      height: 52,
+                      child: Semantics(
+                        button: true,
+                        label: 'Close shipped request details',
+                        hint: 'Double tap to close',
+                        onTap: () => Navigator.pop(context),
+                        child: ExcludeSemantics(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.blackCat,
+                              foregroundColor: AppColors.snow,
+                              elevation: 0,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 22,
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text(
+                              'Close',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w400,
+                                fontSize: 13,
+                                fontFamily: 'Arial',
+                                color: AppColors.snow,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Invisible loop-back stop: VoiceOver/TalkBack don't wrap
+                // from the last element back to the first on their own, so
+                // swiping past the Close button would otherwise feel like
+                // nothing happens. Gaining focus here scrolls back to the
+                // top and redirects real focus onto the visible X button.
+                Semantics(
+                  container: true,
+                  button: true,
+                  label: 'Close shipped request details',
+                  hint: 'Double tap to close',
+                  onTap: () => Navigator.pop(context),
+                  onDidGainAccessibilityFocus:
+                      _redirectShippedCloseLoopToXButton,
+                  child: const SizedBox(width: 1, height: 1),
                 ),
               ],
             ),
@@ -1535,7 +1629,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
           rightNfc: nfc.main.right,
         );
         return _sectionCard(
-          title: 'Nail Dimensions',
+          title: isGroup ? 'Group Client Measurements' : 'Nail Dimensions',
           child: isGroup
               ? FutureBuilder<List<GroupClientMeasurementData>>(
                   future: _loadGroupMeasurementClients(),

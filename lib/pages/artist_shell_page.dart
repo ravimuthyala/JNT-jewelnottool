@@ -125,7 +125,9 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         onOpenNotifications: _openNotifications,
         onManageProfile: _openProfilePage,
         onOpenInbox: _openInbox,
+        onOpenReviews: _openReviewsPage,
         onSignOut: () => _signOut(),
+        isActiveTab: _index == 0,
       ),
 
       ArtistCalendarPage(
@@ -138,6 +140,7 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         onOpenEarnings: _openEarningsPage,
         onOpenInbox: _openInbox,
         onSignOut: () => _signOut(),
+        isActiveTab: _index == 1,
       ),
 
       ArtistHistoryPage(
@@ -149,6 +152,7 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         onOpenReviews: _openReviewsPage,
         onOpenInbox: _openInbox,
         onSignOut: () => _signOut(),
+        isActiveTab: _index == 2,
       ),
 
       ArtistEarningsPage(
@@ -159,12 +163,14 @@ class _ArtistShellPageState extends State<ArtistShellPage> {
         onOpenReviews: _openReviewsPage,
         onOpenInbox: _openInbox,
         onSignOut: () => _signOut(),
+        isActiveTab: _index == 3,
       ),
 
       ArtistProfilePage(
         showBottomNav: false,
         bottomNavIndex: 4,
         onNavTap: _goToTab,
+        isActiveTab: _index == 4,
       ),
     ];
 

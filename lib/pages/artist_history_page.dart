@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../models/client_request_v2.dart';
 import '../services/artist_requests_repository.dart';
@@ -43,6 +44,7 @@ class ArtistHistoryPage extends StatefulWidget {
     this.bottomNavIndex = 4,
     this.onNavTap,
     this.bottomNavigationBar,
+    this.isActiveTab = true,
   });
 
   final VoidCallback? onBackHome;
@@ -63,6 +65,7 @@ class ArtistHistoryPage extends StatefulWidget {
   final int bottomNavIndex;
   final ValueChanged<int>? onNavTap;
   final Widget? bottomNavigationBar;
+  final bool isActiveTab;
 
   @override
   State<ArtistHistoryPage> createState() => _ArtistHistoryPageState();
@@ -72,7 +75,20 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
   final FocusNode _historyTabsFocusNode = FocusNode(
     debugLabel: 'artistHistoryFilters',
   );
-  bool _didRequestInitialA11yFocus = false;
+  // On tab activation, focus should land on Notifications (matching
+  // artist_earnings_page.dart/artist_requests_page_redesign.dart), not the
+  // history filter tabs -- this used to send initial focus to
+  // _historyTabsFocusNode via didChangeDependencies, which also had its own
+  // bug for this IndexedStack-hosted page: didChangeDependencies fires once
+  // when the page is first built, which for IndexedStack is when the shell
+  // mounts ALL tabs up front, not each time the user actually switches to
+  // this one. isActiveTab + didUpdateWidget (below) tracks the real
+  // activation.
+  final FocusNode _notificationsFocusNode = FocusNode(
+    debugLabel: 'artistHistoryNotifications',
+  );
+  bool _didSetInitialA11yFocus = false;
+  bool _focusRequestQueued = false;
 
   ArtistHistoryFilter _filter = ArtistHistoryFilter.all;
   bool _isLoadingDb = true;
@@ -86,33 +102,70 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
     super.initState();
     _loadHistoryFromDb();
     _listenRealtime();
+    if (widget.isActiveTab) {
+      _scheduleInitialA11yFocus();
+    }
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didRequestInitialA11yFocus || !_accessibleNavigation(context)) return;
-    _didRequestInitialA11yFocus = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _historyTabsFocusNode.requestFocus();
+  void didUpdateWidget(covariant ArtistHistoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveTab && widget.isActiveTab) {
+      _didSetInitialA11yFocus = false;
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  void _scheduleInitialA11yFocus() {
+    if (_didSetInitialA11yFocus || _focusRequestQueued || !widget.isActiveTab) {
+      return;
+    }
+    _focusRequestQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      _didSetInitialA11yFocus = true;
+      _focusRequestQueued = false;
+      _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
     });
   }
 
-  bool _accessibleNavigation(BuildContext context) {
-    final mediaQuery = MediaQuery.maybeOf(context);
-    return (mediaQuery?.accessibleNavigation ?? false) ||
-        WidgetsBinding
-            .instance
-            .platformDispatcher
-            .accessibilityFeatures
-            .accessibleNavigation;
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it. Sending an explicit accessibility-focus semantics event fixes that.
+  // Android/TalkBack already tracks requestFocus() correctly here, so this
+  // stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
   void dispose() {
     _requestsChannel?.unsubscribe();
     _historyTabsFocusNode.dispose();
+    _notificationsFocusNode.dispose();
     super.dispose();
   }
 
@@ -1365,6 +1418,7 @@ class _ArtistHistoryPageState extends State<ArtistHistoryPage> {
         backgroundColor: AppColors.snow,
         appBar: JntStandardAppBar(
           onNotifications: _openNotifications,
+          notificationFocusNode: _notificationsFocusNode,
           trailing: _avatarMenu(),
         ),
         body: ListView(

@@ -140,7 +140,15 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  ButtonStyle _signInButtonStyle() {
+  // ElevatedButton gains WidgetState.focused on an ordinary tap/click, not
+  // just keyboard/screen-reader navigation -- so gating purely on
+  // `states.contains(WidgetState.focused)` showed the accessibility focus
+  // ring to every sighted, non-ADA user the instant they tapped Sign In.
+  // The ring is only meant for keyboard/switch/screen-reader users; gate it
+  // on the same accessibility check _requestSignInFocusAfterSemantics
+  // already uses for auto-focus.
+  ButtonStyle _signInButtonStyle(BuildContext context) {
+    final showFocusRing = _shouldAutoFocusForAccessibility(context);
     return ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.pressed)) {
@@ -157,18 +165,18 @@ class _HomePageState extends State<HomePage> {
         const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
       side: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.focused)) {
+        if (showFocusRing && states.contains(WidgetState.focused)) {
           return const BorderSide(color: _focusRing, width: 3);
         }
         return BorderSide.none;
       }),
       elevation: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.pressed)) return 0;
-        if (states.contains(WidgetState.focused)) return 2;
+        if (showFocusRing && states.contains(WidgetState.focused)) return 2;
         return 1;
       }),
       overlayColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.focused)) {
+        if (showFocusRing && states.contains(WidgetState.focused)) {
           return _focusRing.withValues(alpha: 0.16);
         }
         if (states.contains(WidgetState.pressed)) {
@@ -279,7 +287,7 @@ class _HomePageState extends State<HomePage> {
                                 onTap: _openLoginPopup,
                                 child: ExcludeSemantics(
                                   child: ElevatedButton(
-                                    style: _signInButtonStyle(),
+                                    style: _signInButtonStyle(context),
                                     onPressed: _openLoginPopup,
                                     focusNode: _signInFocusNode,
                                     autofocus: false,

@@ -431,7 +431,21 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       _didSetInitialA11yFocus = true;
       _focusRequestQueued = false;
       _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
     });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it, so it can stay wherever it auto-selected on screen load instead of
+  // Notifications. Sending an explicit accessibility-focus semantics event
+  // fixes that. Android/TalkBack already tracks requestFocus() correctly
+  // here, so this stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
@@ -3514,41 +3528,43 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
 
             const SizedBox(height: 12),
 
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Transform.scale(
-                  scale: 0.95,
-                  child: Checkbox(
-                    value: _allowNonLicensed,
-                    onChanged: (v) => setState(() {
-                      _allowNonLicensed = (v ?? true);
-                      _syncSelectedArtistForFilters();
-                    }),
-                    activeColor: AppColors.blackCat,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+            MergeSemantics(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Transform.scale(
+                    scale: 0.95,
+                    child: Checkbox(
+                      value: _allowNonLicensed,
+                      onChanged: (v) => setState(() {
+                        _allowNonLicensed = (v ?? true);
+                        _syncSelectedArtistForFilters();
+                      }),
+                      activeColor: AppColors.blackCat,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(
-                      'Are you willing to allow non-licensed nail technicians to work on your design?',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.blackCat,
-                        height: 1.2,
-                        fontSize: 14,
-                        fontFamily: 'Arial',
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Are you willing to allow non-licensed nail technicians to work on your design?',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.blackCat,
+                          height: 1.2,
+                          fontSize: 14,
+                          fontFamily: 'Arial',
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
 
             const SizedBox(height: 18),
@@ -4057,7 +4073,8 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                     ),
                     const SizedBox(height: 14),
                   ],
-                  Row(
+                  MergeSemantics(
+                    child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Transform.scale(
@@ -4091,6 +4108,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
                         ),
                       ),
                     ],
+                    ),
                   ),
                   if (_shippingDifferent) ...[
                     const SizedBox(height: 10),
@@ -5577,7 +5595,10 @@ class _RadioPill extends StatelessWidget {
     return Semantics(
       checked: selected,
       inMutuallyExclusiveGroup: true,
-      label: label,
+      // Some VoiceOver/TalkBack builds only announce "checked"/"unchecked"
+      // for the `checked` flag rather than "selected", so the state is
+      // spelled out in the label itself to guarantee it's heard.
+      label: selected ? '$label, selected' : label,
       onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(

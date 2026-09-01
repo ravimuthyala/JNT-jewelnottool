@@ -1,4 +1,8 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_email_alias_service.dart';
@@ -15,6 +19,8 @@ class ArtistLoginPage extends StatefulWidget {
 class _ArtistLoginPageState extends State<ArtistLoginPage> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _emailFocusNode = FocusNode(debugLabel: 'artistLoginEmail');
+  final _passwordFocusNode = FocusNode(debugLabel: 'artistLoginPassword');
   String? _error;
   bool _loading = false;
 
@@ -22,7 +28,27 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
+  }
+
+  // iOS VoiceOver does not announce a TextField that gains focus purely via
+  // FocusNode.requestFocus() when advancing off the keyboard's Next button --
+  // it silently lands on Password without reading it aloud. Sending an
+  // explicit accessibility-focus semantics event fixes that. Android/TalkBack
+  // already announces the field from requestFocus() alone, so this stays
+  // iOS-only and Android's behavior is unchanged.
+  void _focusPasswordFieldAccessibly() {
+    _passwordFocusNode.requestFocus();
+    if (!kIsWeb && Platform.isIOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _passwordFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+          const FocusSemanticEvent(),
+        );
+      });
+    }
   }
 
   Future<void> _login() async {
@@ -98,9 +124,22 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
               ),
               const SizedBox(height: 24),
 
-              _field(_emailCtrl, 'Email'),
+              _field(
+                _emailCtrl,
+                'Email',
+                focusNode: _emailFocusNode,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _focusPasswordFieldAccessibly(),
+              ),
               const SizedBox(height: 8),
-              _field(_passwordCtrl, 'Password', obscure: true),
+              _field(
+                _passwordCtrl,
+                'Password',
+                obscure: true,
+                focusNode: _passwordFocusNode,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _login(),
+              ),
 
               if (_error != null) ...[
                 const SizedBox(height: 8),
@@ -145,10 +184,20 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
     );
   }
 
-  Widget _field(TextEditingController c, String label, {bool obscure = false}) {
+  Widget _field(
+    TextEditingController c,
+    String label, {
+    bool obscure = false,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onSubmitted,
+  }) {
     return TextField(
       controller: c,
       obscureText: obscure,
+      focusNode: focusNode,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
       decoration: InputDecoration(
         labelText: label,
         filled: true,

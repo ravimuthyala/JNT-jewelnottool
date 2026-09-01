@@ -1,9 +1,12 @@
 // lib/pages/client_artist_profile_page.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -49,6 +52,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
   Map<String, dynamic> _profileData = const <String, dynamic>{};
   final int _index = 0;
   bool _showCampaignsTab = false;
+  final FocusNode _notificationsFocusNode = FocusNode(
+    debugLabel: 'clientArtistProfileNotifications',
+  );
 
   @override
   void initState() {
@@ -57,6 +63,32 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     unawaited(_loadCampaignVisibility());
     _loadProfileFromSupabase();
     _loadCommunicationPreferences();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+      _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
+    });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it. Sending an explicit accessibility-focus semantics event fixes that.
+  // Android/TalkBack already tracks requestFocus() correctly here, so this
+  // stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _notificationsFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCampaignVisibility() async {
@@ -2327,6 +2359,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
           leading: NotificationBellButton(
             onTap: _openNotifications,
             iconSize: JntHeaderMetrics.notificationIconSize,
+            focusNode: _notificationsFocusNode,
           ),
           title: ExcludeSemantics(
             child: Image.asset(

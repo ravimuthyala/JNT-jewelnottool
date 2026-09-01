@@ -685,6 +685,7 @@ class ArtistRequestsPageRedesign extends StatefulWidget {
     this.includeClientArtistBrandRequestsInRequestTab = false,
     this.clientDisplayName = '',
     this.clientProfileImageUrl = '',
+    this.isActiveTab = true,
   });
 
   final int initialBudgetMin;
@@ -717,6 +718,7 @@ class ArtistRequestsPageRedesign extends StatefulWidget {
   final bool showOnlyCurrentClientRequests;
   final bool showOnlyCompanyRequests;
   final bool includeClientArtistBrandRequestsInRequestTab;
+  final bool isActiveTab;
 
   @override
   State<ArtistRequestsPageRedesign> createState() =>
@@ -729,6 +731,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   // Search + sort
   final _searchCtrl = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(
+    debugLabel: 'artistRequestsSearchField',
+  );
   Timer? _searchAnnouncementTimer;
   final Map<String, GlobalKey> _requestCardSemanticsKeys = <String, GlobalKey>{};
   String _sort = 'Newest';
@@ -742,6 +747,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _companyRequestsSub;
   StreamSubscription<List<ChatNotificationRef>>? _unreadChatSub;
   List<ChatNotificationRef> _unreadChatRefs = const <ChatNotificationRef>[];
+  final FocusNode _notificationsFocusNode = FocusNode(
+    debugLabel: 'artistRequestsNotifications',
+  );
+  bool _didSetInitialA11yFocus = false;
+  bool _focusRequestQueued = false;
 
   bool _hasUnreadChat(String requestId) =>
       _unreadChatRefs.any((r) => r.requestId == requestId);
@@ -889,10 +899,43 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     });
   }
 
+  // FocusManager.instance.primaryFocus?.unfocus() hands focus to the
+  // nearest FocusScope, which can then fall through to an unrelated,
+  // unscoped widget elsewhere in this IndexedStack-based shell (e.g. the
+  // Profile tab) instead of settling harmlessly -- this page has no
+  // FocusScope of its own separating it from sibling tabs. Requesting focus
+  // on a disposable node dismisses the keyboard deterministically without
+  // that fallback, then the accessibility cursor is sent back to the search
+  // field explicitly so VoiceOver/TalkBack doesn't lose its place. Applies
+  // on both platforms -- this is a Flutter focus-scope fallback issue, not
+  // an OS-specific quirk.
+  void _dismissSearchKeyboardKeepingFocus() {
+    FocusScope.of(context).requestFocus(FocusNode());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _searchFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+        const FocusSemanticEvent(),
+      );
+    });
+  }
+
   void _clearSearch() {
     _searchAnnouncementTimer?.cancel();
     _searchCtrl.clear();
     setState(() {});
+    // The clear (X) button only renders while the field has text, so this
+    // rebuild removes the very button that was just focused/tapped -- with
+    // nowhere to land, focus/the accessibility cursor falls through to
+    // whatever else is nearby (e.g. Notifications) instead of staying on
+    // search. Re-requesting focus on the field itself keeps it anchored
+    // there deterministically, on both platforms.
+    _searchFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _searchFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+        const FocusSemanticEvent(),
+      );
+    });
     if (!_accessibleNavigation(context)) return;
     final count = _filteredForTab(_tabCtrl.index).length;
     final message = count == 0
@@ -953,6 +996,64 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             setState(() => _unreadChatRefs = refs);
           });
     }
+
+    if (widget.isActiveTab) {
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ArtistRequestsPageRedesign oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveTab && widget.isActiveTab) {
+      _didSetInitialA11yFocus = false;
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  void _scheduleInitialA11yFocus() {
+    if (_didSetInitialA11yFocus || _focusRequestQueued || !widget.isActiveTab) {
+      return;
+    }
+    _focusRequestQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      _didSetInitialA11yFocus = true;
+      _focusRequestQueued = false;
+      _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
+    });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it. Sending an explicit accessibility-focus semantics event fixes that.
+  // Android/TalkBack already tracks requestFocus() correctly here, so this
+  // stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   Future<void> _loadCurrentArtistIdentity() async {
@@ -1674,12 +1775,40 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         _isLoadingDb = false;
         _hasLoadedRequests = true;
       });
+      unawaited(_reassertNotificationsFocusAfterLoad());
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingDb = false);
+      unawaited(_reassertNotificationsFocusAfterLoad());
     } finally {
       _loadRequestsInFlight = false;
     }
+  }
+
+  // The request feed loads over the network (plus a realtime subscription),
+  // so it can easily still be loading past the initial focus attempt's fixed
+  // delay. When it finally populates, that's a large semantics-tree change
+  // that iOS VoiceOver treats as a new screen and re-announces on its own --
+  // e.g. "Artist requests, 15 items" -- overriding the earlier Notifications
+  // focus. Re-asserting focus right after the data lands corrects that
+  // without touching Android.
+  Future<void> _reassertNotificationsFocusAfterLoad() async {
+    if (!widget.isActiveTab) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !widget.isActiveTab) return;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    if (!mounted || !widget.isActiveTab) return;
+    _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
+
+    // A single attempt can still lose the race to iOS's own screen-changed
+    // announcement, which can fire slightly after this point once the newly
+    // populated list finishes settling. A second, later attempt reclaims
+    // focus after that has had its say.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted || !widget.isActiveTab) return;
+    _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
   }
 
   Future<List<ClientRequestV2>> _expireCompanyPoolRequestsIfNeeded(
@@ -1743,8 +1872,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     _unreadChatSub?.cancel();
     _tabCtrl.dispose();
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
     _budgetMinCtrl.dispose();
     _budgetMaxCtrl.dispose();
+    _notificationsFocusNode.dispose();
     super.dispose();
   }
 
@@ -2207,6 +2338,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         // HEADER (same style as your other pages)
         appBar: JntStandardAppBar(
           onNotifications: _openNotifications,
+          notificationFocusNode: _notificationsFocusNode,
           trailing: _avatarMenu(),
         ),
 
@@ -2298,10 +2430,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         c: AppColors.blackCat.withValues(alpha: 0.9),
       ),
       controller: _searchCtrl,
+      focusNode: _searchFocusNode,
       textInputAction: TextInputAction.search,
       onChanged: _onSearchChanged,
       onSubmitted: (_) {
-        FocusManager.instance.primaryFocus?.unfocus();
+        _dismissSearchKeyboardKeepingFocus();
       },
       decoration: InputDecoration(
         hintText: 'Search by client, title, ID',
@@ -2931,28 +3064,37 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final labelColor = AppColors.blackCat;
 
+    // TabBar already wraps each tab in its own Semantics node announcing
+    // "selected" and "Tab N of Total" -- this label only needs to supply the
+    // content part ("All, 5 orders") so the two merge into one clean
+    // announcement instead of the position being spoken twice.
     return Tab(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13.5 * s,
-              color: labelColor,
-            ),
+      child: Semantics(
+        label: '$label, $count ${count == 1 ? 'order' : 'orders'}',
+        child: ExcludeSemantics(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5 * s,
+                  color: labelColor,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5 * s,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            '$count',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12.5 * s,
-              color: AppColors.blackCat,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -6772,6 +6914,145 @@ class _ArtistRequestDisplayContext {
   final String companyBio;
 }
 
+// Owns the accessibility plumbing InReviewDetailsSheet's Stack-based header
+// needs (a FocusNode/ScrollController pair that must persist and be
+// disposed properly) without converting that whole ~4000-line StatelessWidget
+// to Stateful just for this. Swiping past Accept/Decline otherwise has
+// nowhere to go and modal stays scrolled wherever the user left it; this
+// redirects focus back to the accessible Close control and scrolls the
+// list back to the top when reached.
+class _AccessibleCloseModalScaffold extends StatefulWidget {
+  const _AccessibleCloseModalScaffold({
+    required this.closeLabel,
+    required this.onClose,
+    required this.listPadding,
+    required this.listChildren,
+    required this.footer,
+  });
+
+  final String closeLabel;
+  final VoidCallback onClose;
+  final EdgeInsets listPadding;
+  final List<Widget> listChildren;
+  final Widget footer;
+
+  @override
+  State<_AccessibleCloseModalScaffold> createState() =>
+      _AccessibleCloseModalScaffoldState();
+}
+
+class _AccessibleCloseModalScaffoldState
+    extends State<_AccessibleCloseModalScaffold> {
+  final FocusNode _accessibleCloseFocusNode = FocusNode(
+    debugLabel: 'requestDetailsAccessibleClose',
+  );
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'requestDetailsCloseSemantics',
+  );
+  final ScrollController _listController = ScrollController();
+
+  @override
+  void dispose() {
+    _accessibleCloseFocusNode.dispose();
+    _listController.dispose();
+    super.dispose();
+  }
+
+  void _scrollListToTop() {
+    if (!_listController.hasClients) return;
+    _listController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _focusCloseButton() {
+    if (!mounted) return;
+    _accessibleCloseFocusNode.requestFocus();
+    _closeSemanticsKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  void _redirectEndOfModalToClose() {
+    _scrollListToTop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusCloseButton());
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: widget.closeLabel,
+      hint: 'Double tap to close',
+      onTap: widget.onClose,
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _reqScale(context);
+    return Stack(
+      children: [
+        Positioned(
+          right: 6,
+          top: 6,
+          child: RequestModalInitialClose(
+            label: widget.closeLabel,
+            onClose: widget.onClose,
+            focusNode: _accessibleCloseFocusNode,
+            semanticsKey: _closeSemanticsKey,
+          ),
+        ),
+        Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              height: 5,
+              width: 54,
+              decoration: BoxDecoration(
+                color: AppColors.blackCat.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView(
+                controller: _listController,
+                padding: widget.listPadding,
+                children: widget.listChildren,
+              ),
+            ),
+            widget.footer,
+            _buildAccessibilityCloseLoopTarget(),
+          ],
+        ),
+        Positioned(
+          right: 6,
+          top: 6,
+          child: ExcludeSemantics(
+            child: InkWell(
+              borderRadius: BorderRadius.zero,
+              onTap: widget.onClose,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 18 * s,
+                  color: AppColors.blackCat,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class InReviewDetailsSheet extends StatelessWidget {
   const InReviewDetailsSheet({
     super.key,
@@ -9359,10 +9640,8 @@ class InReviewDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safeBottom = MediaQuery.of(context).viewPadding.bottom;
     final maxH = MediaQuery.of(context).size.height * 0.92;
     final isGroupOrder = request.orderType == RequestOrderTypeV2.group;
-    final s = _reqScale(context);
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -9372,33 +9651,12 @@ class InReviewDetailsSheet extends StatelessWidget {
           color: AppColors.snow,
           borderRadius: BorderRadius.zero,
         ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: 6,
-              top: 6,
-              child: RequestModalInitialClose(
-                label: 'Close request details',
-                onClose: () => Navigator.pop(context),
-              ),
-            ),
-            Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  height: 5,
-                  width: 54,
-                  decoration: BoxDecoration(
-                    color: AppColors.blackCat.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    children: [
+        child: _AccessibleCloseModalScaffold(
+          closeLabel: 'Close request details',
+          onClose: () => Navigator.pop(context),
+          listPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          footer: _acceptDeclineFooter(context),
+          listChildren: [
                       _topHero(context),
                       const SizedBox(height: 10),
                       _descriptionAndCompanyBioSection(),
@@ -9408,7 +9666,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _sectionTitle('Client Measurements'),
+                              _sectionTitle('Group Client Measurements'),
                               const SizedBox(height: 10),
                               FutureBuilder<_RequestNfcDetails>(
                                 future: _loadRequestedNfcDetails(),
@@ -9550,88 +9808,66 @@ class InReviewDetailsSheet extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
-                ),
+        ),
+      ),
+    );
+  }
 
-                Padding(
-                  padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 132,
-                        height: 52,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat.withValues(
-                              alpha: 0.16,
-                            ),
-                            foregroundColor: AppColors.blackCat,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            side: BorderSide(
-                              color: AppColors.blackCat.withValues(alpha: 0.30),
-                            ),
-                          ),
-                          onPressed: onDecline,
-                          child: Text(
-                            declineLabel,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w400,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 132,
-                        height: 52,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.blackCat,
-                            foregroundColor: AppColors.snow,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            elevation: 0,
-                          ),
-                          onPressed: onAccept,
-                          child: Text(
-                            acceptLabel,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w400,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+  Widget _acceptDeclineFooter(BuildContext context) {
+    final safeBottom = MediaQuery.of(context).viewPadding.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 132,
+            height: 52,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: AppColors.blackCat.withValues(alpha: 0.16),
+                foregroundColor: AppColors.blackCat,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
                 ),
-              ],
-            ),
-            Positioned(
-              right: 6,
-              top: 6,
-              child: ExcludeSemantics(
-                child: InkWell(
-                    borderRadius: BorderRadius.zero,
-                    onTap: () => Navigator.pop(context),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 18 * s,
-                        color: AppColors.blackCat,
-                      ),
-                    ),
+                side: BorderSide(
+                  color: AppColors.blackCat.withValues(alpha: 0.30),
+                ),
+              ),
+              onPressed: onDecline,
+              child: Text(
+                declineLabel,
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontFamily: 'Arial',
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 132,
+            height: 52,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                elevation: 0,
+              ),
+              onPressed: onAccept,
+              child: Text(
+                acceptLabel,
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontFamily: 'Arial',
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -9716,20 +9952,34 @@ class InReviewDetailsSheet extends StatelessWidget {
     required String nailLength,
     Map<String, bool> leftNfc = const <String, bool>{},
     Map<String, bool> rightNfc = const <String, bool>{},
+    // Only passed for group-order tabs, where multiple clients each have
+    // their own panel and VoiceOver/TalkBack needs to know which one this
+    // is. The visible heading stays plain "Nail Dimensions" either way --
+    // only the accessibility label carries the client name.
+    String? clientName,
   }) {
+    final trimmedClientName = (clientName ?? '').trim();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Center(
-            child: Text(
-              'Nail Dimensions',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                fontFamily: 'ArialBold',
-                color: AppColors.blackCat,
+          Semantics(
+            header: true,
+            label: trimmedClientName.isEmpty
+                ? 'Nail Dimensions'
+                : '$trimmedClientName Nail Dimensions',
+            child: const ExcludeSemantics(
+              child: Center(
+                child: Text(
+                  'Nail Dimensions',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontFamily: 'ArialBold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
           ),
@@ -10461,6 +10711,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         nailLength: client.nailLength,
         leftNfc: client.nfc.left,
         rightNfc: client.nfc.right,
+        clientName: client.name,
       ),
     );
   }

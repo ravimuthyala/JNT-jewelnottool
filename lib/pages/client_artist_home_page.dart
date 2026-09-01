@@ -790,6 +790,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
             }
           : null,
       onLogout: _logout,
+      isActiveTab: _clientIndex == 2,
     );
 
     final orderNavIndex = _showCampaignsTab ? 4 : 3;
@@ -837,6 +838,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
         _tabFocusBoundary(
           index: 3,
           child: ClientArtistCampaignsPage(
+            isActiveTab: _clientIndex == 3,
             onOpenProfile: _openUnifiedProfile,
             onOpenHistory: () {
               unawaited(_openClientArtistHistory());
@@ -873,6 +875,7 @@ class _ClientArtistHomePageState extends State<ClientArtistHomePage> {
             showBottomNav: false,
             onOpenProfile: _openUnifiedProfile,
             onLogout: _logout,
+            isActiveTab: _clientIndex == 4,
           ),
         ),
     ];

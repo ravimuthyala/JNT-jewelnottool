@@ -71,11 +71,26 @@ class RequestModalInitialClose extends StatefulWidget {
     required this.label,
     required this.onClose,
     this.semanticsKey,
+    this.onAccessibilityFocus,
+    this.focusNode,
   });
 
   final String label;
   final VoidCallback onClose;
   final GlobalKey? semanticsKey;
+
+  /// Fires whenever VoiceOver/TalkBack lands on this control -- including
+  /// when swiping past the last element on the page wraps focus back around
+  /// to it, not just the initial focus-on-open. Callers use this to scroll
+  /// their content back to the top so what's visible matches where focus
+  /// actually is, instead of silently landing on an already-on-screen close
+  /// button while the page is still scrolled down to wherever the user was.
+  final VoidCallback? onAccessibilityFocus;
+
+  /// Lets a caller command focus onto this control from elsewhere on the
+  /// page (e.g. an end-of-content marker that redirects here). Falls back
+  /// to a node this widget owns and manages itself.
+  final FocusNode? focusNode;
 
   @override
   State<RequestModalInitialClose> createState() =>
@@ -85,12 +100,17 @@ class RequestModalInitialClose extends StatefulWidget {
 class _RequestModalInitialCloseState
     extends State<RequestModalInitialClose> {
   final GlobalKey _semanticsKey = GlobalKey();
-  final FocusNode _focusNode = FocusNode(debugLabel: 'requestModalClose');
+  FocusNode? _ownedFocusNode;
   bool _focusSent = false;
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
   @override
   void initState() {
     super.initState();
+    if (widget.focusNode == null) {
+      _ownedFocusNode = FocusNode(debugLabel: 'requestModalClose');
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await WidgetsBinding.instance.endOfFrame;
       await Future<void>.delayed(const Duration(milliseconds: 700));
@@ -106,7 +126,7 @@ class _RequestModalInitialCloseState
 
   @override
   void dispose() {
-    _focusNode.dispose();
+    _ownedFocusNode?.dispose();
     super.dispose();
   }
 
@@ -123,6 +143,7 @@ class _RequestModalInitialCloseState
         label: widget.label,
         hint: 'Double tap to close',
         onTap: widget.onClose,
+        onDidGainAccessibilityFocus: widget.onAccessibilityFocus,
         child: const SizedBox.square(dimension: 48),
       ),
     );

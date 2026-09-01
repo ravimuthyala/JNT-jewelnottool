@@ -106,14 +106,21 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Center(
-            child: Text(
-              'Nail Dimensions',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                fontFamily: 'ArialBold',
-                color: AppColors.blackCat,
+          Semantics(
+            header: true,
+            label:
+                '${c.name.trim().isEmpty ? 'Client' : c.name.trim()} Nail Dimensions',
+            child: const ExcludeSemantics(
+              child: Center(
+                child: Text(
+                  'Nail Dimensions',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontFamily: 'ArialBold',
+                    color: AppColors.blackCat,
+                  ),
+                ),
               ),
             ),
           ),

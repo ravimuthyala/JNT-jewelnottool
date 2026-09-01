@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -128,10 +129,97 @@ class _CompletedRequestSheet extends StatefulWidget {
 
 class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   final SupabaseClient _supabase = Supabase.instance.client;
+  // Flutter's iOS accessibility bridge doesn't reliably honor a proactively
+  // *pushed* FocusSemanticEvent right after a TextField's keyboard closes --
+  // this is a documented, still-open Flutter/iOS engine limitation
+  // (flutter/flutter#36910, #137235: requestFocus()/sendSemanticsEvent
+  // losing to iOS's own native VoiceOver focus resolution after the keyboard
+  // dismisses), not something any amount of Dart-side delay tuning can win;
+  // every timing variant tried here (immediate, 350ms, 650ms, awaiting the
+  // hide call, a didChangeMetrics-based wait for the keyboard inset to hit
+  // zero) still lost that race on a real device.
+  //
+  // So instead of pushing, this *catches* -- but where iOS actually lands
+  // isn't a single fixed spot, and isn't even a single hop: observed
+  // bouncing through the Shipping Label heading (the first accessible
+  // element in the tab) and then the Courier/"Shipped by" field (the
+  // immediately preceding sibling of the tracking field in reading order)
+  // in sequence before settling, not just landing on one of them once.
+  // _keepFieldFocusAfterSubmit arms this key; every plausible landing spot
+  // (the Shipping Label heading, plus the self and per-recipient Courier
+  // fields) wires the same trap via onDidGainAccessibilityFocus and
+  // re-fires the redirect on *every* hit while armed -- disarming after
+  // the first catch let a second bounce (to a different wrong spot) land
+  // uncaught. The redirect target's own onDidGainAccessibilityFocus (see
+  // the tracking fields below) is what actually disarms it, confirming the
+  // redirect stuck rather than assuming the first catch was the only one
+  // needed -- the same catch-and-redirect pattern already proven working
+  // elsewhere in this modal (see _redirectEndOfModalToClose), extended to
+  // keep retrying until it's confirmed to have worked.
+  GlobalKey? _pendingTrackingFieldRefocusKey;
+
+  void _handleTrackingFieldSelfFocused() {
+    _pendingTrackingFieldRefocusKey = null;
+  }
+
+  // Landing on the wrong field even briefly is enough for Flutter to
+  // scroll it into view, and the keyboard closing resizes the ListView's
+  // viewport too -- together these produce a visible scroll/jump right as
+  // Done is tapped, even though the tracking field itself hasn't actually
+  // moved and doesn't need to be re-revealed. _keepFieldFocusAfterSubmit
+  // captures the offset and holds it (via the scroll listener below)
+  // through the whole close/refocus sequence, then releases it.
+  double? _heldShippingScrollOffset;
+
+  void _holdShippingScrollOffset() {
+    final target = _heldShippingScrollOffset;
+    if (target == null || !_listController.hasClients) return;
+    if ((_listController.offset - target).abs() < 0.5) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_listController.hasClients) return;
+      final stillHeld = _heldShippingScrollOffset;
+      if (stillHeld == null) return;
+      final clamped = stillHeld.clamp(
+        _listController.position.minScrollExtent,
+        _listController.position.maxScrollExtent,
+      );
+      if ((_listController.offset - clamped).abs() > 0.5) {
+        _listController.jumpTo(clamped);
+      }
+    });
+  }
+
+  void _handleTrackingRefocusTrapFocused() {
+    final target = _pendingTrackingFieldRefocusKey;
+    if (target == null) return;
+    // Deliberately not disarmed here -- see the field declaration. Only
+    // _handleTrackingFieldSelfFocused (the redirect target actually
+    // gaining focus) or the safety timeout in _keepFieldFocusAfterSubmit
+    // clears this, so a second wrong-spot bounce after this one still gets
+    // caught and redirected too.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      target.currentContext?.findRenderObject()?.sendSemanticsEvent(
+        const FocusSemanticEvent(),
+      );
+    });
+  }
+
   final _trackingCtrl = TextEditingController();
   final FocusNode _closeFocusNode = FocusNode(
     debugLabel: 'completedRequestClose',
   );
+  // Separate from _closeFocusNode, which is already attached to the visual
+  // (ExcludeSemantics-wrapped) close icon -- a FocusNode can only be
+  // attached to one widget at a time, and this one drives the accessible
+  // RequestModalInitialClose control instead.
+  final FocusNode _accessibleCloseFocusNode = FocusNode(
+    debugLabel: 'completedRequestAccessibleClose',
+  );
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'completedRequestCloseSemantics',
+  );
+  final ScrollController _listController = ScrollController();
   final FocusNode _detailsContentFocusNode = FocusNode(
     debugLabel: 'completedDetailsContent',
   );
@@ -150,12 +238,42 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   String? _courier;
   bool _submitting = false;
 
+  // Selecting a courier/date closes a modal (bottom sheet or date picker);
+  // Flutter's post-close focus fallback otherwise lands somewhere unrelated
+  // (e.g. the Shipping Label section above) instead of the field the user
+  // was just on. These stay on the field they belong to across that
+  // close-then-rebuild sequence, unlike a GlobalKey/FocusNode created fresh
+  // inside the field's own build method, which goes stale the moment
+  // selecting a value triggers setState and rebuilds it with a new one.
+  final FocusNode _courierFocusNode = FocusNode(
+    debugLabel: 'completedShippingCourier',
+  );
+  final GlobalKey _courierSemanticsKey = GlobalKey(
+    debugLabel: 'completedShippingCourierSemantics',
+  );
+  final FocusNode _trackingFocusNode = FocusNode(
+    debugLabel: 'completedShippingTracking',
+  );
+  final GlobalKey _trackingSemanticsKey = GlobalKey(
+    debugLabel: 'completedShippingTrackingSemantics',
+  );
+  final FocusNode _shippedDateFocusNode = FocusNode(
+    debugLabel: 'completedShippingDate',
+  );
+  final GlobalKey _shippedDateSemanticsKey = GlobalKey(
+    debugLabel: 'completedShippingDateSemantics',
+  );
+
   // Group order shipping (ship to each member individually): courier +
   // tracking are keyed per recipient instead of one shared pair. 'self'
   // is the primary client; group members are keyed by clientId (falling
   // back to slot index if a legacy row has no clientId).
   final Map<String, String?> _recipientCouriers = {};
   final Map<String, TextEditingController> _recipientTrackingCtrls = {};
+  final Map<String, FocusNode> _recipientCourierFocusNodes = {};
+  final Map<String, GlobalKey> _recipientCourierSemanticsKeys = {};
+  final Map<String, FocusNode> _recipientTrackingFocusNodes = {};
+  final Map<String, GlobalKey> _recipientTrackingSemanticsKeys = {};
 
   bool get _isRespectiveShippingMode =>
       widget.request.orderType == RequestOrderTypeV2.group &&
@@ -201,6 +319,38 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     return _recipientTrackingCtrls.putIfAbsent(
       key,
       () => TextEditingController(),
+    );
+  }
+
+  FocusNode _courierFocusNodeFor(String key) {
+    if (key == 'self') return _courierFocusNode;
+    return _recipientCourierFocusNodes.putIfAbsent(
+      key,
+      () => FocusNode(debugLabel: 'completedShippingCourier-$key'),
+    );
+  }
+
+  GlobalKey _courierSemanticsKeyFor(String key) {
+    if (key == 'self') return _courierSemanticsKey;
+    return _recipientCourierSemanticsKeys.putIfAbsent(
+      key,
+      () => GlobalKey(debugLabel: 'completedShippingCourierSemantics-$key'),
+    );
+  }
+
+  FocusNode _trackingFocusNodeFor(String key) {
+    if (key == 'self') return _trackingFocusNode;
+    return _recipientTrackingFocusNodes.putIfAbsent(
+      key,
+      () => FocusNode(debugLabel: 'completedShippingTracking-$key'),
+    );
+  }
+
+  GlobalKey _trackingSemanticsKeyFor(String key) {
+    if (key == 'self') return _trackingSemanticsKey;
+    return _recipientTrackingSemanticsKeys.putIfAbsent(
+      key,
+      () => GlobalKey(debugLabel: 'completedShippingTrackingSemantics-$key'),
     );
   }
   bool? _dbShippingLabelReady;
@@ -299,11 +449,64 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     for (final ctrl in _recipientTrackingCtrls.values) {
       ctrl.dispose();
     }
+    _courierFocusNode.dispose();
+    _trackingFocusNode.dispose();
+    _shippedDateFocusNode.dispose();
+    for (final node in _recipientCourierFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _recipientTrackingFocusNodes.values) {
+      node.dispose();
+    }
     _closeFocusNode.dispose();
+    _accessibleCloseFocusNode.dispose();
+    _listController.dispose();
     _detailsContentFocusNode.dispose();
     _photosContentFocusNode.dispose();
     _shippingContentFocusNode.dispose();
     super.dispose();
+  }
+
+  void _scrollListToTop() {
+    if (!_listController.hasClients) return;
+    _listController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _focusAccessibleCloseButton() {
+    if (!mounted) return;
+    _accessibleCloseFocusNode.requestFocus();
+    _closeSemanticsKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  // VoiceOver/TalkBack doesn't reliably wrap from the last element back to
+  // the first on its own, so swiping past Mark as Shipped can otherwise
+  // feel like nothing happens. This invisible stop is placed as the very
+  // last thing in the scrollable content -- once focus reaches it, scroll
+  // back to the top and redirect real focus onto the visible X button,
+  // closing the loop.
+  void _redirectEndOfModalToClose() {
+    _scrollListToTop();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _focusAccessibleCloseButton(),
+    );
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Close completed request details',
+      hint: 'Double tap to close',
+      onTap: widget.onClose,
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
   }
 
   @override
@@ -503,13 +706,18 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       _shippedDate = picked;
       _shippedDateCtrl.text = '${picked.month}/${picked.day}/${picked.year}';
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _shippedDateFocusNode.requestFocus();
+      _shippedDateSemanticsKey.currentContext?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final keyboardOpen = bottomInset > 0;
     final sheetMediaQuery = MediaQuery.of(context);
 
     return Semantics(
@@ -545,6 +753,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                   const SizedBox(height: 6),
                   Expanded(
                     child: ListView(
+                      controller: _listController,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: EdgeInsets.fromLTRB(
@@ -554,26 +763,37 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                         16 + math.max(0.0, bottomInset),
                       ),
                       children: [
-                        if (!keyboardOpen) ...[
-                          _topHeroCentered(
-                            context,
-                            widget.request,
-                            widget.onClose,
-                          ),
-                          const SizedBox(height: 12),
-                          _completedStatusBanner(),
-                          const SizedBox(height: 12),
-                          const Divider(
-                            height: 1,
-                            color: AppColors.blackCatBorderLight,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
+                        // Always present, regardless of keyboard visibility.
+                        // This used to be wrapped in `if (!keyboardOpen)` to
+                        // save vertical space while typing, but toggling it
+                        // in and out of the list on every keyboard
+                        // open/close inserts/removes real height above
+                        // whatever the user is currently scrolled to --
+                        // every field below it (including Tracking #) jumps
+                        // by that amount the instant the keyboard opens or
+                        // closes, which read as an uncontrolled scroll no
+                        // amount of scroll-offset holding around the Done
+                        // handler could fix, since the content itself was
+                        // moving, not just the raw scroll offset.
+                        _topHeroCentered(
+                          context,
+                          widget.request,
+                          widget.onClose,
+                        ),
+                        const SizedBox(height: 12),
+                        _completedStatusBanner(),
+                        const SizedBox(height: 12),
+                        const Divider(
+                          height: 1,
+                          color: AppColors.blackCatBorderLight,
+                        ),
+                        const SizedBox(height: 12),
                         ..._completedDetailsSectionItems(),
                         const SizedBox(height: 20),
                         ..._completedPhotosSectionItems(),
                         const SizedBox(height: 20),
                         ..._completedShippingSectionItems(),
+                        _buildAccessibilityCloseLoopTarget(),
                       ],
                     ),
                   ),
@@ -654,14 +874,50 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         'Need by ${_needByLabel(request.neededBy)}. '
         'Budget ${request.budgetMin} dollars to ${request.budgetMax} dollars.';
 
-    return Stack(
+    // Sort keys alone weren't reliable here: the Close button's Stack-
+    // positioned bounding box (top-right corner) doesn't just sit beside the
+    // summary block's box -- since the summary is full-width and unpositioned,
+    // its box actually contains Close's, and that containment (not mere
+    // adjacency) is what let VoiceOver/TalkBack skip straight past the
+    // summary. Giving Close its own non-overlapping strip above the summary
+    // removes the ambiguity outright instead of hinting around it.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Positioned(
-          right: 6,
-          top: 6,
-          child: RequestModalInitialClose(
-            label: 'Close completed request details',
-            onClose: onClose,
+        SizedBox(
+          height: 48,
+          child: Stack(
+            children: [
+              Positioned(
+                right: 6,
+                top: 6,
+                child: RequestModalInitialClose(
+                  label: 'Close completed request details',
+                  onClose: onClose,
+                  focusNode: _accessibleCloseFocusNode,
+                  semanticsKey: _closeSemanticsKey,
+                ),
+              ),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: ExcludeSemantics(
+                  child: InkWell(
+                    focusNode: _closeFocusNode,
+                    borderRadius: BorderRadius.zero,
+                    onTap: onClose,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 24,
+                        color: AppColors.blackCat.withValues(alpha: 0.70),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         Semantics(
@@ -671,7 +927,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           child: SizedBox(
             width: double.infinity,
             child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 6),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -779,26 +1035,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                 ),
               ],
             ),
-            ),
-          ),
-        ),
-
-        Positioned(
-          right: 6,
-          top: 6,
-          child: ExcludeSemantics(
-            child: InkWell(
-                focusNode: _closeFocusNode,
-                borderRadius: BorderRadius.zero,
-                onTap: onClose,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 24,
-                    color: AppColors.blackCat.withValues(alpha: 0.70),
-                  ),
-                ),
             ),
           ),
         ),
@@ -1368,15 +1604,6 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         ? 'Auto-filled on label'
         : _shippingTrackingValue.trim();
 
-    final shippingLabelSummary = _isShippingLabelReady
-        ? 'Shipping label. Label is ready. '
-              'Client, $clientName. '
-              'City and state, $cityState. '
-              'Carrier, $carrier. '
-              'Tracking, $tracking.'
-        : 'Shipping label. Label is being prepared. '
-              'Download, print, and QR code options will be available when the label is ready.';
-
     Widget shippingAction({
       required String label,
       required String hint,
@@ -1409,36 +1636,47 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Not the shared completedSectionTitle/_sectionTitle helper here --
+        // this heading specifically doubles as the redirect-trap target for
+        // _pendingTrackingFieldRefocusKey (see the field declaration for
+        // why), which no other section title in this modal needs.
         Semantics(
-          container: true,
-          label: shippingLabelSummary,
-          child: ExcludeSemantics(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionTitle('Shipping Label'),
-                const SizedBox(height: 10),
-                if (_isShippingLabelReady) ...[
-                  _kv('Client', clientName),
-                  _kv(
-                    'City/State',
-                    cityState == 'Not provided' ? '-' : cityState,
-                  ),
-                  _kv('Carrier', carrier),
-                  _kv('Tracking', tracking),
-                ] else
-                  Text(
-                    'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.68),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-              ],
+          header: true,
+          label: 'Shipping Label',
+          onDidGainAccessibilityFocus: _handleTrackingRefocusTrapFocused,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Shipping Label',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: AppColors.blackCat,
+              ),
             ),
           ),
         ),
+        const SizedBox(height: 10),
+        if (_isShippingLabelReady) ...[
+          _kv('Client', clientName),
+          _kv('City/State', cityState == 'Not provided' ? '-' : cityState),
+          _kv('Carrier', carrier),
+          _kv('Tracking', tracking),
+        ] else
+          Semantics(
+            container: true,
+            label:
+                'Shipping label is being prepared. Download, print, and QR code options will be available when the label is ready.',
+            child: ExcludeSemantics(
+              child: Text(
+                'Shipping label is being prepared by platform. It will appear here with Download, Print, and QR options.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.68),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
         if (_isShippingLabelReady) ...[
           const SizedBox(height: 8),
           Wrap(
@@ -1493,7 +1731,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle('Client Measurements'),
+          _sectionTitle('Group Client Measurements'),
           const SizedBox(height: 8),
           FutureBuilder<List<GroupClientMeasurementData>>(
             future: _loadGroupMeasurementClients(),
@@ -2216,28 +2454,37 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   static Widget _kv(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '$label:',
-              style: TextStyle(
-                fontWeight: FontWeight.w400,
-                color: AppColors.blackCat,
-                fontSize: 12,
+    return Semantics(
+      container: true,
+      label: '$label, $value',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$label:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.blackCat,
+                    fontSize: 12,
+                  ),
+                ),
               ),
-            ),
+              Expanded(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

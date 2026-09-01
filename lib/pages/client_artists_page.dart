@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
@@ -136,7 +138,21 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
       _didSetInitialA11yFocus = true;
       _focusRequestQueued = false;
       _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
     });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it, so it can stay wherever it auto-selected on screen load instead of
+  // Notifications. Sending an explicit accessibility-focus semantics event
+  // fixes that. Android/TalkBack already tracks requestFocus() correctly
+  // here, so this stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
@@ -1122,11 +1138,22 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // This page is always nested inside another route that already declares
+    // its own scopesRoute/namesRoute (ClientShellPage's Artists tab, or
+    // ClientArtistArtistPage's pushed route) -- never a route on its own.
+    // Declaring a second, redundant route boundary here is what makes iOS
+    // treat every rebuild (e.g. the artist list finishing its load) as a
+    // brand-new screen, re-announcing "Artists" over whatever had focus,
+    // including the Notifications button. Android/TalkBack doesn't have
+    // this side effect, so it keeps the route semantics unchanged and only
+    // iOS drops them.
+    final suppressRouteAnnouncementForIOS = !kIsWeb && Platform.isIOS;
+
     return Semantics(
-      scopesRoute: true,
-      namesRoute: true,
+      scopesRoute: !suppressRouteAnnouncementForIOS,
+      namesRoute: !suppressRouteAnnouncementForIOS,
       explicitChildNodes: true,
-      label: 'Artists',
+      label: suppressRouteAnnouncementForIOS ? null : 'Artists',
       child: Scaffold(
         backgroundColor: AppColors.snow,
 
@@ -2509,38 +2536,45 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          artistName,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.blackCat,
-                            fontFamily: 'ArialBold',
-                          ),
+                    child: Semantics(
+                      container: true,
+                      label:
+                          '$artistName, ${artist.rating > 0 ? '${artist.rating.toStringAsFixed(1)} star rating' : 'no rating available'}',
+                      child: ExcludeSemantics(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              artistName,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.blackCat,
+                                fontFamily: 'ArialBold',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 20,
+                              color: AppColors.balletSlippers,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              artist.rating > 0
+                                  ? artist.rating.toStringAsFixed(1)
+                                  : 'N/A',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.blackCat,
+                                fontFamily: 'Arial',
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.star_rounded,
-                          size: 20,
-                          color: AppColors.balletSlippers,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          artist.rating > 0
-                              ? artist.rating.toStringAsFixed(1)
-                              : 'N/A',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.blackCat,
-                            fontFamily: 'Arial',
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -2634,17 +2668,33 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                     requestType: directRequestLabel,
                   ),
                   const SizedBox(height: 8),
-                  _SectionHeading(title: 'Artist Bio'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      bio.isNotEmpty ? bio : 'No artist bio added yet.',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: AppColors.blackCat,
-                        fontFamily: 'Arial',
-                        fontWeight: FontWeight.w400,
+                  Semantics(
+                    container: true,
+                    label:
+                        'Artist Bio, ${bio.isNotEmpty ? bio : 'No artist bio added yet.'}',
+                    child: ExcludeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _SectionHeading(title: 'Artist Bio'),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+                            child: Text(
+                              bio.isNotEmpty
+                                  ? bio
+                                  : 'No artist bio added yet.',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.45,
+                                color: AppColors.blackCat,
+                                fontFamily: 'Arial',
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -2753,6 +2803,7 @@ class _MetaBand extends StatelessWidget {
                 child: _MetaItem(
                   icon: Icons.language_rounded,
                   text: languageText,
+                  semanticLabel: 'Language, $languageText',
                 ),
               ),
               _MetaDivider(),
@@ -2760,6 +2811,7 @@ class _MetaBand extends StatelessWidget {
                 child: _MetaItem(
                   icon: Icons.currency_exchange_rounded,
                   text: currencyText,
+                  semanticLabel: 'Currency, $currencyText',
                 ),
               ),
               _MetaDivider(),
@@ -2769,6 +2821,7 @@ class _MetaBand extends StatelessWidget {
                       ? Icons.arrow_outward_rounded
                       : Icons.arrow_forward_rounded,
                   text: requestText,
+                  semanticLabel: 'Request type, $requestText',
                 ),
               ),
             ],
@@ -2793,13 +2846,26 @@ class _MetaDivider extends StatelessWidget {
 }
 
 class _MetaItem extends StatelessWidget {
-  const _MetaItem({required this.icon, required this.text});
+  const _MetaItem({
+    required this.icon,
+    required this.text,
+    required this.semanticLabel,
+  });
 
   final IconData icon;
   final String text;
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      child: ExcludeSemantics(child: _buildRow()),
+    );
+  }
+
+  Widget _buildRow() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

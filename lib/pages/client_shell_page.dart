@@ -458,6 +458,7 @@ class _ClientShellPageState extends State<ClientShellPage> {
           profile: _profile,
           artistName: name,
           artistNames: const <String>[],
+          showCampaignsTab: _shouldShowRequestsTab(),
         ),
       ),
     );
@@ -558,12 +559,14 @@ class _ClientShellPageState extends State<ClientShellPage> {
           showBrandRequests: true,
           showClientRequests: false,
           useCampaignNaming: true,
+          isActiveTab: _index == 2,
           onLogout: () {
             unawaited(_logoutToHomePage());
           },
         ),
       ClientArtistsPage(
         profile: _profile,
+        isActiveTab: _index == (showRequestsTab ? 3 : 2),
         onOpenProfile: _openProfileFromAvatar,
         onLogout: _logoutToHomePage,
         showProfileMenu: showProfileInAvatar,

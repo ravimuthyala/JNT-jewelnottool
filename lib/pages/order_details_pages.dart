@@ -2964,8 +2964,18 @@ class _BaseOrderDetails extends StatelessWidget {
                     meta.city.trim(),
                     meta.state.trim(),
                   ].where((e) => e.isNotEmpty).join(', ');
+                  final semanticParts = <String>[
+                    'Artist assigned to your request',
+                    displayName,
+                    if (rating != null) '${rating.toStringAsFixed(1)} rating',
+                    if (location.isNotEmpty) location,
+                  ];
 
-                  return Row(
+                  return Semantics(
+                    container: true,
+                    label: semanticParts.join(', '),
+                    child: ExcludeSemantics(
+                      child: Row(
                     children: [
                       Container(
                         height: 56,
@@ -3048,6 +3058,8 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                     ],
+                      ),
+                    ),
                   );
                 },
               ),
@@ -3186,42 +3198,11 @@ class _BaseOrderDetails extends StatelessWidget {
             ],
 
             if (statusPillText == 'Shipped') ...[
-              _ClientStatusTabs(
-                tabs: const ['Details', 'Photos', 'Shipping'],
-                initialSelectedIndex: 2,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Card(
-                        child: _orderDetailsWithRightNailDimensions(
-                          showPaymentAmount: false,
-                          showUploadedInspiration: false,
-                          showSingleMeasurementOuterBorder: false,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _brandCollaborationOrderCard(bottomSpacing: 12),
-                      if (_shouldShowPaymentAmountSection()) ...[
-                        _Card(child: _finalAcceptedAmountSection()),
-                        const SizedBox(height: 12),
-                      ],
-                      _Card(child: _paymentSection(context)),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Card(child: _uploadedInspirationSection()),
-                      if (order.artistCompletedPhotos.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _Card(child: _artistCompletedArtSection()),
-                      ],
-                    ],
-                  ),
-                  _Card(child: _shippingInformationSection(context)),
-                ],
-              ),
+              if (order.artistCompletedPhotos.isNotEmpty) ...[
+                _Card(child: _artistCompletedArtSection()),
+                const SizedBox(height: 12),
+              ],
+              _Card(child: _shippingInformationSection(context)),
               const SizedBox(height: 12),
               Center(
                 child: SizedBox(
@@ -3253,50 +3234,31 @@ class _BaseOrderDetails extends StatelessWidget {
               ),
             ],
             if (statusPillText == 'Delivered') ...[
-              _ClientStatusTabs(
-                tabs: const ['Details', 'Photos', 'Delivered'],
-                initialSelectedIndex: 2,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Card(
-                        child: _orderDetailsWithRightNailDimensions(
-                          showPaymentAmount: false,
-                          showUploadedInspiration: false,
-                          showSingleMeasurementOuterBorder: false,
-                          showGroupMeasurementOuterBorder: false,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _brandCollaborationOrderCard(bottomSpacing: 12),
-                      if (_shouldShowPaymentAmountSection()) ...[
-                        _Card(child: _finalAcceptedAmountSection()),
-                        const SizedBox(height: 12),
-                      ],
-                      _Card(child: _paymentSection(context)),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Card(child: _uploadedInspirationSection()),
-                      if (order.artistCompletedPhotos.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _Card(child: _artistCompletedArtSection()),
-                      ],
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Card(child: _shippingInformationSection(context)),
-                      const SizedBox(height: 12),
-                      _Card(child: rightPanel),
-                    ],
-                  ),
-                ],
+              _Card(
+                child: _orderDetailsWithRightNailDimensions(
+                  showPaymentAmount: false,
+                  showUploadedInspiration: false,
+                  showSingleMeasurementOuterBorder: false,
+                  showGroupMeasurementOuterBorder: false,
+                ),
               ),
+              const SizedBox(height: 12),
+              _brandCollaborationOrderCard(bottomSpacing: 12),
+              if (_shouldShowPaymentAmountSection()) ...[
+                _Card(child: _finalAcceptedAmountSection()),
+                const SizedBox(height: 12),
+              ],
+              _Card(child: _paymentSection(context)),
+              const SizedBox(height: 12),
+              _Card(child: _uploadedInspirationSection()),
+              if (order.artistCompletedPhotos.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _Card(child: _artistCompletedArtSection()),
+              ],
+              const SizedBox(height: 12),
+              _Card(child: _shippingInformationSection(context)),
+              const SizedBox(height: 12),
+              _Card(child: rightPanel),
               const SizedBox(height: 12),
               Center(
                 child: SizedBox(
@@ -3612,13 +3574,18 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Artist Completed Art',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            fontFamily: 'ArialBold',
-            color: AppColors.blackCat,
+        Semantics(
+          header: true,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Artist Completed Art',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                fontFamily: 'ArialBold',
+                color: AppColors.blackCat,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -3688,9 +3655,17 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          header,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        Semantics(
+          header: true,
+          child: ExcludeSemantics(
+            child: Text(
+              header,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 10),
         for (var i = 0; i < budgetRows.length; i++) ...[
@@ -3900,13 +3875,18 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Payment Amount',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: AppColors.blackCat,
-            fontFamily: 'ArialBold',
+        Semantics(
+          header: true,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Payment Amount',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: AppColors.blackCat,
+                fontFamily: 'ArialBold',
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -3991,13 +3971,18 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Shipping Information',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: AppColors.blackCat,
-            fontFamily: 'ArialBold',
+        Semantics(
+          header: true,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Shipping Information',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: AppColors.blackCat,
+                fontFamily: 'ArialBold',
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -4705,13 +4690,18 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Uploaded Inspiration',
-          style: TextStyle(
-            color: AppColors.blackCat,
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-            fontFamily: 'ArialBold',
+        Semantics(
+          header: true,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Uploaded Inspiration',
+              style: TextStyle(
+                color: AppColors.blackCat,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                fontFamily: 'ArialBold',
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -8494,9 +8484,14 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Delivered',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        Semantics(
+          header: true,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Delivered',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+          ),
         ),
         const SizedBox(height: 4),
         Text(
@@ -8591,104 +8586,6 @@ class _AcceptedArtistMeta {
   final double? rating;
 }
 
-class _ClientStatusTabs extends StatefulWidget {
-  const _ClientStatusTabs({
-    required this.tabs,
-    required this.children,
-    this.initialSelectedIndex = 0,
-  });
-
-  final List<String> tabs;
-  final List<Widget> children;
-  final int initialSelectedIndex;
-
-  @override
-  State<_ClientStatusTabs> createState() => _ClientStatusTabsState();
-}
-
-class _ClientStatusTabsState extends State<_ClientStatusTabs> {
-  late int _selectedTab;
-
-  @override
-  void initState() {
-    super.initState();
-    final maxIndex = widget.children.isEmpty ? 0 : widget.children.length - 1;
-    _selectedTab = widget.initialSelectedIndex.clamp(0, maxIndex);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final content = widget.children[_selectedTab];
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.blackCatBorderLight),
-        borderRadius: BorderRadius.zero,
-        color: AppColors.snow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: List.generate(
-              widget.tabs.length,
-              (index) => _tabButton(widget.tabs[index], index),
-            ),
-          ),
-          Container(height: 1, color: AppColors.blackCatBorderLight),
-          Padding(padding: const EdgeInsets.all(12), child: content),
-        ],
-      ),
-    );
-  }
-
-  Widget _tabButton(String label, int index) {
-    final selected = _selectedTab == index;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: '$label, tab ${index + 1} of ${widget.tabs.length}',
-        hint: selected ? 'Selected tab' : 'Double tap to show $label',
-        onTap: () => _selectTab(index, label),
-        child: ExcludeSemantics(
-          child: InkWell(
-            onTap: () => _selectTab(index, label),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                ),
-                Container(
-                  height: 3,
-                  width: double.infinity,
-                  color: selected ? AppColors.blackCat : Colors.transparent,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _selectTab(int index, String label) {
-    if (_selectedTab == index) return;
-    setState(() => _selectedTab = index);
-    announceRequestAccessibilityMessage(context, '$label tab selected.');
-  }
-}
 
 class DeliveredOrderDetailsPage extends StatelessWidget {
   const DeliveredOrderDetailsPage({

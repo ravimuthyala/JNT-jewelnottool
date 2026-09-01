@@ -59,7 +59,26 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     super.dispose();
   }
 
-  InputDecoration _dec(String label) {
+  bool _shouldShowFocusRing(BuildContext context) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    return mediaQuery?.accessibleNavigation ??
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .accessibleNavigation;
+  }
+
+  // Typing into a field focuses it for every user, ADA or not -- gating the
+  // yellow accessibility ring purely on "is this field focused" showed it
+  // to sighted, non-ADA users the moment they tapped in to type their
+  // email. It's only meant for keyboard/switch/screen-reader users; fall
+  // back to an ordinary (non-yellow) focused border otherwise.
+  InputDecoration _dec(String label, BuildContext context) {
+    final focusedBorderColor = _shouldShowFocusRing(context)
+        ? _focusRing
+        : AppColors.blackCat;
+    final focusedBorderWidth = _shouldShowFocusRing(context) ? 2.0 : 1.5;
     return InputDecoration(
       labelText: label,
       labelStyle: const TextStyle(
@@ -95,7 +114,10 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: const BorderSide(color: _focusRing, width: 2),
+        borderSide: BorderSide(
+          color: focusedBorderColor,
+          width: focusedBorderWidth,
+        ),
       ),
     );
   }
@@ -264,7 +286,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                               fontWeight: FontWeight.w400,
                               fontFamily: 'Arial',
                             ),
-                            decoration: _dec('Email'),
+                            decoration: _dec('Email', context),
                             validator: _emailValidator,
                           ),
                           const SizedBox(height: 16),

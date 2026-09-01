@@ -115,6 +115,17 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   final GlobalKey _uploadSemanticsKey = GlobalKey(
     debugLabel: 'acceptedRequestUploadPhotosSemantics',
   );
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'acceptedRequestCloseSemantics',
+  );
+  // Separate from _closeFocusNode, which is already attached to the visual
+  // (ExcludeSemantics-wrapped) close icon below -- a FocusNode can only be
+  // attached to one widget at a time, and this one drives the accessible
+  // RequestModalInitialClose control instead.
+  final FocusNode _accessibleCloseFocusNode = FocusNode(
+    debugLabel: 'acceptedRequestAccessibleClose',
+  );
+  final ScrollController _listController = ScrollController();
   bool _didRequestInitialFocus = false;
   static const int _maxArtistImageBytes = 2 * 1024 * 1024;
   static const int _maxArtistCompletedPhotos = 10;
@@ -509,8 +520,54 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   @override
   void dispose() {
     _closeFocusNode.dispose();
+    _accessibleCloseFocusNode.dispose();
     _uploadFocusNode.dispose();
+    _listController.dispose();
     super.dispose();
+  }
+
+  void _scrollListToTop() {
+    if (!_listController.hasClients) return;
+    _listController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _focusCloseButton() {
+    if (!mounted) return;
+    _accessibleCloseFocusNode.requestFocus();
+    _closeSemanticsKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  // VoiceOver/TalkBack doesn't reliably wrap from the last element back to
+  // the first on its own, so swiping past Mark as Completed can otherwise
+  // feel like nothing happens. This invisible stop is placed as the very
+  // last thing on the page -- once focus reaches it, scroll back to the top
+  // and redirect real focus onto the visible X button, closing the loop.
+  void _redirectEndOfModalToClose() {
+    _scrollListToTop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusCloseButton());
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: _isDesigningMode
+          ? 'Close designing request details'
+          : 'Close accepted request details',
+      hint: 'Double tap to close',
+      onTap: () => Navigator.pop(
+        context,
+        const _AcceptedSheetResult(completed: false, artistPhotos: <String>[]),
+      ),
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
   }
 
   void _restoreUploadFocus({bool announceCount = true}) {
@@ -593,6 +650,8 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                       artistPhotos: <String>[],
                     ),
                   ),
+                  focusNode: _accessibleCloseFocusNode,
+                  semanticsKey: _closeSemanticsKey,
                 ),
               ),
               Column(
@@ -610,6 +669,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
                   Expanded(
                     child: ListView(
+                      controller: _listController,
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       children: [
                         _topHeader(widget.request, shipDays: widget.shipDays),
@@ -971,6 +1031,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                         ],
                       ),
                     ),
+                  _buildAccessibilityCloseLoopTarget(),
                 ],
               ),
               Positioned(
@@ -2295,7 +2356,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionTitle('Client Measurements'),
+          _sectionTitle('Group Client Measurements'),
           const SizedBox(height: 10),
           FutureBuilder<List<GroupClientMeasurementData>>(
             future: _loadGroupMeasurementClients(),
@@ -3827,13 +3888,18 @@ class _CompactGroupClientMeasurementsTabsState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Nail Dimensions',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.blackCat,
+              Semantics(
+                header: true,
+                child: ExcludeSemantics(
+                  child: Text(
+                    '${client.name.trim().isEmpty ? 'Client' : client.name.trim()} Nail Dimensions',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

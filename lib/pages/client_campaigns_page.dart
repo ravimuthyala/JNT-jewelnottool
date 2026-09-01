@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -56,6 +57,7 @@ class ClientCampaignsPage extends StatefulWidget {
     this.splitArtistVisibleRequestsBySource = false,
     this.useCampaignNaming = false,
     this.clientArtistMenuStyle = false,
+    this.isActiveTab = true,
   });
 
   final VoidCallback? onOpenNotifications;
@@ -72,6 +74,7 @@ class ClientCampaignsPage extends StatefulWidget {
   final bool splitArtistVisibleRequestsBySource;
   final bool useCampaignNaming;
   final bool clientArtistMenuStyle;
+  final bool isActiveTab;
 
   @override
   State<ClientCampaignsPage> createState() => _ClientCampaignsPageState();
@@ -90,6 +93,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
   bool _currentClientIsBrandPartner = false;
   bool _currentClientNfcEligible = false;
   final Map<String, Set<String>> _tableColumnsCache = <String, Set<String>>{};
+  final FocusNode _notificationsFocusNode = FocusNode(
+    debugLabel: 'campaignsNotificationsButton',
+  );
+  bool _didSetInitialA11yFocus = false;
+  bool _focusRequestQueued = false;
 
   bool _isBrandPartnerClient(Map<String, dynamic> data) {
     String norm(Object? value) => (value ?? '').toString().trim().toLowerCase();
@@ -281,6 +289,88 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
     super.initState();
     unawaited(_loadHeaderIdentity());
     _listenRequests();
+    if (widget.isActiveTab) {
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ClientCampaignsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveTab && widget.isActiveTab) {
+      _didSetInitialA11yFocus = false;
+      _scheduleInitialA11yFocus();
+    }
+  }
+
+  void _scheduleInitialA11yFocus() {
+    if (_didSetInitialA11yFocus || _focusRequestQueued || !widget.isActiveTab) {
+      return;
+    }
+    _focusRequestQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted || _didSetInitialA11yFocus || !widget.isActiveTab) {
+        _focusRequestQueued = false;
+        return;
+      }
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute?.isCurrent != true) {
+        _focusRequestQueued = false;
+        return;
+      }
+      _didSetInitialA11yFocus = true;
+      _focusRequestQueued = false;
+      _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
+    });
+  }
+
+  // The request feed loads over the network (plus a realtime subscription),
+  // so it can easily still be loading past the initial focus attempt above.
+  // When it finally populates, that's a large semantics-tree change that iOS
+  // VoiceOver treats as a new screen and re-announces on its own, overriding
+  // the earlier Notifications focus. Re-asserting focus right after the data
+  // lands corrects that without touching Android.
+  Future<void> _reassertNotificationsFocusAfterLoad() async {
+    if (!widget.isActiveTab) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !widget.isActiveTab) return;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    if (!mounted || !widget.isActiveTab) return;
+    _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
+
+    // A single attempt can still lose the race to iOS's own screen-changed
+    // announcement, which can fire slightly after this point once the newly
+    // populated list finishes settling. A second, later attempt reclaims
+    // focus after that has had its say.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted || !widget.isActiveTab) return;
+    _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it. Sending an explicit accessibility-focus semantics event fixes that.
+  // Android/TalkBack already tracks requestFocus() correctly here, so this
+  // stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
@@ -289,6 +379,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       Supabase.instance.client.removeChannel(_companyChannel!);
       _companyChannel = null;
     }
+    _notificationsFocusNode.dispose();
     super.dispose();
   }
 
@@ -704,6 +795,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         _items = <ClientRequestV2>[...brandVisible, ...clientVisible];
         _loading = false;
       });
+      unawaited(_reassertNotificationsFocusAfterLoad());
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -712,6 +804,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         _clientRequests = const <ClientRequestV2>[];
         _loading = false;
       });
+      unawaited(_reassertNotificationsFocusAfterLoad());
     }
   }
 
@@ -2105,6 +2198,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
               NotificationsPage.showAsModal(context);
             }
           },
+          notificationFocusNode: _notificationsFocusNode,
           trailing: _AvatarMenu(
             onSelected: _onAvatarMenuSelected,
             displayName: _headerDisplayName.isNotEmpty

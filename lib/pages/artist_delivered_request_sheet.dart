@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/client_request_v2.dart';
@@ -54,6 +55,9 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
 
   final FocusNode _closeFocusNode = FocusNode(
     debugLabel: 'deliveredRequestClose',
+  );
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'deliveredRequestCloseSemantics',
   );
   final FocusNode _detailsContentFocusNode = FocusNode(
     debugLabel: 'deliveredDetailsContent',
@@ -292,6 +296,48 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
     });
   }
 
+  void _scrollDeliveredListToTop() {
+    if (!_sheetScrollController.hasClients) return;
+    _sheetScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _focusCloseButton() {
+    if (!mounted) return;
+    _closeFocusNode.requestFocus();
+    _closeSemanticsKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  // VoiceOver/TalkBack doesn't reliably wrap from the last element back to
+  // the first on its own, so swiping past the Close button would otherwise
+  // feel like nothing happens. This invisible stop is placed as the very
+  // last thing in the scrollable content -- once focus reaches it, scroll
+  // back to the top and redirect real focus onto the visible X button,
+  // closing the loop.
+  void _redirectEndOfModalToClose() {
+    _scrollDeliveredListToTop();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _focusCloseButton(),
+    );
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Close delivered request details',
+      hint: 'Double tap to close',
+      onTap: () => Navigator.pop(context),
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
+  }
+
   @override
   void dispose() {
     _closeFocusNode.dispose();
@@ -324,6 +370,8 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                 child: RequestModalInitialClose(
                   label: 'Close delivered request details',
                   onClose: () => Navigator.pop(context),
+                  focusNode: _closeFocusNode,
+                  semanticsKey: _closeSemanticsKey,
                 ),
               ),
               Container(
@@ -390,6 +438,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                         ),
                       ),
                     ),
+                    _buildAccessibilityCloseLoopTarget(),
                   ],
                 ),
               ),
@@ -1136,16 +1185,24 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   }
 
   Widget _orderDetailsSection() {
+    final isGroup = request.orderType == RequestOrderTypeV2.group;
+    final title = isGroup ? 'Group Client Measurements' : 'Nail Dimensions';
     return _borderBox(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Nail Dimensions',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: AppColors.blackCat,
+          Semantics(
+            header: true,
+            label: title,
+            child: ExcludeSemantics(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.blackCat,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 14),

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../constants/profile_table_columns.dart';
@@ -40,11 +41,62 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   late final Future<_RequestDetailsVm> _vmFuture;
   bool _acceptedBrandCollaborationContract = false;
   final Set<int> _expandedTerms = {1, 2, 3, 4, 5, 6};
+  final ScrollController _listController = ScrollController();
+  final FocusNode _closeFocusNode = FocusNode(
+    debugLabel: 'campaignDetailsClose',
+  );
+  final GlobalKey _closeSemanticsKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _vmFuture = _RequestDetailsVm.load(widget.request);
+  }
+
+  @override
+  void dispose() {
+    _listController.dispose();
+    _closeFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _scrollListToTop() {
+    if (!_listController.hasClients) return;
+    _listController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _focusCloseButton() {
+    if (!mounted) return;
+    _closeFocusNode.requestFocus();
+    _closeSemanticsKey.currentContext?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
+  }
+
+  // VoiceOver/TalkBack doesn't reliably wrap from the last element back to
+  // the first on its own, so swiping past Accept can otherwise feel like
+  // nothing happens. This invisible stop is placed as the very last thing on
+  // the page -- once focus reaches it, immediately scroll back to the top
+  // and redirect real focus onto the visible X button, closing the loop.
+  void _redirectEndOfModalToClose() {
+    _scrollListToTop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusCloseButton());
+  }
+
+  Widget _buildAccessibilityCloseLoopTarget() {
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Close campaign details',
+      hint: 'Double tap to close',
+      onTap: () => Navigator.of(context).pop(),
+      onDidGainAccessibilityFocus: _redirectEndOfModalToClose,
+      child: const SizedBox(width: 1, height: 1),
+    );
   }
 
   void _setBrandCollaborationAcceptance(bool checked) {
@@ -126,6 +178,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   _headerBar(context),
                   Expanded(
                     child: ListView(
+                      controller: _listController,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
@@ -279,6 +332,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       ],
                     ),
                   ),
+                  _buildAccessibilityCloseLoopTarget(),
                 ],
               );
             },
@@ -301,6 +355,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             child: RequestModalInitialClose(
               label: 'Close campaign details',
               onClose: () => Navigator.of(context).pop(),
+              onAccessibilityFocus: _scrollListToTop,
+              focusNode: _closeFocusNode,
+              semanticsKey: _closeSemanticsKey,
             ),
           ),
           Center(
@@ -786,28 +843,41 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     bool center = false,
     double? fontSize,
   }) {
-    return Row(
-      mainAxisSize: center ? MainAxisSize.max : MainAxisSize.min,
-      mainAxisAlignment: center
-          ? MainAxisAlignment.center
-          : MainAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: AppColors.blackCat),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            '$label: $value',
-            textAlign: center ? TextAlign.center : TextAlign.start,
-            maxLines: center ? 1 : 2,
-            overflow: center ? TextOverflow.ellipsis : TextOverflow.visible,
-            style: TextStyle(
-              fontSize: fontSize ?? 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.blackCat,
+    // Without its own Semantics boundary, this field has no distinct
+    // announcement stop -- VoiceOver/TalkBack runs it together with its
+    // neighbors in this row instead of pausing between each one, matching
+    // the explicit-node pattern already used for fields elsewhere in this
+    // file (see _summaryValue).
+    return Semantics(
+      container: true,
+      label: '$label, ${value.trim().isEmpty ? 'not provided' : value}',
+      child: ExcludeSemantics(
+        child: Row(
+          mainAxisSize: center ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisAlignment: center
+              ? MainAxisAlignment.center
+              : MainAxisAlignment.start,
+          children: [
+            Icon(icon, size: 16, color: AppColors.blackCat),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '$label: $value',
+                textAlign: center ? TextAlign.center : TextAlign.start,
+                maxLines: center ? 1 : 2,
+                overflow: center
+                    ? TextOverflow.ellipsis
+                    : TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: fontSize ?? 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blackCat,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 

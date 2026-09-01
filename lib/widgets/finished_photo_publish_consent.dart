@@ -18,32 +18,74 @@ class FinishedPhotoPublishConsentTile extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
+  static const _consentText =
+      'I consent to the publication of photos of my completed '
+      'press-on nail sets.';
+
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        value: value,
-        activeColor: AppColors.blackCat,
-        checkColor: AppColors.snow,
-        onChanged: (v) => onChanged(v ?? false),
-        title: const Text(
-          'I consent to the publication of photos of my completed '
-          'press-on nail sets.',
-          style: TextStyle(fontSize: 13),
+    // CheckboxListTile's `secondary` slot swallowed the info icon's own
+    // Semantics node. Sibling placement plus explicit sort keys still
+    // wasn't reliable -- CheckboxListTile builds its own internal semantics
+    // subtree that keeps producing unpredictable ordering with a hand-added
+    // neighbor. Hand-building both the checkbox row and the icon as fully
+    // independent, explicit Semantics nodes (same pattern used for every
+    // other checkbox/radio on the request pages this pass) removes that
+    // uncertainty entirely instead of continuing to fight the framework
+    // widget's internal merging.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Semantics(
+            checked: value,
+            label: _consentText,
+            onTap: () => onChanged(!value),
+            child: ExcludeSemantics(
+              child: InkWell(
+                onTap: () => onChanged(!value),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: value,
+                        onChanged: (v) => onChanged(v ?? false),
+                        activeColor: AppColors.blackCat,
+                        checkColor: AppColors.snow,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 12),
+                          child: Text(
+                            _consentText,
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-        secondary: _ConsentInfoIcon(
-          onActivate: () => showFinishedPhotoConsentModal(context),
+        Padding(
+          padding: const EdgeInsets.only(top: 12, right: 4),
+          child: _ConsentInfoIcon(
+            onActivate: () => showFinishedPhotoConsentModal(context),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-/// Info icon that opens the consent modal on hover (desktop/web pointer
-/// devices) as well as tap/click (touch devices, where hover doesn't fire).
+/// Info icon that opens the consent modal on tap/click.
 class _ConsentInfoIcon extends StatelessWidget {
   const _ConsentInfoIcon({required this.onActivate});
 
@@ -51,9 +93,15 @@ class _ConsentInfoIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No MouseRegion.onEnter-triggered open here anymore -- TalkBack/
+    // VoiceOver's touch-exploration scan can synthesize a pointer-enter
+    // event as the accessibility cursor merely passes over this icon
+    // (not an intentional activation), which was popping the modal open
+    // mid-swipe and hijacking focus before the user ever perceived
+    // landing on the icon itself. Tap/double-tap (below) already covers
+    // both touch and desktop mouse clicks.
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => onActivate(),
       child: GestureDetector(
         onTap: onActivate,
         behavior: HitTestBehavior.opaque,

@@ -1,9 +1,11 @@
 // lib/pages/client_profile_page.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import '../constants/profile_table_columns.dart';
@@ -87,7 +89,21 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       if (!mounted || !widget.isActiveTab) return;
 
       _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
     });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it, so it can stay wherever it auto-selected on screen load instead of
+  // Notifications. Sending an explicit accessibility-focus semantics event
+  // fixes that. Android/TalkBack already tracks requestFocus() correctly
+  // here, so this stays iOS-only and Android's behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override

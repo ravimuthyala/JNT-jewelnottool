@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/profile_table_columns.dart';
@@ -61,7 +64,23 @@ class _ClientHomeArtistPortfolioPageState
       await Future<void>.delayed(const Duration(milliseconds: 700));
       if (!mounted) return;
       _notificationsFocusNode.requestFocus();
+      _sendNotificationsFocusSemanticEvent();
     });
+  }
+
+  // FocusNode.requestFocus() alone moves Flutter's internal focus, but iOS
+  // VoiceOver keeps its own accessibility cursor and doesn't reliably follow
+  // it -- it can stay on whatever it auto-selected on screen load (e.g. the
+  // portfolio grid, announced as "N items"/"artist profiles available")
+  // instead of Notifications. Sending an explicit accessibility-focus
+  // semantics event fixes that. Android/TalkBack already tracks
+  // requestFocus() correctly here, so this stays iOS-only and Android's
+  // behavior is unchanged.
+  void _sendNotificationsFocusSemanticEvent() {
+    if (kIsWeb || !Platform.isIOS) return;
+    _notificationsFocusNode.context?.findRenderObject()?.sendSemanticsEvent(
+      const FocusSemanticEvent(),
+    );
   }
 
   @override
@@ -246,6 +265,7 @@ class _ClientHomeArtistPortfolioPageState
         _tiles = unique;
         _loading = false;
       });
+      unawaited(_reassertNotificationsFocusAfterLoad());
     } catch (e, st) {
       debugPrint('CLIENT HOME PORTFOLIO LOAD FAILED: $e');
       debugPrint(st.toString());
@@ -255,7 +275,34 @@ class _ClientHomeArtistPortfolioPageState
         _tiles = const <_PortfolioTileData>[];
         _loading = false;
       });
+      unawaited(_reassertNotificationsFocusAfterLoad());
     }
+  }
+
+  // The portfolio feed loads over the network, so it can easily still be
+  // spinning past the initState focus attempt's fixed delay. When the list
+  // finally populates (loading -> N tiles), that's a large semantics-tree
+  // change that iOS VoiceOver treats as a new screen and re-announces on its
+  // own -- overriding our earlier Notifications focus with something like
+  // "N items, Client home". Re-asserting focus right after the data lands
+  // corrects that without touching Android, which doesn't re-grab focus this
+  // way.
+  Future<void> _reassertNotificationsFocusAfterLoad() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    if (!mounted) return;
+    _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
+
+    // A single attempt can still lose the race to iOS's own screen-changed
+    // announcement, which can fire slightly after this point once the newly
+    // populated list finishes settling. A second, later attempt reclaims
+    // focus after that has had its say.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    _notificationsFocusNode.requestFocus();
+    _sendNotificationsFocusSemanticEvent();
   }
 
   Future<List<Map<String, dynamic>>> _readArtistRows(String table) async {
@@ -895,11 +942,21 @@ class _ClientHomeArtistPortfolioPageState
   Widget build(BuildContext context) {
     final profileKey = GlobalKey();
 
+    // This page is a tab inside ClientShellPage's own route (already
+    // labeled "Client home" one level up), not a real separate Navigator
+    // route. Marking it as its own scopesRoute/namesRoute a second time is
+    // what makes iOS treat every rebuild here (e.g. the portfolio feed
+    // finishing its load) as a brand-new screen, re-announcing "Artist
+    // portfolio, N items" over whatever had focus -- Android/TalkBack
+    // doesn't have this side effect, so it keeps the route semantics
+    // unchanged and only iOS drops them.
+    final suppressRouteAnnouncementForIOS = !kIsWeb && Platform.isIOS;
+
     return Semantics(
-      scopesRoute: true,
+      scopesRoute: !suppressRouteAnnouncementForIOS,
       explicitChildNodes: true,
-      namesRoute: true,
-      label: 'Artist portfolio',
+      namesRoute: !suppressRouteAnnouncementForIOS,
+      label: suppressRouteAnnouncementForIOS ? null : 'Artist portfolio',
       child: Scaffold(
       backgroundColor: AppColors.snow,
       appBar: JntStandardAppBar(

@@ -32,10 +32,13 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
   static const Color _iconColor = AppColors.blackCat;
   bool _focused = false;
 
+  // The "button" trait below already makes VoiceOver/TalkBack append the
+  // word "button" on its own, so it isn't repeated in this text -- doing so
+  // would announce it twice ("...notification, button, button").
   String _notificationSemanticLabel(int count) {
-    if (count <= 0) return 'Notifications, no unread notifications';
-    if (count == 1) return 'Notifications, 1 unread notification';
-    return 'Notifications, $count unread notifications';
+    if (count <= 0) return 'No unread notifications';
+    if (count == 1) return '1 unread notification';
+    return '$count unread notifications';
   }
 
   @override
